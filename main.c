@@ -27,7 +27,6 @@
 	#include <json-c/json.h>
 #endif
 
-#include <libubox/list.h>
 #include <libubox/utils.h>
 
 #include "lexer.h"
@@ -35,47 +34,17 @@
 #include "eval.h"
 
 
-struct match_item {
-	struct json_object *jsobj;
-	char *name;
-	struct list_head list;
-};
-
 static void
 print_usage(char *app)
 {
 	printf(
 	"== Usage ==\n\n"
-	"  # %s [-a] [-i <file> | -s \"json...\"] {-t <pattern> | -e <pattern>}\n"
-	"  -q		Quiet, no errors are printed\n"
+	"  # %s [-d] {-i <file> | -s \"utpl script...\"}\n"
 	"  -h, --help	Print this help\n"
-	"  -a		Implicitely treat input as array, useful for JSON logs\n"
-	"  -i path	Specify a JSON file to parse\n"
-	"  -s \"json\"	Specify a JSON string to parse\n"
-	"  -l limit	Specify max number of results to show\n"
-	"  -F separator	Specify a field separator when using export\n"
-	"  -t <pattern>	Print the type of values matched by pattern\n"
-	"  -e <pattern>	Print the values matched by pattern\n"
-	"  -e VAR=<pat>	Serialize matched value for shell \"eval\"\n\n"
-	"== Patterns ==\n\n"
-	"  Patterns are JsonPath: http://goessner.net/articles/JsonPath/\n"
-	"  This tool implements $, @, [], * and the union operator ','\n"
-	"  plus the usual expressions and literals.\n"
-	"  It does not support the recursive child search operator '..' or\n"
-	"  the '?()' and '()' filter expressions as those would require a\n"
-	"  complete JavaScript engine to support them.\n\n"
-	"== Examples ==\n\n"
-	"  Display the first IPv4 address on lan:\n"
-	"  # ifstatus lan | %s -e '@[\"ipv4-address\"][0].address'\n\n"
-	"  Extract the release string from the board information:\n"
-	"  # ubus call system board | %s -e '@.release.description'\n\n"
-	"  Find all interfaces which are up:\n"
-	"  # ubus call network.interface dump | \\\n"
-	"  	%s -e '@.interface[@.up=true].interface'\n\n"
-	"  Export br-lan traffic counters for shell eval:\n"
-	"  # devstatus br-lan | %s -e 'RX=@.statistics.rx_bytes' \\\n"
-	"	-e 'TX=@.statistics.tx_bytes'\n",
-		app, app, app, app, app);
+	"  -i file	Specify an utpl script to parse\n"
+	"  -s \"utpl script...\"	Specify an utpl code fragment to parse\n"
+	"  -d Instead of executing the script, dump the resulting AST as dot\n",
+		app);
 }
 
 static void
@@ -337,7 +306,7 @@ main(int argc, char **argv)
 	bool dumponly = false;
 	char buf[1024], *tmp;
 	char *source = NULL;
-	FILE *input = stdin;
+	FILE *input = NULL;
 	int opt, rv = 0;
 
 	if (argc == 1)
@@ -354,7 +323,7 @@ main(int argc, char **argv)
 			goto out;
 
 		case 'i':
-			input = fopen(optarg, "r");
+			input = strcmp(optarg, "-") ? fopen(optarg, "r") : stdin;
 
 			if (!input) {
 				fprintf(stderr, "Failed to open %s: %s\n", optarg, strerror(errno));
