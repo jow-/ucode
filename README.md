@@ -8,8 +8,8 @@ anywhere throughout the template.
 ## BLOCKS
 
 There are three kinds of blocks; expression blocks, statement blocks and
-comment blocks. The former two embed code logic using a C-like syntax while
-the latter comment block type is simply discarded during processing.
+comment blocks. The former two embed code logic using a JavaScript-like syntax
+while the latter comment block type is simply discarded during processing.
 
 
 ### 1. STATEMENT BLOCKS
@@ -24,8 +24,8 @@ By default, statement blocks produce no output and the entire block is
 reduced to an empty string during template evaluation but contained script
 code might invoke functions such as `print()` to explicitly output contents.
 
-For example the following template would result in "The epoch is odd" or
-"The epoch is even", depending on the current epoch value:
+For example the following template would result in `The epoch is odd` or
+`The epoch is even`, depending on the current epoch value:
 
 `The epoch is {% if (time() % 2): %}odd{% else %}even{% endif %}!`
 
@@ -44,8 +44,8 @@ the current user executing the utpl interpreter.
 
 ### 3. COMMENT BLOCKS
 
-Comment blocks, which are denoted with an opening '{#' and a closing '#}' tag
-may contain arbitrary text except the closing '#}' tag itself. Comments blocks
+Comment blocks, which are denoted with an opening `{#` and a closing `#}` tag
+may contain arbitrary text except the closing `#}` tag itself. Comments blocks
 are completely stripped during processing and are replaced with an empty string.
 
 The following example template would result in the output "Hello world":
@@ -121,10 +121,11 @@ This is a first lineThis is item 1.This is item 2.This is item 3.This is the las
 
 ## SCRIPT LANGUAGE
 
-The language used within statement and expression blocks uses untyped variables
-and employs a simplified JavaScript like syntax.
+The utpl script language used within statement and expression blocks uses
+untyped variables and employs a simplified JavaScript like syntax.
 
-Utpl script implements function scoping and differentiates between local and global variables. Each function has its own private scope while executing and
+Utpl script implements function scoping and differentiates between local and
+global variables. Each function has its own private scope while executing and
 local variables declared inside a function are not accessible in the outer
 calling scope.
 
@@ -272,7 +273,7 @@ Printing a list:
 ```
 
 The alternative syntax replaces the opening curly brace (`{`) with a colon
-(`:`) and the closing curly brace (`}`) with and explicit `endfor` keyword:
+(`:`) and the closing curly brace (`}`) with an explicit `endfor` keyword:
 
 ```
 Printing a list:
@@ -325,7 +326,7 @@ Function declarations support the same kind of alternative syntax as defined
 for control statements (3.3.)
 
 The alternative syntax replaces the opening curly brace (`{`) with a colon
-(`:`) and the closing curly brace (`}`) with and explicit `endfunction`
+(`:`) and the closing curly brace (`}`) with an explicit `endfunction`
 keyword:
 
 ```
@@ -345,7 +346,7 @@ operators to manipulate values and variables.
 #### 5.1. Arithmetic operations
 
 The operators `+`, `-`, `*`, `/`, `%`, `++` and `--` allow to perform
-additions, substractions, multiplications, divisions, modulo increment or
+additions, substractions, multiplications, divisions, modulo, increment or
 decrement operations respectively where the result depends on the type of
 involved values.
 
@@ -356,7 +357,7 @@ convert a given value to a numeric value or to negate a given value.
 If either operand of the `+` operator is a string, the other one is converted
 to a string value as well and a concatenated string is returned.
 
-All other arithmetic operators coerce their operands to numeric values.
+All other arithmetic operators coerce their operands into numeric values.
 Fractional values are converted to doubles, other numeric values to integers.
 
 If either operand is a double, the other one is converted to a double value as
@@ -433,15 +434,15 @@ are equal, inequal, lower than, lower than/equal to, higher than or higher
 than/equal to each other respectively.
 
 If both operands are strings, their respective byte values are compared, if
-both are objects or array, their underlying memory addresses are compared.
+both are objects or arrays, their underlying memory addresses are compared.
 
-In all other cases, both operands are compared to numeric values and the 
-compared with each other.
+In all other cases, both operands are coerced into numeric values and the
+resulting values are compared with each other.
 
 This means that comparing values of different types will coerce them both to
 numbers.
 
-The result of the relational operation is a boolean indicating trueness.
+The result of the relational operation is a boolean indicating truishness.
 
 ```javascript
 {%
@@ -458,16 +459,16 @@ The result of the relational operation is a boolean indicating trueness.
 
 #### 5.4. Logical operations
 
-The operators `&&`, `||` and `!` test whether their operands are both true,
+The operators `&&`, `||` and `!` test whether their operands are all true,
 partially true or false respectively.
 
 In the case of `&&` the rightmost value is returned while `||` results in the
-first trueish value.
+first truish value.
 
-The unary `!` operator will result in `true` if the operand is not trueish,
+The unary `!` operator will result in `true` if the operand is not treish,
 otherwise it will result in `false`.
 
-Operands are evaluated from left to right while testing trueness, which means
+Operands are evaluated from left to right while testing truishness, which means
 that expressions with side effects, such as function calls, are only executed
 if the preceeding condition was satisifed.
 
@@ -485,7 +486,7 @@ if the preceeding condition was satisifed.
 
 #### 5.5. Assignment operations
 
-Besides the basic assignment operator `=`, most other operators have a
+In addition to the basic assignment operator `=`, most other operators have a
 corresponding shortcut assignment operator which reads the specified variable,
 applies the operation and operand to it, and writes it back.
 
@@ -504,6 +505,8 @@ The result of assignment expressions is the assigned value.
   a ^= 9;    // a = a ^ 9;
   a <<= 10;  // a = a << 10;
   a >>= 11;  // a = a >> 11;
+
+  print(a = 2);  // 2
 %}
 ```
 
@@ -534,12 +537,12 @@ the two arguments to determine the quadrant of the result.
 #### 6.3. `chr(n1, ...)`
 
 Converts each given numeric value to a byte and return the resulting string.
-Invalid numeric values or values < 0 resul in `\0` bytes, values larger than
+Invalid numeric values or values < 0 result in `\0` bytes, values larger than
 255 are truncated to 255.
 
 ```javascript
 chr(65, 98, 99);  // "Abc"
-chr(-1, 300);     // string consisting of "\0" and "\377" bytes
+chr(-1, 300);     // string consisting of an `0x0` and a `0xff` byte
 ```
 
 #### 6.4. `cos(x)`
@@ -574,7 +577,7 @@ of n.
 Filter the array passed as first argument by invoking the function specified
 in the second argument for each array item.
 
-If the invoked function returns a trueish result, the item is retained,
+If the invoked function returns a truish result, the item is retained,
 otherwise it is dropped. The filter function is invoked with three arguments:
 
  1. The array value
@@ -646,7 +649,7 @@ Return the natural logarithm of x.
 #### 6.20. `ltrim(s, c)`
 
 Trim any of the specified characters in `c` from the start of `str`.
-If the second argument is omitted, trims the characters, `' '` (space), `\t`,
+If the second argument is omitted, trims the characters, ` ` (space), `\t`,
 `\r` and `\n`.
 
 ```javascript
@@ -727,7 +730,7 @@ Returns `null` if the first argument was neither an array, nor a string.
 #### 6.29. `rtrim(str, c)`
 
 Trim any of the specified characters in `c` from the end of `str`.
-If the second argument is omitted, trims the characters, `' '` (space), `\t`,
+If the second argument is omitted, trims the characters, ` ` (space), `\t`,
 `\r` and `\n`.
 
 ```javascript
@@ -808,11 +811,12 @@ Returns the current UNIX epoch.
 
 ```javascript
 time();     // 1598043054
+```
 
 #### 6.39. `trim()`
 
 Trim any of the specified characters in `c` from the start and end of `str`.
-If the second argument is omitted, trims the characters, `' '` (space), `\t`,
+If the second argument is omitted, trims the characters, ` ` (space), `\t`,
 `\r` and `\n`.
 
 ```javascript
@@ -822,14 +826,16 @@ ltrim("--bar--", "-")  // "bar"
 
 #### 6.40. `type(x)`
 
-Returns the type of the given value which might be one of `function`, `object`,
-`array`, `double`, `int` or `bool`.
+Returns the type of the given value as string which might be one of
+`"function"`, `"object"`, `"array"`, `"double"`, `"int"` or `"bool"`.
 
 Returns `null` when no value or `null` is passed.
 
 #### 6.41. `uchr(n1, ...)`
 
-Converts each given numeric value to an utf8 escape sequence and return the resulting string. Invalid numeric values or values outside the range `0` .. `0x10FFFF` are represented by the unicode replacement character `0xFFFD`.
+Converts each given numeric value to an utf8 escape sequence and returns the
+resulting string. Invalid numeric values or values outside the range `0` ..
+`0x10FFFF` are represented by the unicode replacement character `0xFFFD`.
 
 ```javascript
 uchr(0x2600, 0x26C6, 0x2601);  // "☀⛆☁"
@@ -838,7 +844,7 @@ uchr(-1, 0x20ffff, "foo");     // "���"
 
 #### 6.42. `uc(str)`
 
-Convert the given string to uppercase and return the resulting string.
+Converts the given string to uppercase and return the resulting string.
 Returns `null` if the given argument could not be converted to a string.
 
 #### 6.43. `unshift(arr, v1, ...)`
