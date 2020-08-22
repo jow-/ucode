@@ -867,7 +867,7 @@ ut_execute_call(struct ut_state *state, struct ut_opcode *op)
 	struct json_object *rv;
 	char *lhs;
 
-	if (!decl) {
+	if (!decl || decl->type != T_FUNC) {
 		lhs = ut_ref_to_str(op->operand[0]);
 		rv = ut_exception(state, op->operand[0],
 			"Type error: %s is not a function",
