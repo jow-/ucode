@@ -1154,6 +1154,253 @@ ut_rtrim(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	return ut_trim_common(s, op, args, false, true);
 }
 
+static size_t
+ut_printf_common(struct ut_state *s, struct ut_opcode *op, struct json_object *args, char **res)
+{
+	struct json_object *fmt = json_object_array_get_idx(args, 0);
+	char *tmp, *fp, sfmt[sizeof("%0- 123456789.123456789%")];
+	union { const char *s; int64_t n; double d; } arg;
+	size_t len = 0, arglen, argidx;
+	const char *fstr, *last, *p;
+	enum json_type t;
+	int slen = 0;
+
+	*res = NULL;
+
+	if (json_object_is_type(fmt, json_type_string))
+		fstr = json_object_get_string(fmt);
+	else
+		fstr = "";
+
+	arglen = json_object_array_length(args);
+	argidx = 1;
+
+	for (last = p = fstr; *p; p++) {
+		if (*p == '%') {
+			if (p > last) {
+				tmp = realloc(*res, len + (p - last) + 1);
+
+				if (!tmp)
+					goto err;
+
+				*res = tmp;
+				snprintf(*res + len, p - last + 1, "%s", last);
+				len += (p - last);
+			}
+
+			last = p++;
+
+			fp = sfmt;
+			*fp++ = '%';
+
+			memset(&arg, 0, sizeof(arg));
+
+			while (strchr("0- ", *p)) {
+				if (fp + 1 >= sfmt + sizeof(sfmt))
+					goto next;
+
+				*fp++ = *p++;
+			}
+
+			if (*p >= '1' && *p <= '9') {
+				if (fp + 1 >= sfmt + sizeof(sfmt))
+					goto next;
+
+				*fp++ = *p++;
+
+				while (isdigit(*p)) {
+					if (fp + 1 >= sfmt + sizeof(sfmt))
+						goto next;
+
+					*fp++ = *p++;
+				}
+			}
+
+			if (*p == '.') {
+				if (fp + 1 >= sfmt + sizeof(sfmt))
+					goto next;
+
+				*fp++ = *p++;
+
+				if (*p == '-') {
+					if (fp + 1 >= sfmt + sizeof(sfmt))
+						goto next;
+
+					*fp++ = *p++;
+				}
+
+				while (isdigit(*p)) {
+					if (fp + 1 >= sfmt + sizeof(sfmt))
+						goto next;
+
+					*fp++ = *p++;
+				}
+			}
+
+			if (!strncmp(p, "hh", 2) || !strncmp(p, "ll", 2)) {
+				if (fp + 2 >= sfmt + sizeof(sfmt))
+					goto next;
+
+				*fp++ = *p++;
+				*fp++ = *p++;
+			}
+			else if (*p == 'h' || *p == 'l') {
+				if (fp + 1 >= sfmt + sizeof(sfmt))
+					goto next;
+
+				*fp++ = *p++;
+			}
+
+			switch (*p) {
+			case 'd':
+			case 'i':
+			case 'o':
+			case 'u':
+			case 'x':
+			case 'X':
+				t = json_type_int;
+
+				if (argidx < arglen)
+					arg.n = ut_cast_int64(json_object_array_get_idx(args, argidx++));
+				else
+					arg.n = 0;
+
+				break;
+
+			case 'e':
+			case 'E':
+			case 'f':
+			case 'F':
+			case 'g':
+			case 'G':
+				t = json_type_double;
+
+				if (argidx < arglen)
+					arg.d = ut_cast_double(json_object_array_get_idx(args, argidx++));
+				else
+					arg.d = 0;
+
+				break;
+
+			case 'c':
+				t = json_type_int;
+
+				if (argidx < arglen)
+					arg.n = ut_cast_int64(json_object_array_get_idx(args, argidx++)) & 0xff;
+				else
+					arg.n = 0;
+
+				break;
+
+			case 's':
+				t = json_type_string;
+
+				if (argidx < arglen)
+					arg.s = json_object_get_string(json_object_array_get_idx(args, argidx++));
+				else
+					arg.s = NULL;
+
+				arg.s = arg.s ? arg.s : "(null)";
+
+				break;
+
+			case '%':
+				t = json_type_null;
+
+				break;
+
+			default:
+				goto next;
+			}
+
+			if (fp + 2 >= sfmt + sizeof(sfmt))
+				goto next;
+
+			*fp++ = *p;
+			*fp = 0;
+
+			switch (t) {
+			case json_type_int:    slen = snprintf(NULL, 0, sfmt, arg.n); break;
+			case json_type_double: slen = snprintf(NULL, 0, sfmt, arg.d); break;
+			case json_type_string: slen = snprintf(NULL, 0, sfmt, arg.s); break;
+			default:               slen = snprintf(NULL, 0, sfmt);
+			}
+
+			if (slen < 0)
+				continue;
+
+			tmp = realloc(*res, len + slen + 1);
+
+			if (!tmp)
+				goto err;
+
+			*res = tmp;
+
+			switch (t) {
+			case json_type_int:    slen = snprintf(*res + len, slen + 1, sfmt, arg.n); break;
+			case json_type_double: slen = snprintf(*res + len, slen + 1, sfmt, arg.d); break;
+			case json_type_string: slen = snprintf(*res + len, slen + 1, sfmt, arg.s); break;
+			default:               slen = snprintf(*res + len, slen + 1, sfmt);
+			}
+
+			if (slen > 0)
+				len += slen;
+
+			last = p + 1;
+
+next:
+			continue;
+		}
+	}
+
+	tmp = realloc(*res, len + (p - last) + 1);
+
+	if (!tmp)
+		goto err;
+
+	*res = tmp;
+	snprintf(*res + len, p - last + 1, "%s", last);
+	len += (p - last);
+
+	return len;
+
+err:
+	free(*res);
+	*res = NULL;
+
+	return 0;
+}
+
+static struct json_object *
+ut_sprintf(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+{
+	char *str = NULL;
+	size_t len;
+
+	len = ut_printf_common(s, op, args, &str);
+
+	if (!str)
+		return ut_exception(s, op, UT_ERRMSG_OOM);
+
+	return json_object_new_string_len(str, len);
+}
+
+static struct json_object *
+ut_printf(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+{
+	char *str = NULL;
+	size_t len;
+
+	len = ut_printf_common(s, op, args, &str);
+
+	if (!str)
+		return ut_exception(s, op, UT_ERRMSG_OOM);
+
+	len = fwrite(str, 1, len, stdout);
+
+	return json_object_new_int64(len);
+}
+
 static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "abs",		ut_abs },
 	{ "atan2",		ut_atan2 },
@@ -1199,6 +1446,8 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "uc",			ut_uc },
 	{ "unshift",	ut_unshift },
 	{ "values",		ut_values },
+	{ "sprintf",	ut_sprintf },
+	{ "printf",		ut_printf },
 };
 
 static int

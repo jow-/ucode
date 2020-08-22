@@ -854,9 +854,38 @@ Returns the last value added to the array.
 
 #### 6.44. `values(obj)`
 
-Returns an array containing all values of the given object. Returns `null? if
+Returns an array containing all values of the given object. Returns `null` if
 no object was passed.
 
 ```javascript
 values({ foo: true, bar: false });   // [true, false]
 ```
+
+#### 6.45. `printf(fmt, ...)`
+
+Formats the given arguments according to the given format string and outputs the
+result to stdout.
+
+Utpl supports a restricted subset of the formats allowed by the underlying
+libc's `printf()` implementation, namely it allows the `d`, `i`, `o`, `u`, `x`,
+`X`, `e`, `E`, `f`, `F`, `g`, `G`, `c` and `s` conversions.
+
+Other format specifiers such as `n` or `z` are not accepted and returned
+verbatim. Format specifiers including `*` and `$` directives are rejected as
+well.
+
+```javascript
+{%
+  printf("Hello %s\n", "world");  // Hello world
+  printf("%08x\n", 123);          // 0000007b
+  printf("%c%c%c\n", 65, 98, 99); // Abc
+  printf("%g\n", 10 / 3.0);       // 3.33333
+%}
+```
+
+#### 6.46. `sprintf(fmt, ...)`
+
+Formats the given arguments according to the given format string and returns the
+resulting string.
+
+See `printf()` for details.
