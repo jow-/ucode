@@ -700,6 +700,9 @@ ut_type(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 		case json_type_boolean:
 			return json_object_new_string("bool");
 
+		case json_type_string:
+			return json_object_new_string("string");
+
 		default:
 			return NULL;
 		}
