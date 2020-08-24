@@ -801,11 +801,12 @@ ut_execute_object(struct ut_state *state, struct ut_opcode *op)
 }
 
 struct json_object *
-ut_invoke(struct ut_state *state, struct ut_opcode *op, struct json_object *func, struct json_object *argvals)
+ut_invoke(struct ut_state *state, struct ut_opcode *op, struct json_object *scope,
+          struct json_object *func, struct json_object *argvals)
 {
 	struct ut_opcode *decl = json_object_get_userdata(func);
 	struct ut_opcode *arg = decl ? decl->operand[1] : NULL;
-	struct json_object *scope, *rv = NULL;
+	struct json_object *s, *rv = NULL;
 	struct ut_opcode *tag;
 	size_t arridx;
 	ut_c_fn *cfn;
@@ -820,13 +821,13 @@ ut_invoke(struct ut_state *state, struct ut_opcode *op, struct json_object *func
 		return cfn ? cfn(state, op, argvals) : NULL;
 	}
 
-	scope = ut_addscope(state, decl);
+	s = scope ? scope : ut_addscope(state, decl);
 
-	if (!json_object_is_type(scope, json_type_object))
-		return scope;
+	if (!json_object_is_type(s, json_type_object))
+		return s;
 
 	for (arridx = 0; arg; arridx++, arg = arg->sibling)
-		ut_setval(scope, arg->val, json_object_array_get_idx(argvals, arridx));
+		ut_setval(s, arg->val, argvals ? json_object_array_get_idx(argvals, arridx) : NULL);
 
 	rv = ut_execute_op_sequence(state, decl->operand[2]);
 	tag = json_object_get_userdata(rv);
@@ -851,9 +852,11 @@ ut_invoke(struct ut_state *state, struct ut_opcode *op, struct json_object *func
 		break;
 	}
 
-	state->stack.scope[--state->stack.off] = NULL;
+	if (!scope) {
+		state->stack.scope[--state->stack.off] = NULL;
 
-	json_object_put(scope);
+		json_object_put(s);
+	}
 
 	return rv;
 }
@@ -876,7 +879,7 @@ ut_execute_call(struct ut_state *state, struct ut_opcode *op)
 		free(lhs);
 	}
 	else {
-		rv = ut_invoke(state, op, func, argvals);
+		rv = ut_invoke(state, op, NULL, func, argvals);
 	}
 
 	ut_putval(argvals);
@@ -1294,7 +1297,7 @@ ut_run(struct ut_state *state)
 	ut_lib_init(state, scope);
 
 	args = json_object_new_array();
-	rv = ut_invoke(state, state->main, state->main->val, args);
+	rv = ut_invoke(state, state->main, NULL, state->main->val, args);
 
 	json_object_put(args);
 	json_object_put(rv);

@@ -40,7 +40,7 @@ enum json_type
 ut_cast_number(struct json_object *v, int64_t *n, double *d);
 
 struct json_object *
-ut_invoke(struct ut_state *, struct ut_opcode *, struct json_object *, struct json_object *);
+ut_invoke(struct ut_state *, struct ut_opcode *, struct json_object *, struct json_object *, struct json_object *);
 
 enum ut_error_type
 ut_run(struct ut_state *state);

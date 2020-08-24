@@ -435,7 +435,7 @@ ut_filter(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 		json_object_array_put_idx(cmpargs, 0, json_object_get(json_object_array_get_idx(obj, arridx)));
 		json_object_array_put_idx(cmpargs, 1, json_object_new_int64(arridx));
 
-		rv = ut_invoke(s, op, func, cmpargs);
+		rv = ut_invoke(s, op, NULL, func, cmpargs);
 
 		if (ut_val_is_truish(rv))
 			json_object_array_add(arr, json_object_get(json_object_array_get_idx(obj, arridx)));
@@ -622,7 +622,7 @@ ut_map(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 		json_object_array_put_idx(cmpargs, 0, json_object_get(json_object_array_get_idx(obj, arridx)));
 		json_object_array_put_idx(cmpargs, 1, json_object_new_int64(arridx));
 
-		json_object_array_add(arr, ut_invoke(s, op, func, cmpargs));
+		json_object_array_add(arr, ut_invoke(s, op, NULL, func, cmpargs));
 	}
 
 	ut_putval(cmpargs);
@@ -779,7 +779,7 @@ sort_fn(const void *k1, const void *k2)
 	json_object_array_put_idx(sort_ctx.args, 0, *v1);
 	json_object_array_put_idx(sort_ctx.args, 1, *v2);
 
-	rv = ut_invoke(sort_ctx.s, sort_ctx.op, sort_ctx.fn, sort_ctx.args);
+	rv = ut_invoke(sort_ctx.s, sort_ctx.op, NULL, sort_ctx.fn, sort_ctx.args);
 	ret = !ut_val_is_truish(rv);
 
 	ut_putval(rv);
