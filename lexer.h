@@ -22,6 +22,7 @@
 #define __T_MAX 69
 #define T_EXCEPTION	(__T_MAX + 0)
 #define T_CFUNC		(__T_MAX + 1)
+#define T_RESSOURCE	(__T_MAX + 2)
 
 extern const char *tokennames[__T_MAX];
 
