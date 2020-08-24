@@ -1338,12 +1338,12 @@ static size_t
 ut_printf_common(struct ut_state *s, struct ut_opcode *op, struct json_object *args, char **res)
 {
 	struct json_object *fmt = json_object_array_get_idx(args, 0);
-	char *tmp, *fp, sfmt[sizeof("%0- 123456789.123456789%")];
+	char *fp, sfmt[sizeof("%0- 123456789.123456789%")];
 	union { const char *s; int64_t n; double d; } arg;
 	size_t len = 0, arglen, argidx;
 	const char *fstr, *last, *p;
 	enum json_type t;
-	int slen = 0;
+	bool ok;
 
 	*res = NULL;
 
@@ -1357,16 +1357,8 @@ ut_printf_common(struct ut_state *s, struct ut_opcode *op, struct json_object *a
 
 	for (last = p = fstr; *p; p++) {
 		if (*p == '%') {
-			if (p > last) {
-				tmp = realloc(*res, len + (p - last) + 1);
-
-				if (!tmp)
-					goto err;
-
-				*res = tmp;
-				snprintf(*res + len, p - last + 1, "%s", last);
-				len += (p - last);
-			}
+			if (!snprintf_append(res, &len, "%s", p - last, last))
+				goto err;
 
 			last = p++;
 
@@ -1500,31 +1492,14 @@ ut_printf_common(struct ut_state *s, struct ut_opcode *op, struct json_object *a
 			*fp = 0;
 
 			switch (t) {
-			case json_type_int:    slen = snprintf(NULL, 0, sfmt, arg.n); break;
-			case json_type_double: slen = snprintf(NULL, 0, sfmt, arg.d); break;
-			case json_type_string: slen = snprintf(NULL, 0, sfmt, arg.s); break;
-			default:               slen = snprintf(NULL, 0, sfmt);
+			case json_type_int:    ok = sprintf_append(res, &len, sfmt, arg.n); break;
+			case json_type_double: ok = sprintf_append(res, &len, sfmt, arg.d); break;
+			case json_type_string: ok = sprintf_append(res, &len, sfmt, arg.s); break;
+			default:               ok = sprintf_append(res, &len, sfmt);        break;
 			}
 
-			if (slen < 0)
-				continue;
-
-			tmp = realloc(*res, len + slen + 1);
-
-			if (!tmp)
+			if (!ok)
 				goto err;
-
-			*res = tmp;
-
-			switch (t) {
-			case json_type_int:    slen = snprintf(*res + len, slen + 1, sfmt, arg.n); break;
-			case json_type_double: slen = snprintf(*res + len, slen + 1, sfmt, arg.d); break;
-			case json_type_string: slen = snprintf(*res + len, slen + 1, sfmt, arg.s); break;
-			default:               slen = snprintf(*res + len, slen + 1, sfmt);
-			}
-
-			if (slen > 0)
-				len += slen;
 
 			last = p + 1;
 
@@ -1533,14 +1508,8 @@ next:
 		}
 	}
 
-	tmp = realloc(*res, len + (p - last) + 1);
-
-	if (!tmp)
+	if (!snprintf_append(res, &len, "%s", p - last, last))
 		goto err;
-
-	*res = tmp;
-	snprintf(*res + len, p - last + 1, "%s", last);
-	len += (p - last);
 
 	return len;
 
