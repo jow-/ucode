@@ -136,7 +136,7 @@ static const struct token reserved_words[] = {
 	{ T_IN,			"in",    2 },
 };
 
-const char *tokennames[69] = {
+const char *tokennames[__T_MAX] = {
 	[0]				= "End of file",
 	[T_FUNC]        = "'function'",
 	[T_LOCAL]		= "'local'",

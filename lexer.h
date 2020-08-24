@@ -19,7 +19,10 @@
 
 #include "ast.h"
 
-extern const char *tokennames[69];
+#define __T_MAX 69
+#define T_EXCEPTION (__T_MAX + 0)
+
+extern const char *tokennames[__T_MAX];
 
 bool
 utf8enc(char **out, int *rem, int code);

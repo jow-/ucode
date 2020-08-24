@@ -25,9 +25,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
-#define T_MAX (sizeof(tokennames) / sizeof(tokennames[0]))
-#define T_EXCEPTION (T_MAX + 0)
-
 
 static struct ut_opcode exception_tag = { .type = T_EXCEPTION };
 
