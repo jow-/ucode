@@ -31,6 +31,186 @@
 #include <sys/time.h>
 
 
+static bool
+snprintf_append(char **dptr, size_t *dlen, const char *fmt, ssize_t sz, ...)
+{
+	va_list ap;
+	char *tmp;
+	int n;
+
+	va_start(ap, sz);
+	n = vsnprintf(NULL, 0, fmt, ap);
+	va_end(ap);
+
+	if (n < 0)
+		return false;
+	else if (sz >= 0 && n > sz)
+		n = sz;
+
+	tmp = realloc(*dptr, *dlen + n + 1);
+
+	if (!tmp)
+		return false;
+
+	va_start(ap, sz);
+	vsnprintf(tmp + *dlen, n + 1, fmt, ap);
+	va_end(ap);
+
+	*dptr = tmp;
+	*dlen += n;
+
+	return true;
+}
+
+#define sprintf_append(dptr, dlen, fmt, ...) \
+	snprintf_append(dptr, dlen, fmt, -1, ##__VA_ARGS__)
+
+static void
+format_error_context(char **msg, size_t *msglen, const char *expr, size_t off)
+{
+	int eoff, eline, padlen;
+	const char *p, *nl;
+	int i;
+
+	/* skip lines until error line */
+	for (p = nl = expr, eline = 0; *p && p < expr + off; p++) {
+		if (*p == '\n') {
+			nl = p + 1;
+			eline++;
+		}
+	}
+
+	eoff = p - nl;
+
+	sprintf_append(msg, msglen, "In line %u, byte %d:\n\n `", eline + 1, eoff);
+
+	for (p = nl, padlen = 0; *p != '\n' && *p != '\0'; p++) {
+		switch (*p) {
+		case '\t':
+			sprintf_append(msg, msglen, "    ");
+			if (p < nl + eoff)
+				padlen += 4;
+			break;
+
+		case '\r':
+		case '\v':
+			sprintf_append(msg, msglen, " ");
+			if (p < nl + eoff)
+				padlen++;
+			break;
+
+		default:
+			sprintf_append(msg, msglen, "%c", *p);
+			if (p < nl + eoff)
+				padlen++;
+		}
+	}
+
+	sprintf_append(msg, msglen, "`\n  ");
+
+	if (padlen < strlen("Near here ^")) {
+		for (i = 0; i < padlen; i++)
+			sprintf_append(msg, msglen, " ");
+
+		sprintf_append(msg, msglen, "^-- Near here\n");
+	}
+	else {
+		sprintf_append(msg, msglen, "Near here ");
+
+		for (i = strlen("Near here "); i < padlen; i++)
+			sprintf_append(msg, msglen, "-");
+
+		sprintf_append(msg, msglen, "^\n");
+	}
+
+	sprintf_append(msg, msglen, "\n");
+}
+
+char *
+ut_format_error(struct ut_state *state, const char *expr)
+{
+	size_t off = state ? state->off : 0;
+	struct ut_opcode *tag;
+	bool first = true;
+	size_t msglen = 0;
+	char *msg = NULL;
+	int i, max_i;
+
+	switch (state ? state->error.code : UT_ERROR_OUT_OF_MEMORY) {
+	case UT_ERROR_NO_ERROR:
+		return NULL;
+
+	case UT_ERROR_OUT_OF_MEMORY:
+		sprintf_append(&msg, &msglen, "Runtime error: Out of memory\n");
+		break;
+
+	case UT_ERROR_UNTERMINATED_COMMENT:
+		sprintf_append(&msg, &msglen, "Syntax error: Unterminated comment\n");
+		break;
+
+	case UT_ERROR_UNTERMINATED_STRING:
+		sprintf_append(&msg, &msglen, "Syntax error: Unterminated string\n");
+		break;
+
+	case UT_ERROR_UNTERMINATED_BLOCK:
+		sprintf_append(&msg, &msglen, "Syntax error: Unterminated template block\n");
+		break;
+
+	case UT_ERROR_UNEXPECTED_CHAR:
+		sprintf_append(&msg, &msglen, "Syntax error: Unexpected character\n");
+		break;
+
+	case UT_ERROR_OVERLONG_STRING:
+		sprintf_append(&msg, &msglen, "Syntax error: String or label literal too long\n");
+		break;
+
+	case UT_ERROR_INVALID_ESCAPE:
+		sprintf_append(&msg, &msglen, "Syntax error: Invalid escape sequence\n");
+		break;
+
+	case UT_ERROR_NESTED_BLOCKS:
+		sprintf_append(&msg, &msglen, "Syntax error: Template blocks may not be nested\n");
+		break;
+
+	case UT_ERROR_UNEXPECTED_TOKEN:
+		sprintf_append(&msg, &msglen, "Syntax error: Unexpected token\n");
+
+		for (i = 0, max_i = 0; i < sizeof(state->error.info.tokens) * 8; i++)
+			if ((state->error.info.tokens[i / 64] & ((unsigned)1 << (i % 64))) && tokennames[i])
+				max_i = i;
+
+		for (i = 0; i < sizeof(state->error.info.tokens) * 8; i++) {
+			if ((state->error.info.tokens[i / 64] & ((unsigned)1 << (i % 64))) && tokennames[i]) {
+				if (first) {
+					sprintf_append(&msg, &msglen, "Expecting %s", tokennames[i]);
+					first = false;
+				}
+				else if (i < max_i) {
+					sprintf_append(&msg, &msglen, ", %s", tokennames[i]);
+				}
+				else {
+					sprintf_append(&msg, &msglen, " or %s", tokennames[i]);
+				}
+			}
+		}
+
+		sprintf_append(&msg, &msglen, "\n");
+		break;
+
+	case UT_ERROR_EXCEPTION:
+		tag = json_object_get_userdata(state->error.info.exception);
+		off = (tag && tag->operand[0]) ? tag->operand[0]->off : 0;
+
+		sprintf_append(&msg, &msglen, "%s\n", json_object_get_string(state->error.info.exception));
+		break;
+	}
+
+	if (off)
+		format_error_context(&msg, &msglen, expr, off);
+
+	return msg;
+}
+
 static double
 ut_cast_double(struct json_object *v)
 {

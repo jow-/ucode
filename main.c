@@ -30,6 +30,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "eval.h"
+#include "lib.h"
 
 
 static void
@@ -43,148 +44,6 @@ print_usage(char *app)
 	"  -s \"utpl script...\"	Specify an utpl code fragment to parse\n"
 	"  -d Instead of executing the script, dump the resulting AST as dot\n",
 		app);
-}
-
-static void
-print_error_context(const char *expr, size_t off)
-{
-	int eoff, eline, padlen;
-	const char *p, *nl;
-	int i;
-
-	/* skip lines until error line */
-	for (p = nl = expr, eline = 0; *p && p < expr + off; p++) {
-		if (*p == '\n') {
-			nl = p + 1;
-			eline++;
-		}
-	}
-
-	eoff = p - nl;
-
-	fprintf(stderr, "In line %u, byte %d:\n\n `", eline + 1, eoff);
-
-	for (p = nl, padlen = 0; *p != '\n' && *p != '\0'; p++) {
-		switch (*p) {
-		case '\t':
-			fprintf(stderr, "    ");
-			if (p < nl + eoff)
-				padlen += 4;
-			break;
-
-		case '\r':
-		case '\v':
-			fprintf(stderr, " ");
-			if (p < nl + eoff)
-				padlen++;
-			break;
-
-		default:
-			fprintf(stderr, "%c", *p);
-			if (p < nl + eoff)
-				padlen++;
-		}
-	}
-
-	fprintf(stderr, "`\n  ");
-
-	if (padlen < strlen("Near here ^")) {
-		for (i = 0; i < padlen; i++)
-			fprintf(stderr, " ");
-
-		fprintf(stderr, "^-- Near here\n");
-	}
-	else {
-		fprintf(stderr, "Near here ");
-
-		for (i = strlen("Near here "); i < padlen; i++)
-			fprintf(stderr, "-");
-
-		fprintf(stderr, "^\n");
-	}
-
-	fprintf(stderr, "\n");
-}
-
-static void
-print_error(struct ut_state *state, const char *expr)
-{
-	size_t off = state ? state->off : 0;
-	struct ut_opcode *tag;
-	bool first = true;
-	int i, max_i;
-
-	switch (state ? state->error.code : UT_ERROR_OUT_OF_MEMORY) {
-	case UT_ERROR_NO_ERROR:
-		return;
-
-	case UT_ERROR_OUT_OF_MEMORY:
-		fprintf(stderr, "Runtime error: Out of memory\n");
-		break;
-
-	case UT_ERROR_UNTERMINATED_COMMENT:
-		fprintf(stderr, "Syntax error: Unterminated comment\n");
-		break;
-
-	case UT_ERROR_UNTERMINATED_STRING:
-		fprintf(stderr, "Syntax error: Unterminated string\n");
-		break;
-
-	case UT_ERROR_UNTERMINATED_BLOCK:
-		fprintf(stderr, "Syntax error: Unterminated template block\n");
-		break;
-
-	case UT_ERROR_UNEXPECTED_CHAR:
-		fprintf(stderr, "Syntax error: Unexpected character\n");
-		break;
-
-	case UT_ERROR_OVERLONG_STRING:
-		fprintf(stderr, "Syntax error: String or label literal too long\n");
-		break;
-
-	case UT_ERROR_INVALID_ESCAPE:
-		fprintf(stderr, "Syntax error: Invalid escape sequence\n");
-		break;
-
-	case UT_ERROR_NESTED_BLOCKS:
-		fprintf(stderr, "Syntax error: Template blocks may not be nested\n");
-		break;
-
-	case UT_ERROR_UNEXPECTED_TOKEN:
-		fprintf(stderr, "Syntax error: Unexpected token\n");
-
-		for (i = 0, max_i = 0; i < sizeof(state->error.info.tokens) * 8; i++)
-			if ((state->error.info.tokens[i / 64] & ((unsigned)1 << (i % 64))) && tokennames[i])
-				max_i = i;
-
-		for (i = 0; i < sizeof(state->error.info.tokens) * 8; i++) {
-			if ((state->error.info.tokens[i / 64] & ((unsigned)1 << (i % 64))) && tokennames[i]) {
-				if (first) {
-					fprintf(stderr, "Expecting %s", tokennames[i]);
-					first = false;
-				}
-				else if (i < max_i) {
-					fprintf(stderr, ", %s", tokennames[i]);
-				}
-				else {
-					fprintf(stderr, " or %s", tokennames[i]);
-				}
-			}
-		}
-
-		fprintf(stderr, "\n");
-		break;
-
-	case UT_ERROR_EXCEPTION:
-		tag = json_object_get_userdata(state->error.info.exception);
-		off = (tag && tag->operand[0]) ? tag->operand[0]->off : 0;
-
-		fprintf(stderr, "%s\n", json_object_get_string(state->error.info.exception));
-		break;
-	}
-
-	if (off)
-		print_error_context(expr, off);
 }
 
 #ifndef NDEBUG
@@ -272,6 +131,7 @@ parse(const char *source, bool dumponly)
 {
 	struct ut_state *state = calloc(1, sizeof(*state));
 	enum ut_error_type err;
+	char *msg;
 
 	err = ut_parse(state, source);
 
@@ -289,8 +149,12 @@ parse(const char *source, bool dumponly)
 		}
 	}
 
-	if (err)
-		print_error(state, source);
+	if (err) {
+		msg = ut_format_error(state, source);
+
+		fprintf(stderr, "%s\n", msg);
+		free(msg);
+	}
 
 	ut_free(state);
 
@@ -351,7 +215,11 @@ main(int argc, char **argv)
 			tmp = realloc(source, tlen + rlen + 1);
 
 			if (!tmp) {
-				print_error(NULL, "");
+				tmp = ut_format_error(NULL, "");
+
+				fprintf(stderr, "%s\n", tmp);
+				free(tmp);
+
 				rv = UT_ERROR_OUT_OF_MEMORY;
 				goto out;
 			}
