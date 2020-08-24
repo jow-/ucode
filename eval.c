@@ -811,7 +811,7 @@ ut_invoke(struct ut_state *state, struct ut_opcode *op, struct json_object *scop
 		return NULL;
 
 	/* is native function */
-	if (json_object_get_boolean(func)) {
+	if (decl->type == T_CFUNC) {
 		cfn = (ut_c_fn *)decl->operand[0];
 
 		return cfn ? cfn(state, op, argvals) : NULL;
@@ -866,7 +866,7 @@ ut_execute_call(struct ut_state *state, struct ut_opcode *op)
 	struct json_object *rv;
 	char *lhs;
 
-	if (!decl || decl->type != T_FUNC) {
+	if (!decl || (decl->type != T_FUNC && decl->type != T_CFUNC)) {
 		lhs = ut_ref_to_str(op->operand[0]);
 		rv = ut_exception(state, op->operand[0],
 			"Type error: %s is not a function",

@@ -1609,8 +1609,8 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 static bool
 add_function(struct ut_state *state, struct json_object *scope, const char *name, ut_c_fn *fn)
 {
-	struct ut_opcode *op = ut_new_op(state, T_FUNC,
-		json_object_new_boolean(1),  (struct ut_opcode *)fn, (void *)1);
+	struct ut_opcode *op = ut_new_op(state, T_CFUNC,
+		json_object_new_boolean(0), (struct ut_opcode *)fn, (void *)1);
 
 	json_object_set_serializer(op->val, func_to_string, op, NULL);
 
