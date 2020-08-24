@@ -107,10 +107,12 @@ static void dump(struct ut_opcode *op, int level) {
 	for (prev = NULL, cur = op; cur; prev = cur, cur = cur->sibling) {
 		dump_node(cur);
 
-		for (i = 0; i < sizeof(cur->operand) / sizeof(cur->operand[0]); i++) {
-			if (cur->operand[i]) {
-				dump(cur->operand[i], level + 1);
-				printf("n%p -> n%p [label=\"op%d\"];\n", cur, cur->operand[i], i + 1);
+		if (cur->type < __T_MAX) {
+			for (i = 0; i < sizeof(cur->operand) / sizeof(cur->operand[0]); i++) {
+				if (cur->operand[i]) {
+					dump(cur->operand[i], level + 1);
+					printf("n%p -> n%p [label=\"op%d\"];\n", cur, cur->operand[i], i + 1);
+				}
 			}
 		}
 
