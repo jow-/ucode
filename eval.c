@@ -24,7 +24,6 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <libubox/utils.h>
 
 #define T_MAX (sizeof(tokennames) / sizeof(tokennames[0]))
 #define T_EXCEPTION (T_MAX + 0)

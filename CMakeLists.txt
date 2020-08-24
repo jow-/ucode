@@ -37,13 +37,10 @@ ADD_CUSTOM_COMMAND(
   COMMENT "Generating parser.c"
 )
 
-FIND_PATH(ubox_include_dir libubox/list.h)
-INCLUDE_DIRECTORIES(${ubox_include_dir})
-
 SET_PROPERTY(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "lemon;parser.h;parser.out")
 SET_SOURCE_FILES_PROPERTIES("parser.c" PROPERTIES GENERATED TRUE COMPILE_FLAGS -Wno-error=unused-but-set-variable)
 ADD_EXECUTABLE(utpl main.c ast.c lexer.c parser.c eval.c lib.c)
-TARGET_LINK_LIBRARIES(utpl ubox ${json})
+TARGET_LINK_LIBRARIES(utpl ${json})
 
 CHECK_FUNCTION_EXISTS(ceil CEIL_FUNCTION_EXISTS)
 IF (NOT CEIL_FUNCTION_EXISTS)

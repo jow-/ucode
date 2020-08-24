@@ -23,7 +23,6 @@
 #include <stdarg.h>
 #include <string.h>
 #include <math.h>
-#include <libubox/utils.h>
 
 struct ut_opcode *
 ut_new_op(struct ut_state *s, int type, struct json_object *val, ...)
