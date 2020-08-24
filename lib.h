@@ -18,8 +18,27 @@
 #define __LIB_H_
 
 #include "ast.h"
+#include "lexer.h"
 
 typedef struct json_object *(ut_c_fn)(struct ut_state *, struct ut_opcode *, struct json_object *);
+
+static inline int
+ut_c_fn_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
+{
+	return sprintbuf(pb, "%sfunction(...) { [native code] }%s",
+		level ? "\"" : "", level ? "\"" : "");
+}
+
+static inline bool
+ut_add_function(struct ut_state *state, struct json_object *scope, const char *name, ut_c_fn *fn)
+{
+	struct ut_opcode *op = ut_new_op(state, T_CFUNC,
+		json_object_new_boolean(0), (struct ut_opcode *)fn, (void *)1);
+
+	json_object_set_serializer(op->val, ut_c_fn_to_string, op, NULL);
+
+	return json_object_object_add(scope, name, json_object_get(op->val));
+}
 
 void ut_lib_init(struct ut_state *state, struct json_object *scope);
 

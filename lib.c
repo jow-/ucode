@@ -1599,29 +1599,11 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "printf",		ut_printf },
 };
 
-static int
-func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
-{
-	return sprintbuf(pb, "%sfunction(...) { [native code] }%s",
-		level ? "\"" : "", level ? "\"" : "");
-}
-
-static bool
-add_function(struct ut_state *state, struct json_object *scope, const char *name, ut_c_fn *fn)
-{
-	struct ut_opcode *op = ut_new_op(state, T_CFUNC,
-		json_object_new_boolean(0), (struct ut_opcode *)fn, (void *)1);
-
-	json_object_set_serializer(op->val, func_to_string, op, NULL);
-
-	return json_object_object_add(scope, name, json_object_get(op->val));
-}
-
 void
 ut_lib_init(struct ut_state *state, struct json_object *scope)
 {
 	int i;
 
 	for (i = 0; i < sizeof(functions) / sizeof(functions[0]); i++)
-		add_function(state, scope, functions[i].name, functions[i].func);
+		ut_add_function(state, scope, functions[i].name, functions[i].func);
 }
