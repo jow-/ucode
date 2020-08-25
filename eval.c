@@ -330,6 +330,7 @@ ut_getref_required(struct ut_state *state, struct ut_opcode *op, struct json_obj
 				tokennames[op->operand[0]->type], tokennames[op->type]);
 		}
 
+		*key = NULL;
 		return rv;
 	}
 
@@ -406,10 +407,7 @@ ut_execute_assign(struct ut_state *state, struct ut_opcode *op)
 
 	scope = ut_getref_required(state, label, &key);
 
-	if (!scope)
-		return NULL;
-
-	return ut_setval(scope, key, ut_execute_op(state, value));
+	return key ? ut_setval(scope, key, ut_execute_op(state, value)) : scope;
 }
 
 static struct json_object *
@@ -740,8 +738,8 @@ ut_execute_inc_dec(struct ut_state *state, struct ut_opcode *op)
 
 	scope = ut_getref_required(state, label, &key);
 
-	if (!scope)
-		return NULL;
+	if (!key)
+		return scope;
 
 	val = ut_getval(scope, key);
 
@@ -1166,14 +1164,14 @@ ut_execute_op(struct ut_state *state, struct ut_opcode *op)
 	case T_DOT:
 		scope = ut_getref_required(state, op, &key);
 
-		return ut_getval(scope, key);
+		return key ? ut_getval(scope, key) : scope;
 
 	case T_LBRACK:
 		/* postfix access */
 		if (op->val) {
 			scope = ut_getref_required(state, op, &key);
 
-			return ut_getval(scope, key);
+			return key ? ut_getval(scope, key) : scope;
 		}
 
 		return ut_execute_list(state, op->operand[0]);
