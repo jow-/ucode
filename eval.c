@@ -1139,6 +1139,7 @@ ut_execute_op(struct ut_state *state, struct ut_opcode *op)
 	case T_DOUBLE:
 	case T_BOOL:
 	case T_STRING:
+	case T_NULL:
 		return json_object_get(op->val);
 
 	case T_THIS:
