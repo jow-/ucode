@@ -317,7 +317,7 @@ ut_getref_required(struct ut_state *state, struct ut_opcode *op, struct json_obj
 
 	if (!json_object_is_type(scope, json_type_array) &&
 		!json_object_is_type(scope, json_type_object)) {
-		lhs = ut_ref_to_str(op->operand[0]);
+		lhs = op->operand[0] ? ut_ref_to_str(op->operand[0]) : NULL;
 
 		if (lhs) {
 			rv = ut_exception(state, op->operand[0], "Type error: %s is null", lhs);
@@ -325,9 +325,8 @@ ut_getref_required(struct ut_state *state, struct ut_opcode *op, struct json_obj
 			free(lhs);
 		}
 		else {
-			rv = ut_exception(state, op->operand[0],
-				"Syntax error: Invalid left-hand side operand %s for %s",
-				tokennames[op->operand[0]->type], tokennames[op->type]);
+			rv = ut_exception(state, op,
+				"Syntax error: Invalid left-hand side operand %s", tokennames[op->type]);
 		}
 
 		*key = NULL;
