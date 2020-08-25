@@ -131,6 +131,7 @@ static const struct token reserved_words[] = {
 	{ T_BOOL,		"false", 5, parse_bool },
 	{ T_BOOL,		"true",  4, parse_bool },
 	{ T_ELSE,		"else",  4 },
+	{ T_THIS,		"this",  4 },
 	{ T_NUMBER,		"NaN",   3, parse_number },
 	{ T_FOR,		"for",   3 },
 	{ T_IN,			"in",    2 },
@@ -204,6 +205,7 @@ const char *tokennames[__T_MAX] = {
 	[T_RETURN]      = "'return'",
 	[T_BREAK]    	= "'break'",
 	[T_CONTINUE]    = "'continue'",
+	[T_THIS]        = "'this'",
 	//[T_LSTM]		= "'{%'",
 	//[T_RSTM]		= "'%}'"
 };

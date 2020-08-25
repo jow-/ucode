@@ -823,6 +823,8 @@ ut_invoke(struct ut_state *state, struct ut_opcode *op, struct json_object *scop
 	for (arridx = 0; arg; arridx++, arg = arg->sibling)
 		ut_setval(s, arg->val, argvals ? json_object_array_get_idx(argvals, arridx) : NULL);
 
+	json_object_set_userdata(s, json_object_get(state->ctx), NULL);
+
 	rv = ut_execute_op_sequence(state, decl->operand[2]);
 	tag = json_object_get_userdata(rv);
 
@@ -849,6 +851,7 @@ ut_invoke(struct ut_state *state, struct ut_opcode *op, struct json_object *scop
 	if (!scope) {
 		state->stack.scope[--state->stack.off] = NULL;
 
+		json_object_put(json_object_get_userdata(s));
 		json_object_put(s);
 	}
 
@@ -1139,6 +1142,9 @@ ut_execute_op(struct ut_state *state, struct ut_opcode *op)
 	case T_STRING:
 		return json_object_get(op->val);
 
+	case T_THIS:
+		return json_object_get_userdata(ut_getscope(state, 0));
+
 	case T_FUNC:
 		if (op->operand[0])
 			ut_setval(ut_getscope(state, 0), op->operand[0]->val, op->val);
@@ -1158,11 +1164,13 @@ ut_execute_op(struct ut_state *state, struct ut_opcode *op)
 
 	case T_LABEL:
 		scope = ut_getref(state, op, &key);
+		state->ctx = scope;
 
 		return ut_getval(scope, key);
 
 	case T_DOT:
 		scope = ut_getref_required(state, op, &key);
+		state->ctx = scope;
 
 		return key ? ut_getval(scope, key) : scope;
 
@@ -1170,6 +1178,7 @@ ut_execute_op(struct ut_state *state, struct ut_opcode *op)
 		/* postfix access */
 		if (op->val) {
 			scope = ut_getref_required(state, op, &key);
+			state->ctx = scope;
 
 			return key ? ut_getval(scope, key) : scope;
 		}
@@ -1287,6 +1296,8 @@ ut_run(struct ut_state *state)
 
 	if (!json_object_is_type(scope, json_type_object))
 		return UT_ERROR_EXCEPTION;
+
+	state->ctx = scope;
 
 	ut_lib_init(state, scope);
 

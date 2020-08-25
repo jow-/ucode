@@ -260,6 +260,7 @@ primary_exp(A) ::= T_NUMBER(B).							{ A = B; }
 primary_exp(A) ::= T_DOUBLE(B).							{ A = B; }
 primary_exp(A) ::= T_STRING(B).							{ A = B; }
 primary_exp(A) ::= T_LABEL(B).							{ A = B; }
+primary_exp(A) ::= T_THIS(B).							{ A = B; }
 primary_exp(A) ::= array(B).							{ A = B; }
 primary_exp(A) ::= object(B).							{ A = B; }
 primary_exp(A) ::= T_LPAREN assign_exp(B) T_RPAREN.		{ A = B; }

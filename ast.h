@@ -77,6 +77,7 @@ struct ut_state {
 		uint8_t size;
 		uint8_t off;
 	} stack;
+	struct json_object *ctx;
 };
 
 struct ut_opcode *ut_new_op(struct ut_state *s, int type, struct json_object *val, ...);
