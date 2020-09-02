@@ -305,7 +305,7 @@ ut_getref(struct ut_state *state, struct ut_opcode *op, struct json_object **key
 
 		*key = op->val;
 
-		return scope;
+		return json_object_get(scope);
 	}
 	else {
 		*key = NULL;
@@ -335,6 +335,8 @@ ut_getref_required(struct ut_state *state, struct ut_opcode *op, struct json_obj
 			rv = ut_exception(state, op,
 				"Syntax error: Invalid left-hand side operand %s", tokennames[op->type]);
 		}
+
+		json_object_put(scope);
 
 		*key = NULL;
 		return rv;
@@ -429,11 +431,17 @@ ut_execute_assign(struct ut_state *state, struct ut_opcode *op)
 {
 	struct ut_opcode *label = op->operand[0];
 	struct ut_opcode *value = op->operand[1];
-	struct json_object *scope, *key;
+	struct json_object *scope, *key, *val;
 
 	scope = ut_getref_required(state, label, &key);
 
-	return key ? ut_setval(scope, key, ut_execute_op(state, value)) : scope;
+	if (!key)
+		return scope;
+
+	val = ut_setval(scope, key, ut_execute_op(state, value));
+	ut_putval(scope);
+
+	return val;
 }
 
 static struct json_object *
@@ -768,6 +776,8 @@ ut_execute_inc_dec(struct ut_state *state, struct ut_opcode *op)
 		return scope;
 
 	val = ut_getval(scope, key);
+
+	ut_putval(scope);
 
 	if (ut_cast_number(val, &n, &d) == json_type_double)
 		nval = json_object_new_double_rounded(d + (op->type == T_INC ? 1.0 : -1.0));
@@ -1159,7 +1169,7 @@ ut_execute_break_cont(struct ut_state *state, struct ut_opcode *op)
 static struct json_object *
 ut_execute_op(struct ut_state *state, struct ut_opcode *op)
 {
-	struct json_object *scope, *key;
+	struct json_object *scope, *key, *val;
 
 	switch (op->type) {
 	case T_NUMBER:
@@ -1193,13 +1203,22 @@ ut_execute_op(struct ut_state *state, struct ut_opcode *op)
 		scope = ut_getref(state, op, &key);
 		state->ctx = scope;
 
-		return ut_getval(scope, key);
+		val = ut_getval(scope, key);
+		ut_putval(scope);
+
+		return val;
 
 	case T_DOT:
 		scope = ut_getref_required(state, op, &key);
 		state->ctx = scope;
 
-		return key ? ut_getval(scope, key) : scope;
+		if (!key)
+			return scope;
+
+		val = ut_getval(scope, key);
+		ut_putval(scope);
+
+		return val;
 
 	case T_LBRACK:
 		/* postfix access */
@@ -1207,7 +1226,13 @@ ut_execute_op(struct ut_state *state, struct ut_opcode *op)
 			scope = ut_getref_required(state, op, &key);
 			state->ctx = scope;
 
-			return key ? ut_getval(scope, key) : scope;
+			if (!key)
+				return scope;
+
+			val = ut_getval(scope, key);
+			json_object_put(scope);
+
+			return val;
 		}
 
 		return ut_execute_list(state, op->operand[0]);
