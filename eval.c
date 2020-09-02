@@ -777,7 +777,7 @@ ut_execute_list(struct ut_state *state, struct ut_opcode *op)
 static struct json_object *
 ut_execute_object(struct ut_state *state, struct ut_opcode *op)
 {
-	struct json_object *obj = json_object_new_object();
+	struct json_object *obj = ut_new_object(state, NULL);
 	struct ut_opcode *key, *val;
 
 	if (!obj)

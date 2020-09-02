@@ -132,6 +132,40 @@ json_object_new_null_obj(void) {
 	return d;
 }
 
+static void
+obj_free(struct json_object *v, void *ud)
+{
+	struct ut_tagvalue *tag = json_object_get_userdata(v);
+
+	json_object_put(tag->proto);
+	free(ud);
+}
+
+struct json_object *
+ut_new_object(struct ut_state *s, struct json_object *proto) {
+	struct json_object *val = json_object_new_object();
+	struct ut_tagvalue *tag;
+
+	if (!val)
+		return NULL;
+
+	tag = calloc(1, sizeof(*tag));
+
+	if (!tag) {
+		json_object_put(val);
+
+		return NULL;
+	}
+
+	tag->val = val;
+	tag->type = T_LBRACE;
+	tag->proto = json_object_get(proto);
+
+	json_object_set_serializer(val, NULL, tag, obj_free);
+
+	return tag->val;
+}
+
 static int
 func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
