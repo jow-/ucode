@@ -61,29 +61,36 @@ ut_exception(struct ut_state *state, struct ut_opcode *op, const char *fmt, ...)
 bool
 ut_val_is_truish(struct json_object *val)
 {
+	struct ut_opcode *tag = json_object_get_userdata(val);
 	double d;
 
-	switch (json_object_get_type(val)) {
-	case json_type_int:
-		return (json_object_get_int64(val) != 0);
-
-	case json_type_double:
-		d = json_object_get_double(val);
-
-		return (d != 0 && !isnan(d));
-
-	case json_type_boolean:
-		return (json_object_get_boolean(val) != false);
-
-	case json_type_string:
-		return (json_object_get_string_len(val) > 0);
-
-	case json_type_array:
-	case json_type_object:
-		return true;
+	switch (tag ? tag->type : 0) {
+	case T_EXCEPTION:
+		return false;
 
 	default:
-		return false;
+		switch (json_object_get_type(val)) {
+		case json_type_int:
+			return (json_object_get_int64(val) != 0);
+
+		case json_type_double:
+			d = json_object_get_double(val);
+
+			return (d != 0 && !isnan(d));
+
+		case json_type_boolean:
+			return (json_object_get_boolean(val) != false);
+
+		case json_type_string:
+			return (json_object_get_string_len(val) > 0);
+
+		case json_type_array:
+		case json_type_object:
+			return true;
+
+		default:
+			return false;
+		}
 	}
 }
 
