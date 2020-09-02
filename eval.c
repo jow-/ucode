@@ -345,8 +345,20 @@ ut_getref_required(struct ut_state *state, struct ut_opcode *op, struct json_obj
 }
 
 static struct json_object *
+ut_getproto(struct json_object *obj)
+{
+	struct ut_tagvalue *tag = json_object_get_userdata(obj);
+
+	if (!tag || (tag->type != T_LBRACE && tag->type <= __T_MAX) || !tag->val)
+		return NULL;
+
+	return tag->proto;
+}
+
+static struct json_object *
 ut_getval(struct json_object *scope, struct json_object *key)
 {
+	struct json_object *o, *v;
 	int64_t idx;
 	double d;
 
@@ -374,7 +386,15 @@ ut_getval(struct json_object *scope, struct json_object *key)
 		return json_object_get(json_object_array_get_idx(scope, idx));
 	}
 
-	return json_object_get(json_object_object_get(scope, key ? json_object_get_string(key) : "null"));
+	for (o = scope; o; o = ut_getproto(o)) {
+		if (!json_object_is_type(o, json_type_object))
+			continue;
+
+		if (json_object_object_get_ex(o, key ? json_object_get_string(key) : "null", &v))
+			return json_object_get(v);
+	}
+
+	return NULL;
 }
 
 static struct json_object *
