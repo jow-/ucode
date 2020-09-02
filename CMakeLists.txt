@@ -4,6 +4,11 @@ include(CheckFunctionExists)
 PROJECT(utpl C)
 ADD_DEFINITIONS(-Os -Wall -Werror --std=gnu99 -Wmissing-declarations -Wno-error=unused-variable -ffunction-sections -D_GNU_SOURCE)
 
+OPTION(FS_SUPPORT "Filesystem plugin support" ON)
+
+SET(LIB_SEARCH_PATH "/usr/lib/utpl/*.so:/usr/share/utpl/*.utpl:./*.so:./*.utpl" CACHE STRING "Default library search path")
+ADD_DEFINITIONS(-DLIB_SEARCH_PATH="${LIB_SEARCH_PATH}")
+
 IF(NOT APPLE)
   SET(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "-Wl,--gc-sections")
 ENDIF()
@@ -46,5 +51,12 @@ CHECK_FUNCTION_EXISTS(ceil CEIL_FUNCTION_EXISTS)
 IF (NOT CEIL_FUNCTION_EXISTS)
   TARGET_LINK_LIBRARIES(utpl m)
 ENDIF()
+
+CHECK_FUNCTION_EXISTS(dlopen DLOPEN_FUNCTION_EXISTS)
+IF (NOT DLOPEN_FUNCTION_EXISTS)
+  TARGET_LINK_LIBRARIES(utpl dl)
+ENDIF()
+
+SET(LIBRARIES "")
 
 INSTALL(TARGETS utpl RUNTIME DESTINATION bin)

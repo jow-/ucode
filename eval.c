@@ -1333,6 +1333,29 @@ ut_execute_op_sequence(struct ut_state *state, struct ut_opcode *op)
 	return v;
 }
 
+static void
+ut_globals_init(struct ut_state *state, struct json_object *scope)
+{
+	struct json_object *arr = json_object_new_array();
+	const char *p, *last;
+
+	if (!arr)
+		return;
+
+	for (p = last = LIB_SEARCH_PATH;; p++) {
+		if (*p == ':' || *p == '\0') {
+			json_object_array_add(arr, json_object_new_string_len(last, p - last));
+
+			if (!*p)
+				break;
+
+			last = p + 1;
+		}
+	}
+
+	json_object_object_add(scope, "REQUIRE_SEARCH_PATH", arr);
+}
+
 enum ut_error_type
 ut_run(struct ut_state *state)
 {
@@ -1351,6 +1374,7 @@ ut_run(struct ut_state *state)
 
 	state->ctx = scope;
 
+	ut_globals_init(state, scope);
 	ut_lib_init(state, scope);
 
 	args = json_object_new_array();

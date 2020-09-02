@@ -19,6 +19,7 @@
 #include "lexer.h"
 #include "eval.h"
 #include "lib.h"
+#include "module.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,7 +29,10 @@
 #include <errno.h>
 #include <math.h>
 #include <time.h>
+#include <dlfcn.h>
+#include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/types.h>
 
 
 static bool
@@ -1592,6 +1596,166 @@ ut_printf(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	return json_object_new_int64(len);
 }
 
+static struct json_object *
+ut_require_so(struct ut_state *s, struct ut_opcode *op, const char *path)
+{
+	void (*init)(const struct ut_ops *, struct ut_state *, struct json_object *);
+	struct json_object *scope;
+	struct stat st;
+	void *dlh;
+
+	if (stat(path, &st))
+		return NULL;
+
+	dlerror();
+	dlh = dlopen(path, RTLD_LAZY|RTLD_LOCAL);
+
+	if (!dlh)
+		return ut_exception(s, op, "Unable to dlopen file %s: %s", path, dlerror());
+
+	init = dlsym(dlh, "ut_module_init");
+
+	if (!init)
+		return ut_exception(s, op, "Module %s provides no 'ut_module_init' function", path);
+
+	scope = json_object_new_object();
+
+	if (!scope)
+		return ut_exception(s, op, UT_ERRMSG_OOM);
+
+	init(&ut, s, scope);
+
+	return scope;
+}
+
+static struct json_object *
+ut_require_utpl(struct ut_state *s, struct ut_opcode *op, const char *path)
+{
+	struct json_object *ex, *scope;
+	char *source, *msg;
+	struct stat st;
+	FILE *sfile;
+
+	if (stat(path, &st))
+		return NULL;
+
+	sfile = fopen(path, "rb");
+
+	if (!sfile)
+		return ut_exception(s, op, "Unable to open file %s: %s", path, strerror(errno));
+
+	source = calloc(1, st.st_size + 1);
+
+	if (!source) {
+		fclose(sfile);
+
+		return ut_exception(s, op, UT_ERRMSG_OOM);
+	}
+
+	fread(source, 1, st.st_size, sfile);
+	fclose(sfile);
+
+	if (ut_parse(s, source)) {
+		msg = ut_format_error(s, source);
+		ex = ut_exception(s, op, "Module loading failed: %s", msg);
+
+		free(source);
+		free(msg);
+
+		return ex;
+	}
+
+	free(source);
+
+	scope = json_object_new_object();
+
+	if (!scope)
+		return ut_exception(s, op, UT_ERRMSG_OOM);
+
+	return ut_invoke(s, op, scope, s->main->val, NULL);
+}
+
+static struct json_object *
+ut_require_path(struct ut_state *s, struct ut_opcode *op, const char *path_template, const char *name)
+{
+	struct json_object *rv = NULL;
+	const char *p, *q, *last;
+	char *path = NULL;
+	size_t plen = 0;
+
+	p = strchr(path_template, '*');
+
+	if (!p)
+		goto invalid;
+
+	snprintf_append(&path, &plen, "%s", p - path_template, path_template);
+
+	for (q = last = name;; q++) {
+		if (*q == '.' || *q == '\0') {
+			snprintf_append(&path, &plen, "%s", q - last, last);
+			sprintf_append(&path, &plen, "%s", *q ? "/" : ++p);
+
+			if (*q == '\0')
+				break;
+
+			last = q + 1;
+		}
+		else if (!isalnum(*q) && *q != '_') {
+			goto invalid;
+		}
+	}
+
+	if (!strcmp(p, ".so"))
+		rv = ut_require_so(s, op, path);
+	else if (!strcmp(p, ".utpl"))
+		rv = ut_require_utpl(s, op, path);
+
+invalid:
+	free(path);
+
+	return rv;
+}
+
+static struct json_object *
+ut_require(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+{
+	struct json_object *val = json_object_array_get_idx(args, 0);
+	struct json_object *search, *se, *res;
+	size_t arridx, arrlen;
+	const char *name;
+
+	if (!json_object_is_type(val, json_type_string))
+		return NULL;
+
+	name = json_object_get_string(val);
+	search = json_object_object_get(s->stack.scope[0], "REQUIRE_SEARCH_PATH");
+
+	if (!json_object_is_type(search, json_type_array))
+		return ut_exception(s, op, "Global require search path not set");
+
+	for (arridx = 0, arrlen = json_object_array_length(search); arridx < arrlen; arridx++) {
+		se = json_object_array_get_idx(search, arridx);
+
+		if (!json_object_is_type(se, json_type_string))
+			continue;
+
+		res = ut_require_path(s, op, json_object_get_string(se), name);
+
+		if (res)
+			return res;
+	}
+
+	return ut_exception(s, op, "No module named '%s' could be found", name);
+}
+
+const struct ut_ops ut = {
+	.register_function = ut_register_function,
+	.register_type = ut_register_extended_type,
+	.set_type = ut_set_extended_type,
+	.get_type = ut_get_extended_type,
+	.new_object = ut_new_object,
+};
+
 static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "abs",		ut_abs },
 	{ "atan2",		ut_atan2 },
@@ -1639,6 +1803,7 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "values",		ut_values },
 	{ "sprintf",	ut_sprintf },
 	{ "printf",		ut_printf },
+	{ "require",	ut_require },
 };
 
 void
