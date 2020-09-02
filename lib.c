@@ -257,6 +257,48 @@ ut_cast_int64(struct json_object *v)
 	return n;
 }
 
+static int
+ut_c_fn_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
+{
+	return sprintbuf(pb, "%sfunction(...) { [native code] }%s",
+		level ? "\"" : "", level ? "\"" : "");
+}
+
+static void
+ut_c_fn_free(struct json_object *v, void *ud)
+{
+	struct ut_tagvalue *tag = json_object_get_userdata(v);
+
+	json_object_put(tag->proto);
+	free(ud);
+}
+
+static bool
+ut_register_function(struct ut_state *state, struct json_object *scope, const char *name, ut_c_fn *fn)
+{
+	struct json_object *val = json_object_new_object();
+	struct ut_tagvalue *tag;
+
+	if (!val)
+		return NULL;
+
+	tag = calloc(1, sizeof(*tag));
+
+	if (!tag) {
+		json_object_put(val);
+
+		return NULL;
+	}
+
+	tag->val = val;
+	tag->type = T_CFUNC;
+	tag->data = fn;
+
+	json_object_set_serializer(val, ut_c_fn_to_string, tag, ut_c_fn_free);
+
+	return json_object_object_add(scope, name, tag->val);
+}
+
 static struct json_object *
 ut_print(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 {
@@ -1605,5 +1647,5 @@ ut_lib_init(struct ut_state *state, struct json_object *scope)
 	int i;
 
 	for (i = 0; i < sizeof(functions) / sizeof(functions[0]); i++)
-		ut_add_function(state, scope, functions[i].name, functions[i].func);
+		ut_register_function(state, scope, functions[i].name, functions[i].func);
 }

@@ -806,8 +806,8 @@ ut_invoke(struct ut_state *state, struct ut_opcode *op, struct json_object *scop
 {
 	struct ut_opcode *decl = json_object_get_userdata(func);
 	struct ut_opcode *arg = decl ? decl->operand[1] : NULL;
+	struct ut_tagvalue *tag = (struct ut_tagvalue *)decl;
 	struct json_object *s, *rv = NULL;
-	struct ut_opcode *tag;
 	size_t arridx;
 	ut_c_fn *cfn;
 
@@ -815,8 +815,8 @@ ut_invoke(struct ut_state *state, struct ut_opcode *op, struct json_object *scop
 		return NULL;
 
 	/* is native function */
-	if (decl->type == T_CFUNC) {
-		cfn = (ut_c_fn *)decl->operand[0];
+	if (tag->type == T_CFUNC) {
+		cfn = (ut_c_fn *)tag->data;
 
 		return cfn ? cfn(state, op, argvals) : NULL;
 	}
@@ -838,7 +838,7 @@ ut_invoke(struct ut_state *state, struct ut_opcode *op, struct json_object *scop
 	case T_BREAK:
 	case T_CONTINUE:
 		ut_putval(rv);
-		rv = ut_exception(state, tag, "Syntax error: %s statement must be inside loop",
+		rv = ut_exception(state, (struct ut_opcode *)tag, "Syntax error: %s statement must be inside loop",
 		                  tokennames[tag->type]);
 		break;
 
