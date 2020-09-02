@@ -57,6 +57,14 @@ struct ut_opcode {
 	uint32_t off;
 };
 
+struct ut_tagvalue {
+	int type;
+	struct json_object *val;
+	struct json_object *proto;
+	size_t tagtype;
+	void *data;
+};
+
 struct ut_state {
 	struct ut_opcode *pool;
 	struct ut_opcode *main;
@@ -80,6 +88,11 @@ struct ut_state {
 	struct json_object *ctx;
 };
 
+struct ut_extended_type {
+	const char *name;
+	void (*free)(void *);
+};
+
 struct ut_opcode *ut_new_op(struct ut_state *s, int type, struct json_object *val, ...);
 struct ut_opcode *ut_wrap_op(struct ut_opcode *parent, ...);
 struct ut_opcode *ut_append_op(struct ut_opcode *a, struct ut_opcode *b);
@@ -90,6 +103,10 @@ struct ut_opcode *ut_new_func(struct ut_state *s, struct ut_opcode *name, struct
 
 struct json_object *json_object_new_double_rounded(double v);
 struct json_object *json_object_new_null_obj(void);
+
+bool ut_register_extended_type(const char *name, void (*freefn)(void *));
+struct json_object *ut_set_extended_type(struct ut_state *s, struct json_object *v, struct json_object *proto, const char *name, void *data);
+void **ut_get_extended_type(struct json_object *val, const char *name);
 
 void *ParseAlloc(void *(*mfunc)(size_t));
 void Parse(void *pParser, int type, struct ut_opcode *op, struct ut_state *s);

@@ -24,6 +24,9 @@
 #include <string.h>
 #include <math.h>
 
+static size_t ut_ext_types_count = 0;
+static struct ut_extended_type *ut_ext_types = NULL;
+
 struct ut_opcode *
 ut_new_op(struct ut_state *s, int type, struct json_object *val, ...)
 {
@@ -191,8 +194,7 @@ ut_free(struct ut_state *s)
 		for (op = s->pool; op;) {
 			tmp = op->next;
 
-			if (op->val != (void *)1)
-				json_object_put(op->val);
+			json_object_put(op->val);
 
 			free(op);
 			op = tmp;
@@ -201,6 +203,7 @@ ut_free(struct ut_state *s)
 		ut_reset(s);
 	}
 
+	free(ut_ext_types);
 	free(s);
 }
 
@@ -247,4 +250,105 @@ out:
 	ParseFree(pParser, free);
 
 	return s->error.code;
+}
+
+bool
+ut_register_extended_type(const char *name, void (*freefn)(void *))
+{
+	struct ut_extended_type *tmp;
+
+	tmp = realloc(ut_ext_types, (ut_ext_types_count + 1) * sizeof(*tmp));
+
+	if (!tmp)
+		return false;
+
+	ut_ext_types = tmp;
+	ut_ext_types[ut_ext_types_count].name = name;
+	ut_ext_types[ut_ext_types_count].free = freefn;
+	ut_ext_types_count++;
+
+	return true;
+}
+
+static int
+ut_extended_type_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
+{
+	struct ut_tagvalue *tag = json_object_get_userdata(v);
+	struct ut_extended_type *et;
+
+	if (!tag)
+		return 0;
+
+	et = &ut_ext_types[tag->tagtype - 1];
+
+	return sprintbuf(pb, "%s<%s %p>%s", level ? "\"" : "", et->name, tag->data, level ? "\"" : "");
+}
+
+static void
+ut_extended_type_free(struct json_object *v, void *ud)
+{
+	struct ut_tagvalue *tag = json_object_get_userdata(v);
+	struct ut_extended_type *et;
+
+	if (!tag)
+		return;
+
+	et = &ut_ext_types[tag->tagtype - 1];
+
+	if (et->free)
+		et->free(tag->data);
+
+	json_object_put(tag->proto);
+	free(ud);
+}
+
+struct json_object *
+ut_set_extended_type(struct ut_state *s, struct json_object *v, struct json_object *proto, const char *name, void *data)
+{
+	struct ut_extended_type *et = NULL;
+	struct ut_tagvalue *tag;
+	size_t n;
+
+	for (n = 0; n < ut_ext_types_count; n++) {
+		if (!strcmp(name, ut_ext_types[n].name)) {
+			et = &ut_ext_types[n];
+			break;
+		}
+	}
+
+	if (!et)
+		return NULL;
+
+	tag = calloc(1, sizeof(*tag));
+
+	if (!tag)
+		return NULL;
+
+	tag->val = v;
+	tag->type = T_RESSOURCE;
+	tag->proto = json_object_get(proto);
+	tag->tagtype = n + 1;
+	tag->data = data;
+
+	json_object_set_serializer(tag->val, ut_extended_type_to_string, tag, ut_extended_type_free);
+
+	return tag->val;
+}
+
+void **
+ut_get_extended_type(struct json_object *v, const char *name)
+{
+	struct ut_tagvalue *tag = json_object_get_userdata(v);
+	size_t n = tag ? tag->tagtype : 0;
+	struct ut_extended_type *et;
+
+	if (!tag || tag->type != T_RESSOURCE || n == 0 || n > ut_ext_types_count)
+		return NULL;
+
+	et = &ut_ext_types[n - 1];
+
+	if (name && strcmp(et->name, name))
+		return NULL;
+
+	return &tag->data;
 }
