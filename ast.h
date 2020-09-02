@@ -102,8 +102,8 @@ void ut_free(struct ut_state *s);
 struct ut_opcode *ut_new_func(struct ut_state *s, struct ut_opcode *name, struct ut_opcode *args, struct ut_opcode *body);
 
 struct json_object *ut_new_object(struct ut_state *s, struct json_object *proto);
-struct json_object *json_object_new_double_rounded(double v);
-struct json_object *json_object_new_null_obj(void);
+struct json_object *ut_new_double(double v);
+struct json_object *ut_new_null(void);
 
 bool ut_register_extended_type(const char *name, void (*freefn)(void *));
 struct json_object *ut_set_extended_type(struct ut_state *s, struct json_object *v, struct json_object *proto, const char *name, void *data);

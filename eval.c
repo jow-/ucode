@@ -780,7 +780,7 @@ ut_execute_inc_dec(struct ut_state *state, struct ut_opcode *op)
 	ut_putval(scope);
 
 	if (ut_cast_number(val, &n, &d) == json_type_double)
-		nval = json_object_new_double_rounded(d + (op->type == T_INC ? 1.0 : -1.0));
+		nval = ut_new_double(d + (op->type == T_INC ? 1.0 : -1.0));
 	else
 		nval = json_object_new_int64(n + (op->type == T_INC ? 1 : -1));
 
@@ -978,7 +978,7 @@ ut_execute_unary_plus_minus(struct ut_state *state, struct ut_opcode *op)
 		return json_object_new_int64((op->type == T_SUB) ? -n : n);
 
 	default:
-		return json_object_new_double_rounded((op->type == T_SUB) ? -d : d);
+		return ut_new_double((op->type == T_SUB) ? -d : d);
 	}
 }
 
@@ -1038,22 +1038,22 @@ ut_execute_arith(struct ut_state *state, struct ut_opcode *op)
 
 		switch (op->type) {
 		case T_ADD:
-			return json_object_new_double_rounded(d1 + d2);
+			return ut_new_double(d1 + d2);
 
 		case T_SUB:
-			return json_object_new_double_rounded(d1 - d2);
+			return ut_new_double(d1 - d2);
 
 		case T_MUL:
-			return json_object_new_double_rounded(d1 * d2);
+			return ut_new_double(d1 * d2);
 
 		case T_DIV:
 			if (d2 == 0.0)
-				return json_object_new_double_rounded(NAN);
+				return ut_new_double(NAN);
 
-			return json_object_new_double_rounded(d1 / d2);
+			return ut_new_double(d1 / d2);
 
 		case T_MOD:
-			return json_object_new_double_rounded(NAN);
+			return ut_new_double(NAN);
 		}
 	}
 
@@ -1069,7 +1069,7 @@ ut_execute_arith(struct ut_state *state, struct ut_opcode *op)
 
 	case T_DIV:
 		if (n2 == 0)
-			return json_object_new_double_rounded(NAN);
+			return ut_new_double(NAN);
 
 		return json_object_new_int64(n1 / n2);
 
@@ -1077,7 +1077,7 @@ ut_execute_arith(struct ut_state *state, struct ut_opcode *op)
 		return json_object_new_int64(n1 % n2);
 	}
 
-	return json_object_new_double_rounded(NAN);
+	return ut_new_double(NAN);
 }
 
 static struct json_object *
@@ -1149,7 +1149,7 @@ ut_execute_return(struct ut_state *state, struct ut_opcode *op)
 	struct json_object *val = op->operand[0] ? ut_execute_op(state, op->operand[0]) : NULL;
 
 	if (!val)
-		val = json_object_new_null_obj();
+		val = ut_new_null();
 
 	json_object_set_userdata(val, op, NULL);
 

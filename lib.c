@@ -500,12 +500,12 @@ ut_abs(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	double d;
 
 	if (json_object_is_type(v, json_type_null))
-		return json_object_new_double_rounded(NAN);
+		return ut_new_double(NAN);
 
 	t = ut_cast_number(v, &n, &d);
 
 	if (t == json_type_double)
-		return (isnan(d) || d < 0) ? json_object_new_double_rounded(-d) : json_object_get(v);
+		return (isnan(d) || d < 0) ? ut_new_double(-d) : json_object_get(v);
 
 	return (n < 0) ? json_object_new_int64(-n) : json_object_get(v);
 }
@@ -517,9 +517,9 @@ ut_atan2(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	double d2 = ut_cast_double(json_object_array_get_idx(args, 1));
 
 	if (isnan(d1) || isnan(d2))
-		return json_object_new_double_rounded(NAN);
+		return ut_new_double(NAN);
 
-	return json_object_new_double_rounded(atan2(d1, d2));
+	return ut_new_double(atan2(d1, d2));
 }
 
 static struct json_object *
@@ -558,9 +558,9 @@ ut_cos(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	double d = ut_cast_double(json_object_array_get_idx(args, 0));
 
 	if (isnan(d))
-		return json_object_new_double_rounded(NAN);
+		return ut_new_double(NAN);
 
-	return json_object_new_double_rounded(cos(d));
+	return ut_new_double(cos(d));
 }
 
 static struct json_object *
@@ -620,9 +620,9 @@ ut_exp(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	double d = ut_cast_double(json_object_array_get_idx(args, 0));
 
 	if (isnan(d))
-		return json_object_new_double_rounded(NAN);
+		return ut_new_double(NAN);
 
-	return json_object_new_double_rounded(exp(d));
+	return ut_new_double(exp(d));
 }
 
 static struct json_object *
@@ -682,12 +682,12 @@ ut_hex(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	char *e;
 
 	if (!val || !isxdigit(*val))
-		return json_object_new_double_rounded(NAN);
+		return ut_new_double(NAN);
 
 	n = strtoll(val, &e, 16);
 
 	if (e == val || *e)
-		return json_object_new_double_rounded(NAN);
+		return ut_new_double(NAN);
 
 	return json_object_new_int64(n);
 }
@@ -698,7 +698,7 @@ ut_int(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	int64_t n = ut_cast_int64(json_object_array_get_idx(args, 0));
 
 	if (errno == EINVAL || errno == EOVERFLOW)
-		return json_object_new_double_rounded(NAN);
+		return ut_new_double(NAN);
 
 	return json_object_new_int64(n);
 }
@@ -816,9 +816,9 @@ ut_log(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	double d = ut_cast_double(json_object_array_get_idx(args, 0));
 
 	if (isnan(d))
-		return json_object_new_double_rounded(NAN);
+		return ut_new_double(NAN);
 
-	return json_object_new_double_rounded(log(d));
+	return ut_new_double(log(d));
 }
 
 static struct json_object *
@@ -978,9 +978,9 @@ ut_sin(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	double d = ut_cast_double(json_object_array_get_idx(args, 0));
 
 	if (isnan(d))
-		return json_object_new_double_rounded(NAN);
+		return ut_new_double(NAN);
 
-	return json_object_new_double_rounded(sin(d));
+	return ut_new_double(sin(d));
 }
 
 
@@ -1153,9 +1153,9 @@ ut_sqrt(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	double d = ut_cast_double(json_object_array_get_idx(args, 0));
 
 	if (isnan(d))
-		return json_object_new_double_rounded(NAN);
+		return ut_new_double(NAN);
 
-	return json_object_new_double_rounded(sqrt(d));
+	return ut_new_double(sqrt(d));
 }
 
 static struct json_object *

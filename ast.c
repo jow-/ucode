@@ -108,7 +108,7 @@ double_rounded_to_string(struct json_object *v, struct printbuf *pb, int level, 
 }
 
 struct json_object *
-json_object_new_double_rounded(double v)
+ut_new_double(double v)
 {
 	struct json_object *d = json_object_new_double(v);
 
@@ -124,7 +124,8 @@ null_obj_to_string(struct json_object *v, struct printbuf *pb, int level, int fl
 }
 
 struct json_object *
-json_object_new_null_obj(void) {
+ut_new_null(void)
+{
 	struct json_object *d = json_object_new_boolean(false);
 
 	json_object_set_serializer(d, null_obj_to_string, NULL, NULL);

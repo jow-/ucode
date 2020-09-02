@@ -539,13 +539,13 @@ parse_number(const char *buf, struct ut_opcode *op, struct ut_state *s)
 
 	if (!strncmp(buf, "Infinity", 8)) {
 		op->type = T_DOUBLE;
-		op->val = json_object_new_double_rounded(INFINITY);
+		op->val = ut_new_double(INFINITY);
 
 		return 8;
 	}
 	else if (!strncmp(buf, "NaN", 3)) {
 		op->type = T_DOUBLE;
-		op->val = json_object_new_double_rounded(NAN);
+		op->val = ut_new_double(NAN);
 
 		return 3;
 	}
@@ -558,7 +558,7 @@ parse_number(const char *buf, struct ut_opcode *op, struct ut_state *s)
 
 			if (e > buf) {
 				op->type = T_DOUBLE;
-				op->val = json_object_new_double_rounded(d);
+				op->val = ut_new_double(d);
 
 				return (e - buf);
 			}
