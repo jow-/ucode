@@ -47,9 +47,9 @@ print_usage(char *app)
 }
 
 #ifndef NDEBUG
-static void dump(struct ut_opcode *op, int level);
+static void dump(struct ut_state *s, uint32_t off, int level);
 
-static void dump_node(struct ut_opcode *op) {
+static void dump_node(struct ut_op *op) {
 	const char *p;
 
 	switch (op->type) {
@@ -96,22 +96,24 @@ static void dump_node(struct ut_opcode *op) {
 	}
 }
 
-static void dump(struct ut_opcode *op, int level) {
-	struct ut_opcode *prev, *cur;
+static void dump(struct ut_state *s, uint32_t off, int level) {
+	struct ut_op *prev, *cur, *child;
 	int i;
 
 	if (level == 0) {
 		printf("digraph G {\nmain [shape=box];\n");
 	}
 
-	for (prev = NULL, cur = op; cur; prev = cur, cur = cur->sibling) {
+	for (prev = NULL, cur = ut_get_op(s, off); cur; prev = cur, cur = ut_get_op(s, cur->tree.next)) {
 		dump_node(cur);
 
 		if (cur->type < __T_MAX) {
-			for (i = 0; i < sizeof(cur->operand) / sizeof(cur->operand[0]); i++) {
-				if (cur->operand[i]) {
-					dump(cur->operand[i], level + 1);
-					printf("n%p -> n%p [label=\"op%d\"];\n", cur, cur->operand[i], i + 1);
+			for (i = 0; i < ARRAY_SIZE(cur->tree.operand) && cur->tree.operand[i]; i++) {
+				child = ut_get_op(s, cur->tree.operand[i]);
+
+				if (cur->tree.operand[i]) {
+					dump(s, cur->tree.operand[i], level + 1);
+					printf("n%p -> n%p [label=\"op%d\"];\n", cur, child, i + 1);
 				}
 			}
 		}
@@ -121,7 +123,7 @@ static void dump(struct ut_opcode *op, int level) {
 	}
 
 	if (level == 0) {
-		printf("main -> n%p [style=dotted];\n", op);
+		printf("main -> n%p [style=dotted];\n", ut_get_op(s, off));
 
 		printf("}\n");
 	}
@@ -143,7 +145,7 @@ parse(const char *source, bool dumponly)
 			fprintf(stderr, "Debug support not compiled in\n");
 			err = UT_ERROR_EXCEPTION;
 #else /* NDEBUG */
-			dump(state->main, 0);
+			dump(state, state->main, 0);
 #endif /* NDEBUG */
 		}
 		else {

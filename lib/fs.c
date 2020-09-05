@@ -32,7 +32,7 @@ static struct json_object *dir_proto;
 static int last_error = 0;
 
 static struct json_object *
-ut_fs_error(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+ut_fs_error(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *errmsg;
 
@@ -47,7 +47,7 @@ ut_fs_error(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 
 
 static struct json_object *
-ut_fs_close(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+ut_fs_close(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.file");
 
@@ -61,7 +61,7 @@ ut_fs_close(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 }
 
 static struct json_object *
-ut_fs_read(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+ut_fs_read(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *limit = json_object_array_get_idx(args, 0);
 	struct json_object *rv = NULL;
@@ -153,7 +153,7 @@ ut_fs_read(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 }
 
 static struct json_object *
-ut_fs_write(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+ut_fs_write(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *data = json_object_array_get_idx(args, 0);
 	size_t len, wsize;
@@ -182,9 +182,9 @@ ut_fs_write(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 }
 
 static struct json_object *
-ut_fs_seek(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+ut_fs_seek(struct ut_state *s, uint32_t off, struct json_object *args)
 {
-	struct json_object *off  = json_object_array_get_idx(args, 0);
+	struct json_object *ofs  = json_object_array_get_idx(args, 0);
 	struct json_object *how  = json_object_array_get_idx(args, 1);
 	int whence, res;
 	long offset;
@@ -194,12 +194,12 @@ ut_fs_seek(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 	if (!fp || !*fp)
 		err_return(EBADF);
 
-	if (!off)
+	if (!ofs)
 		offset = 0;
-	else if (!json_object_is_type(off, json_type_int))
+	else if (!json_object_is_type(ofs, json_type_int))
 		err_return(EINVAL);
 	else
-		offset = (long)json_object_get_int64(off);
+		offset = (long)json_object_get_int64(ofs);
 
 	if (!how)
 		whence = 0;
@@ -217,7 +217,7 @@ ut_fs_seek(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 }
 
 static struct json_object *
-ut_fs_tell(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+ut_fs_tell(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	long offset;
 
@@ -235,7 +235,7 @@ ut_fs_tell(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 }
 
 static struct json_object *
-ut_fs_open(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+ut_fs_open(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *path = json_object_array_get_idx(args, 0);
 	struct json_object *mode = json_object_array_get_idx(args, 1);
@@ -263,7 +263,7 @@ ut_fs_open(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
 
 
 static struct json_object *
-ut_fs_readdir(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+ut_fs_readdir(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	DIR **dp = (DIR **)ops->get_type(s->ctx, "fs.dir");
 	struct dirent *e;
@@ -281,7 +281,7 @@ ut_fs_readdir(struct ut_state *s, struct ut_opcode *op, struct json_object *args
 }
 
 static struct json_object *
-ut_fs_closedir(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+ut_fs_closedir(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	DIR **dp = (DIR **)ops->get_type(s->ctx, "fs.dir");
 
@@ -295,7 +295,7 @@ ut_fs_closedir(struct ut_state *s, struct ut_opcode *op, struct json_object *arg
 }
 
 static struct json_object *
-ut_fs_opendir(struct ut_state *s, struct ut_opcode *op, struct json_object *args)
+ut_fs_opendir(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *path = json_object_array_get_idx(args, 0);
 	struct json_object *diro;

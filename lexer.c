@@ -32,7 +32,7 @@ struct token {
 	int type;
 	const char *pat;
 	int plen;
-	int (*parse)(const char *buf, struct ut_opcode *op, struct ut_state *s);
+	int (*parse)(const char *buf, struct ut_op *op, struct ut_state *s);
 };
 
 #define dec(o) \
@@ -42,11 +42,11 @@ struct token {
 	(((x) >= 'a') ? (10 + (x) - 'a') : \
 		(((x) >= 'A') ? (10 + (x) - 'A') : dec(x)))
 
-static int parse_comment(const char *, struct ut_opcode *, struct ut_state *);
-static int parse_string(const char *, struct ut_opcode *, struct ut_state *);
-static int parse_number(const char *, struct ut_opcode *, struct ut_state *);
-static int parse_label(const char *, struct ut_opcode *, struct ut_state *);
-static int parse_bool(const char *, struct ut_opcode *, struct ut_state *);
+static int parse_comment(const char *, struct ut_op *, struct ut_state *);
+static int parse_string(const char *, struct ut_op *, struct ut_state *);
+static int parse_number(const char *, struct ut_op *, struct ut_state *);
+static int parse_label(const char *, struct ut_op *, struct ut_state *);
+static int parse_bool(const char *, struct ut_op *, struct ut_state *);
 
 static const struct token tokens[] = {
 	{ 0,			" ",     1 },
@@ -278,7 +278,7 @@ utf8enc(char **out, int *rem, int code)
  */
 
 static int
-parse_comment(const char *buf, struct ut_opcode *op, struct ut_state *s)
+parse_comment(const char *buf, struct ut_op *op, struct ut_state *s)
 {
 	const char *p = buf;
 
@@ -314,7 +314,7 @@ parse_comment(const char *buf, struct ut_opcode *op, struct ut_state *s)
  */
 
 static int
-parse_string(const char *buf, struct ut_opcode *op, struct ut_state *s)
+parse_string(const char *buf, struct ut_op *op, struct ut_state *s)
 {
 	char q = *(buf++);
 	char str[128] = { 0 };
@@ -483,7 +483,7 @@ parse_string(const char *buf, struct ut_opcode *op, struct ut_state *s)
  */
 
 static int
-parse_label(const char *buf, struct ut_opcode *op, struct ut_state *s)
+parse_label(const char *buf, struct ut_op *op, struct ut_state *s)
 {
 	const struct token *word;
 	char str[128] = { 0 };
@@ -531,7 +531,7 @@ parse_label(const char *buf, struct ut_opcode *op, struct ut_state *s)
  */
 
 static int
-parse_number(const char *buf, struct ut_opcode *op, struct ut_state *s)
+parse_number(const char *buf, struct ut_op *op, struct ut_state *s)
 {
 	double d;
 	char *e;
@@ -581,7 +581,7 @@ parse_number(const char *buf, struct ut_opcode *op, struct ut_state *s)
  */
 
 static int
-parse_bool(const char *buf, struct ut_opcode *op, struct ut_state *s)
+parse_bool(const char *buf, struct ut_op *op, struct ut_state *s)
 {
 	if (!strncmp(buf, "false", 5)) {
 		op->val = json_object_new_boolean(false);
@@ -599,7 +599,7 @@ parse_bool(const char *buf, struct ut_opcode *op, struct ut_state *s)
 
 
 static int
-match_token(const char *ptr, struct ut_opcode *op, struct ut_state *s)
+match_token(const char *ptr, struct ut_op *op, struct ut_state *s)
 {
 	int i;
 	const struct token *tok;
@@ -621,10 +621,10 @@ match_token(const char *ptr, struct ut_opcode *op, struct ut_state *s)
 	return -UT_ERROR_UNEXPECTED_CHAR;
 }
 
-struct ut_opcode *
+uint32_t
 ut_get_token(struct ut_state *s, const char *input, int *mlen)
 {
-	struct ut_opcode op = { 0 };
+	struct ut_op op = { 0 };
 	const char *o, *p;
 
 	for (o = p = input; *p; p++) {
@@ -647,9 +647,9 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 						p--;
 
 				if (p == o)
-					return NULL;
+					return 0;
 
-				return ut_new_op(s, T_TEXT, json_object_new_string_len(o, p - o), (void *)1);
+				return ut_new_op(s, T_TEXT, json_object_new_string_len(o, p - o), UINT32_MAX);
 			}
 		}
 		else if (s->blocktype == UT_BLOCK_COMMENT) {
@@ -669,7 +669,7 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 				s->blocktype = UT_BLOCK_NONE;
 				s->off += *mlen;
 
-				return NULL;
+				return 0;
 			}
 		}
 		else if (s->blocktype == UT_BLOCK_STATEMENT || s->blocktype == UT_BLOCK_EXPRESSION) {
@@ -678,7 +678,7 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 			if (*mlen < 0) {
 				s->error.code = -*mlen;
 
-				return NULL;
+				return 0;
 			}
 
 			/* disallow nesting blocks */
@@ -688,7 +688,7 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 			          (op.type == T_LSTM || op.type == T_RSTM || op.type == T_LEXP))) {
 				s->error.code = UT_ERROR_NESTED_BLOCKS;
 
-				return NULL;
+				return 0;
 			}
 
 			/* emit additional empty statement (semicolon) at end of template block */
@@ -718,9 +718,9 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 
 			/* do not report '{%' and '%}' tags to parser */
 			if (op.type == T_LSTM || op.type == T_RSTM || op.type == 0)
-				return NULL;
+				return 0;
 
-			return ut_new_op(s, op.type, op.val, (void *)1);
+			return ut_new_op(s, op.type, op.val, UINT32_MAX);
 		}
 	}
 
@@ -728,15 +728,15 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 	if (s->blocktype == UT_BLOCK_EXPRESSION || s->blocktype == UT_BLOCK_COMMENT) {
 		s->error.code = UT_ERROR_UNTERMINATED_BLOCK;
 
-		return NULL;
+		return 0;
 	}
 
 	if (p > input) {
 		*mlen = p - input;
 		s->off += *mlen;
 
-		return ut_new_op(s, T_TEXT, json_object_new_string_len(o, p - o), (void *)1);
+		return ut_new_op(s, T_TEXT, json_object_new_string_len(o, p - o), UINT32_MAX);
 	}
 
-	return NULL;
+	return 0;
 }

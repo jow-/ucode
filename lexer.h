@@ -29,7 +29,7 @@ extern const char *tokennames[__T_MAX];
 bool
 utf8enc(char **out, int *rem, int code);
 
-struct ut_opcode *
+uint32_t
 ut_get_token(struct ut_state *s, const char *input, int *mlen);
 
 #endif /* __LEXER_H_ */

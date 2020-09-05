@@ -25,7 +25,7 @@
 #include "ast.h"
 
 __attribute__((format(printf, 3, 0))) struct json_object *
-ut_exception(struct ut_state *state, struct ut_opcode *op, const char *fmt, ...);
+ut_exception(struct ut_state *state, uint32_t op, const char *fmt, ...);
 
 void
 ut_putval(struct json_object *val);
@@ -40,7 +40,7 @@ enum json_type
 ut_cast_number(struct json_object *v, int64_t *n, double *d);
 
 struct json_object *
-ut_invoke(struct ut_state *, struct ut_opcode *, struct json_object *, struct json_object *, struct json_object *);
+ut_invoke(struct ut_state *, uint32_t, struct json_object *, struct json_object *, struct json_object *);
 
 enum ut_error_type
 ut_run(struct ut_state *state);

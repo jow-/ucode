@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-%token_type {struct ut_opcode *}
+%token_type {uint32_t}
 %extra_argument {struct ut_state *s}
 
 %nonassoc T_LEXP T_REXP T_LSTM T_RSTM.
@@ -59,28 +59,35 @@
 #define YYNOERRORRECOVERY
 
 #define new_op(type, val, ...) \
-	ut_new_op(s, type, val, ##__VA_ARGS__, (void *)1)
+	ut_new_op(s, type, val, ##__VA_ARGS__, UINT32_MAX)
 
 #define wrap_op(op, ...) \
-	ut_wrap_op(op, ##__VA_ARGS__, (void *)1)
+	ut_wrap_op(s, op, ##__VA_ARGS__, UINT32_MAX)
 
-#define append_op ut_append_op
+#define append_op(op1, op2) \
+	ut_append_op(s, op1, op2)
 
 #define no_empty_obj(op) \
-	((!op || op->type != T_LBRACE || op->operand[0]) ? op : NULL)
+	ut_no_empty_obj(s, op)
 
-#define new_func(name, args, body) \
-	ut_new_func(s, name, args, body)
+static inline uint32_t
+ut_no_empty_obj(struct ut_state *s, uint32_t off)
+{
+	struct ut_op *op = ut_get_op(s, off);
+
+	return (!op || op->type != T_LBRACE || op->tree.operand[0]) ? off : 0;
+}
 
 }
 
 %syntax_error {
+	struct ut_op *op = TOKEN ? ut_get_op(s, TOKEN) : NULL;
 	int i;
 
 	s->error.code = UT_ERROR_UNEXPECTED_TOKEN;
 
-	if (TOKEN)
-		s->off = TOKEN->off;
+	if (op)
+		s->off = op->off;
 
 	for (i = 0; i < sizeof(tokennames) / sizeof(tokennames[0]); i++)
 		if (yy_find_shift_action(yypParser, (YYCODETYPE)i) < YYNSTATE + YYNRULE)
@@ -88,8 +95,8 @@
 }
 
 
-input ::= chunks(A).									{ s->main = new_func(NULL, NULL, A); }
-input ::= .												{ s->main = new_func(NULL, NULL, new_op(T_TEXT, json_object_new_string(""))); }
+input ::= chunks(A).									{ s->main = new_op(T_FUNC, NULL, 0, 0, A); }
+input ::= .												{ s->main = new_op(T_TEXT, json_object_new_string("")); s->main = new_op(T_FUNC, NULL, 0, 0, s->main); }
 
 chunks(A) ::= chunks(B) T_TEXT(C).						{ A = B ? append_op(B, C) : C; }
 chunks(A) ::= chunks(B) tplexp(C).						{ A = B ? append_op(B, C) : C; }
@@ -116,7 +123,7 @@ stmt(A) ::= decl_stmt(B).								{ A = B; }
 cpd_stmt(A) ::= T_LBRACE stmts(B) T_RBRACE.				{ A = B; }
 
 exp_stmt(A) ::= exp(B) T_SCOL.							{ A = B; }
-exp_stmt(A) ::= T_SCOL.									{ A = NULL; }
+exp_stmt(A) ::= T_SCOL.									{ A = 0; }
 
 sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN stmt(D) T_ELSE stmt(E).
 														{ A = wrap_op(B, C, no_empty_obj(D), no_empty_obj(E)); }
@@ -145,17 +152,17 @@ iter_stmt(A) ::= T_FOR(B) T_LPAREN exp_stmt(C) exp_stmt(D) exp(E) T_RPAREN T_COL
 														{ A = wrap_op(B, C, D, E, F); }
 
 func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN T_RPAREN cpd_stmt(C).
-														{ A = new_func(B, NULL, C); }
+														{ A = new_op(T_FUNC, NULL, B, 0, C); }
 func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN T_RPAREN empty_object.
-														{ A = new_func(B, NULL, NULL); }
+														{ A = new_op(T_FUNC, NULL, B, 0, 0); }
 func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN T_RPAREN T_COLON chunks(C) T_ENDFUNC.
-														{ A = new_func(B, NULL, C); }
+														{ A = new_op(T_FUNC, NULL, B, 0, C); }
 func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN args(C) T_RPAREN cpd_stmt(D).
-														{ A = new_func(B, C, D); }
+														{ A = new_op(T_FUNC, NULL, B, C, D); }
 func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN args(C) T_RPAREN empty_object.
-														{ A = new_func(B, C, NULL); }
+														{ A = new_op(T_FUNC, NULL, B, C, 0); }
 func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN args(C) T_RPAREN T_COLON chunks(D) T_ENDFUNC.
-														{ A = new_func(B, C, D); }
+														{ A = new_op(T_FUNC, NULL, B, C, D); }
 
 args(A) ::= args(B) T_COMMA T_LABEL(C).					{ A = append_op(B, C); }
 args(A) ::= T_LABEL(B).									{ A = B; }
@@ -245,14 +252,14 @@ unary_exp(A) ::= T_COMPL(B) unary_exp(C).				{ A = wrap_op(B, C); }
 unary_exp(A) ::= T_NOT(B) unary_exp(C).					{ A = wrap_op(B, C); }
 unary_exp(A) ::= postfix_exp(B).						{ A = B; }
 
-postfix_exp(A) ::= unary_exp(B) T_INC(C).				{ A = wrap_op(C, B); A->val = (void *)1; }
-postfix_exp(A) ::= unary_exp(B) T_DEC(C).				{ A = wrap_op(C, B); A->val = (void *)1; }
+postfix_exp(A) ::= unary_exp(B) T_INC(C).				{ A = wrap_op(C, B); ut_get_op(s, A)->val = (void *)1; }
+postfix_exp(A) ::= unary_exp(B) T_DEC(C).				{ A = wrap_op(C, B); ut_get_op(s, A)->val = (void *)1; }
 postfix_exp(A) ::= unary_exp(B) T_LPAREN(C) T_RPAREN.	{ A = wrap_op(C, B); }
 postfix_exp(A) ::= unary_exp(B) T_LPAREN(C) arg_exp(D) T_RPAREN.
 														{ A = wrap_op(C, B, D); }
 postfix_exp(A) ::= postfix_exp(B) T_DOT(C) T_LABEL(D).	{ A = wrap_op(C, B, D); }
 postfix_exp(A) ::= postfix_exp(B) T_LBRACK(C) assign_exp(D) T_RBRACK.
-														{ A = wrap_op(C, B, D); A->val = (void *)1; }
+														{ A = wrap_op(C, B, D); ut_get_op(s, A)->val = (void *)1; }
 postfix_exp(A) ::= primary_exp(B).						{ A = B; }
 
 primary_exp(A) ::= T_BOOL(B).							{ A = B; }
@@ -266,13 +273,13 @@ primary_exp(A) ::= array(B).							{ A = B; }
 primary_exp(A) ::= object(B).							{ A = B; }
 primary_exp(A) ::= T_LPAREN assign_exp(B) T_RPAREN.		{ A = B; }
 primary_exp(A) ::= T_FUNC T_LPAREN T_RPAREN empty_object.
-														{ A = new_func(NULL, NULL, NULL); }
+														{ A = new_op(T_FUNC, NULL, 0, 0, 0); }
 primary_exp(A) ::= T_FUNC T_LPAREN args(B) T_RPAREN empty_object.
-														{ A = new_func(NULL, B, NULL); }
+														{ A = new_op(T_FUNC, NULL, 0, B, 0); }
 primary_exp(A) ::= T_FUNC T_LPAREN T_RPAREN cpd_stmt(B).
-														{ A = new_func(NULL, NULL, B); }
+														{ A = new_op(T_FUNC, NULL, 0, 0, B); }
 primary_exp(A) ::= T_FUNC T_LPAREN args(B) T_RPAREN cpd_stmt(C).
-														{ A = new_func(NULL, B, C); }
+														{ A = new_op(T_FUNC, NULL, 0, B, C); }
 
 array(A) ::= T_LBRACK(B) T_RBRACK.						{ A = B; }
 array(A) ::= T_LBRACK(B) exp(C) T_RBRACK.				{ A = wrap_op(B, C); }

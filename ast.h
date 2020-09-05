@@ -50,24 +50,29 @@ enum ut_block_type {
 	UT_BLOCK_COMMENT
 };
 
-struct ut_opcode {
-	int type;
-	struct json_object *val;
-	struct ut_opcode *operand[4], *next, *sibling;
+struct ut_op {
+	uint16_t type;
+	uint16_t is_first:1;
+	uint16_t is_op:1;
 	uint32_t off;
-};
-
-struct ut_tagvalue {
-	int type;
 	struct json_object *val;
-	struct json_object *proto;
-	size_t tagtype;
-	void *data;
+	union {
+		struct {
+			struct json_object *proto;
+			size_t type;
+			void *data;
+		} tag;
+		struct {
+			uint32_t next;
+			uint32_t operand[4];
+		} tree;
+	};
 };
 
 struct ut_state {
-	struct ut_opcode *pool;
-	struct ut_opcode *main;
+	struct ut_op *pool;
+	uint32_t poolsize;
+	uint32_t main;
 	uint8_t semicolon_emitted:1;
 	uint8_t start_tag_seen:1;
 	uint8_t srand_called:1;
@@ -93,14 +98,20 @@ struct ut_extended_type {
 	void (*free)(void *);
 };
 
-struct ut_opcode *ut_new_op(struct ut_state *s, int type, struct json_object *val, ...);
-struct ut_opcode *ut_wrap_op(struct ut_opcode *parent, ...);
-struct ut_opcode *ut_append_op(struct ut_opcode *a, struct ut_opcode *b);
+struct ut_op *ut_get_op(struct ut_state *s, uint32_t off);
+struct ut_op *ut_get_child(struct ut_state *s, uint32_t off, int n);
+
+static inline uint32_t ut_get_off(struct ut_state *s, struct ut_op *op) {
+	return op ? (op - s->pool + 1) : 0;
+};
+
+uint32_t ut_new_op(struct ut_state *s, int type, struct json_object *val, ...);
+uint32_t ut_wrap_op(struct ut_state *s, uint32_t parent, ...);
+uint32_t ut_append_op(struct ut_state *s, uint32_t a, uint32_t b);
 enum ut_error_type ut_parse(struct ut_state *s, const char *expr);
 void ut_free(struct ut_state *s);
 
-struct ut_opcode *ut_new_func(struct ut_state *s, struct ut_opcode *name, struct ut_opcode *args, struct ut_opcode *body);
-
+struct json_object *ut_new_func(struct ut_state *s, struct ut_op *decl);
 struct json_object *ut_new_object(struct ut_state *s, struct json_object *proto);
 struct json_object *ut_new_double(double v);
 struct json_object *ut_new_null(void);
@@ -110,7 +121,7 @@ struct json_object *ut_set_extended_type(struct ut_state *s, struct json_object 
 void **ut_get_extended_type(struct json_object *val, const char *name);
 
 void *ParseAlloc(void *(*mfunc)(size_t));
-void Parse(void *pParser, int type, struct ut_opcode *op, struct ut_state *s);
+void Parse(void *pParser, int type, uint32_t off, struct ut_state *s);
 void ParseFree(void *pParser, void (*ffunc)(void *));
 
 
