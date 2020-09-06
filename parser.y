@@ -120,7 +120,9 @@ stmt(A) ::= break_stmt(B).								{ A = B; }
 stmt(A) ::= decl_stmt(B).								{ A = B; }
 
 //cpd_stmt(A) ::= T_LBRACE T_RBRACE.						{ A = NULL; }
+cpd_stmt(A) ::= T_LBRACE stmts(B) exp(C) T_RBRACE.		{ A = B ? append_op(B, C) : C; }
 cpd_stmt(A) ::= T_LBRACE stmts(B) T_RBRACE.				{ A = B; }
+cpd_stmt(A) ::= T_LBRACE exp(B) T_RBRACE.				{ A = B; }
 
 exp_stmt(A) ::= exp(B) T_SCOL.							{ A = B; }
 exp_stmt(A) ::= T_SCOL.									{ A = 0; }
