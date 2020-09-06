@@ -549,7 +549,7 @@ void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_obj
 	ops->register_type("fs.file", close_file);
 	ops->register_type("fs.dir", close_dir);
 
-	for (i = 0; i < sizeof(functions) / sizeof(functions[0]); i++)
+	for (i = 0; i < ARRAY_SIZE(functions); i++)
 		ops->register_function(s, scope, functions[i].name, functions[i].func);
 
 	file_proto = ops->new_object(s, NULL);
