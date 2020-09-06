@@ -153,18 +153,18 @@ iter_stmt(A) ::= T_FOR(B) T_LPAREN exp_stmt(C) exp_stmt(D) T_RPAREN T_COLON chun
 iter_stmt(A) ::= T_FOR(B) T_LPAREN exp_stmt(C) exp_stmt(D) exp(E) T_RPAREN T_COLON chunks(F) T_ENDFOR.
 														{ A = wrap_op(B, C, D, E, F); }
 
-func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN T_RPAREN cpd_stmt(C).
-														{ A = new_op(T_FUNC, NULL, B, 0, C); }
-func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN T_RPAREN empty_object.
-														{ A = new_op(T_FUNC, NULL, B, 0, 0); }
-func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN T_RPAREN T_COLON chunks(C) T_ENDFUNC.
-														{ A = new_op(T_FUNC, NULL, B, 0, C); }
-func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN args(C) T_RPAREN cpd_stmt(D).
-														{ A = new_op(T_FUNC, NULL, B, C, D); }
-func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN args(C) T_RPAREN empty_object.
-														{ A = new_op(T_FUNC, NULL, B, C, 0); }
-func_stmt(A) ::= T_FUNC T_LABEL(B) T_LPAREN args(C) T_RPAREN T_COLON chunks(D) T_ENDFUNC.
-														{ A = new_op(T_FUNC, NULL, B, C, D); }
+func_stmt(A) ::= T_FUNC(B) T_LABEL(C) T_LPAREN T_RPAREN cpd_stmt(D).
+														{ A = wrap_op(B, C, 0, D); }
+func_stmt(A) ::= T_FUNC(B) T_LABEL(C) T_LPAREN T_RPAREN empty_object.
+														{ A = wrap_op(B, C, 0, 0); }
+func_stmt(A) ::= T_FUNC(B) T_LABEL(C) T_LPAREN T_RPAREN T_COLON chunks(D) T_ENDFUNC.
+														{ A = wrap_op(B, C, 0, D); }
+func_stmt(A) ::= T_FUNC(B) T_LABEL(C) T_LPAREN args(D) T_RPAREN cpd_stmt(E).
+														{ A = wrap_op(B, C, D, E); }
+func_stmt(A) ::= T_FUNC(B) T_LABEL(C) T_LPAREN args(D) T_RPAREN empty_object.
+														{ A = wrap_op(B, C, D, 0); }
+func_stmt(A) ::= T_FUNC(B) T_LABEL(C) T_LPAREN args(D) T_RPAREN T_COLON chunks(E) T_ENDFUNC.
+														{ A = wrap_op(B, C, D, E); }
 
 args(A) ::= args(B) T_COMMA T_LABEL(C).					{ A = append_op(B, C); }
 args(A) ::= T_LABEL(B).									{ A = B; }
