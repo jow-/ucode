@@ -20,7 +20,10 @@
 #include <errno.h>
 #include <string.h>
 #include <dirent.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/sysmacros.h>
 
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
@@ -319,11 +322,214 @@ ut_fs_opendir(struct ut_state *s, uint32_t off, struct json_object *args)
 	return ops->set_type(s, diro, dir_proto, "fs.dir", dp);
 }
 
+static struct json_object *
+ut_fs_readlink(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *path = json_object_array_get_idx(args, 0);
+	struct json_object *res;
+	ssize_t buflen = 0, rv;
+	char *buf = NULL, *tmp;
+
+	if (!json_object_is_type(path, json_type_string))
+		err_return(EINVAL);
+
+	do {
+		buflen += 128;
+		tmp = realloc(buf, buflen);
+
+		if (!tmp) {
+			free(buf);
+			err_return(ENOMEM);
+		}
+
+		buf = tmp;
+		rv = readlink(json_object_get_string(path), buf, buflen);
+
+		if (rv == -1) {
+			free(buf);
+			err_return(errno);
+		}
+
+		if (rv < buflen)
+			break;
+	}
+	while (true);
+
+	res = json_object_new_string_len(buf, buflen);
+
+	free(buf);
+
+	return res;
+}
+
+static struct json_object *
+ut_fs_stat_common(struct ut_state *s, uint32_t off, struct json_object *args, bool use_lstat)
+{
+	struct json_object *path = json_object_array_get_idx(args, 0);
+	struct json_object *res, *o;
+	struct stat st;
+	int rv;
+
+	if (!json_object_is_type(path, json_type_string))
+		err_return(EINVAL);
+
+	rv = (use_lstat ? lstat : stat)(json_object_get_string(path), &st);
+
+	if (rv == -1)
+		err_return(errno);
+
+	res = json_object_new_object();
+
+	if (!res)
+		err_return(ENOMEM);
+
+	o = json_object_new_object();
+
+	if (o) {
+		json_object_object_add(o, "major", json_object_new_int64(major(st.st_dev)));
+		json_object_object_add(o, "minor", json_object_new_int64(minor(st.st_dev)));
+
+		json_object_object_add(res, "dev", o);
+	}
+
+	o = json_object_new_object();
+
+	if (o) {
+		json_object_object_add(o, "setuid", json_object_new_boolean(st.st_mode & S_ISUID));
+		json_object_object_add(o, "setgid", json_object_new_boolean(st.st_mode & S_ISGID));
+		json_object_object_add(o, "sticky", json_object_new_boolean(st.st_mode & S_ISVTX));
+
+		json_object_object_add(o, "user_read", json_object_new_boolean(st.st_mode & S_IRUSR));
+		json_object_object_add(o, "user_write", json_object_new_boolean(st.st_mode & S_IWUSR));
+		json_object_object_add(o, "user_exec", json_object_new_boolean(st.st_mode & S_IXUSR));
+
+		json_object_object_add(o, "group_read", json_object_new_boolean(st.st_mode & S_IRGRP));
+		json_object_object_add(o, "group_write", json_object_new_boolean(st.st_mode & S_IWGRP));
+		json_object_object_add(o, "group_exec", json_object_new_boolean(st.st_mode & S_IXGRP));
+
+		json_object_object_add(o, "other_read", json_object_new_boolean(st.st_mode & S_IROTH));
+		json_object_object_add(o, "other_write", json_object_new_boolean(st.st_mode & S_IWOTH));
+		json_object_object_add(o, "other_exec", json_object_new_boolean(st.st_mode & S_IXOTH));
+
+		json_object_object_add(res, "perm", o);
+	}
+
+	json_object_object_add(res, "inode", json_object_new_int64((int64_t)st.st_ino));
+	json_object_object_add(res, "mode", json_object_new_int64((int64_t)st.st_mode & ~S_IFMT));
+	json_object_object_add(res, "nlink", json_object_new_int64((int64_t)st.st_nlink));
+	json_object_object_add(res, "uid", json_object_new_int64((int64_t)st.st_uid));
+	json_object_object_add(res, "gid", json_object_new_int64((int64_t)st.st_gid));
+	json_object_object_add(res, "size", json_object_new_int64((int64_t)st.st_size));
+	json_object_object_add(res, "blksize", json_object_new_int64((int64_t)st.st_blksize));
+	json_object_object_add(res, "blocks", json_object_new_int64((int64_t)st.st_blocks));
+	json_object_object_add(res, "atime", json_object_new_int64((int64_t)st.st_atime));
+	json_object_object_add(res, "mtime", json_object_new_int64((int64_t)st.st_mtime));
+	json_object_object_add(res, "ctime", json_object_new_int64((int64_t)st.st_ctime));
+
+	if (S_ISREG(st.st_mode))
+		json_object_object_add(res, "type", json_object_new_string("file"));
+	else if (S_ISDIR(st.st_mode))
+		json_object_object_add(res, "type", json_object_new_string("directory"));
+	else if (S_ISCHR(st.st_mode))
+		json_object_object_add(res, "type", json_object_new_string("char"));
+	else if (S_ISBLK(st.st_mode))
+		json_object_object_add(res, "type", json_object_new_string("block"));
+	else if (S_ISFIFO(st.st_mode))
+		json_object_object_add(res, "type", json_object_new_string("fifo"));
+	else if (S_ISLNK(st.st_mode))
+		json_object_object_add(res, "type", json_object_new_string("link"));
+	else if (S_ISSOCK(st.st_mode))
+		json_object_object_add(res, "type", json_object_new_string("socket"));
+	else
+		json_object_object_add(res, "type", json_object_new_string("unknown"));
+
+	return res;
+}
+
+static struct json_object *
+ut_fs_stat(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	return ut_fs_stat_common(s, off, args, false);
+}
+
+static struct json_object *
+ut_fs_lstat(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	return ut_fs_stat_common(s, off, args, true);
+}
+
+static struct json_object *
+ut_fs_mkdir(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *path = json_object_array_get_idx(args, 0);
+	struct json_object *mode = json_object_array_get_idx(args, 1);
+
+	if (!json_object_is_type(path, json_type_string) ||
+	    (mode && !json_object_is_type(mode, json_type_int)))
+		err_return(EINVAL);
+
+	if (mkdir(json_object_get_string(path), (mode_t)(mode ? json_object_get_int64(mode) : 0777)) == -1)
+		err_return(errno);
+
+	return json_object_new_boolean(true);
+}
+
+static struct json_object *
+ut_fs_rmdir(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *path = json_object_array_get_idx(args, 0);
+
+	if (!json_object_is_type(path, json_type_string))
+		err_return(EINVAL);
+
+	if (rmdir(json_object_get_string(path)) == -1)
+		err_return(errno);
+
+	return json_object_new_boolean(true);
+}
+
+static struct json_object *
+ut_fs_symlink(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *dest = json_object_array_get_idx(args, 0);
+	struct json_object *path = json_object_array_get_idx(args, 1);
+
+	if (!json_object_is_type(dest, json_type_string) ||
+	    !json_object_is_type(path, json_type_string))
+		err_return(EINVAL);
+
+	if (symlink(json_object_get_string(dest), json_object_get_string(path)) == -1)
+		err_return(errno);
+
+	return json_object_new_boolean(true);
+}
+
+static struct json_object *
+ut_fs_unlink(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *path = json_object_array_get_idx(args, 0);
+
+	if (!json_object_is_type(path, json_type_string))
+		err_return(EINVAL);
+
+	if (unlink(json_object_get_string(path)) == -1)
+		err_return(errno);
+
+	return json_object_new_boolean(true);
+}
+
 
 static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "error",		ut_fs_error },
 	{ "open",		ut_fs_open },
 	{ "opendir",	ut_fs_opendir },
+	{ "readlink",	ut_fs_readlink },
+	{ "stat",		ut_fs_stat },
+	{ "lstat",		ut_fs_lstat },
+	{ "mkdir",		ut_fs_mkdir },
+	{ "rmdir",		ut_fs_rmdir },
+	{ "symlink",	ut_fs_symlink },
+	{ "unlink",		ut_fs_unlink },
 };
 
 
