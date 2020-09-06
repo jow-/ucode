@@ -1,0 +1,46 @@
+By default, whitespace before a block start tag or after a block end tag
+is retained. By suffixing the start tag or prefixing the end tag with a
+dash, the leading or trailing whitespace is trimmed respectively.
+
+-- Expect stdout --
+Whitespace control applies to all block types:
+Comment before: | |, after: | |, both: ||
+Statement before: |test |, after: | test|, both: |test|
+Expression before: |test |, after: | test|, both: |test|
+
+By default whitespace around a block is retained.
+Leading whitespace can be trimmed like this.
+The same applies to trailing whitespace.
+It is also possible to trim bothleading and trailingwhitespace.
+
+Stripping works across multiple lines as well:test
+
+Likewise, stripping over multiple lines of trailing whitespace works as
+expected too.This is after the block.
+-- End --
+
+-- Testcase --
+Whitespace control applies to all block types:
+Comment before: | {#- test #} |, after: | {#- test #} |, both: | {#- test -#} |
+Statement before: | {%- print("test") %} |, after: | {% print("test") -%} |, both: | {%- print("test") -%} |
+Expression before: | {{- "test" }} |, after: | {{ "test" -}} |, both: | {{- "test" -}} |
+
+By default whitespace {{ "around a block" }} is retained.
+Leading whitespace can be trimmed {#- note the leading dash #} like this.
+The same applies to {# note the trailing dash -#} trailing whitespace.
+It is also possible to trim both {{- "leading and trailing" -}} whitespace.
+
+Stripping works across multiple lines as well:
+
+{%-
+    /* The word "test" will be printed after "well:" above */
+    print("test")
+%}
+
+Likewise, stripping over multiple lines of trailing whitespace works as
+expected too.
+
+{#- Any whitespace after "expected too." and before "This is after the block" will be trimmed. -#}
+
+This is after the block.
+-- End --

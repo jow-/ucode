@@ -1,0 +1,17 @@
+Nesting blocks into non-comment blocks should fail.
+
+-- Expect stderr --
+Syntax error: Template blocks may not be nested
+In line 2, byte 60:
+
+ `We may not nest statement blocks into expression blocks: {{ {% print(1 + 2) %} }}.`
+  Near here --------------------------------------------------^
+
+
+-- End --
+
+-- Testcase --
+We can nest other block types into comments: {# {% {{ 1 + 2 }} %} #}
+We may not nest statement blocks into expression blocks: {{ {% print(1 + 2) %} }}.
+We may not nest expression blocks into statement blocks: {% {{ 1 + 2 }} %}.
+-- End --

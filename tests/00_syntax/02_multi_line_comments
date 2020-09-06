@@ -1,0 +1,12 @@
+Multiline comments.
+
+-- Expect stdout --
+This is an example text  for testing comment blocks.
+-- End --
+
+-- Testcase --
+This is an example text {# containing
+a comment spanning multiple lines and
+	different indentation
+		#} for testing comment blocks.
+-- End --

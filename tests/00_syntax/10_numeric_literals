@@ -1,0 +1,26 @@
+C-style numeric integer and float literals are understood, as well
+as the special keywords "Infinity" and "NaN" to denote the IEEE 754
+floating point values.
+
+Numeric values are either stored as signed 64 bit integers or signed
+doubles internally.
+
+-- Expect stdout --
+Integers literals: 123, 127, 2748, 57082
+Float literals: 10, 10.3, 1.23456e-65, 16.0625
+Special values: Infinity, Infinity, NaN, NaN
+Minimum values: -9223372036854775808, -1.79769e+308
+Maximum values: 9223372036854775807, 1.79769e+308
+Minimum truncation: -9223372036854775808, -Infinity
+Maximum truncation: 9223372036854775807, Infinity
+-- End --
+
+-- Testcase --
+Integers literals: {{ 123 }}, {{ 0177 }}, {{ 0xabc }}, {{ 0xDEFA }}
+Float literals: {{ 10. }}, {{ 10.3 }}, {{ 123.456e-67 }}, {{ 0x10.1 }}
+Special values: {{ Infinity }}, {{ 1 / 0 }}, {{ NaN }}, {{ "x" / 1 }}
+Minimum values: {{ -9223372036854775808 }}, {{ -1.7976931348623158e+308 }}
+Maximum values: {{ 9223372036854775807 }}, {{ 1.7976931348623158e+308 }}
+Minimum truncation: {{ -10000000000000000000 }}, {{ -1.0e309 }}
+Maximum truncation: {{ 10000000000000000000 }}, {{ 1.0e309 }}
+-- End --

@@ -1,0 +1,25 @@
+String literals may be enclosed in single or double quotes.
+Embedded escape sequences are started with a backslash, followed
+by either a hexadecimal, an octal or a single character escape sequence.
+
+-- Expect stdout --
+Single quoted string
+Double quoted string
+Unicode escape sequence: ☀💩
+Escaped double quote (") character
+Escaped single quote (') character
+Hexadecimal escape: XYZ xyz
+Octal escape: ABC xyz
+{ "Single char escape": "\u0007\b\u001b\f\r\t\u000b\\\n" }
+-- End --
+
+-- Testcase --
+{{ 'Single quoted string' }}
+{{ "Double quoted string" }}
+{{ "Unicode escape sequence: \u2600\uD83D\uDCA9" }}
+{{ "Escaped double quote (\") character" }}
+{{ 'Escaped single quote (\') character' }}
+{{ "Hexadecimal escape: \x58\x59\x5A \x78\x79\x7a" }}
+{{ "Octal escape: \101\102\103 \170\171\172" }}
+{{ { "Single char escape": "\a\b\e\f\r\t\v\\\n" } }}
+-- End --

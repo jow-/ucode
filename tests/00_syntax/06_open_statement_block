@@ -1,0 +1,13 @@
+The last statement block of a template may remain open, this is useful for templates
+that contain only code.
+
+-- Expect stdout --
+This template consists entirely of script code!
+-- End --
+
+-- Testcase --
+{%
+	print("This template ");
+	print("consists entirely ");
+	print("of script code!\n");
+-- End --

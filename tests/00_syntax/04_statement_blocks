@@ -1,0 +1,18 @@
+Testing statement blocks.
+
+-- Expect stdout --
+The result of 3 * 7 is 21.
+A statement block may contain multiple statements: Hello World
+To escape the start tag, output it as string expression: {%
+Alternatively print it: {%
+-- End --
+
+-- Testcase --
+The result of 3 * 7 is {% print(3 * 7) %}.
+A statement block may contain multiple statements: {%
+	print("Hello ");
+	print("World");
+%}
+To escape the start tag, output it as string expression: {{ "{%" }}
+Alternatively print it: {% print("{%") %}
+-- End --

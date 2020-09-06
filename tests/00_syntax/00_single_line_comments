@@ -1,0 +1,15 @@
+Single line comments.
+
+-- Expect stdout --
+This is  a test.
+ a test.
+A test .
+
+-- End --
+
+-- Testcase --
+This is {# a comment within #} a test.
+{# Comment before #} a test.
+A test {# and a comment after #}.
+{# This is a comment with embedded "{#" tag. #}
+-- End --

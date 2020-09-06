@@ -1,0 +1,23 @@
+Statement and expression blocks may contain C-style comments.
+A C-style comment is started by a slash followed by an asterisk
+and ended by an asterisk followed by a slash.
+
+Such comments may appear everywhere within statement or expression
+blocks, even in the middle of statements or expressions.
+
+-- Expect stdout --
+The result of 12 - 4 is 8.
+Statement blocks may use C comments too: Test Another test. The final test.
+-- End --
+
+-- Testcase --
+The result of 12 - 4 is {{ /* A comment before */ 12 - /* or even within */ 4 /* or after an expression */ }}.
+Statement blocks may use C comments too: {%
+	print("Test"); /* A comment. */
+
+	/* Another comment. */
+	print(" Another test.");
+
+	print(/* A comment within */ " The final test.");
+%}
+-- End --

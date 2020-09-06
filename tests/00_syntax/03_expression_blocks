@@ -1,0 +1,11 @@
+Testing expression blocks.
+
+-- Expect stdout --
+The result of 3 * 7 is 21.
+To escape the start tag, output it as string expression: {{
+-- End --
+
+-- Testcase --
+The result of 3 * 7 is {{ 3 * 7 }}.
+To escape the start tag, output it as string expression: {{ "{{" }}
+-- End --

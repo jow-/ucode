@@ -1,0 +1,15 @@
+Unterminated comment
+
+-- Expect stderr --
+Syntax error: Unterminated template block
+In line 1, byte 8:
+
+ `This is {# an unclosed comment`
+          ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+This is {# an unclosed comment
+-- End --
