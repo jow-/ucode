@@ -1,0 +1,51 @@
+The utpl script language supports declaring objects (dictionaries) using
+either JSON or JavaScript notation.
+
+-- Expect stdout --
+{ }
+{ "name": "Bob", "age": 31, "email": { "work": "bob@example.com", "private": "bob@example.org" } }
+{ "banana": "yellow", "tomato": "red", "broccoli": "green" }
+{ "foo": "bar", "complex key": "qrx" }
+{ "foo": { "bar": true } }
+-- End --
+
+-- Testcase --
+{%
+	// An empty object can be declared using a pair of curly brackets
+	empty_obj = { };
+
+	// It is also possible to use JSON notation to declare an object
+	json_obj = {
+		"name": "Bob",
+		"age": 31,
+		"email": {
+			"work": "bob@example.com",
+			"private": "bob@example.org"
+		}
+	};
+
+	// Declaring an object in JavaScript notation is supported as well
+	another_obj = {
+		banana: "yellow",
+		tomato: "red",
+		broccoli: "green"
+	};
+
+	// Mixing styles is allowed too
+	third_obj = {
+		foo: "bar",
+		"complex key": "qrx"
+	};
+
+	// Important caveat: when nesting objects, ensure that curly brackets
+	// are separated by space or newline to avoid interpretation as
+	// expression block tag!
+	nested_obj = { foo: { bar: true } }; // <-- mind the space in "} }"
+
+	// Printing (or stringifying) objects will return their JSON representation
+	print(empty_obj, "\n");
+	print(json_obj, "\n");
+	print(another_obj, "\n");
+	print(third_obj, "\n");
+	print(nested_obj, "\n");
+-- End --

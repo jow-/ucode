@@ -1,0 +1,125 @@
+Performing unary plus or minus, or performing arithmetic operations may
+implicitly convert non-numeric values to numeric ones.
+
+If an addition is performed and either operand is a string, the other
+operand is converted into a string as well and the addition result is a
+concatenated string consisting of the two operand values.
+
+-- Expect stdout --
+HelloWorld
+12
+34
+true
+false
+null
+{ "some": "object" }
+[ "some", "array" ]
+function() { ... }
+1.2
+Infinity
+124
+123
+123
+NaN
+NaN
+NaN
+124.2
+Infinity
+1
+0
+0
+NaN
+NaN
+NaN
+1.2
+Infinity
+123
+12.3
+NaN
+-1
+0
+0
+NaN
+NaN
+NaN
+-1.2
+-Infinity
+-123
+-12.3
+NaN
+4.2
+9.6
+-- End --
+
+-- Testcase --
+{%
+	print(join("\n", [
+
+		// Adding two strings concatenates them:
+		"Hello" + "World",
+
+		// Adding a number to a string results in a string:
+		"1" + 2,
+
+		// Adding a string to a number results in a string:
+		3 + "4",
+
+		// Adding any non-string value to a string or vice versa will
+		// force stringification of the non-string value
+		"" + true,
+		"" + false,
+		"" + null,
+		"" + { some: "object" },
+		"" + [ "some", "array" ],
+		"" + function() {},
+		"" + 1.2,
+		"" + (1 / 0),
+
+		// Adding a numeric value to a non-string, non-numeric value
+		// or vice versa will convert the non-numeric argument to a
+		// number
+		123 + true,
+		123 + false,
+		123 + null,
+		123 + { some: "object" },
+		123 + [ "some", "array" ],
+		123 + function() {},
+		123 + 1.2,
+		123 + (1 / 0),
+
+		// The unary "+" operator follows the same logic as adding a
+		// non-numeric, non-string value to a numeric one. Additionally
+		// the unary plus forces conversion of string values into numbers
+		+true,
+		+false,
+		+null,
+		+{ some: "object" },
+		+[ "some", "array" ],
+		+function() {},
+		+1.2,
+		+(1 / 0),
+		+"123",
+		+"12.3",
+		+"this is not a number",
+
+		// The unary "-" operator functions like the unary "+" one and
+		// it additionally returns the negation of the numeric value
+		-true,
+		-false,
+		-null,
+		-{ some: "object" },
+		-[ "some", "array" ],
+		-function() {},
+		-1.2,
+		-(1 / 0),
+		-"123",
+		-"12.3",
+		-"this is not a number",
+
+		// Adding a double to an integer or vice versa will force the
+		// result to a double as well
+		1.2 + 3,
+		4 + 5.6,
+
+	"" ]));
+-- End --

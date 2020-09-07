@@ -1,0 +1,53 @@
+While arithmetic divisions generally follow the value conversion rules
+outlined in the "00_value_conversion" test case, a number of additional
+constraints apply.
+
+-- Expect stdout --
+Division by zero yields Infinity:
+1 / 0 = Infinity
+
+Division by Infinity yields zero:
+1 / Infinity = 0
+
+Dividing Infinity yields Infinity:
+Infinity / 1 = Infinity
+
+Dividing Infinity by Infinity yields NaN:
+Infinity / Infinity = NaN
+
+If either operand is NaN, the result is NaN:
+1 / NaN = NaN
+NaN / 1 = NaN
+
+If both operands are integers, integer division is performed:
+10 / 3 = 3
+
+If either operand is a double, double division is performed:
+10.0 / 3 = 3.33333
+10 / 3.0 = 3.33333
+-- End --
+
+-- Testcase --
+Division by zero yields Infinity:
+1 / 0 = {{ 1 / 0 }}
+
+Division by Infinity yields zero:
+1 / Infinity = {{ 1 / Infinity }}
+
+Dividing Infinity yields Infinity:
+Infinity / 1 = {{ Infinity / 1 }}
+
+Dividing Infinity by Infinity yields NaN:
+Infinity / Infinity = {{ Infinity / Infinity }}
+
+If either operand is NaN, the result is NaN:
+1 / NaN = {{ 1 / NaN }}
+NaN / 1 = {{ NaN / 1 }}
+
+If both operands are integers, integer division is performed:
+10 / 3 = {{ 10 / 3 }}
+
+If either operand is a double, double division is performed:
+10.0 / 3 = {{ 10.0 / 3 }}
+10 / 3.0 = {{ 10 / 3.0 }}
+-- End --

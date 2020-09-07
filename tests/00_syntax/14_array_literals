@@ -1,0 +1,25 @@
+The utpl script language supports declaring arrays using JSON notation.
+
+-- Expect stdout --
+[ ]
+[ "first", "second", 123, [ "a", "nested", "array" ], { "a": "nested object" } ]
+-- End --
+
+-- Testcase --
+{%
+	// An empty array can be declared using a pair of square brackets
+	empty_array = [ ];
+
+	// JSON notation is used to declare an array with contents
+	json_array = [
+		"first",
+		"second",
+		123,
+		[ "a", "nested", "array" ],
+		{ a: "nested object" }
+	];
+
+	// Printing (or stringifying) arrays will return their JSON representation
+	print(empty_array, "\n");
+	print(json_array, "\n");
+-- End --

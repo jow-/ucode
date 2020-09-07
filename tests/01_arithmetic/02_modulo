@@ -1,0 +1,32 @@
+The utpl language supports modulo divisions, however they're only defined
+for integer values.
+
+-- Expect stdout --
+If both operands are integers or convertible to integers,
+the modulo division yields the remainder:
+10 % 4 = 2
+"10" % 4 = 2
+10 % "4" = 2
+"10" % "4" = 2
+
+If either operand is a double value, the modulo operation
+yields NaN:
+10.0 % 4 = NaN
+10 % 4.0 = NaN
+"10.0" % 4 = NaN
+-- End --
+
+-- Testcase --
+If both operands are integers or convertible to integers,
+the modulo division yields the remainder:
+10 % 4 = {{ 10 % 4 }}
+"10" % 4 = {{ "10" % 4 }}
+10 % "4" = {{ 10 % 4 }}
+"10" % "4" = {{ "10" % "4" }}
+
+If either operand is a double value, the modulo operation
+yields NaN:
+10.0 % 4 = {{ 10.0 % 4 }}
+10 % 4.0 = {{ 10 % 4.0 }}
+"10.0" % 4 = {{ "10.0" % 4 }}
+-- End --
