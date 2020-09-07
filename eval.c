@@ -1085,6 +1085,8 @@ ut_execute_arith(struct ut_state *state, uint32_t off)
 		case T_DIV:
 			if (d2 == 0.0)
 				return ut_new_double(INFINITY);
+			else if (isnan(d2))
+				return ut_new_double(NAN);
 			else if (!isfinite(d2))
 				return ut_new_double(0.0);
 
