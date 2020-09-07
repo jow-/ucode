@@ -1039,7 +1039,7 @@ ut_execute_arith(struct ut_state *state, uint32_t off)
 	    (json_object_is_type(v1, json_type_string) ||
 	     json_object_is_type(v2, json_type_string))) {
 		s1 = v1 ? json_object_get_string(v1) : "null";
-		s2 = v1 ? json_object_get_string(v2) : "null";
+		s2 = v2 ? json_object_get_string(v2) : "null";
 		len1 = strlen(s1);
 		len2 = strlen(s2);
 		s = calloc(1, len1 + len2 + 1);
