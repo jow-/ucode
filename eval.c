@@ -995,6 +995,7 @@ static struct json_object *
 ut_execute_unary_plus_minus(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
+	struct ut_op *op1 = ut_get_child(state, off, 0);
 	struct json_object *val = ut_execute_op(state, op ? op->tree.operand[0] : 0);
 	enum json_type t;
 	int64_t n;
@@ -1006,6 +1007,9 @@ ut_execute_unary_plus_minus(struct ut_state *state, uint32_t off)
 
 	switch (t) {
 	case json_type_int:
+		if (op1->is_overflow)
+			return json_object_new_int64(((n >= 0) == (op->type == T_SUB)) ? INT64_MIN : INT64_MAX);
+
 		return json_object_new_int64((op->type == T_SUB) ? -n : n);
 
 	default:

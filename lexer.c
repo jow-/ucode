@@ -22,6 +22,7 @@
 #include <ctype.h>
 #include <regex.h>
 #include <math.h>
+#include <errno.h>
 
 #include "ast.h"
 #include "lexer.h"
@@ -618,9 +619,9 @@ parse_label(const char *buf, struct ut_op *op, struct ut_state *s)
 static int
 parse_number(const char *buf, struct ut_op *op, struct ut_state *s)
 {
+	long long int n;
 	double d;
 	char *e;
-	int n;
 
 	if (!strncmp(buf, "Infinity", 8)) {
 		op->type = T_DOUBLE;
@@ -635,7 +636,7 @@ parse_number(const char *buf, struct ut_op *op, struct ut_state *s)
 		return 3;
 	}
 
-	n = strtol(buf, &e, 0);
+	n = strtoll(buf, &e, 0);
 
 	if (e > buf) {
 		if (*e == '.') {
@@ -649,8 +650,10 @@ parse_number(const char *buf, struct ut_op *op, struct ut_state *s)
 			}
 		}
 
+
 		op->type = T_NUMBER;
 		op->val = json_object_new_int64(n);
+		op->is_overflow = (errno == ERANGE);
 
 		return (e - buf);
 	}
@@ -711,6 +714,7 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 {
 	struct ut_op op = { 0 };
 	const char *o, *p;
+	uint32_t rv;
 
 	for (o = p = input; *p; p++) {
 		if (s->blocktype == UT_BLOCK_NONE) {
@@ -805,7 +809,12 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 			if (op.type == T_LSTM || op.type == T_RSTM || op.type == 0)
 				return 0;
 
-			return ut_new_op(s, op.type, op.val, UINT32_MAX);
+			rv = ut_new_op(s, op.type, op.val, UINT32_MAX);
+
+			if (rv)
+				s->pool[rv - 1].is_overflow = op.is_overflow;
+
+			return rv;
 		}
 	}
 
