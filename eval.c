@@ -1088,7 +1088,7 @@ ut_execute_arith(struct ut_state *state, uint32_t off)
 			else if (isnan(d2))
 				return ut_new_double(NAN);
 			else if (!isfinite(d2))
-				return ut_new_double(0.0);
+				return ut_new_double(isfinite(d1) ? 0.0 : NAN);
 
 			return ut_new_double(d1 / d2);
 
