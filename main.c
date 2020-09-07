@@ -235,7 +235,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	rv = parse(source, dumponly);
+	rv = source ? parse(source, dumponly) : 0;
 
 out:
 	if (input && input != stdin)
