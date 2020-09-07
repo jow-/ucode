@@ -1080,7 +1080,9 @@ ut_execute_arith(struct ut_state *state, uint32_t off)
 
 		case T_DIV:
 			if (d2 == 0.0)
-				return ut_new_double(NAN);
+				return ut_new_double(INFINITY);
+			else if (!isfinite(d2))
+				return ut_new_double(0.0);
 
 			return ut_new_double(d1 / d2);
 
@@ -1101,7 +1103,7 @@ ut_execute_arith(struct ut_state *state, uint32_t off)
 
 	case T_DIV:
 		if (n2 == 0)
-			return ut_new_double(NAN);
+			return ut_new_double(INFINITY);
 
 		return json_object_new_int64(n1 / n2);
 
