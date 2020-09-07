@@ -322,6 +322,7 @@ parse_string(const char *buf, struct ut_op *op, struct ut_state *s)
 	const char *in = buf;
 	bool esc = false;
 	int rem = sizeof(str) - 1;
+	int lead_surrogate = 0;
 	int code;
 
 	while (*in) {
@@ -331,16 +332,48 @@ parse_string(const char *buf, struct ut_op *op, struct ut_state *s)
 			if (in[0] == 'u') {
 				if (isxdigit(in[1]) && isxdigit(in[2]) &&
 				    isxdigit(in[3]) && isxdigit(in[4])) {
-					if (!utf8enc(&out, &rem,
-					             hex(in[1]) * 16 * 16 * 16 +
-					             hex(in[2]) * 16 * 16 +
-					             hex(in[3]) * 16 +
-					             hex(in[4]))) {
+					code = hex(in[1]) * 16 * 16 * 16 +
+					       hex(in[2]) * 16 * 16 +
+					       hex(in[3]) * 16 +
+					       hex(in[4]);
+
+					/* is a leading surrogate value */
+					if ((code & 0xFC00) == 0xD800) {
+						/* found a subsequent leading surrogate, ignore and emit replacement char for previous one */
+						if (lead_surrogate) {
+							if (!utf8enc(&out, &rem, 0xFFFD)) {
+								s->off += (in - buf);
+
+								return -UT_ERROR_OVERLONG_STRING;
+							}
+						}
+
+						/* store surrogate value and advance to next escape sequence */
+						lead_surrogate = code;
+						goto next;
+					}
+
+					/* is a trailing surrogate value */
+					else if ((code & 0xFC00) == 0xDC00) {
+						/* found a trailing surrogate following a leading one, combine and encode */
+						if (lead_surrogate) {
+							code = 0x10000 + ((lead_surrogate & 0x3FF) << 10) + (code & 0x3FF);
+							lead_surrogate = 0;
+						}
+
+						/* trailing surrogate not following a leading one, ignore and use replacement char */
+						else {
+							code = 0xFFFD;
+						}
+					}
+
+					if (!utf8enc(&out, &rem, code)) {
 						s->off += (in - buf);
 
 						return -UT_ERROR_OVERLONG_STRING;
 					}
 
+next:
 					in += 5;
 				}
 				else {
@@ -350,122 +383,174 @@ parse_string(const char *buf, struct ut_op *op, struct ut_state *s)
 				}
 			}
 
-			/* \xFF */
-			else if (in[0] == 'x') {
-				if (isxdigit(in[1]) && isxdigit(in[2])) {
-					if (!utf8enc(&out, &rem, hex(in[1]) * 16 + hex(in[2]))) {
+			/* other escape sequences */
+			else {
+				/* found any non-utf8 escape sequence following a leading unicode surrogate,
+				   emit replacement character and skip surrogate. */
+				if (lead_surrogate) {
+					if (!utf8enc(&out, &rem, 0xFFFD)) {
 						s->off += (in - buf);
 
 						return -UT_ERROR_OVERLONG_STRING;
 					}
 
-					in += 3;
+					lead_surrogate = 0;
 				}
-				else {
-					s->off += (in - buf);
-					return -UT_ERROR_INVALID_ESCAPE;
-				}
-			}
 
-			/* \377, \77 or \7 */
-			else if (in[0] >= '0' && in[0] <= '7') {
-				/* \377 */
-				if (in[1] >= '0' && in[1] <= '7' &&
-				    in[2] >= '0' && in[2] <= '7') {
-					code = dec(in[0]) * 8 * 8 +
-					       dec(in[1]) * 8 +
-					       dec(in[2]);
+				/* \xFF */
+				if (in[0] == 'x') {
 
-					if (code > 255) {
+
+					if (isxdigit(in[1]) && isxdigit(in[2])) {
+						if (!utf8enc(&out, &rem, hex(in[1]) * 16 + hex(in[2]))) {
+							s->off += (in - buf);
+
+							return -UT_ERROR_OVERLONG_STRING;
+						}
+
+						in += 3;
+					}
+					else {
 						s->off += (in - buf);
 
 						return -UT_ERROR_INVALID_ESCAPE;
 					}
-
-					if (!utf8enc(&out, &rem, code)) {
-						s->off += (in - buf);
-
-						return -UT_ERROR_OVERLONG_STRING;
-					}
-
-					in += 3;
 				}
 
-				/* \77 */
-				else if (in[1] >= '0' && in[1] <= '7') {
-					if (!utf8enc(&out, &rem, dec(in[0]) * 8 + dec(in[1]))) {
-						s->off += (in - buf);
+				/* \377, \77 or \7 */
+				else if (in[0] >= '0' && in[0] <= '7') {
+					if (lead_surrogate) {
+						if (!utf8enc(&out, &rem, 0xFFFD)) {
+							s->off += (in - buf);
 
-						return -UT_ERROR_OVERLONG_STRING;
+							return -UT_ERROR_OVERLONG_STRING;
+						}
+
+						lead_surrogate = 0;
 					}
 
-					in += 2;
+					/* \377 */
+					if (in[1] >= '0' && in[1] <= '7' &&
+					    in[2] >= '0' && in[2] <= '7') {
+						code = dec(in[0]) * 8 * 8 +
+						       dec(in[1]) * 8 +
+						       dec(in[2]);
+
+						if (code > 255) {
+							s->off += (in - buf);
+
+							return -UT_ERROR_INVALID_ESCAPE;
+						}
+
+						if (!utf8enc(&out, &rem, code)) {
+							s->off += (in - buf);
+
+							return -UT_ERROR_OVERLONG_STRING;
+						}
+
+						in += 3;
+					}
+
+					/* \77 */
+					else if (in[1] >= '0' && in[1] <= '7') {
+						if (!utf8enc(&out, &rem, dec(in[0]) * 8 + dec(in[1]))) {
+							s->off += (in - buf);
+
+							return -UT_ERROR_OVERLONG_STRING;
+						}
+
+						in += 2;
+					}
+
+					/* \7 */
+					else {
+						if (!utf8enc(&out, &rem, dec(in[0]))) {
+							s->off += (in - buf);
+
+							return -UT_ERROR_OVERLONG_STRING;
+						}
+
+						in += 1;
+					}
 				}
 
-				/* \7 */
+				/* single character escape */
 				else {
-					if (!utf8enc(&out, &rem, dec(in[0]))) {
+					if (lead_surrogate) {
+						if (!utf8enc(&out, &rem, 0xFFFD)) {
+							s->off += (in - buf);
+
+							return -UT_ERROR_OVERLONG_STRING;
+						}
+
+						lead_surrogate = 0;
+					}
+
+					if (rem-- < 1) {
 						s->off += (in - buf);
 
 						return -UT_ERROR_OVERLONG_STRING;
 					}
 
-					in += 1;
+					switch (in[0]) {
+					case 'a': *out = '\a'; break;
+					case 'b': *out = '\b'; break;
+					case 'e': *out = '\e'; break;
+					case 'f': *out = '\f'; break;
+					case 'n': *out = '\n'; break;
+					case 'r': *out = '\r'; break;
+					case 't': *out = '\t'; break;
+					case 'v': *out = '\v'; break;
+					default:
+						*out = *in;
+						break;
+					}
+
+					in++;
+					out++;
 				}
-			}
-
-			/* single character escape */
-			else {
-				if (rem-- < 1) {
-					s->off += (in - buf);
-
-					return -UT_ERROR_OVERLONG_STRING;
-				}
-
-				switch (in[0]) {
-				case 'a': *out = '\a'; break;
-				case 'b': *out = '\b'; break;
-				case 'e': *out = '\e'; break;
-				case 'f': *out = '\f'; break;
-				case 'n': *out = '\n'; break;
-				case 'r': *out = '\r'; break;
-				case 't': *out = '\t'; break;
-				case 'v': *out = '\v'; break;
-				default:
-					*out = *in;
-					break;
-				}
-
-				in++;
-				out++;
 			}
 
 			esc = false;
+			continue;
 		}
 
 		/* begin of escape sequence */
-		else if (*in == '\\') {
+		if (*in == '\\') {
 			in++;
 			esc = true;
+			continue;
 		}
 
+
+		/* there's a non-escape following a previous leading unicode surrogate,
+		 * ignore surrogate and emit replacement char */
+		if (lead_surrogate) {
+			if (!utf8enc(&out, &rem, 0xFFFD)) {
+				s->off += (in - buf);
+
+				return -UT_ERROR_OVERLONG_STRING;
+			}
+
+			lead_surrogate = 0;
+		}
+
+
 		/* terminating quote */
-		else if (*in == q) {
+		if (*in == q) {
 			op->val = json_object_new_string_len(str, sizeof(str) - 1 - rem);
 
 			return (in - buf) + 2;
 		}
 
 		/* ordinary char */
-		else {
-			if (rem-- < 1) {
-				s->off += (in - buf);
+		if (rem-- < 1) {
+			s->off += (in - buf);
 
-				return -UT_ERROR_OVERLONG_STRING;
-			}
-
-			*out++ = *in++;
+			return -UT_ERROR_OVERLONG_STRING;
 		}
+
+		*out++ = *in++;
 	}
 
 	return -UT_ERROR_UNTERMINATED_STRING;
