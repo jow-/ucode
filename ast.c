@@ -383,7 +383,7 @@ ut_extended_type_free(struct json_object *v, void *ud)
 
 	et = &ut_ext_types[op->tag.type - 1];
 
-	if (et->free)
+	if (et->free && op->tag.data)
 		et->free(op->tag.data);
 
 	json_object_put(op->tag.proto);
