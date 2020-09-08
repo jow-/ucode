@@ -1,0 +1,59 @@
+Function declarations follow the ECMAScript 5 syntax. Functions can be
+declared anonymously, which is useful for "throw-away" functions such
+as sort or filter callbacks or for building objects or arrays of function
+values.
+
+If functions are declared with a name, the resulting function value is
+automatically assigned under the given name to the current scope.
+
+When function values are stringifed, the resulting string will describe
+the declaration of the function.
+
+Nesting function declarations is possible as well.
+
+
+-- Expect stdout --
+function() { ... }
+function test_fn(a, b) { ... }
+function test2_fn(a, b) { ... }
+
+
+A function declaration using the alternative syntax:
+The function was called with arguments 123 and 456.
+-- End --
+
+-- Testcase --
+{%
+	// declare an anonymous function and
+	// assign resulting value
+	anon_fn = function() {
+		return "test";
+	};
+
+	// declare a named function
+	function test_fn(a, b) {
+		return a + b;
+	}
+
+	// nesting functions is legal
+	function test2_fn(a, b) {
+		function test3_fn(a, b) {
+			return a * b;
+		}
+
+		return a + test3_fn(a, b);
+	}
+
+	print(anon_fn, "\n");
+	print(test_fn, "\n");
+	print(test2_fn, "\n");
+%}
+
+A function declaration using the alternative syntax:
+
+{%- function test3_fn(a, b): %}
+The function was called with arguments {{ a }} and {{ b }}.
+{%- endfunction -%}
+
+{{ test3_fn(123, 456) }}
+-- End --

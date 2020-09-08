@@ -1,0 +1,50 @@
+Utpl implements C-style pre- and postfix increment and decrement operators.
+
+Pre-increment or -decrement operations first mutate the value and then return
+the resulting value while post-increment or -decrement operations first return
+the initial value and then mutate the operand.
+
+Since the decrement and increment operators mutate their operand, they
+may only be applied to variables, not constant literal expressions.
+
+If an undefined variable is incremented or decremented, its initial value
+is assumed to be "0".
+
+If a non-numeric value is incremented or decremented, it is converted to a
+number first. If the value is not convertible, the result of the increment
+or decrement operation is NaN.
+
+-- Expect stdout --
+Incrementing a not existing variable assumes "0" as initial value:
+
+ - Postfix increment result: null, value after: 1
+ - Prefix increment result:  1, value after: 1
+ - Postfix decrement result: null, value after: -1
+ - Prefix decrement result:  -1, value after: -1
+
+Incrementing a non-numeric value will convert it to a number:
+
+124
+3.5
+2
+NaN
+
+-- End --
+
+-- Testcase --
+Incrementing a not existing variable assumes "0" as initial value:
+
+ - Postfix increment result: {{ "" + a++ }}, value after: {{ a }}
+ - Prefix increment result:  {{ "" + ++b }}, value after: {{ b }}
+ - Postfix decrement result: {{ "" + c-- }}, value after: {{ c }}
+ - Prefix decrement result:  {{ "" + --d }}, value after: {{ d }}
+
+Incrementing a non-numeric value will convert it to a number:
+
+{%
+	n = "123"; n++; print(n, "\n");
+	n = "4.5"; n--; print(n, "\n");
+	n = true; n++; print(n, "\n");
+	n = { some: "object" }; n--; print(n, "\n");
+%}
+-- End --

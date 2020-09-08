@@ -1,0 +1,157 @@
+Two for-loop variants are supported: a C-style counting for loop
+consisting of an initialization expression, a test condition
+and a step expression and a for-in-loop variant which allows
+enumerating properties of objects or items of arrays.
+
+Additionally, utpl supports an alternative syntax suitable for
+template block tags.
+
+
+-- Expect stdout --
+A simple counting for-loop:
+Iteration 0
+Iteration 1
+Iteration 2
+Iteration 3
+Iteration 4
+Iteration 5
+Iteration 6
+Iteration 7
+Iteration 8
+Iteration 9
+
+
+If the loop body consists of only one statement, the curly braces
+may be omitted:
+Iteration 0
+Iteration 1
+Iteration 2
+Iteration 3
+Iteration 4
+Iteration 5
+Iteration 6
+Iteration 7
+Iteration 8
+Iteration 9
+
+
+Any of the init-, test- and increment expressions may be omitted.
+
+Loop without initialization statement:
+Iteration null
+Iteration 1
+Iteration 2
+
+
+Loop without test statement:
+Iteration 0
+Iteration 1
+Iteration 2
+
+
+Loop without init-, test- or increment statement:
+Iteration 1
+Iteration 2
+Iteration 3
+
+
+For-in loop enumerating object properties:
+Key: foo
+Key: bar
+
+
+For-in loop enumerating array items:
+Item: one
+Item: two
+Item: three
+
+
+A counting for-loop using the alternative syntax:
+Iteration 0
+Iteration 1
+Iteration 2
+Iteration 3
+Iteration 4
+Iteration 5
+Iteration 6
+Iteration 7
+Iteration 8
+Iteration 9
+
+
+A for-in loop using the alternative syntax:
+Item 123
+Item 456
+Item 789
+
+-- End --
+
+-- Testcase --
+A simple counting for-loop:
+{%
+	for (i = 0; i < 10; i++) {
+		print("Iteration ");
+		print(i);
+		print("\n");
+	}
+%}
+
+If the loop body consists of only one statement, the curly braces
+may be omitted:
+{%
+ 	for (i = 0; i < 10; i++)
+		print("Iteration ", i, "\n");
+%}
+
+Any of the init-, test- and increment expressions may be omitted.
+
+Loop without initialization statement:
+{%
+	for (; j < 3; j++)
+		print("Iteration " + j + "\n");
+%}
+
+Loop without test statement:
+{%
+	for (j = 0;; j++) {
+		if (j == 3)
+			break;
+
+		print("Iteration ", j, "\n");
+	}
+%}
+
+Loop without init-, test- or increment statement:
+{%
+	for (;;) {
+		if (k++ == 3)
+			break;
+
+		print("Iteration ", k, "\n");
+	}
+%}
+
+For-in loop enumerating object properties:
+{%
+	obj = { foo: true, bar: false };
+	for (key in obj)
+		print("Key: ", key, "\n");
+%}
+
+For-in loop enumerating array items:
+{%
+	arr = [ "one", "two", "three" ];
+	for (item in arr)
+		print("Item: ", item, "\n");
+%}
+
+A counting for-loop using the alternative syntax:
+{% for (x = 0; x < 10; x++): -%}
+Iteration {{ x }}
+{% endfor %}
+
+A for-in loop using the alternative syntax:
+{% for (n in [123, 456, 789]): -%}
+Item {{ n }}
+{% endfor %}
+-- End --

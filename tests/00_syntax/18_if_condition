@@ -1,0 +1,99 @@
+Utpl implements C-style if/else conditions and ?: ternary statements.
+
+Like with for- and while-loops, an alternative syntax form suitable
+for template blocks is supported.
+
+
+-- Expect stdout --
+This should print "one":
+one
+
+This should print "two":
+two
+
+Multiple conditions can be used by chaining if/else statements:
+three
+
+If the conditional block consists of only one statement, the curly
+braces may be omitted:
+two
+
+An if-condition using the alternative syntax:
+Variable x has another value.
+
+
+Ternary expressions function similar to if/else statements but
+only allow for a single expression in the true and false branches:
+Variable x is one
+-- End --
+
+-- Testcase --
+This should print "one":
+{%
+	x = 0;
+
+	if (x == 0) {
+		print("one");
+	}
+	else {
+		print("two");
+	}
+%}
+
+This should print "two":
+{%
+	x = 1;
+
+	if (x == 0) {
+		print("one");
+	}
+	else {
+		print("two");
+	}
+%}
+
+Multiple conditions can be used by chaining if/else statements:
+{%
+	x = 2;
+
+	if (x == 0) {
+		print("one");
+	}
+	else if (x == 1) {
+		print("two");
+	}
+	else if (x == 2) {
+		print("three");
+	}
+	else {
+		print("four");
+	}
+%}
+
+If the conditional block consists of only one statement, the curly
+braces may be omitted:
+{%
+	x = 5;
+
+	if (x == 0)
+		print("one");
+	else
+		print("two");
+%}
+
+An if-condition using the alternative syntax:
+{% if (x == 1): -%}
+Variable x was set to one.
+{% else -%}
+Variable x has another value.
+{% endif %}
+
+Ternary expressions function similar to if/else statements but
+only allow for a single expression in the true and false branches:
+{%
+	x = 1;
+	s = (x == 1) ? "Variable x is one" : "Variable x has another value";
+
+	print(s);
+%}
+-- End --
