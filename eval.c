@@ -804,7 +804,7 @@ ut_execute_inc_dec(struct ut_state *state, uint32_t off)
 	ut_putval(ut_setval(scope, key, nval));
 
 	/* postfix inc/dec, return old val */
-	if (op->val)
+	if (op->is_postfix)
 		return val;
 
 	ut_putval(val);
@@ -1292,7 +1292,7 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 
 	case T_LBRACK:
 		/* postfix access */
-		if (op->val) {
+		if (op->is_postfix) {
 			scope = ut_getref_required(state, off, &key);
 			state->ctx = scope;
 

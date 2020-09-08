@@ -254,14 +254,14 @@ unary_exp(A) ::= T_COMPL(B) unary_exp(C).				{ A = wrap_op(B, C); }
 unary_exp(A) ::= T_NOT(B) unary_exp(C).					{ A = wrap_op(B, C); }
 unary_exp(A) ::= postfix_exp(B).						{ A = B; }
 
-postfix_exp(A) ::= unary_exp(B) T_INC(C).				{ A = wrap_op(C, B); ut_get_op(s, A)->val = (void *)1; }
-postfix_exp(A) ::= unary_exp(B) T_DEC(C).				{ A = wrap_op(C, B); ut_get_op(s, A)->val = (void *)1; }
+postfix_exp(A) ::= unary_exp(B) T_INC(C).				{ A = wrap_op(C, B); ut_get_op(s, A)->is_postfix = 1; }
+postfix_exp(A) ::= unary_exp(B) T_DEC(C).				{ A = wrap_op(C, B); ut_get_op(s, A)->is_postfix = 1; }
 postfix_exp(A) ::= unary_exp(B) T_LPAREN(C) T_RPAREN.	{ A = wrap_op(C, B); }
 postfix_exp(A) ::= unary_exp(B) T_LPAREN(C) arg_exp(D) T_RPAREN.
 														{ A = wrap_op(C, B, D); }
 postfix_exp(A) ::= postfix_exp(B) T_DOT(C) T_LABEL(D).	{ A = wrap_op(C, B, D); }
 postfix_exp(A) ::= postfix_exp(B) T_LBRACK(C) assign_exp(D) T_RBRACK.
-														{ A = wrap_op(C, B, D); ut_get_op(s, A)->val = (void *)1; }
+														{ A = wrap_op(C, B, D); ut_get_op(s, A)->is_postfix = 1; }
 postfix_exp(A) ::= primary_exp(B).						{ A = B; }
 
 primary_exp(A) ::= T_BOOL(B).							{ A = B; }
