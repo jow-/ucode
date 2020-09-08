@@ -284,6 +284,43 @@ ut_fs_readdir(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
+ut_fs_telldir(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	DIR **dp = (DIR **)ops->get_type(s->ctx, "fs.dir");
+	long position;
+
+	if (!dp || !*dp)
+		err_return(EBADF);
+
+	position = telldir(*dp);
+
+	if (position == -1)
+		err_return(errno);
+
+	return json_object_new_int64((int64_t)position);
+}
+
+static struct json_object *
+ut_fs_seekdir(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *ofs = json_object_array_get_idx(args, 0);
+	DIR **dp = (DIR **)ops->get_type(s->ctx, "fs.dir");
+	long position;
+
+	if (!json_object_is_type(ofs, json_type_int))
+		err_return(EINVAL);
+
+	if (!dp || !*dp)
+		err_return(EBADF);
+
+	position = (long)json_object_get_int64(ofs);
+
+	seekdir(*dp, position);
+
+	return json_object_new_boolean(true);
+}
+
+static struct json_object *
 ut_fs_closedir(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	DIR **dp = (DIR **)ops->get_type(s->ctx, "fs.dir");
@@ -566,6 +603,8 @@ void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_obj
 
 	if (dir_proto) {
 		ops->register_function(s, dir_proto, "readdir", ut_fs_readdir);
+		ops->register_function(s, dir_proto, "seek", ut_fs_seekdir);
+		ops->register_function(s, dir_proto, "tell", ut_fs_telldir);
 		ops->register_function(s, dir_proto, "closedir", ut_fs_closedir);
 	}
 }
