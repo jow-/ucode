@@ -58,7 +58,7 @@ ut_fs_close(struct ut_state *s, uint32_t off, struct json_object *args)
 		err_return(EBADF);
 
 	fclose(*fp);
-	//*fp = NULL;
+	*fp = NULL;
 
 	return json_object_new_boolean(true);
 }
