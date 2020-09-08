@@ -602,9 +602,9 @@ void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_obj
 	dir_proto = ops->new_object(s, NULL);
 
 	if (dir_proto) {
-		ops->register_function(s, dir_proto, "readdir", ut_fs_readdir);
+		ops->register_function(s, dir_proto, "read", ut_fs_readdir);
 		ops->register_function(s, dir_proto, "seek", ut_fs_seekdir);
 		ops->register_function(s, dir_proto, "tell", ut_fs_telldir);
-		ops->register_function(s, dir_proto, "closedir", ut_fs_closedir);
+		ops->register_function(s, dir_proto, "close", ut_fs_closedir);
 	}
 }
