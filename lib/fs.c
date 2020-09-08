@@ -216,7 +216,7 @@ ut_fs_seek(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (res < 0)
 		err_return(errno);
 
-	return json_object_new_int64(res);
+	return json_object_new_boolean(true);
 }
 
 static struct json_object *
