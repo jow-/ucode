@@ -909,6 +909,9 @@ ut_type(struct ut_state *s, uint32_t off, struct json_object *args)
 	case T_FUNC:
 		return json_object_new_string("function");
 
+	case T_RESSOURCE:
+		return json_object_new_string("ressource");
+
 	default:
 		switch (json_object_get_type(v)) {
 		case json_type_object:
