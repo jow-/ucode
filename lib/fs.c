@@ -29,6 +29,7 @@
 
 static const struct ut_ops *ops;
 
+static struct json_object *proc_proto;
 static struct json_object *file_proto;
 static struct json_object *dir_proto;
 
@@ -48,23 +49,8 @@ ut_fs_error(struct ut_state *s, uint32_t off, struct json_object *args)
 	return errmsg;
 }
 
-
 static struct json_object *
-ut_fs_close(struct ut_state *s, uint32_t off, struct json_object *args)
-{
-	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.file");
-
-	if (!fp || !*fp)
-		err_return(EBADF);
-
-	fclose(*fp);
-	*fp = NULL;
-
-	return json_object_new_boolean(true);
-}
-
-static struct json_object *
-ut_fs_read(struct ut_state *s, uint32_t off, struct json_object *args)
+ut_fs_read_common(struct ut_state *s, uint32_t off, struct json_object *args, const char *type)
 {
 	struct json_object *limit = json_object_array_get_idx(args, 0);
 	struct json_object *rv = NULL;
@@ -73,7 +59,7 @@ ut_fs_read(struct ut_state *s, uint32_t off, struct json_object *args)
 	const char *lstr;
 	int64_t lsize;
 
-	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.file");
+	FILE **fp = (FILE **)ops->get_type(s->ctx, type);
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -156,13 +142,13 @@ ut_fs_read(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_fs_write(struct ut_state *s, uint32_t off, struct json_object *args)
+ut_fs_write_common(struct ut_state *s, uint32_t off, struct json_object *args, const char *type)
 {
 	struct json_object *data = json_object_array_get_idx(args, 0);
 	size_t len, wsize;
 	const char *str;
 
-	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.file");
+	FILE **fp = (FILE **)ops->get_type(s->ctx, type);
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -182,6 +168,87 @@ ut_fs_write(struct ut_state *s, uint32_t off, struct json_object *args)
 		err_return(errno);
 
 	return json_object_new_int64(wsize);
+}
+
+
+static struct json_object *
+ut_fs_pclose(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.proc");
+
+	if (!fp || !*fp)
+		err_return(EBADF);
+
+	pclose(*fp);
+	*fp = NULL;
+
+	return json_object_new_boolean(true);
+}
+
+static struct json_object *
+ut_fs_pread(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	return ut_fs_read_common(s, off, args, "fs.proc");
+}
+
+static struct json_object *
+ut_fs_pwrite(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	return ut_fs_write_common(s, off, args, "fs.proc");
+}
+
+static struct json_object *
+ut_fs_popen(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *comm = json_object_array_get_idx(args, 0);
+	struct json_object *mode = json_object_array_get_idx(args, 1);
+	struct json_object *fo;
+	FILE *fp;
+
+	if (!json_object_is_type(comm, json_type_string))
+		err_return(EINVAL);
+
+	fp = popen(json_object_get_string(comm),
+		json_object_is_type(mode, json_type_string) ? json_object_get_string(mode) : "r");
+
+	if (!fp)
+		err_return(errno);
+
+	fo = json_object_new_object();
+
+	if (!fo) {
+		pclose(fp);
+		err_return(ENOMEM);
+	}
+
+	return ops->set_type(s, fo, proc_proto, "fs.proc", fp);
+}
+
+
+static struct json_object *
+ut_fs_close(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.file");
+
+	if (!fp || !*fp)
+		err_return(EBADF);
+
+	fclose(*fp);
+	*fp = NULL;
+
+	return json_object_new_boolean(true);
+}
+
+static struct json_object *
+ut_fs_read(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	return ut_fs_read_common(s, off, args, "fs.file");
+}
+
+static struct json_object *
+ut_fs_write(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	return ut_fs_write_common(s, off, args, "fs.file");
 }
 
 static struct json_object *
@@ -560,6 +627,7 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "error",		ut_fs_error },
 	{ "open",		ut_fs_open },
 	{ "opendir",	ut_fs_opendir },
+	{ "popen",		ut_fs_popen },
 	{ "readlink",	ut_fs_readlink },
 	{ "stat",		ut_fs_stat },
 	{ "lstat",		ut_fs_lstat },
@@ -569,6 +637,10 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "unlink",		ut_fs_unlink },
 };
 
+
+static void close_proc(void *ud) {
+	pclose((FILE *)ud);
+}
 
 static void close_file(void *ud) {
 	fclose((FILE *)ud);
@@ -583,11 +655,20 @@ void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_obj
 	int i;
 
 	ops = ut;
+	ops->register_type("fs.proc", close_proc);
 	ops->register_type("fs.file", close_file);
 	ops->register_type("fs.dir", close_dir);
 
 	for (i = 0; i < ARRAY_SIZE(functions); i++)
 		ops->register_function(s, scope, functions[i].name, functions[i].func);
+
+	proc_proto = ops->new_object(s, NULL);
+
+	if (proc_proto) {
+		ops->register_function(s, proc_proto, "read", ut_fs_pread);
+		ops->register_function(s, proc_proto, "write", ut_fs_pwrite);
+		ops->register_function(s, proc_proto, "close", ut_fs_pclose);
+	}
 
 	file_proto = ops->new_object(s, NULL);
 
