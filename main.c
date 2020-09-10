@@ -92,7 +92,12 @@ static void dump_node(struct ut_op *op) {
 		break;
 
 	default:
-		printf("n%p [label=\"%s\"];\n", op, tokennames[op->type]);
+		printf("n%p [label=\"%s", op, tokennames[op->type]);
+
+		if (op->is_postfix)
+			printf(", postfix");
+
+		printf("\"];\n");
 	}
 }
 
@@ -108,7 +113,7 @@ static void dump(struct ut_state *s, uint32_t off, int level) {
 		dump_node(cur);
 
 		if (cur->type < __T_MAX) {
-			for (i = 0; i < ARRAY_SIZE(cur->tree.operand) && cur->tree.operand[i]; i++) {
+			for (i = 0; i < ARRAY_SIZE(cur->tree.operand); i++) {
 				child = ut_get_op(s, cur->tree.operand[i]);
 
 				if (cur->tree.operand[i]) {
