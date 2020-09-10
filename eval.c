@@ -970,13 +970,6 @@ ut_execute_exp(struct ut_state *state, uint32_t off)
 	struct ut_op *tag = val ? json_object_get_userdata(val) : NULL;
 
 	switch (tag ? tag->type : 0) {
-	case T_RETURN:
-		ut_write_str(tag->val);
-		break;
-
-	case T_BREAK:
-		return val;
-
 	case T_EXCEPTION:
 		printf("<exception: %s>", json_object_get_string(val));
 		break;
