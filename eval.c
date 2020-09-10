@@ -1432,7 +1432,7 @@ enum ut_error_type
 ut_run(struct ut_state *state)
 {
 	struct ut_op *op = ut_get_op(state, state->main);
-	struct json_object *main, *scope, *args, *rv;
+	struct json_object *entry, *scope, *args, *rv;
 
 	if (!op || op->type != T_FUNC) {
 		ut_exception(state, state->main, "Runtime error: Invalid root operation in AST");
@@ -1440,9 +1440,9 @@ ut_run(struct ut_state *state)
 		return UT_ERROR_EXCEPTION;
 	}
 
-	main = ut_execute_function(state, state->main);
+	entry = ut_execute_function(state, state->main);
 
-	if (!main)
+	if (!entry)
 		return UT_ERROR_EXCEPTION;
 
 	scope = ut_addscope(state, state->main);
@@ -1456,9 +1456,9 @@ ut_run(struct ut_state *state)
 	ut_lib_init(state, scope);
 
 	args = json_object_new_array();
-	rv = ut_invoke(state, state->main, NULL, main, args);
+	rv = ut_invoke(state, state->main, NULL, entry, args);
 
-	json_object_put(main);
+	json_object_put(entry);
 	json_object_put(args);
 	json_object_put(rv);
 
