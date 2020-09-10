@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
 include(CheckFunctionExists)
+include(CheckSymbolExists)
 
 PROJECT(utpl C)
 ADD_DEFINITIONS(-Os -Wall -Werror --std=gnu99 -Wmissing-declarations -Wno-error=unused-variable -ffunction-sections -D_GNU_SOURCE)
@@ -57,6 +58,18 @@ CHECK_FUNCTION_EXISTS(dlopen DLOPEN_FUNCTION_EXISTS)
 IF (NOT DLOPEN_FUNCTION_EXISTS)
   TARGET_LINK_LIBRARIES(utpl dl)
 ENDIF()
+
+SET(CMAKE_REQUIRED_LIBRARIES json-c)
+CHECK_SYMBOL_EXISTS(json_object_array_shrink "json.h" HAVE_ARRAY_SHRINK)
+IF(HAVE_ARRAY_SHRINK)
+  ADD_DEFINITIONS(-DHAVE_ARRAY_SHRINK)
+ELSE()
+  CHECK_SYMBOL_EXISTS(json_object_array_shrink "json-c/json.h" HAVE_ARRAY_SHRINK2)
+  IF(HAVE_ARRAY_SHRINK2)
+    ADD_DEFINITIONS(-DHAVE_ARRAY_SHRINK)
+  ENDIF()
+ENDIF()
+UNSET(CMAKE_REQUIRED_LIBRARIES)
 
 SET(LIBRARIES "")
 

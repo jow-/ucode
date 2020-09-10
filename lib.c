@@ -437,7 +437,9 @@ ut_pop(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (arrlen > 0) {
 		item = json_object_array_get_idx(arr, arrlen - 1);
 		json_object_array_del_idx(arr, arrlen - 1, 1);
+#ifdef HAVE_ARRAY_SHRINK
 		json_object_array_shrink(arr, 0);
+#endif
 	}
 
 	return json_object_get(item);
@@ -461,7 +463,9 @@ ut_shift(struct ut_state *s, uint32_t off, struct json_object *args)
 			json_object_array_get_idx(arr, arridx + 1));
 
 	json_object_array_del_idx(arr, arrlen - 1, 1);
+#ifdef HAVE_ARRAY_SHRINK
 	json_object_array_shrink(arr, 0);
+#endif
 
 	return item;
 }
