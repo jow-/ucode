@@ -1,0 +1,10 @@
+Makefile
+CMakeCache.txt
+CMakeFiles
+*.cmake
+install_manifest.txt
+parser.[ch]
+parser.out
+contrib/lemon
+utpl
+lib/*.so
