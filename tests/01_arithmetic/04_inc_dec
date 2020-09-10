@@ -28,7 +28,6 @@ Incrementing a non-numeric value will convert it to a number:
 3.5
 2
 NaN
-
 -- End --
 
 -- Testcase --

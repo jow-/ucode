@@ -18,7 +18,6 @@ Iteration 7
 Iteration 8
 Iteration 9
 
-
 If the loop body consists of only one statement, the curly braces
 may be omitted:
 Iteration 0
@@ -32,7 +31,6 @@ Iteration 7
 Iteration 8
 Iteration 9
 
-
 A counting while-loop using the alternative syntax:
 Iteration null
 Iteration 1
@@ -44,7 +42,6 @@ Iteration 6
 Iteration 7
 Iteration 8
 Iteration 9
-
 -- End --
 
 -- Testcase --

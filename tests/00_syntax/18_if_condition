@@ -40,6 +40,7 @@ This should print "one":
 	}
 %}
 
+
 This should print "two":
 {%
 	x = 1;
@@ -51,6 +52,7 @@ This should print "two":
 		print("two");
 	}
 %}
+
 
 Multiple conditions can be used by chaining if/else statements:
 {%
@@ -70,6 +72,7 @@ Multiple conditions can be used by chaining if/else statements:
 	}
 %}
 
+
 If the conditional block consists of only one statement, the curly
 braces may be omitted:
 {%
@@ -81,12 +84,14 @@ braces may be omitted:
 		print("two");
 %}
 
+
 An if-condition using the alternative syntax:
 {% if (x == 1): -%}
 Variable x was set to one.
 {% else -%}
 Variable x has another value.
 {% endif %}
+
 
 Ternary expressions function similar to if/else statements but
 only allow for a single expression in the true and false branches:
@@ -96,4 +101,5 @@ only allow for a single expression in the true and false branches:
 
 	print(s);
 %}
+
 -- End --

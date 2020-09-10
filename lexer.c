@@ -58,6 +58,7 @@ static const struct token tokens[] = {
 	{ T_ASRIGHT,	">>=",   3 },
 	{ T_LEXP,		"{{-",   3 },
 	{ T_REXP,		"-}}",   3 },
+	{ T_LSTM,		"{%+",   3 },
 	{ T_LSTM,		"{%-",   3 },
 	{ T_RSTM,		"-%}",   3 },
 	{ T_AND,		"&&",    2 },
@@ -731,9 +732,16 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 				s->off += *mlen;
 
 				/* strip whitespace before block */
-				if (p[2] == '-')
+				if (p[2] == '-') {
 					while (p > o && isspace(p[-1]))
 						p--;
+				}
+
+				/* lstrip */
+				else if (s->lstrip_blocks && s->blocktype == UT_BLOCK_STATEMENT && p[2] != '+') {
+					while (p > o && p[-1] != '\n' && isspace(p[-1]))
+						p--;
+				}
 
 				if (p == o)
 					return 0;
@@ -789,9 +797,6 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 					*mlen = 0;
 				}
 				else {
-					s->semicolon_emitted = false;
-					s->blocktype = UT_BLOCK_NONE;
-
 					/* strip whitespace after block */
 					if (*p == '-') {
 						while (isspace(p[3])) {
@@ -799,6 +804,13 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 							p++;
 						}
 					}
+					else if (s->blocktype == UT_BLOCK_STATEMENT &&
+					         s->trim_blocks && p[2] == '\n') {
+						(*mlen)++;
+					}
+
+					s->semicolon_emitted = false;
+					s->blocktype = UT_BLOCK_NONE;
 				}
 			}
 

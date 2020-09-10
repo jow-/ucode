@@ -11,10 +11,11 @@ Statement blocks may use C++ comments too: Test Another test.
 The result of 5 + 9 is {{ // The block end tag is ignored: }}
 // And the expression block continues here!
 5 + 9 }}.
-Statement blocks may use C++ comments too: {%
+Statement blocks may use C++ comments too: {%+
 	print("Test"); // A comment.
 
 	// Another comment.
 	print(" Another test.");
 %}
+
 -- End --

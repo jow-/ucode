@@ -17,9 +17,9 @@ function() { ... }
 function test_fn(a, b) { ... }
 function test2_fn(a, b) { ... }
 
-
 A function declaration using the alternative syntax:
 The function was called with arguments 123 and 456.
+
 -- End --
 
 -- Testcase --
@@ -50,10 +50,8 @@ The function was called with arguments 123 and 456.
 %}
 
 A function declaration using the alternative syntax:
-
-{%- function test3_fn(a, b): %}
+{% function test3_fn(a, b): %}
 The function was called with arguments {{ a }} and {{ b }}.
-{%- endfunction -%}
-
+{% endfunction %}
 {{ test3_fn(123, 456) }}
 -- End --

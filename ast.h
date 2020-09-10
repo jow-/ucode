@@ -78,6 +78,8 @@ struct ut_state {
 	uint8_t semicolon_emitted:1;
 	uint8_t start_tag_seen:1;
 	uint8_t srand_called:1;
+	uint8_t trim_blocks:1;
+	uint8_t lstrip_blocks:1;
 	size_t off;
 	enum ut_block_type blocktype;
 	struct {

@@ -22,7 +22,7 @@ expected too.This is after the block.
 -- Testcase --
 Whitespace control applies to all block types:
 Comment before: | {#- test #} |, after: | {#- test #} |, both: | {#- test -#} |
-Statement before: | {%- print("test") %} |, after: | {% print("test") -%} |, both: | {%- print("test") -%} |
+Statement before: | {%- print("test") %} |, after: | {%+ print("test") -%} |, both: | {%- print("test") -%} |
 Expression before: | {{- "test" }} |, after: | {{ "test" -}} |, both: | {{- "test" -}} |
 
 By default whitespace {{ "around a block" }} is retained.
@@ -36,6 +36,7 @@ Stripping works across multiple lines as well:
     /* The word "test" will be printed after "well:" above */
     print("test")
 %}
+
 
 Likewise, stripping over multiple lines of trailing whitespace works as
 expected too.

@@ -38,11 +38,13 @@ print_usage(char *app)
 {
 	printf(
 	"== Usage ==\n\n"
-	"  # %s [-d] {-i <file> | -s \"utpl script...\"}\n"
+	"  # %s [-d] [-l] [-r] {-i <file> | -s \"utpl script...\"}\n"
 	"  -h, --help	Print this help\n"
 	"  -i file	Specify an utpl script to parse\n"
 	"  -s \"utpl script...\"	Specify an utpl code fragment to parse\n"
-	"  -d Instead of executing the script, dump the resulting AST as dot\n",
+	"  -d Instead of executing the script, dump the resulting AST as dot\n"
+	"  -l Do not strip leading block whitespace\n"
+	"  -r Do not trim trailing block newlines\n",
 		app);
 }
 
@@ -136,9 +138,8 @@ static void dump(struct ut_state *s, uint32_t off, int level) {
 #endif /* NDEBUG */
 
 static enum ut_error_type
-parse(const char *source, bool dumponly)
+parse(struct ut_state *state, const char *source, bool dumponly)
 {
-	struct ut_state *state = calloc(1, sizeof(*state));
 	enum ut_error_type err;
 	char *msg;
 
@@ -173,8 +174,9 @@ parse(const char *source, bool dumponly)
 int
 main(int argc, char **argv)
 {
-	size_t rlen, tlen = 0;
+	struct ut_state *state;
 	bool dumponly = false;
+	size_t rlen, tlen = 0;
 	char buf[1024], *tmp;
 	char *source = NULL;
 	FILE *input = NULL;
@@ -186,7 +188,17 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	while ((opt = getopt(argc, argv, "dhi:s:")) != -1)
+	state = calloc(1, sizeof(*state));
+
+	if (!state) {
+		rv = UT_ERROR_OUT_OF_MEMORY;
+		goto out;
+	}
+
+	state->lstrip_blocks = 1;
+	state->trim_blocks = 1;
+
+	while ((opt = getopt(argc, argv, "dhlri:s:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -206,6 +218,14 @@ main(int argc, char **argv)
 
 		case 'd':
 			dumponly = true;
+			break;
+
+		case 'l':
+			state->lstrip_blocks = 0;
+			break;
+
+		case 'r':
+			state->trim_blocks = 0;
 			break;
 
 		case 's':
@@ -240,7 +260,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	rv = source ? parse(source, dumponly) : 0;
+	rv = source ? parse(state, source, dumponly) : 0;
 
 out:
 	if (input && input != stdin)

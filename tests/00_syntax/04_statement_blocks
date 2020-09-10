@@ -8,11 +8,13 @@ Alternatively print it: {%
 -- End --
 
 -- Testcase --
-The result of 3 * 7 is {% print(3 * 7) %}.
-A statement block may contain multiple statements: {%
+The result of 3 * 7 is {%+ print(3 * 7) %}.
+A statement block may contain multiple statements: {%+
 	print("Hello ");
 	print("World");
 %}
+
 To escape the start tag, output it as string expression: {{ "{%" }}
-Alternatively print it: {% print("{%") %}
+Alternatively print it: {%+ print("{%") %}
+
 -- End --
