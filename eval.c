@@ -245,7 +245,7 @@ ut_ref_to_str(struct ut_state *state, uint32_t off)
 		return p;
 
 	case T_LBRACK:
-		if (!op->val)
+		if (!op->is_postfix)
 			return NULL;
 
 		s = ut_ref_to_str(state, op->tree.operand[0]);
@@ -286,7 +286,7 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 
 		return ut_execute_op(state, off1);
 	}
-	else if (op && op->type == T_LBRACK && op->val) {
+	else if (op && op->type == T_LBRACK && op->is_postfix) {
 		*key = off2 ? ut_execute_op(state, off2) : NULL;
 
 		return ut_execute_op(state, off1);
