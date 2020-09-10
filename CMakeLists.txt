@@ -5,6 +5,7 @@ PROJECT(utpl C)
 ADD_DEFINITIONS(-Os -Wall -Werror --std=gnu99 -Wmissing-declarations -Wno-error=unused-variable -ffunction-sections -D_GNU_SOURCE)
 
 OPTION(FS_SUPPORT "Filesystem plugin support" ON)
+OPTION(UBUS_SUPPORT "Ubus plugin support" ON)
 
 SET(LIB_SEARCH_PATH "/usr/lib/utpl/*.so:/usr/share/utpl/*.utpl:./*.so:./*.utpl" CACHE STRING "Default library search path")
 ADD_DEFINITIONS(-DLIB_SEARCH_PATH="${LIB_SEARCH_PATH}")
@@ -62,7 +63,14 @@ SET(LIBRARIES "")
 IF(FS_SUPPORT)
   SET(LIBRARIES ${LIBRARIES} fs_lib)
   ADD_LIBRARY(fs_lib MODULE lib/fs.c)
-  SET_TARGET_PROPERTIES(fs_lib PROPERTIES OUTPUT_NAME fs PREFIX "")
+  SET_TARGET_PROPERTIES(fs_lib PROPERTIES OUTPUT_NAME lib/fs PREFIX "")
+ENDIF()
+
+IF(UBUS_SUPPORT)
+  SET(LIBRARIES ${LIBRARIES} ubus_lib)
+  ADD_LIBRARY(ubus_lib MODULE lib/ubus.c)
+  SET_TARGET_PROPERTIES(ubus_lib PROPERTIES OUTPUT_NAME lib/ubus PREFIX "")
+  TARGET_LINK_LIBRARIES(ubus_lib ubus blobmsg_json)
 ENDIF()
 
 INSTALL(TARGETS utpl RUNTIME DESTINATION bin)
