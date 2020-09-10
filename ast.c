@@ -174,7 +174,7 @@ obj_free(struct json_object *v, void *ud)
 }
 
 struct json_object *
-ut_new_object(struct ut_state *s, struct json_object *proto) {
+ut_new_object(struct json_object *proto) {
 	struct json_object *val = json_object_new_object();
 	struct ut_op *op;
 
@@ -228,7 +228,7 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 }
 
 struct json_object *
-ut_new_func(struct ut_state *s, struct ut_op *decl)
+ut_new_func(struct ut_op *decl)
 {
 	struct json_object *val = json_object_new_object();
 	struct ut_op *op;
@@ -391,7 +391,7 @@ ut_extended_type_free(struct json_object *v, void *ud)
 }
 
 struct json_object *
-ut_set_extended_type(struct ut_state *s, struct json_object *v, struct json_object *proto, const char *name, void *data)
+ut_set_extended_type(struct json_object *v, struct json_object *proto, const char *name, void *data)
 {
 	struct ut_extended_type *et = NULL;
 	struct ut_op *op;

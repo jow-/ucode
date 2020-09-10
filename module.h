@@ -21,14 +21,19 @@
 #include "lib.h"
 
 struct ut_ops {
-	bool (*register_function)(struct ut_state *, struct json_object *, const char *, ut_c_fn *);
+	bool (*register_function)(struct json_object *, const char *, ut_c_fn *);
 	bool (*register_type)(const char *, void (*)(void *));
-	struct json_object *(*set_type)(struct ut_state *, struct json_object *, struct json_object *, const char *, void *);
+	struct json_object *(*set_type)(struct json_object *, struct json_object *, const char *, void *);
 	void **(*get_type)(struct json_object *, const char *);
-	struct json_object *(*new_object)(struct ut_state *, struct json_object *);
+	struct json_object *(*new_object)(struct json_object *);
 };
 
 extern const struct ut_ops ut;
+
+#define register_functions(ops, functions, scope) \
+	if (scope) \
+		for (int i = 0; i < ARRAY_SIZE(functions); i++) \
+			ops->register_function(scope, functions[i].name, functions[i].func)
 
 void ut_module_init(const struct ut_ops *, struct ut_state *, struct json_object *);
 

@@ -193,7 +193,7 @@ ut_addscope(struct ut_state *state, uint32_t decl)
 		state->stack.size++;
 	}
 
-	scope = ut_new_object(state, NULL);
+	scope = ut_new_object(NULL);
 
 	if (!scope)
 		return ut_exception(state, decl, UT_ERRMSG_OOM);
@@ -832,7 +832,7 @@ ut_execute_list(struct ut_state *state, uint32_t off)
 static struct json_object *
 ut_execute_object(struct ut_state *state, uint32_t off)
 {
-	struct json_object *obj = ut_new_object(state, NULL);
+	struct json_object *obj = ut_new_object(NULL);
 	struct ut_op *key, *val;
 
 	if (!obj)
@@ -1211,7 +1211,7 @@ static struct json_object *
 ut_execute_function(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
-	struct json_object *obj = ut_new_func(state, op);
+	struct json_object *obj = ut_new_func(op);
 
 	if (!obj)
 		return ut_exception(state, off, UT_ERRMSG_OOM);

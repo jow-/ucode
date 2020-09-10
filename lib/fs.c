@@ -221,7 +221,7 @@ ut_fs_popen(struct ut_state *s, uint32_t off, struct json_object *args)
 		err_return(ENOMEM);
 	}
 
-	return ops->set_type(s, fo, proc_proto, "fs.proc", fp);
+	return ops->set_type(fo, proc_proto, "fs.proc", fp);
 }
 
 
@@ -328,7 +328,7 @@ ut_fs_open(struct ut_state *s, uint32_t off, struct json_object *args)
 		err_return(ENOMEM);
 	}
 
-	return ops->set_type(s, fo, file_proto, "fs.file", fp);
+	return ops->set_type(fo, file_proto, "fs.file", fp);
 }
 
 
@@ -423,7 +423,7 @@ ut_fs_opendir(struct ut_state *s, uint32_t off, struct json_object *args)
 		err_return(ENOMEM);
 	}
 
-	return ops->set_type(s, diro, dir_proto, "fs.dir", dp);
+	return ops->set_type(diro, dir_proto, "fs.dir", dp);
 }
 
 static struct json_object *
@@ -622,8 +622,28 @@ ut_fs_unlink(struct ut_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
+static const struct { const char *name; ut_c_fn *func; } proc_fns[] = {
+	{ "read",		ut_fs_pread },
+	{ "write",		ut_fs_pwrite },
+	{ "close",		ut_fs_pclose },
+};
 
-static const struct { const char *name; ut_c_fn *func; } functions[] = {
+static const struct { const char *name; ut_c_fn *func; } file_fns[] = {
+	{ "read",		ut_fs_read },
+	{ "write",		ut_fs_write },
+	{ "seek",		ut_fs_seek },
+	{ "tell",		ut_fs_tell },
+	{ "close",		ut_fs_close },
+};
+
+static const struct { const char *name; ut_c_fn *func; } dir_fns[] = {
+	{ "read",		ut_fs_readdir },
+	{ "seek",		ut_fs_seekdir },
+	{ "tell",		ut_fs_telldir },
+	{ "close",		ut_fs_closedir },
+};
+
+static const struct { const char *name; ut_c_fn *func; } global_fns[] = {
 	{ "error",		ut_fs_error },
 	{ "open",		ut_fs_open },
 	{ "opendir",	ut_fs_opendir },
@@ -652,40 +672,17 @@ static void close_dir(void *ud) {
 
 void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_object *scope)
 {
-	int i;
-
 	ops = ut;
 	ops->register_type("fs.proc", close_proc);
 	ops->register_type("fs.file", close_file);
 	ops->register_type("fs.dir", close_dir);
 
-	for (i = 0; i < ARRAY_SIZE(functions); i++)
-		ops->register_function(s, scope, functions[i].name, functions[i].func);
+	proc_proto = ops->new_object(NULL);
+	file_proto = ops->new_object(NULL);
+	dir_proto = ops->new_object(NULL);
 
-	proc_proto = ops->new_object(s, NULL);
-
-	if (proc_proto) {
-		ops->register_function(s, proc_proto, "read", ut_fs_pread);
-		ops->register_function(s, proc_proto, "write", ut_fs_pwrite);
-		ops->register_function(s, proc_proto, "close", ut_fs_pclose);
-	}
-
-	file_proto = ops->new_object(s, NULL);
-
-	if (file_proto) {
-		ops->register_function(s, file_proto, "read", ut_fs_read);
-		ops->register_function(s, file_proto, "write", ut_fs_write);
-		ops->register_function(s, file_proto, "seek", ut_fs_seek);
-		ops->register_function(s, file_proto, "tell", ut_fs_tell);
-		ops->register_function(s, file_proto, "close", ut_fs_close);
-	}
-
-	dir_proto = ops->new_object(s, NULL);
-
-	if (dir_proto) {
-		ops->register_function(s, dir_proto, "read", ut_fs_readdir);
-		ops->register_function(s, dir_proto, "seek", ut_fs_seekdir);
-		ops->register_function(s, dir_proto, "tell", ut_fs_telldir);
-		ops->register_function(s, dir_proto, "close", ut_fs_closedir);
-	}
+	register_functions(ops, global_fns, scope);
+	register_functions(ops, proc_fns, proc_proto);
+	register_functions(ops, file_fns, file_proto);
+	register_functions(ops, dir_fns, dir_proto);
 }

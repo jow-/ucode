@@ -171,7 +171,7 @@ ut_ubus_connect(struct ut_state *s, uint32_t off, struct json_object *args)
 
 	ubus_add_uloop(c->ctx);
 
-	return ops->set_type(s, co, conn_proto, "ubus.connection", c);
+	return ops->set_type(co, conn_proto, "ubus.connection", c);
 }
 
 static void
@@ -317,17 +317,11 @@ static void close_connection(void *ud) {
 
 void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_object *scope)
 {
-	int i;
-
 	ops = ut;
 	ops->register_type("ubus.connection", close_connection);
 
-	for (i = 0; i < ARRAY_SIZE(global_fns); i++)
-		ops->register_function(s, scope, global_fns[i].name, global_fns[i].func);
+	conn_proto = ops->new_object(NULL);
 
-	conn_proto = ops->new_object(s, NULL);
-
-	if (conn_proto)
-		for (i = 0; i < ARRAY_SIZE(global_fns); i++)
-			ops->register_function(s, conn_proto, conn_fns[i].name, conn_fns[i].func);
+	register_functions(ops, global_fns, scope);
+	register_functions(ops, conn_fns, conn_proto);
 }

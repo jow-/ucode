@@ -278,7 +278,7 @@ ut_c_fn_free(struct json_object *v, void *ud)
 }
 
 static bool
-ut_register_function(struct ut_state *state, struct json_object *scope, const char *name, ut_c_fn *fn)
+ut_register_function(struct json_object *scope, const char *name, ut_c_fn *fn)
 {
 	struct json_object *val = json_object_new_object();
 	struct ut_op *op;
@@ -1819,5 +1819,5 @@ ut_lib_init(struct ut_state *state, struct json_object *scope)
 	int i;
 
 	for (i = 0; i < sizeof(functions) / sizeof(functions[0]); i++)
-		ut_register_function(state, scope, functions[i].name, functions[i].func);
+		ut_register_function(scope, functions[i].name, functions[i].func);
 }
