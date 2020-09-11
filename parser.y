@@ -34,9 +34,8 @@
 %left T_BOR.
 %left T_BXOR.
 %left T_BAND.
-%left T_IN.
-%left T_EQ T_NE.
-%left T_LT T_LE T_GT T_GE.
+%left T_EQ T_NE T_EQS T_NES.
+%left T_LT T_LE T_GT T_GE T_IN.
 %left T_LSHIFT T_RSHIFT.
 %left T_ADD T_SUB.
 %left T_MUL T_DIV T_MOD.
@@ -217,20 +216,20 @@ bor_exp(A) ::= bxor_exp(B).								{ A = B; }
 bxor_exp(A) ::= bxor_exp(B) T_BXOR(C) band_exp(D).		{ A = wrap_op(C, B, D); }
 bxor_exp(A) ::= band_exp(B).							{ A = B; }
 
-band_exp(A) ::= band_exp(B) T_BAND(C) in_exp(D).		{ A = wrap_op(C, B, D); }
-band_exp(A) ::= in_exp(B).								{ A = B; }
-
-in_exp(A) ::= equal_exp(B) T_IN(C) equal_exp(D).		{ A = wrap_op(C, B, D); }
-in_exp(A) ::= equal_exp(B).								{ A = B; }
+band_exp(A) ::= band_exp(B) T_BAND(C) equal_exp(D).		{ A = wrap_op(C, B, D); }
+band_exp(A) ::= equal_exp(B).							{ A = B; }
 
 equal_exp(A) ::= equal_exp(B) T_EQ(C) rel_exp(D).		{ A = wrap_op(C, B, D); }
 equal_exp(A) ::= equal_exp(B) T_NE(C) rel_exp(D).		{ A = wrap_op(C, B, D); }
+equal_exp(A) ::= equal_exp(B) T_EQS(C) rel_exp(D).		{ A = wrap_op(C, B, D); }
+equal_exp(A) ::= equal_exp(B) T_NES(C) rel_exp(D).		{ A = wrap_op(C, B, D); }
 equal_exp(A) ::= rel_exp(B).							{ A = B; }
 
 rel_exp(A) ::= rel_exp(B) T_LT(C) shift_exp(D).			{ A = wrap_op(C, B, D); }
 rel_exp(A) ::= rel_exp(B) T_LE(C) shift_exp(D).			{ A = wrap_op(C, B, D); }
 rel_exp(A) ::= rel_exp(B) T_GT(C) shift_exp(D).			{ A = wrap_op(C, B, D); }
 rel_exp(A) ::= rel_exp(B) T_GE(C) shift_exp(D).			{ A = wrap_op(C, B, D); }
+rel_exp(A) ::= rel_exp(B) T_IN(C) shift_exp(D).			{ A = wrap_op(C, B, D); }
 rel_exp(A) ::= shift_exp(B).							{ A = B; }
 
 shift_exp(A) ::= shift_exp(B) T_LSHIFT(C) add_exp(D).	{ A = wrap_op(C, B, D); }

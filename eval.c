@@ -746,6 +746,68 @@ ut_execute_rel(struct ut_state *state, uint32_t off)
 }
 
 static struct json_object *
+ut_execute_equality(struct ut_state *state, uint32_t off)
+{
+	struct ut_op *op = ut_get_op(state, off);
+	uint32_t off1 = op ? op->tree.operand[0] : 0;
+	uint32_t off2 = op ? op->tree.operand[1] : 0;
+	struct json_object *v1 = ut_execute_op(state, off1);
+	struct json_object *v2 = ut_execute_op(state, off2);
+	struct ut_op *tag1 = json_object_get_userdata(v1);
+	struct ut_op *tag2 = json_object_get_userdata(v2);
+	enum json_type t1 = json_object_get_type(v1);
+	enum json_type t2 = json_object_get_type(v2);
+	struct json_object *rv;
+	bool equal = false;
+
+	if ((tag1 ? tag1->type : 0) != (tag2 ? tag2->type : 0)) {
+		equal = false;
+	}
+	else if (t1 != t2) {
+		equal = false;
+	}
+	else {
+		switch (t1) {
+		case json_type_array:
+		case json_type_object:
+			equal = (v1 == v2);
+			break;
+
+		case json_type_boolean:
+			equal = (json_object_get_boolean(v1) == json_object_get_boolean(v2));
+			break;
+
+		case json_type_double:
+			if (isnan(json_object_get_double(v1)) || isnan(json_object_get_double(v2)))
+				equal = false;
+			else
+				equal = (json_object_get_double(v1) == json_object_get_double(v2));
+
+			break;
+
+		case json_type_int:
+			equal = (json_object_get_int64(v1) == json_object_get_int64(v2));
+			break;
+
+		case json_type_string:
+			equal = !strcmp(json_object_get_string(v1), json_object_get_string(v2));
+			break;
+
+		case json_type_null:
+			equal = true;
+			break;
+		}
+	}
+
+	rv = json_object_new_boolean((op->type == T_EQS) ? equal : !equal);
+
+	ut_putval(v1);
+	ut_putval(v2);
+
+	return rv;
+}
+
+static struct json_object *
 ut_execute_in(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
@@ -1324,6 +1386,10 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 	case T_EQ:
 	case T_NE:
 		return ut_execute_rel(state, off);
+
+	case T_EQS:
+	case T_NES:
+		return ut_execute_equality(state, off);
 
 	case T_IN:
 		return ut_execute_in(state, off);
