@@ -31,7 +31,6 @@
 #include <time.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <sys/types.h>
 
 
@@ -252,7 +251,7 @@ ut_cast_int64(struct json_object *v)
 			errno = EINVAL;
 		else if (!isfinite(d))
 			errno = EOVERFLOW;
-		else if (ceil(d) != d)
+		else if ((double)(int64_t)d != d)
 			errno = ERANGE;
 
 		return (int64_t)d;
@@ -496,37 +495,6 @@ ut_unshift(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_abs(struct ut_state *s, uint32_t off, struct json_object *args)
-{
-	struct json_object *v = json_object_array_get_idx(args, 0);
-	enum json_type t;
-	int64_t n;
-	double d;
-
-	if (json_object_is_type(v, json_type_null))
-		return ut_new_double(NAN);
-
-	t = ut_cast_number(v, &n, &d);
-
-	if (t == json_type_double)
-		return (isnan(d) || d < 0) ? ut_new_double(-d) : json_object_get(v);
-
-	return (n < 0) ? json_object_new_int64(-n) : json_object_get(v);
-}
-
-static struct json_object *
-ut_atan2(struct ut_state *s, uint32_t off, struct json_object *args)
-{
-	double d1 = ut_cast_double(json_object_array_get_idx(args, 0));
-	double d2 = ut_cast_double(json_object_array_get_idx(args, 1));
-
-	if (isnan(d1) || isnan(d2))
-		return ut_new_double(NAN);
-
-	return ut_new_double(atan2(d1, d2));
-}
-
-static struct json_object *
 ut_chr(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	size_t len = json_object_array_length(args);
@@ -554,17 +522,6 @@ ut_chr(struct ut_state *s, uint32_t off, struct json_object *args)
 	}
 
 	return json_object_new_string_len(str, len);
-}
-
-static struct json_object *
-ut_cos(struct ut_state *s, uint32_t off, struct json_object *args)
-{
-	double d = ut_cast_double(json_object_array_get_idx(args, 0));
-
-	if (isnan(d))
-		return ut_new_double(NAN);
-
-	return ut_new_double(cos(d));
 }
 
 static struct json_object *
@@ -616,17 +573,6 @@ ut_exit(struct ut_state *s, uint32_t off, struct json_object *args)
 	int64_t n = ut_cast_int64(json_object_array_get_idx(args, 0));
 
 	exit(n);
-}
-
-static struct json_object *
-ut_exp(struct ut_state *s, uint32_t off, struct json_object *args)
-{
-	double d = ut_cast_double(json_object_array_get_idx(args, 0));
-
-	if (isnan(d))
-		return ut_new_double(NAN);
-
-	return ut_new_double(exp(d));
 }
 
 static struct json_object *
@@ -815,17 +761,6 @@ ut_lc(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_log(struct ut_state *s, uint32_t off, struct json_object *args)
-{
-	double d = ut_cast_double(json_object_array_get_idx(args, 0));
-
-	if (isnan(d))
-		return ut_new_double(NAN);
-
-	return ut_new_double(log(d));
-}
-
-static struct json_object *
 ut_map(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
@@ -875,32 +810,6 @@ ut_ord(struct ut_state *s, uint32_t off, struct json_object *args)
 		return NULL;
 
 	return json_object_new_int64((int64_t)str[0]);
-}
-
-static struct json_object *
-ut_rand(struct ut_state *s, uint32_t off, struct json_object *args)
-{
-	struct timeval tv;
-
-	if (!s->srand_called) {
-		gettimeofday(&tv, NULL);
-		srand((tv.tv_sec * 1000) + (tv.tv_usec / 1000));
-
-		s->srand_called = true;
-	}
-
-	return json_object_new_int64(rand());
-}
-
-static struct json_object *
-ut_srand(struct ut_state *s, uint32_t off, struct json_object *args)
-{
-	int64_t n = ut_cast_int64(json_object_array_get_idx(args, 0));
-
-	srand((unsigned int)n);
-	s->srand_called = true;
-
-	return NULL;
 }
 
 static struct json_object *
@@ -977,17 +886,6 @@ ut_reverse(struct ut_state *s, uint32_t off, struct json_object *args)
 	}
 
 	return rv;
-}
-
-static struct json_object *
-ut_sin(struct ut_state *s, uint32_t off, struct json_object *args)
-{
-	double d = ut_cast_double(json_object_array_get_idx(args, 0));
-
-	if (isnan(d))
-		return ut_new_double(NAN);
-
-	return ut_new_double(sin(d));
 }
 
 
@@ -1152,17 +1050,6 @@ ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
 		json_object_array_add(arr, json_object_new_string_len(splitstr, p - splitstr));
 
 	return arr;
-}
-
-static struct json_object *
-ut_sqrt(struct ut_state *s, uint32_t off, struct json_object *args)
-{
-	double d = ut_cast_double(json_object_array_get_idx(args, 0));
-
-	if (isnan(d))
-		return ut_new_double(NAN);
-
-	return ut_new_double(sqrt(d));
 }
 
 static struct json_object *
@@ -1767,15 +1654,11 @@ const struct ut_ops ut = {
 };
 
 static const struct { const char *name; ut_c_fn *func; } functions[] = {
-	{ "abs",		ut_abs },
-	{ "atan2",		ut_atan2 },
 	{ "chr",		ut_chr },
-	{ "cos",		ut_cos },
 	{ "delete",		ut_delete },
 	{ "die",		ut_die },
 	{ "exists",		ut_exists },
 	{ "exit",		ut_exit },
-	{ "exp",		ut_exp },
 	{ "filter",		ut_filter },
 	{ "getenv",		ut_getenv },
 	{ "hex",		ut_hex },
@@ -1785,24 +1668,19 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "keys",		ut_keys },
 	{ "lc",			ut_lc },
 	{ "length",		ut_length },
-	{ "log",		ut_log },
 	{ "ltrim",		ut_ltrim },
 	{ "map",		ut_map },
 	{ "ord",		ut_ord },
 	{ "pop",		ut_pop },
 	{ "print",		ut_print },
 	{ "push",		ut_push },
-	{ "rand",		ut_rand },
 	{ "reverse",	ut_reverse },
 	{ "rindex",		ut_rindex },
 	{ "rtrim",		ut_rtrim },
 	{ "shift",		ut_shift },
-	{ "sin",		ut_sin },
 	{ "sort",		ut_sort },
 	{ "splice",		ut_splice },
 	{ "split",		ut_split },
-	{ "sqrt",		ut_sqrt },
-	{ "srand",		ut_srand },
 	{ "substr",		ut_substr },
 	{ "time",		ut_time },
 	{ "trim",		ut_trim },
