@@ -7,6 +7,7 @@ ADD_DEFINITIONS(-Os -Wall -Werror --std=gnu99 -Wmissing-declarations -Wno-error=
 
 OPTION(FS_SUPPORT "Filesystem plugin support" ON)
 OPTION(UBUS_SUPPORT "Ubus plugin support" ON)
+OPTION(UCI_SUPPORT "UCI plugin support" ON)
 
 SET(LIB_SEARCH_PATH "/usr/lib/utpl/*.so:/usr/share/utpl/*.utpl:./*.so:./*.utpl" CACHE STRING "Default library search path")
 ADD_DEFINITIONS(-DLIB_SEARCH_PATH="${LIB_SEARCH_PATH}")
@@ -84,6 +85,13 @@ IF(UBUS_SUPPORT)
   ADD_LIBRARY(ubus_lib MODULE lib/ubus.c)
   SET_TARGET_PROPERTIES(ubus_lib PROPERTIES OUTPUT_NAME lib/ubus PREFIX "")
   TARGET_LINK_LIBRARIES(ubus_lib ubus blobmsg_json)
+ENDIF()
+
+IF(UCI_SUPPORT)
+  SET(LIBRARIES ${LIBRARIES} uci_lib)
+  ADD_LIBRARY(uci_lib MODULE lib/uci.c)
+  SET_TARGET_PROPERTIES(uci_lib PROPERTIES OUTPUT_NAME lib/uci PREFIX "")
+  TARGET_LINK_LIBRARIES(uci_lib uci)
 ENDIF()
 
 INSTALL(TARGETS utpl RUNTIME DESTINATION bin)
