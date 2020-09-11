@@ -30,6 +30,7 @@
 #include <math.h>
 #include <time.h>
 #include <dlfcn.h>
+#include <arpa/inet.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -1642,6 +1643,113 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 	return ut_exception(s, off, "No module named '%s' could be found", name);
 }
 
+static struct json_object *
+ut_iptoarr(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *ip = json_object_array_get_idx(args, 0);
+	struct json_object *res;
+	union {
+		uint8_t u8[4];
+		struct in_addr in;
+		struct in6_addr in6;
+	} a;
+	int i;
+
+	if (!json_object_is_type(ip, json_type_string))
+		return NULL;
+
+	if (inet_pton(AF_INET6, json_object_get_string(ip), &a)) {
+		res = json_object_new_array();
+
+		if (!res)
+			return NULL;
+
+		for (i = 0; i < 16; i++)
+			json_object_array_add(res, json_object_new_int64(a.in6.s6_addr[i]));
+
+		return res;
+	}
+	else if (inet_pton(AF_INET, json_object_get_string(ip), &a)) {
+		res = json_object_new_array();
+
+		if (!res)
+			return NULL;
+
+		json_object_array_add(res, json_object_new_int64(a.u8[0]));
+		json_object_array_add(res, json_object_new_int64(a.u8[1]));
+		json_object_array_add(res, json_object_new_int64(a.u8[2]));
+		json_object_array_add(res, json_object_new_int64(a.u8[3]));
+
+		return res;
+	}
+
+	return NULL;
+}
+
+static int
+check_byte(struct json_object *v)
+{
+	int n;
+
+	if (!json_object_is_type(v, json_type_int))
+		return -1;
+
+	n = json_object_get_int(v);
+
+	if (n < 0 || n > 255)
+		return -1;
+
+	return n;
+}
+
+static struct json_object *
+ut_arrtoip(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *arr = json_object_array_get_idx(args, 0);
+	union {
+		uint8_t u8[4];
+		struct in6_addr in6;
+	} a;
+	char buf[INET6_ADDRSTRLEN];
+	int i, n;
+
+	if (!json_object_is_type(arr, json_type_array))
+		return NULL;
+
+	switch (json_object_array_length(arr)) {
+	case 4:
+		for (i = 0; i < 4; i++) {
+			n = check_byte(json_object_array_get_idx(arr, i));
+
+			if (n < 0)
+				return NULL;
+
+			a.u8[i] = n;
+		}
+
+		inet_ntop(AF_INET, &a, buf, sizeof(buf));
+
+		return json_object_new_string(buf);
+
+	case 16:
+		for (i = 0; i < 16; i++) {
+			n = check_byte(json_object_array_get_idx(arr, i));
+
+			if (n < 0)
+				return NULL;
+
+			a.in6.s6_addr[i] = n;
+		}
+
+		inet_ntop(AF_INET6, &a, buf, sizeof(buf));
+
+		return json_object_new_string(buf);
+
+	default:
+		return NULL;
+	}
+}
+
 const struct ut_ops ut = {
 	.register_function = ut_register_function,
 	.register_type = ut_register_extended_type,
@@ -1692,6 +1800,8 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "sprintf",	ut_sprintf },
 	{ "printf",		ut_printf },
 	{ "require",	ut_require },
+	{ "iptoarr",	ut_iptoarr },
+	{ "arrtoip",	ut_arrtoip },
 };
 
 void
