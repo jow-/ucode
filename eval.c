@@ -1326,7 +1326,9 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 
 	case T_LABEL:
 		scope = ut_getref(state, off, &key);
-		state->ctx = scope;
+
+		ut_putval(state->ctx);
+		state->ctx = json_object_get(scope);
 
 		val = ut_getval(scope, key);
 		ut_putval(scope);
@@ -1335,7 +1337,9 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 
 	case T_DOT:
 		scope = ut_getref_required(state, off, &key);
-		state->ctx = scope;
+
+		ut_putval(state->ctx);
+		state->ctx = json_object_get(scope);
 
 		if (!key)
 			return scope;
@@ -1349,7 +1353,9 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 		/* postfix access */
 		if (op->is_postfix) {
 			scope = ut_getref_required(state, off, &key);
-			state->ctx = scope;
+
+			ut_putval(state->ctx);
+			state->ctx = json_object_get(scope);
 
 			if (!key)
 				return scope;
