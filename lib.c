@@ -1761,7 +1761,9 @@ const struct ut_ops ut = {
 	.set_type = ut_set_extended_type,
 	.get_type = ut_get_extended_type,
 	.new_object = ut_new_object,
+	.new_double = ut_new_double,
 	.invoke = ut_invoke,
+	.cast_number = ut_cast_number,
 };
 
 static const struct { const char *name; ut_c_fn *func; } functions[] = {
