@@ -26,6 +26,7 @@ struct ut_ops {
 	struct json_object *(*set_type)(struct json_object *, struct json_object *, const char *, void *);
 	void **(*get_type)(struct json_object *, const char *);
 	struct json_object *(*new_object)(struct json_object *);
+	struct json_object *(*invoke)(struct ut_state *, uint32_t, struct json_object *, struct json_object *, struct json_object *);
 };
 
 extern const struct ut_ops ut;
