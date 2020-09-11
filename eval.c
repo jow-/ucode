@@ -229,7 +229,8 @@ ut_ref_to_str(struct ut_state *state, uint32_t off)
 	switch (op ? op->type : 0) {
 	case T_DOT:
 		s = ut_ref_to_str(state, op->tree.operand[0]);
-		n1 = strlen(s ? s : "(null)");
+		s = s ? s : "(...)";
+		n1 = strlen(s);
 
 		l = ((op2 ? op2->type : 0) == T_LABEL) ? json_object_get_string(op2->val) : "???";
 		n2 = strlen(l);
@@ -239,7 +240,7 @@ ut_ref_to_str(struct ut_state *state, uint32_t off)
 		if (!p)
 			return NULL;
 
-		snprintf(p, n1 + n2 + 2, "%s.%s", s ? s : "(null)", l);
+		snprintf(p, n1 + n2 + 2, "%s.%s", s, l);
 		free(s);
 
 		return p;
@@ -249,9 +250,24 @@ ut_ref_to_str(struct ut_state *state, uint32_t off)
 			return NULL;
 
 		s = ut_ref_to_str(state, op->tree.operand[0]);
-		n1 = strlen(s ? s : "(null)");
+		s = s ? s : "(...)";
+		n1 = strlen(s);
 
-		l = "...";
+		switch (op2 ? op2->type : 0) {
+		case T_STRING:
+			l = json_object_to_json_string(op2->val);
+			break;
+
+		case T_NUMBER:
+		case T_LABEL:
+		case T_BOOL:
+			l = json_object_get_string(op2->val);
+			break;
+
+		default:
+			l = "...";
+		}
+
 		n2 = strlen(l);
 
 		p = calloc(1, n1 + n2 + 3);
