@@ -109,6 +109,12 @@ static inline uint32_t ut_get_off(struct ut_state *s, struct ut_op *op) {
 	return op ? (op - s->pool + 1) : 0;
 };
 
+static inline bool ut_is_type(struct json_object *val, int type) {
+	struct ut_op *tag = json_object_get_userdata(val);
+
+	return (tag && tag->type == type);
+};
+
 uint32_t ut_new_op(struct ut_state *s, int type, struct json_object *val, ...);
 uint32_t ut_wrap_op(struct ut_state *s, uint32_t parent, ...);
 uint32_t ut_append_op(struct ut_state *s, uint32_t a, uint32_t b);
