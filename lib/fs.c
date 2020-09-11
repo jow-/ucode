@@ -622,6 +622,55 @@ ut_fs_unlink(struct ut_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
+static struct json_object *
+ut_fs_getcwd(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *res;
+	char *buf = NULL, *tmp;
+	size_t buflen = 0;
+
+	do {
+		buflen += 128;
+		tmp = realloc(buf, buflen);
+
+		if (!tmp) {
+			free(buf);
+			err_return(ENOMEM);
+		}
+
+		buf = tmp;
+
+		if (getcwd(buf, buflen) != NULL)
+			break;
+
+		if (errno == ERANGE)
+			continue;
+
+		err_return(errno);
+	}
+	while (true);
+
+	res = json_object_new_string(buf);
+
+	free(buf);
+
+	return res;
+}
+
+static struct json_object *
+ut_fs_chdir(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *path = json_object_array_get_idx(args, 0);
+
+	if (!json_object_is_type(path, json_type_string))
+		err_return(EINVAL);
+
+	if (chdir(json_object_get_string(path)) == -1)
+		err_return(errno);
+
+	return json_object_new_boolean(true);
+}
+
 static const struct { const char *name; ut_c_fn *func; } proc_fns[] = {
 	{ "read",		ut_fs_pread },
 	{ "write",		ut_fs_pwrite },
@@ -655,6 +704,8 @@ static const struct { const char *name; ut_c_fn *func; } global_fns[] = {
 	{ "rmdir",		ut_fs_rmdir },
 	{ "symlink",	ut_fs_symlink },
 	{ "unlink",		ut_fs_unlink },
+	{ "getcwd",		ut_fs_getcwd },
+	{ "chdir",		ut_fs_chdir },
 };
 
 
