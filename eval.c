@@ -378,7 +378,7 @@ ut_getval(struct json_object *scope, struct json_object *key)
 		if (json_object_is_type(key, json_type_double)) {
 			d = json_object_get_double(key);
 
-			if (ceil(d) != d)
+			if ((double)(int64_t)(d) != d)
 				return NULL;
 
 			idx = (int64_t)d;
