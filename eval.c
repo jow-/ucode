@@ -483,7 +483,7 @@ ut_execute_local(struct ut_state *state, uint32_t off)
 
 		if (label)
 			rv = ut_setval(
-				state->stack.scope[state->stack.off-1], label->val,
+				ut_getscope(state, 0), label->val,
 				as->tree.operand[1] ? ut_execute_op(state, as->tree.operand[1]) : NULL);
 
 		as = ut_get_op(state, as->tree.next);
