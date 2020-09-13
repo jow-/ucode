@@ -139,17 +139,17 @@ iter_stmt(A) ::= T_WHILE(B) T_LPAREN exp(C) T_RPAREN stmt(D).
 														{ A = wrap_op(B, C, no_empty_obj(D)); }
 iter_stmt(A) ::= T_WHILE(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D) T_ENDWHILE.
 														{ A = wrap_op(B, C, D); }
-iter_stmt(A) ::= T_FOR(B) T_LPAREN exp(C) T_RPAREN stmt(D).
-														{ A = wrap_op(B, C, NULL, NULL, no_empty_obj(D)); }
-iter_stmt(A) ::= T_FOR(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D) T_ENDFOR.
-														{ A = wrap_op(B, C, NULL, NULL, no_empty_obj(D)); }
-iter_stmt(A) ::= T_FOR(B) T_LPAREN exp_stmt(C) exp_stmt(D) T_RPAREN stmt(E).
+iter_stmt(A) ::= T_FOR(B) T_LPAREN for_in_exp(C) T_RPAREN stmt(D).
+														{ A = wrap_op(B, C, NULL, NULL, no_empty_obj(D)); ut_get_op(s, A)->is_for_in = 1; }
+iter_stmt(A) ::= T_FOR(B) T_LPAREN for_in_exp(C) T_RPAREN T_COLON chunks(D) T_ENDFOR.
+														{ A = wrap_op(B, C, NULL, NULL, no_empty_obj(D)); ut_get_op(s, A)->is_for_in = 1; }
+iter_stmt(A) ::= T_FOR(B) T_LPAREN decl_or_exp(C) exp_stmt(D) T_RPAREN stmt(E).
 														{ A = wrap_op(B, C, D, NULL, no_empty_obj(E)); }
-iter_stmt(A) ::= T_FOR(B) T_LPAREN exp_stmt(C) exp_stmt(D) exp(E) T_RPAREN stmt(F).
+iter_stmt(A) ::= T_FOR(B) T_LPAREN decl_or_exp(C) exp_stmt(D) exp(E) T_RPAREN stmt(F).
 														{ A = wrap_op(B, C, D, E, no_empty_obj(F)); }
-iter_stmt(A) ::= T_FOR(B) T_LPAREN exp_stmt(C) exp_stmt(D) T_RPAREN T_COLON chunks(E) T_ENDFOR.
+iter_stmt(A) ::= T_FOR(B) T_LPAREN decl_or_exp(C) exp_stmt(D) T_RPAREN T_COLON chunks(E) T_ENDFOR.
 														{ A = wrap_op(B, C, D, NULL, E); }
-iter_stmt(A) ::= T_FOR(B) T_LPAREN exp_stmt(C) exp_stmt(D) exp(E) T_RPAREN T_COLON chunks(F) T_ENDFOR.
+iter_stmt(A) ::= T_FOR(B) T_LPAREN decl_or_exp(C) exp_stmt(D) exp(E) T_RPAREN T_COLON chunks(F) T_ENDFOR.
 														{ A = wrap_op(B, C, D, E, F); }
 
 func_stmt(A) ::= T_FUNC(B) T_LABEL(C) T_LPAREN T_RPAREN cpd_stmt(D).
@@ -167,6 +167,12 @@ func_stmt(A) ::= T_FUNC(B) T_LABEL(C) T_LPAREN args(D) T_RPAREN T_COLON chunks(E
 
 args(A) ::= args(B) T_COMMA T_LABEL(C).					{ A = append_op(B, C); }
 args(A) ::= T_LABEL(B).									{ A = B; }
+
+for_in_exp(A) ::= rel_exp(B).							{ A = B; }
+for_in_exp(A) ::= T_LOCAL(B) rel_exp(C).				{ A = wrap_op(B, C); }
+
+decl_or_exp(A) ::= exp_stmt(B).							{ A = B; }
+decl_or_exp(A) ::= decl_stmt(B).						{ A = B; }
 
 ret_stmt(A) ::= T_RETURN(B) exp(C) T_SCOL.				{ A = wrap_op(B, C); }
 ret_stmt(A) ::= T_RETURN(B) T_SCOL.						{ A = B; }

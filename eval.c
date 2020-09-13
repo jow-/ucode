@@ -525,29 +525,42 @@ ut_execute_if(struct ut_state *state, uint32_t off)
 static struct json_object *
 ut_execute_for(struct ut_state *state, uint32_t off)
 {
-	struct json_object *ivar, *val, *item, *rv = NULL;
+	struct json_object *scope, *val, *item, *rv = NULL;
+	struct ut_op *loop = ut_get_op(state, off);
 	struct ut_op *init = ut_get_child(state, off, 0);
 	struct ut_op *test = ut_get_child(state, off, 1);
 	struct ut_op *incr = ut_get_child(state, off, 2);
 	struct ut_op *body = ut_get_child(state, off, 3);
-	struct ut_op *tag;
+	struct ut_op *ivar, *tag;
 	size_t arridx, arrlen;
+	bool local = false;
 
 	/* for (x in ...) loop variant */
-	if (init != NULL && test == NULL && incr == NULL) {
+	if (loop->is_for_in) {
+		if (init->type == T_LOCAL) {
+			local = true;
+			init = ut_get_op(state, init->tree.operand[0]);
+		}
+
 		if (init->type != T_IN)
 			return ut_exception(state, ut_get_off(state, init),
 			                    "Syntax error: missing ';' after for loop initializer");
 
-		ivar = ut_get_op(state, init->tree.operand[0])->val;
+		ivar = ut_get_op(state, init->tree.operand[0]);
+
+		if (!ivar || ivar->type != T_LABEL)
+			return ut_exception(state, ut_get_off(state, init),
+			                    "Syntax error: invalid for-in left-hand side");
+
 		val = ut_execute_op(state, init->tree.operand[1]);
+		scope = local ? ut_getscope(state, 0) : ut_getref(state, ut_get_off(state, ivar), NULL);
 
 		if (json_object_is_type(val, json_type_array)) {
 			for (arridx = 0, arrlen = json_object_array_length(val);
 			     arridx < arrlen; arridx++) {
 				item = json_object_array_get_idx(val, arridx);
 
-				ut_setval(ut_getscope(state, 0), ivar, item);
+				ut_setval(scope, ivar->val, item);
 				ut_putval(rv);
 
 				rv = ut_execute_op_sequence(state, ut_get_off(state, body));
@@ -570,7 +583,7 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 		}
 		else if (json_object_is_type(val, json_type_object)) {
 			json_object_object_foreach(val, key, item) {
-				ut_setval(ut_getscope(state, 0), ivar, json_object_new_string(key));
+				ut_setval(scope, ivar->val, json_object_new_string(key));
 				ut_putval(rv);
 
 				rv = ut_execute_op_sequence(state, ut_get_off(state, body));
