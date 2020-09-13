@@ -75,6 +75,15 @@ A for-in loop using the alternative syntax:
 Item 123
 Item 456
 Item 789
+
+For-in and counting for loops may declare variables:
+Iteration 0
+Iteration 1
+Iteration 2
+
+Item 123
+Item 456
+Item 789
 -- End --
 
 -- Testcase --
@@ -143,6 +152,15 @@ Iteration {{ x }}
 
 A for-in loop using the alternative syntax:
 {% for (n in [123, 456, 789]): -%}
+Item {{ n }}
+{% endfor %}
+
+For-in and counting for loops may declare variables:
+{% for (local i = 0; i < 3; i++): %}
+Iteration {{ i }}
+{% endfor %}
+
+{% for (local n in [123, 456, 789]): %}
 Item {{ n }}
 {% endfor %}
 -- End --
