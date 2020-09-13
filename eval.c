@@ -298,12 +298,14 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 	uint8_t i;
 
 	if (op && op->type == T_DOT) {
-		*key = off2 ? ut_get_op(state, off2)->val : NULL;
+		if (key)
+			*key = off2 ? ut_get_op(state, off2)->val : NULL;
 
 		return ut_execute_op(state, off1);
 	}
 	else if (op && op->type == T_LBRACK && op->is_postfix) {
-		*key = off2 ? ut_execute_op(state, off2) : NULL;
+		if (key)
+			*key = off2 ? ut_execute_op(state, off2) : NULL;
 
 		return ut_execute_op(state, off1);
 	}
@@ -323,12 +325,14 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 			scope = next;
 		}
 
-		*key = op->val;
+		if (key)
+			*key = op->val;
 
 		return json_object_get(scope);
 	}
 	else {
-		*key = NULL;
+		if (key)
+			*key = NULL;
 
 		return NULL;
 	}
