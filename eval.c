@@ -1317,7 +1317,7 @@ ut_execute_function(struct ut_state *state, uint32_t off)
 static struct json_object *
 ut_execute_this(struct ut_state *state, uint32_t off)
 {
-	return ut_getproto(ut_getscope(state, 0));
+	return json_object_get(ut_getproto(ut_getscope(state, 0)));
 }
 
 static struct json_object *
