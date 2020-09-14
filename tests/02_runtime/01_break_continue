@@ -1,0 +1,50 @@
+The "break" and "continue" statements allow to abort a running loop or to
+prematurely advance to the next cycle.
+
+-- Expect stdout --
+Testing break:
+ - Iteration 0
+ - Iteration 1
+ - Iteration 2
+ - Iteration 3
+ - Iteration 4
+ - Iteration 5
+ - Iteration 6
+ - Iteration 7
+ - Iteration 8
+ - Iteration 9
+ - Iteration 10
+
+Testing continue:
+ - Iteration 0
+ - Iteration 2
+ - Iteration 4
+ - Iteration 6
+ - Iteration 8
+-- End --
+
+-- Testcase --
+Testing break:
+{%
+	local i = 0;
+
+	while (true) {
+		print(" - Iteration ", i, "\n");
+
+		if (i == 10)
+			break;
+
+		i++;
+	}
+%}
+
+Testing continue:
+{%
+	for (i = 0; i < 10; i++) {
+		if (i % 2)
+			continue;
+
+		print(" - Iteration ", i, "\n");
+	}
+%}
+-- End --

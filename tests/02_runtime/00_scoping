@@ -1,0 +1,161 @@
+Utpl implements function scoping, make sure that local variables are
+invisible outside of the function scope.
+
+-- Expect stdout --
+a_global=true
+a_local=true
+
+b_global=true
+b_local=false
+
+c_global=true
+c_local=false
+
+
+When seting a nonlocal variable, it is set in the nearest parent
+scope containing the variable or in the root scope if the variable
+was not found.
+
+x=2
+y=
+z=1
+
+
+Variables implicitly declared by for-in or counting for loops follow the same
+scoping rules.
+
+inner2 f_a=3
+inner2 f_b=3
+inner2 f_c=3
+inner2 f_d=3
+inner2 f_e=3
+
+inner f_a=3
+inner f_b=3
+inner f_c=3
+inner f_d=
+inner f_e=3
+
+outer f_a=3
+outer f_b=
+outer f_c=
+outer f_d=
+outer f_e=3
+-- End --
+
+-- Testcase --
+{%
+	a_global = true;
+	local a_local = true;
+
+	function test() {
+		b_global = true;
+		local b_local = true;
+
+		function test2() {
+			c_global = true;
+			local c_local = true;
+		}
+
+		test2();
+	}
+
+	test();
+-%}
+
+a_global={{ !!a_global }}
+a_local={{ !!a_local }}
+
+b_global={{ !!b_global }}
+b_local={{ !!b_local }}
+
+c_global={{ !!c_global }}
+c_local={{ !!c_local }}
+
+
+When seting a nonlocal variable, it is set in the nearest parent
+scope containing the variable or in the root scope if the variable
+was not found.
+
+{%
+	x = 1;
+
+	function scope1() {
+		x = 2;
+		local y;
+
+		function scope2() {
+			// this does not set "y" in the root scope but overwrites the
+			// variable declared in the "scope1" function scope.
+			y = 2;
+
+			// this sets "z" in the root scope because it was not declared
+			// anywhere yet
+			z = 1;
+		}
+
+		scope2();
+	}
+
+	scope1();
+-%}
+
+x={{ x }}
+y={{ y }}
+z={{ z }}
+
+
+Variables implicitly declared by for-in or counting for loops follow the same
+scoping rules.
+
+{%
+	function scope3() {
+		// f_a is not declared local and be set i nthe root scope
+		for (f_a = 1; f_a < 3; f_a++)
+			;
+
+		for (local f_b = 1; f_b < 3; f_b++)
+			;
+
+		local f_c;
+
+		function scope4() {
+			// f_c is not declared local but declared in the parent scope, it
+			// will be set there
+			for (f_c in [1, 2, 3])
+				;
+
+			for (local f_d in [1, 2, 3])
+				;
+
+			// f_e is not declared, it will be set in the root scope
+			for (f_e in [1, 2, 3])
+				;
+
+			print("inner2 f_a=", f_a, "\n");
+			print("inner2 f_b=", f_b, "\n");
+			print("inner2 f_c=", f_c, "\n");
+			print("inner2 f_d=", f_d, "\n");
+			print("inner2 f_e=", f_e, "\n");
+			print("\n");
+		}
+
+		scope4();
+
+		print("inner f_a=", f_a, "\n");
+		print("inner f_b=", f_b, "\n");
+		print("inner f_c=", f_c, "\n");
+		print("inner f_d=", f_d, "\n");
+		print("inner f_e=", f_e, "\n");
+		print("\n");
+	}
+
+	scope3();
+
+	print("outer f_a=", f_a, "\n");
+	print("outer f_b=", f_b, "\n");
+	print("outer f_c=", f_c, "\n");
+	print("outer f_d=", f_d, "\n");
+	print("outer f_e=", f_e, "\n");
+%}
+-- End --
