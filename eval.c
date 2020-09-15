@@ -1361,7 +1361,7 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 		scope = ut_getref(state, off, &key);
 
 		ut_putval(state->ctx);
-		state->ctx = json_object_get(scope);
+		state->ctx = NULL;
 
 		val = ut_getval(scope, key);
 		ut_putval(scope);
@@ -1548,7 +1548,7 @@ ut_run(struct ut_state *state)
 	if (!json_object_is_type(scope, json_type_object))
 		return UT_ERROR_EXCEPTION;
 
-	state->ctx = scope;
+	state->ctx = NULL;
 
 	ut_globals_init(state, scope);
 	ut_lib_init(state, scope);

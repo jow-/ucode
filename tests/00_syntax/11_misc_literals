@@ -9,7 +9,8 @@ The "false" keyword represents a false boolean value: false
 -- End --
 
 -- Testcase --
-The "this" keyword refers to the current function context: {{ type(this) }}
+{% local t = { f: function() { return this; } } %}
+The "this" keyword refers to the current function context: {{ type(t.f()) }}
 The "null" keyword represents the null value: {{ "" + null }}
 The "true" keyword represents a true boolean value: {{ true }}
 The "false" keyword represents a false boolean value: {{ false }}
