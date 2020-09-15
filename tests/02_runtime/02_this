@@ -1,0 +1,28 @@
+The "this" object accesses the current function context.
+
+-- Expect stdout --
+
+-- End --
+true
+true
+-- Testcase --
+{%
+	local g = this;
+
+	// Functions not invoked on objects have no this context
+	function test() {
+		print(this, "\n");
+		return (this === null);
+	}
+
+	// When invoked, "this" will point to the object containing the function
+	local o = {
+		test: function() {
+			return (this === o);
+		}
+	};
+
+	print(test(), "\n");
+	print(o.test(), "\n");
+%}
+-- End --
