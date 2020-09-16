@@ -38,14 +38,16 @@ print_usage(char *app)
 {
 	printf(
 	"== Usage ==\n\n"
-	"  # %s [-d] [-l] [-r] [-S] {-i <file> | -s \"utpl script...\"}\n"
+	"  # %s [-d] [-l] [-r] [-S] [-e '{\"var\": ...}'] [-E env.json] {-i <file> | -s \"utpl script...\"}\n"
 	"  -h, --help	Print this help\n"
 	"  -i file	Specify an utpl script to parse\n"
 	"  -s \"utpl script...\"	Specify an utpl code fragment to parse\n"
 	"  -d Instead of executing the script, dump the resulting AST as dot\n"
 	"  -l Do not strip leading block whitespace\n"
 	"  -r Do not trim trailing block newlines\n"
-	"  -S Enable strict mode\n",
+	"  -S Enable strict mode\n"
+	"  -e Set global variables from given JSON object\n"
+	"  -E Set global variables from given JSON file\n",
 		app);
 }
 
@@ -139,7 +141,7 @@ static void dump(struct ut_state *s, uint32_t off, int level) {
 #endif /* NDEBUG */
 
 static enum ut_error_type
-parse(struct ut_state *state, const char *source, bool dumponly)
+parse(struct ut_state *state, const char *source, bool dumponly, struct json_object *env)
 {
 	enum ut_error_type err;
 	char *msg;
@@ -156,7 +158,7 @@ parse(struct ut_state *state, const char *source, bool dumponly)
 #endif /* NDEBUG */
 		}
 		else {
-			err = ut_run(state);
+			err = ut_run(state, env);
 		}
 	}
 
@@ -172,15 +174,67 @@ parse(struct ut_state *state, const char *source, bool dumponly)
 	return err;
 }
 
+static bool stdin_used = false;
+
+static char *
+read_file(const char *path) {
+	char buf[64], *s = NULL, *tmp;
+	size_t rlen, tlen = 0;
+	FILE *fp = NULL;
+
+	if (!strcmp(path, "-")) {
+		if (stdin_used) {
+			fprintf(stderr, "Can read from stdin only once\n");
+			goto out;
+		}
+
+		fp = stdin;
+		stdin_used = true;
+	}
+	else {
+		fp = fopen(path, "r");
+
+		if (!fp) {
+			fprintf(stderr, "Failed to open %s: %s\n", path, strerror(errno));
+			goto out;
+		}
+	}
+
+	while (1) {
+		rlen = fread(buf, 1, sizeof(buf), fp);
+
+		if (rlen == 0)
+			break;
+
+		tmp = realloc(s, tlen + rlen + 1);
+
+		if (!tmp) {
+			fprintf(stderr, "Out or memory\n");
+			free(s);
+			s = NULL;
+			goto out;
+		}
+
+		s = tmp;
+		memcpy(s + tlen, buf, rlen);
+		s[tlen + rlen] = 0;
+		tlen += rlen;
+	}
+
+out:
+	if (fp != NULL && fp != stdin)
+		fclose(fp);
+
+	return s;
+}
+
 int
 main(int argc, char **argv)
 {
+	char *srcstr = NULL, *srcfile = NULL, *envstr = NULL;
+	struct json_object *env = NULL, *o;
 	struct ut_state *state;
 	bool dumponly = false;
-	size_t rlen, tlen = 0;
-	char buf[1024], *tmp;
-	char *source = NULL;
-	FILE *input = NULL;
 	int opt, rv = 0;
 
 	if (argc == 1)
@@ -199,7 +253,7 @@ main(int argc, char **argv)
 	state->lstrip_blocks = 1;
 	state->trim_blocks = 1;
 
-	while ((opt = getopt(argc, argv, "dhlrSi:s:")) != -1)
+	while ((opt = getopt(argc, argv, "dhlrSe:E:i:s:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -207,10 +261,9 @@ main(int argc, char **argv)
 			goto out;
 
 		case 'i':
-			input = strcmp(optarg, "-") ? fopen(optarg, "r") : stdin;
+			srcfile = read_file(optarg);
 
-			if (!input) {
-				fprintf(stderr, "Failed to open %s: %s\n", optarg, strerror(errno));
+			if (!srcfile) {
 				rv = UT_ERROR_EXCEPTION;
 				goto out;
 			}
@@ -230,46 +283,59 @@ main(int argc, char **argv)
 			break;
 
 		case 's':
-			source = optarg;
+			srcstr = optarg;
 			break;
 
 		case 'S':
 			state->strict_declarations = 1;
 			break;
-		}
-	}
 
-	if (!source) {
-		while (1) {
-			rlen = fread(buf, 1, sizeof(buf), input);
+		case 'e':
+			envstr = optarg;
+			/* fallthrough */
 
-			if (rlen == 0)
-				break;
+		case 'E':
+			if (!envstr) {
+				envstr = read_file(optarg);
 
-			tmp = realloc(source, tlen + rlen + 1);
+				if (!envstr) {
+					rv = UT_ERROR_EXCEPTION;
+					goto out;
+				}
+			}
 
-			if (!tmp) {
-				tmp = ut_format_error(NULL, "");
+			o = json_tokener_parse(envstr);
 
-				fprintf(stderr, "%s\n", tmp);
-				free(tmp);
+			if (envstr != optarg)
+				free(envstr);
 
-				rv = UT_ERROR_OUT_OF_MEMORY;
+			if (!json_object_is_type(o, json_type_object)) {
+				fprintf(stderr, "Option -%c must point to a valid JSON object\n", opt);
+
+				rv = UT_ERROR_EXCEPTION;
 				goto out;
 			}
 
-			source = tmp;
-			memcpy(source + tlen, buf, rlen);
-			source[tlen + rlen] = 0;
-			tlen += rlen;
+			env = env ? env : json_object_new_object();
+
+			json_object_object_foreach(o, key, val)
+				json_object_object_add(env, key, val);
+
+			break;
 		}
 	}
 
-	rv = source ? parse(state, source, dumponly) : 0;
+	if ((srcstr && srcfile) || (!srcstr && !srcfile)) {
+		fprintf(stderr, srcstr ? "Options -i and -s are exclusive\n" : "One of -i or -s is required\n");
+
+		rv = UT_ERROR_EXCEPTION;
+		goto out;
+	}
+
+	rv = parse(state, srcstr ? srcstr : srcfile, dumponly, env);
 
 out:
-	if (input && input != stdin)
-		fclose(input);
+	free(srcfile);
 
 	return rv;
 }

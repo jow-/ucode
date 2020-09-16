@@ -1531,7 +1531,7 @@ ut_globals_init(struct ut_state *state, struct json_object *scope)
 }
 
 enum ut_error_type
-ut_run(struct ut_state *state)
+ut_run(struct ut_state *state, struct json_object *env)
 {
 	struct json_object *entry = NULL, *scope = NULL, *args = NULL, *rv = NULL;
 	struct ut_op *op = ut_get_op(state, state->main);
@@ -1544,6 +1544,11 @@ ut_run(struct ut_state *state)
 		scope = ut_addscope(state, state->main);
 
 		state->ctx = NULL;
+
+		if (env) {
+			json_object_object_foreach(env, key, val)
+				json_object_object_add(scope, key, val);
+		}
 
 		ut_globals_init(state, scope);
 		ut_lib_init(state, scope);

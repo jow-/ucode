@@ -43,6 +43,6 @@ struct json_object *
 ut_invoke(struct ut_state *, uint32_t, struct json_object *, struct json_object *, struct json_object *);
 
 enum ut_error_type
-ut_run(struct ut_state *state);
+ut_run(struct ut_state *state, struct json_object *env);
 
 #endif
