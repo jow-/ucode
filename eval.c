@@ -303,8 +303,14 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 
 			next = ut_getscope(state, ++i);
 
-			if (!next)
+			if (!next) {
+				if (state->strict_declarations)
+					ut_throw(state, off,
+					         "Reference error: access to undeclared variable %s",
+					         json_object_get_string(op->val));
+
 				break;
+			}
 
 			scope = next;
 		}
@@ -1355,6 +1361,11 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 
 		ut_putval(state->ctx);
 		state->ctx = NULL;
+
+		if (state->strict_declarations && scope == NULL) {
+			ut_throw(state, off, "Reference error: %s is not defined",
+			         json_object_get_string(op->val));
+		}
 
 		val = ut_getval(scope, key);
 		ut_putval(scope);

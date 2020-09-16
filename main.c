@@ -38,13 +38,14 @@ print_usage(char *app)
 {
 	printf(
 	"== Usage ==\n\n"
-	"  # %s [-d] [-l] [-r] {-i <file> | -s \"utpl script...\"}\n"
+	"  # %s [-d] [-l] [-r] [-S] {-i <file> | -s \"utpl script...\"}\n"
 	"  -h, --help	Print this help\n"
 	"  -i file	Specify an utpl script to parse\n"
 	"  -s \"utpl script...\"	Specify an utpl code fragment to parse\n"
 	"  -d Instead of executing the script, dump the resulting AST as dot\n"
 	"  -l Do not strip leading block whitespace\n"
-	"  -r Do not trim trailing block newlines\n",
+	"  -r Do not trim trailing block newlines\n"
+	"  -S Enable strict mode\n",
 		app);
 }
 
@@ -198,7 +199,7 @@ main(int argc, char **argv)
 	state->lstrip_blocks = 1;
 	state->trim_blocks = 1;
 
-	while ((opt = getopt(argc, argv, "dhlri:s:")) != -1)
+	while ((opt = getopt(argc, argv, "dhlrSi:s:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -230,6 +231,10 @@ main(int argc, char **argv)
 
 		case 's':
 			source = optarg;
+			break;
+
+		case 'S':
+			state->strict_declarations = 1;
 			break;
 		}
 	}
