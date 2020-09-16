@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <setjmp.h>
 
 #ifdef JSONC
 	#include <json.h>
@@ -86,9 +87,13 @@ struct ut_state {
 	struct {
 		enum ut_error_type code;
 		union {
-			struct json_object *exception;
+			struct {
+				size_t off;
+				char *message;
+			} exception;
 			uint64_t tokens[2];
 		} info;
+		jmp_buf jmp;
 	} error;
 	struct {
 		struct json_object **scope;

@@ -24,8 +24,8 @@
 
 #include "ast.h"
 
-__attribute__((format(printf, 3, 0))) struct json_object *
-ut_exception(struct ut_state *state, uint32_t op, const char *fmt, ...);
+__attribute__((noreturn,format(printf, 3, 0))) void
+ut_throw(struct ut_state *state, uint32_t off, const char *fmt, ...);
 
 void
 ut_putval(struct json_object *val);
