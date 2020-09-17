@@ -47,7 +47,8 @@ print_usage(char *app)
 	"  -r Do not trim trailing block newlines\n"
 	"  -S Enable strict mode\n"
 	"  -e Set global variables from given JSON object\n"
-	"  -E Set global variables from given JSON file\n",
+	"  -E Set global variables from given JSON file\n"
+	"  -m Preload given module\n",
 		app);
 }
 
@@ -141,7 +142,8 @@ static void dump(struct ut_state *s, uint32_t off, int level) {
 #endif /* NDEBUG */
 
 static enum ut_error_type
-parse(struct ut_state *state, const char *source, bool dumponly, struct json_object *env)
+parse(struct ut_state *state, const char *source, bool dumponly,
+      struct json_object *env, struct json_object *modules)
 {
 	enum ut_error_type err;
 	char *msg;
@@ -158,7 +160,7 @@ parse(struct ut_state *state, const char *source, bool dumponly, struct json_obj
 #endif /* NDEBUG */
 		}
 		else {
-			err = ut_run(state, env);
+			err = ut_run(state, env, modules);
 		}
 	}
 
@@ -232,7 +234,7 @@ int
 main(int argc, char **argv)
 {
 	char *srcstr = NULL, *srcfile = NULL, *envstr = NULL;
-	struct json_object *env = NULL, *o;
+	struct json_object *env = NULL, *modules = NULL, *o;
 	struct ut_state *state;
 	bool dumponly = false;
 	int opt, rv = 0;
@@ -253,7 +255,7 @@ main(int argc, char **argv)
 	state->lstrip_blocks = 1;
 	state->trim_blocks = 1;
 
-	while ((opt = getopt(argc, argv, "dhlrSe:E:i:s:")) != -1)
+	while ((opt = getopt(argc, argv, "dhlrSe:E:i:s:m:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -322,6 +324,13 @@ main(int argc, char **argv)
 				json_object_object_add(env, key, val);
 
 			break;
+
+		case 'm':
+			modules = modules ? modules : json_object_new_array();
+
+			json_object_array_add(modules, json_object_new_string(optarg));
+
+			break;
 		}
 	}
 
@@ -332,9 +341,11 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	rv = parse(state, srcstr ? srcstr : srcfile, dumponly, env);
+	rv = parse(state, srcstr ? srcstr : srcfile, dumponly, env, modules);
 
 out:
+	json_object_put(modules);
+	json_object_put(env);
 	free(srcfile);
 
 	return rv;

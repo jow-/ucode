@@ -1557,10 +1557,11 @@ ut_register_variable(struct json_object *scope, const char *key, struct json_obj
 }
 
 enum ut_error_type
-ut_run(struct ut_state *state, struct json_object *env)
+ut_run(struct ut_state *state, struct json_object *env, struct json_object *modules)
 {
 	struct ut_op *op = ut_get_op(state, state->main);
 	struct json_object *entry, *scope, *args, *rv;
+	size_t i;
 
 	if (!op || op->type != T_FUNC) {
 		ut_exception(state, state->main, "Runtime error: Invalid root operation in AST");
@@ -1589,6 +1590,23 @@ ut_run(struct ut_state *state, struct json_object *env)
 	ut_lib_init(state, scope);
 
 	args = json_object_new_array();
+
+	if (modules) {
+		for (i = 0; i < json_object_array_length(modules); i++) {
+			json_object_array_put_idx(args, 0, json_object_get(json_object_array_get_idx(modules, i)));
+
+			rv = ut_invoke(state, state->main, NULL,
+			               json_object_object_get(scope, "require"),
+			               args);
+
+			ut_register_variable(scope,
+			                     json_object_get_string(json_object_array_get_idx(modules, i)),
+			                     rv);
+		}
+
+		json_object_array_del_idx(args, 0, 1);
+	}
+
 	rv = ut_invoke(state, state->main, NULL, entry, args);
 
 	json_object_put(entry);
