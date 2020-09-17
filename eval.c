@@ -223,24 +223,16 @@ ut_ref_to_str(struct ut_state *state, uint32_t off)
 	struct ut_op *op = ut_get_op(state, off);
 	struct ut_op *op2 = ut_get_child(state, off, 1);
 	const char *l;
-	size_t n1, n2;
 	char *s, *p;
 
 	switch (op ? op->type : 0) {
 	case T_DOT:
 		s = ut_ref_to_str(state, op->tree.operand[0]);
-		s = s ? s : "(...)";
-		n1 = strlen(s);
-
 		l = ((op2 ? op2->type : 0) == T_LABEL) ? json_object_get_string(op2->val) : "???";
-		n2 = strlen(l);
 
-		p = calloc(1, n1 + n2 + 2);
+		if (asprintf(&p, "%s.%s", s ? s : "(...)", l) == -1)
+			p = NULL;
 
-		if (!p)
-			return NULL;
-
-		snprintf(p, n1 + n2 + 2, "%s.%s", s, l);
 		free(s);
 
 		return p;
@@ -249,13 +241,14 @@ ut_ref_to_str(struct ut_state *state, uint32_t off)
 		if (!op->is_postfix)
 			return NULL;
 
+		/* fall through */
+
+	case T_LPAREN:
 		s = ut_ref_to_str(state, op->tree.operand[0]);
-		s = s ? s : "(...)";
-		n1 = strlen(s);
 
 		switch (op2 ? op2->type : 0) {
 		case T_STRING:
-			l = json_object_to_json_string(op2->val);
+			l = json_object_to_json_string_ext(op2->val, JSON_C_TO_STRING_NOSLASHESCAPE);
 			break;
 
 		case T_NUMBER:
@@ -268,14 +261,11 @@ ut_ref_to_str(struct ut_state *state, uint32_t off)
 			l = "...";
 		}
 
-		n2 = strlen(l);
+		if (asprintf(&p, "%s%c%s%c", s ? s : "(...)",
+		             (op->type == T_LPAREN) ? '(' : '[', l,
+		             (op->type == T_LPAREN) ? ')' : ']') == -1)
+			p = NULL;
 
-		p = calloc(1, n1 + n2 + 3);
-
-		if (!p)
-			return NULL;
-
-		snprintf(p, n1 + n2 + 3, "%s[%s]", s, l);
 		free(s);
 
 		return p;
@@ -287,6 +277,17 @@ ut_ref_to_str(struct ut_state *state, uint32_t off)
 		return NULL;
 	}
 }
+
+#define alloca_sprintf(...) \
+	({ \
+		char *__p = NULL; \
+		int __n = snprintf(NULL, 0, __VA_ARGS__); \
+		if (__n >= 0) { \
+			__p = alloca(__n + 1); \
+			snprintf(__p, __n + 1, __VA_ARGS__); \
+		} \
+		__p; \
+	})
 
 static struct json_object *
 ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
@@ -351,7 +352,7 @@ ut_getref_required(struct ut_state *state, uint32_t off, struct json_object **ke
 	struct ut_op *op = ut_get_op(state, off);
 	uint32_t off1 = op ? op->tree.operand[0] : 0;
 	struct json_object *scope, *skey, *rv;
-	char *lhs;
+	char *lhs, *p = NULL;
 
 	scope = ut_getref(state, off, &skey);
 
@@ -360,16 +361,13 @@ ut_getref_required(struct ut_state *state, uint32_t off, struct json_object **ke
 		lhs = off1 ? ut_ref_to_str(state, off1) : NULL;
 
 		if (lhs) {
-			rv = ut_exception(state, off1, "Type error: %s is null", lhs);
-
+			p = alloca_sprintf("Type error: the result of `%s` is %s", lhs,
+			                   scope ? "not an array or object" : "null");
 			free(lhs);
-		}
-		else {
-			rv = ut_exception(state, off,
-				"Syntax error: Invalid left-hand side operand %s", tokennames[op->type]);
 		}
 
 		json_object_put(scope);
+		rv = ut_exception(state, off1, p ? p : "Type error: left-hand side is not an array or object");
 
 		*key = NULL;
 		return rv;
@@ -1032,15 +1030,17 @@ ut_execute_call(struct ut_state *state, uint32_t off)
 	struct ut_op *decl = func ? json_object_get_userdata(func) : NULL;
 	struct json_object *argvals = ut_execute_list(state, off2);
 	struct json_object *rv;
-	char *lhs;
+	char *lhs, *p = NULL;
 
 	if (!decl || (decl->type != T_FUNC && decl->type != T_CFUNC)) {
 		lhs = ut_ref_to_str(state, off1);
-		rv = ut_exception(state, off1,
-			"Type error: %s is not a function",
-			lhs ? lhs : "left-hand side expression");
 
-		free(lhs);
+		if (lhs) {
+			p = alloca_sprintf("Type error: %s is not a function", lhs);
+			free(lhs);
+		}
+
+		rv = ut_exception(state, off1, p ? p : "Type error: left-hand side expression is not a function");
 	}
 	else {
 		rv = ut_invoke(state, off, NULL, func, argvals);
