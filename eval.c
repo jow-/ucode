@@ -1530,6 +1530,23 @@ ut_globals_init(struct ut_state *state, struct json_object *scope)
 	json_object_object_add(scope, "REQUIRE_SEARCH_PATH", arr);
 }
 
+static void
+ut_register_variable(struct json_object *scope, const char *key, struct json_object *val)
+{
+	char *name = strdup(key);
+	char *p;
+
+	if (!name)
+		return;
+
+	for (p = name; *p; p++)
+		if (!isalnum(*p) && *p != '_')
+			*p = '_';
+
+	json_object_object_add(scope, name, val);
+	free(name);
+}
+
 enum ut_error_type
 ut_run(struct ut_state *state, struct json_object *env)
 {
@@ -1547,7 +1564,7 @@ ut_run(struct ut_state *state, struct json_object *env)
 
 		if (env) {
 			json_object_object_foreach(env, key, val)
-				json_object_object_add(scope, key, val);
+				ut_register_variable(scope, key, val);
 		}
 
 		ut_globals_init(state, scope);
