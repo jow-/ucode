@@ -1147,8 +1147,27 @@ ut_write_str(struct json_object *v)
 	const char *p;
 	size_t len;
 
-	p = v ? json_object_get_string(v) : "";
-	len = json_object_is_type(v, json_type_string) ? json_object_get_string_len(v) : strlen(p);
+	switch (json_object_get_type(v)) {
+	case json_type_object:
+	case json_type_array:
+		p = json_object_to_json_string_ext(v, JSON_C_TO_STRING_NOSLASHESCAPE|JSON_C_TO_STRING_SPACED);
+		len = strlen(p);
+		break;
+
+	case json_type_string:
+		p = json_object_get_string(v);
+		len = json_object_get_string_len(v);
+		break;
+
+	case json_type_null:
+		p = "";
+		len = 0;
+		break;
+
+	default:
+		p = json_object_get_string(v);
+		len = strlen(p);
+	}
 
 	fwrite(p, 1, len, stdout);
 }
