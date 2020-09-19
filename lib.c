@@ -134,10 +134,10 @@ char *
 ut_format_error(struct ut_state *state, const char *expr)
 {
 	size_t off = state ? state->off : 0;
-	char *msg = NULL, *p;
-	size_t msglen = 0;
+	struct ut_op *tag;
 	bool first = true;
-	struct ut_op *op;
+	size_t msglen = 0;
+	char *msg = NULL;
 	int i, max_i;
 
 	switch (state ? state->error.code : UT_ERROR_OUT_OF_MEMORY) {
@@ -202,11 +202,10 @@ ut_format_error(struct ut_state *state, const char *expr)
 		break;
 
 	case UT_ERROR_EXCEPTION:
-		p = state->error.info.exception.message;
-		op = ut_get_op(state, state->error.info.exception.off);
-		off = op ? op->off : 0;
+		tag = json_object_get_userdata(state->error.info.exception);
+		off = (tag && tag->tree.operand[0]) ? ut_get_op(state, tag->tree.operand[0])->off : 0;
 
-		sprintf_append(&msg, &msglen, "%s\n", p ? p : UT_ERRMSG_OOM);
+		sprintf_append(&msg, &msglen, "%s\n", json_object_get_string(state->error.info.exception));
 		break;
 	}
 
@@ -510,7 +509,7 @@ ut_chr(struct ut_state *s, uint32_t off, struct json_object *args)
 	str = calloc(1, len);
 
 	if (!str)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	for (idx = 0; idx < len; idx++) {
 		n = ut_cast_int64(json_object_array_get_idx(args, idx));
@@ -554,7 +553,7 @@ ut_die(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	const char *msg = json_object_get_string(json_object_array_get_idx(args, 0));
 
-	ut_throw(s, off, "%s", msg ? msg : "Died");
+	return ut_exception(s, off, "%s", msg ? msg : "Died");
 }
 
 static struct json_object *
@@ -604,7 +603,7 @@ ut_filter(struct ut_state *s, uint32_t off, struct json_object *args)
 		ut_putval(arr);
 		ut_putval(cmpargs);
 
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 	}
 
 	json_object_array_put_idx(cmpargs, 2, json_object_get(obj));
@@ -680,7 +679,7 @@ ut_join(struct ut_state *s, uint32_t off, struct json_object *args)
 	p = res = calloc(1, len);
 
 	if (!res)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	for (arrlen = json_object_array_length(arr), arridx = 0; arridx < arrlen; arridx++) {
 		if (arridx > 0) {
@@ -726,7 +725,7 @@ ut_keys(struct ut_state *s, uint32_t off, struct json_object *args)
 	arr = json_object_new_array();
 
 	if (!arr)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	json_object_object_foreach(obj, key, val)
 		json_object_array_add(arr, json_object_new_string(key));
@@ -748,7 +747,7 @@ ut_lc(struct ut_state *s, uint32_t off, struct json_object *args)
 	res = p = calloc(1, len);
 
 	if (!res)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	while (*str)
 		if (*str >= 'A' && *str <= 'Z')
@@ -780,7 +779,7 @@ ut_map(struct ut_state *s, uint32_t off, struct json_object *args)
 		ut_putval(arr);
 		ut_putval(cmpargs);
 
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 	}
 
 	json_object_array_put_idx(cmpargs, 2, json_object_get(obj));
@@ -866,7 +865,7 @@ ut_reverse(struct ut_state *s, uint32_t off, struct json_object *args)
 		rv = json_object_new_array();
 
 		if (!rv)
-			ut_throw(s, off, UT_ERRMSG_OOM);
+			return ut_exception(s, off, UT_ERRMSG_OOM);
 
 		for (arridx = json_object_array_length(obj); arridx > 0; arridx--)
 			json_object_array_add(rv, json_object_get(json_object_array_get_idx(obj, arridx - 1)));
@@ -877,7 +876,7 @@ ut_reverse(struct ut_state *s, uint32_t off, struct json_object *args)
 		p = dup = calloc(1, len + 1);
 
 		if (!dup)
-			ut_throw(s, off, UT_ERRMSG_OOM);
+			return ut_exception(s, off, UT_ERRMSG_OOM);
 
 		while (len > 0)
 			*p++ = str[--len];
@@ -936,7 +935,7 @@ ut_sort(struct ut_state *s, uint32_t off, struct json_object *args)
 		sort_ctx.args = json_object_new_array();
 
 		if (!sort_ctx.args)
-			ut_throw(s, off, UT_ERRMSG_OOM);
+			return ut_exception(s, off, UT_ERRMSG_OOM);
 	}
 
 	json_object_array_sort(arr, sort_fn);
@@ -1033,7 +1032,7 @@ ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
 	arr = json_object_new_array();
 
 	if (!arr)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	sepstr = json_object_get_string(sep);
 	splitstr = json_object_get_string(str);
@@ -1140,7 +1139,7 @@ ut_uc(struct ut_state *s, uint32_t off, struct json_object *args)
 	res = p = calloc(1, len);
 
 	if (!res)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	while (*str)
 		if (*str >= 'a' && *str <= 'z')
@@ -1181,7 +1180,7 @@ ut_uchr(struct ut_state *s, uint32_t off, struct json_object *args)
 	str = calloc(1, ulen);
 
 	if (!str)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	for (idx = 0, p = str, rem = ulen; idx < len; idx++) {
 		n = ut_cast_int64(json_object_array_get_idx(args, idx));
@@ -1208,7 +1207,7 @@ ut_values(struct ut_state *s, uint32_t off, struct json_object *args)
 	arr = json_object_new_array();
 
 	if (!arr)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	json_object_object_foreach(obj, key, val) {
 		(void)key;
@@ -1471,7 +1470,7 @@ ut_sprintf(struct ut_state *s, uint32_t off, struct json_object *args)
 	len = ut_printf_common(s, off, args, &str);
 
 	if (!str)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	return json_object_new_string_len(str, len);
 }
@@ -1485,7 +1484,7 @@ ut_printf(struct ut_state *s, uint32_t off, struct json_object *args)
 	len = ut_printf_common(s, off, args, &str);
 
 	if (!str)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	len = fwrite(str, 1, len, stdout);
 
@@ -1507,17 +1506,17 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 	dlh = dlopen(path, RTLD_LAZY|RTLD_LOCAL);
 
 	if (!dlh)
-		ut_throw(s, off, "Unable to dlopen file %s: %s", path, dlerror());
+		return ut_exception(s, off, "Unable to dlopen file %s: %s", path, dlerror());
 
 	init = dlsym(dlh, "ut_module_init");
 
 	if (!init)
-		ut_throw(s, off, "Module %s provides no 'ut_module_init' function", path);
+		return ut_exception(s, off, "Module %s provides no 'ut_module_init' function", path);
 
 	scope = json_object_new_object();
 
 	if (!scope)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	init(&ut, s, scope);
 
@@ -1527,8 +1526,8 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 static struct json_object *
 ut_require_utpl(struct ut_state *s, uint32_t off, const char *path)
 {
-	struct json_object *scope;
-	char *source, *msg, *p;
+	struct json_object *ex, *scope;
+	char *source, *msg;
 	struct stat st;
 	FILE *sfile;
 
@@ -1538,14 +1537,14 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path)
 	sfile = fopen(path, "rb");
 
 	if (!sfile)
-		ut_throw(s, off, "Unable to open file %s: %s", path, strerror(errno));
+		return ut_exception(s, off, "Unable to open file %s: %s", path, strerror(errno));
 
 	source = calloc(1, st.st_size + 1);
 
 	if (!source) {
 		fclose(sfile);
 
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 	}
 
 	fread(source, 1, st.st_size, sfile);
@@ -1553,12 +1552,12 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path)
 
 	if (ut_parse(s, source)) {
 		msg = ut_format_error(s, source);
-		p = alloca(strlen(msg));
-		strcpy(p, msg);
+		ex = ut_exception(s, off, "Module loading failed: %s", msg);
+
 		free(source);
 		free(msg);
 
-		ut_throw(s, off, "Module loading failed: %s", p);
+		return ex;
 	}
 
 	free(source);
@@ -1566,7 +1565,7 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path)
 	scope = json_object_new_object();
 
 	if (!scope)
-		ut_throw(s, off, UT_ERRMSG_OOM);
+		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	return ut_invoke(s, off, scope, ut_get_op(s, s->main)->val, NULL);
 }
@@ -1627,7 +1626,7 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 	search = json_object_object_get(s->stack.scope[0], "REQUIRE_SEARCH_PATH");
 
 	if (!json_object_is_type(search, json_type_array))
-		ut_throw(s, off, "Global require search path not set");
+		return ut_exception(s, off, "Global require search path not set");
 
 	for (arridx = 0, arrlen = json_object_array_length(search); arridx < arrlen; arridx++) {
 		se = json_object_array_get_idx(search, arridx);
@@ -1641,7 +1640,7 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 			return res;
 	}
 
-	ut_throw(s, off, "No module named '%s' could be found", name);
+	return ut_exception(s, off, "No module named '%s' could be found", name);
 }
 
 static struct json_object *

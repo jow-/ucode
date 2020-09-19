@@ -262,7 +262,7 @@ ut_reset(struct ut_state *s)
 	s->off = 0;
 
 	if (s->error.code == UT_ERROR_EXCEPTION)
-		free(s->error.info.exception.message);
+		json_object_put(s->error.info.exception);
 
 	memset(&s->error, 0, sizeof(s->error));
 }
