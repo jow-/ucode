@@ -273,6 +273,8 @@ ut_free(struct ut_state *s)
 	size_t n;
 
 	if (s) {
+		json_object_put(s->ctx);
+
 		while (s->stack.off > 0)
 			json_object_put(s->stack.scope[--s->stack.off]);
 
