@@ -300,7 +300,7 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 
 	if (op && op->type == T_DOT) {
 		if (key)
-			*key = off2 ? ut_get_op(state, off2)->val : NULL;
+			*key = off2 ? json_object_get(ut_get_op(state, off2)->val) : NULL;
 
 		return ut_execute_op(state, off1);
 	}
@@ -334,7 +334,7 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 		}
 
 		if (key)
-			*key = op->val;
+			*key = json_object_get(op->val);
 
 		return json_object_get(scope);
 	}
@@ -367,6 +367,7 @@ ut_getref_required(struct ut_state *state, uint32_t off, struct json_object **ke
 		}
 
 		json_object_put(scope);
+		json_object_put(skey);
 		rv = ut_exception(state, off1, p ? p : "Type error: left-hand side is not an array or object");
 
 		*key = NULL;
@@ -472,6 +473,7 @@ ut_execute_assign(struct ut_state *state, uint32_t off)
 
 	val = ut_setval(scope, key, ut_execute_op(state, value));
 	ut_putval(scope);
+	ut_putval(key);
 
 	return val;
 }
@@ -895,6 +897,7 @@ ut_execute_inc_dec(struct ut_state *state, uint32_t off)
 	val = ut_getval(scope, key);
 
 	ut_putval(scope);
+	ut_putval(key);
 
 	if (ut_cast_number(val, &n, &d) == json_type_double)
 		nval = ut_new_double(d + (op->type == T_INC ? 1.0 : -1.0));
@@ -1378,6 +1381,7 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 
 		val = ut_getval(scope, key);
 		ut_putval(scope);
+		ut_putval(key);
 
 		return val;
 
@@ -1392,6 +1396,7 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 
 		val = ut_getval(scope, key);
 		ut_putval(scope);
+		ut_putval(key);
 
 		return val;
 
@@ -1407,7 +1412,8 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 				return scope;
 
 			val = ut_getval(scope, key);
-			json_object_put(scope);
+			ut_putval(scope);
+			ut_putval(key);
 
 			return val;
 		}
