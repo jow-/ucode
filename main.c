@@ -321,7 +321,9 @@ main(int argc, char **argv)
 			env = env ? env : json_object_new_object();
 
 			json_object_object_foreach(o, key, val)
-				json_object_object_add(env, key, val);
+				json_object_object_add(env, key, json_object_get(val));
+
+			json_object_put(o);
 
 			break;
 
