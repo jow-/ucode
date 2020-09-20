@@ -1583,7 +1583,7 @@ ut_run(struct ut_state *state, struct json_object *env, struct json_object *modu
 
 	if (env) {
 		json_object_object_foreach(env, key, val)
-			ut_register_variable(scope, key, val);
+			ut_register_variable(scope, key, json_object_get(val));
 	}
 
 	ut_globals_init(state, scope);
