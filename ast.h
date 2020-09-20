@@ -101,6 +101,7 @@ struct ut_state {
 
 struct ut_extended_type {
 	const char *name;
+	struct json_object *proto;
 	void (*free)(void *);
 };
 
@@ -128,8 +129,8 @@ struct json_object *ut_new_object(struct json_object *proto);
 struct json_object *ut_new_double(double v);
 struct json_object *ut_new_null(void);
 
-bool ut_register_extended_type(const char *name, void (*freefn)(void *));
-struct json_object *ut_set_extended_type(struct json_object *v, struct json_object *proto, const char *name, void *data);
+bool ut_register_extended_type(const char *name, struct json_object *proto, void (*freefn)(void *));
+struct json_object *ut_set_extended_type(struct json_object *v, const char *name, void *data);
 void **ut_get_extended_type(struct json_object *val, const char *name);
 
 void *ParseAlloc(void *(*mfunc)(size_t));

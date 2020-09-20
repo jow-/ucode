@@ -291,6 +291,9 @@ ut_free(struct ut_state *s)
 		ut_reset(s);
 	}
 
+	while (ut_ext_types_count > 0)
+		json_object_put(ut_ext_types[--ut_ext_types_count].proto);
+
 	free(ut_ext_types);
 	free(s);
 }
@@ -343,7 +346,7 @@ out:
 }
 
 bool
-ut_register_extended_type(const char *name, void (*freefn)(void *))
+ut_register_extended_type(const char *name, struct json_object *proto, void (*freefn)(void *))
 {
 	struct ut_extended_type *tmp;
 
@@ -355,6 +358,7 @@ ut_register_extended_type(const char *name, void (*freefn)(void *))
 	ut_ext_types = tmp;
 	ut_ext_types[ut_ext_types_count].name = name;
 	ut_ext_types[ut_ext_types_count].free = freefn;
+	ut_ext_types[ut_ext_types_count].proto = proto;
 	ut_ext_types_count++;
 
 	return true;
@@ -393,7 +397,7 @@ ut_extended_type_free(struct json_object *v, void *ud)
 }
 
 struct json_object *
-ut_set_extended_type(struct json_object *v, struct json_object *proto, const char *name, void *data)
+ut_set_extended_type(struct json_object *v, const char *name, void *data)
 {
 	struct ut_extended_type *et = NULL;
 	struct ut_op *op;
@@ -416,7 +420,7 @@ ut_set_extended_type(struct json_object *v, struct json_object *proto, const cha
 
 	op->val = v;
 	op->type = T_RESSOURCE;
-	op->tag.proto = json_object_get(proto);
+	op->tag.proto = json_object_get(et->proto);
 	op->tag.type = n + 1;
 	op->tag.data = data;
 

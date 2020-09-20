@@ -23,8 +23,6 @@
 
 static const struct ut_ops *ops;
 
-static struct json_object *uci_proto;
-
 static int last_error = 0;
 
 enum pkg_cmd {
@@ -105,7 +103,7 @@ ut_uci_cursor(struct ut_state *s, uint32_t off, struct json_object *args)
 		err_return(UCI_ERR_MEM);
 	}
 
-	return ops->set_type(co, uci_proto, "uci.cursor", c);
+	return ops->set_type(co, "uci.cursor", c);
 }
 
 
@@ -1015,11 +1013,13 @@ static void close_uci(void *ud) {
 
 void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_object *scope)
 {
-	ops = ut;
-	ops->register_type("uci.cursor", close_uci);
+	struct json_object *uci_proto;
 
+	ops = ut;
 	uci_proto = ops->new_object(NULL);
 
 	register_functions(ops, global_fns, scope);
 	register_functions(ops, cursor_fns, uci_proto);
+
+	ops->register_type("uci.cursor", uci_proto, close_uci);
 }

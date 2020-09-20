@@ -22,8 +22,8 @@
 
 struct ut_ops {
 	bool (*register_function)(struct json_object *, const char *, ut_c_fn *);
-	bool (*register_type)(const char *, void (*)(void *));
-	struct json_object *(*set_type)(struct json_object *, struct json_object *, const char *, void *);
+	bool (*register_type)(const char *, struct json_object *, void (*)(void *));
+	struct json_object *(*set_type)(struct json_object *, const char *, void *);
 	void **(*get_type)(struct json_object *, const char *);
 	struct json_object *(*new_object)(struct json_object *);
 	struct json_object *(*new_double)(double);

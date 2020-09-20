@@ -29,10 +29,6 @@
 
 static const struct ut_ops *ops;
 
-static struct json_object *proc_proto;
-static struct json_object *file_proto;
-static struct json_object *dir_proto;
-
 static int last_error = 0;
 
 static struct json_object *
@@ -221,7 +217,7 @@ ut_fs_popen(struct ut_state *s, uint32_t off, struct json_object *args)
 		err_return(ENOMEM);
 	}
 
-	return ops->set_type(fo, proc_proto, "fs.proc", fp);
+	return ops->set_type(fo, "fs.proc", fp);
 }
 
 
@@ -328,7 +324,7 @@ ut_fs_open(struct ut_state *s, uint32_t off, struct json_object *args)
 		err_return(ENOMEM);
 	}
 
-	return ops->set_type(fo, file_proto, "fs.file", fp);
+	return ops->set_type(fo, "fs.file", fp);
 }
 
 
@@ -423,7 +419,7 @@ ut_fs_opendir(struct ut_state *s, uint32_t off, struct json_object *args)
 		err_return(ENOMEM);
 	}
 
-	return ops->set_type(diro, dir_proto, "fs.dir", dp);
+	return ops->set_type(diro, "fs.dir", dp);
 }
 
 static struct json_object *
@@ -723,11 +719,9 @@ static void close_dir(void *ud) {
 
 void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_object *scope)
 {
-	ops = ut;
-	ops->register_type("fs.proc", close_proc);
-	ops->register_type("fs.file", close_file);
-	ops->register_type("fs.dir", close_dir);
+	struct json_object *proc_proto, *file_proto, *dir_proto;
 
+	ops = ut;
 	proc_proto = ops->new_object(NULL);
 	file_proto = ops->new_object(NULL);
 	dir_proto = ops->new_object(NULL);
@@ -736,4 +730,8 @@ void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_obj
 	register_functions(ops, proc_fns, proc_proto);
 	register_functions(ops, file_fns, file_proto);
 	register_functions(ops, dir_fns, dir_proto);
+
+	ops->register_type("fs.proc", proc_proto, close_proc);
+	ops->register_type("fs.file", file_proto, close_file);
+	ops->register_type("fs.dir", dir_proto, close_dir);
 }

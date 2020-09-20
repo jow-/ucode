@@ -25,8 +25,6 @@
 
 static const struct ut_ops *ops;
 
-static struct json_object *conn_proto;
-
 static enum ubus_msg_status last_error = 0;
 
 struct ubus_connection {
@@ -171,7 +169,7 @@ ut_ubus_connect(struct ut_state *s, uint32_t off, struct json_object *args)
 
 	ubus_add_uloop(c->ctx);
 
-	return ops->set_type(co, conn_proto, "ubus.connection", c);
+	return ops->set_type(co, "ubus.connection", c);
 }
 
 static void
@@ -317,11 +315,13 @@ static void close_connection(void *ud) {
 
 void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_object *scope)
 {
-	ops = ut;
-	ops->register_type("ubus.connection", close_connection);
+	struct json_object *conn_proto;
 
+	ops = ut;
 	conn_proto = ops->new_object(NULL);
 
 	register_functions(ops, global_fns, scope);
 	register_functions(ops, conn_fns, conn_proto);
+
+	ops->register_type("ubus.connection", conn_proto, close_connection);
 }
