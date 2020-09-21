@@ -1436,6 +1436,28 @@ ut_execute_this(struct ut_state *state, uint32_t off)
 }
 
 static struct json_object *
+ut_execute_try_catch(struct ut_state *state, uint32_t off)
+{
+	struct ut_op *op = ut_get_op(state, off);
+	struct json_object *rv;
+
+	rv = ut_execute_op_sequence(state, op->tree.operand[0]);
+
+	if (ut_is_type(rv, T_EXCEPTION)) {
+		if (op->tree.operand[1])
+			ut_putval(ut_setval(ut_getscope(state, 0), ut_get_child(state, off, 1)->val,
+			                    json_object_new_string(json_object_get_string(rv))));
+
+		memset(&state->error, 0, sizeof(state->error));
+
+		ut_putval(rv);
+		rv = ut_execute_op_sequence(state, op->tree.operand[2]);
+	}
+
+	return rv;
+}
+
+static struct json_object *
 ut_execute_op(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
@@ -1593,6 +1615,9 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 	case T_BREAK:
 	case T_CONTINUE:
 		return ut_execute_break_cont(state, off);
+
+	case T_TRY:
+		return ut_execute_try_catch(state, off);
 
 	default:
 		return ut_exception(state, off, "Runtime error: Unrecognized opcode %d", op->type);

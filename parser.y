@@ -114,6 +114,7 @@ stmt(A) ::= exp_stmt(B).								{ A = B; }
 stmt(A) ::= sel_stmt(B).								{ A = B; }
 stmt(A) ::= iter_stmt(B).								{ A = B; }
 stmt(A) ::= func_stmt(B).								{ A = B; }
+stmt(A) ::= try_stmt(B).								{ A = B; }
 stmt(A) ::= ret_stmt(B).								{ A = B; }
 stmt(A) ::= break_stmt(B).								{ A = B; }
 stmt(A) ::= decl_stmt(B).								{ A = B; }
@@ -164,6 +165,14 @@ func_stmt(A) ::= T_FUNC(B) T_LABEL(C) T_LPAREN args(D) T_RPAREN empty_object.
 														{ A = wrap_op(B, C, D, 0); }
 func_stmt(A) ::= T_FUNC(B) T_LABEL(C) T_LPAREN args(D) T_RPAREN T_COLON chunks(E) T_ENDFUNC.
 														{ A = wrap_op(B, C, D, E); }
+
+try_stmt(A) ::= T_TRY(B) try_catch_block(C) T_CATCH T_LPAREN T_LABEL(D) T_RPAREN try_catch_block(E).
+														{ A = wrap_op(B, C, D, E); }
+try_stmt(A) ::= T_TRY(B) try_catch_block(C) T_CATCH try_catch_block(D).
+														{ A = wrap_op(B, C, 0, D); }
+
+try_catch_block(A) ::= cpd_stmt(B).						{ A = B; }
+try_catch_block(A) ::= empty_object.					{ A = 0; }
 
 args(A) ::= args(B) T_COMMA T_LABEL(C).					{ A = append_op(B, C); }
 args(A) ::= T_LABEL(B).									{ A = B; }
