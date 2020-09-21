@@ -1,17 +1,14 @@
 The "this" object accesses the current function context.
 
 -- Expect stdout --
-
+true
+true
 -- End --
-true
-true
+
 -- Testcase --
 {%
-	local g = this;
-
 	// Functions not invoked on objects have no this context
 	function test() {
-		print(this, "\n");
 		return (this === null);
 	}
 
