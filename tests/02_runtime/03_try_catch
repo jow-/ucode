@@ -1,0 +1,31 @@
+Wrapping an exeptional operation in try {} catch {} allows handling the
+resulting exception and to continue the execution flow.
+
+-- Expect stdout --
+Catched first exception.
+Catched second exception: exception 2.
+After exceptions.
+-- End --
+
+-- Testcase --
+{%
+	// A try-catch block that discards the exception information.
+	try {
+		die("exception 1");
+	}
+	catch {
+		print("Catched first exception.\n");
+	}
+
+	// A try-catch block that captures the resulting exception in
+	// the given variable.
+	try {
+		die("exception 2");
+	}
+	catch (e) {
+		print("Catched second exception: ", e, ".\n");
+	}
+
+	print("After exceptions.\n");
+%}
+-- End --
