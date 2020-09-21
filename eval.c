@@ -821,8 +821,10 @@ _ut_get_operands(struct ut_state *state, struct ut_op *op, size_t n, struct json
 
 		if (child && child->is_list)
 			v[i] = ut_execute_list(state, ut_get_off(state, child));
-		else
+		else if (child)
 			v[i] = ut_execute_op(state, ut_get_off(state, child));
+		else
+			v[i] = NULL;
 
 		if (ut_is_type(v[i], T_EXCEPTION)) {
 			for (j = 0; j < i; j++)
