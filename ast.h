@@ -57,6 +57,7 @@ struct ut_op {
 	uint16_t is_overflow:1;
 	uint16_t is_postfix:1;
 	uint16_t is_for_in:1;
+	uint16_t is_list:1;
 	uint32_t off;
 	struct json_object *val;
 	union {

@@ -302,5 +302,5 @@ tuples(A) ::= tuple(B).									{ A = B; }
 tuple(A) ::= T_LABEL(B) T_COLON exp(C).					{ A = append_op(B, C); }
 tuple(A) ::= T_STRING(B) T_COLON exp(C).				{ A = append_op(B, C); }
 
-arg_exp(A) ::= arg_exp(B) T_COMMA assign_exp(C).		{ A = append_op(B, C); }
-arg_exp(A) ::= assign_exp(B).							{ A = B; }
+arg_exp(A) ::= arg_exp(B) T_COMMA assign_exp(C).		{ A = append_op(B, C); ut_get_op(s, A)->is_list = 1; }
+arg_exp(A) ::= assign_exp(B).							{ A = B; ut_get_op(s, A)->is_list = 1; }
