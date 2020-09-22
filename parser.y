@@ -177,6 +177,8 @@ try_catch_block(A) ::= empty_object.					{ A = 0; }
 
 switch_stmt(A) ::= T_SWITCH(B) T_LPAREN exp(C) T_RPAREN T_LBRACE switch_cases(D) T_RBRACE.
 														{ A = wrap_op(B, C, D); }
+switch_stmt(A) ::= T_SWITCH T_LPAREN exp(B) T_RPAREN empty_object.
+														{ A = B; }
 
 switch_cases(A) ::= switch_cases(B) switch_case(C).		{ A = append_op(B, C); }
 switch_cases(A) ::= switch_case(B).						{ A = B; }
