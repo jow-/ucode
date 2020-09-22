@@ -859,60 +859,57 @@ ut_execute_rel(struct ut_state *state, uint32_t off)
 	return rv;
 }
 
+static bool
+ut_eq(struct json_object *v1, struct json_object *v2)
+{
+	struct ut_op *tag1 = json_object_get_userdata(v1);
+	struct ut_op *tag2 = json_object_get_userdata(v2);
+	enum json_type t1 = json_object_get_type(v1);
+	enum json_type t2 = json_object_get_type(v2);
+
+	if ((tag1 ? tag1->type : 0) != (tag2 ? tag2->type : 0))
+		return false;
+
+	if (t1 != t2)
+		return false;
+
+	switch (t1) {
+	case json_type_array:
+	case json_type_object:
+		return (v1 == v2);
+
+	case json_type_boolean:
+		return (json_object_get_boolean(v1) == json_object_get_boolean(v2));
+
+	case json_type_double:
+		if (isnan(json_object_get_double(v1)) || isnan(json_object_get_double(v2)))
+			return false;
+
+		return (json_object_get_double(v1) == json_object_get_double(v2));
+
+	case json_type_int:
+		return (json_object_get_int64(v1) == json_object_get_int64(v2));
+
+	case json_type_string:
+		return !strcmp(json_object_get_string(v1), json_object_get_string(v2));
+
+	case json_type_null:
+		return true;
+	}
+
+	return false;
+}
+
 static struct json_object *
 ut_execute_equality(struct ut_state *state, uint32_t off)
 {
-	struct ut_op *tag1, *tag2, *op = ut_get_op(state, off);
+	struct ut_op *op = ut_get_op(state, off);
 	struct json_object *v[2], *rv;
-	enum json_type t1, t2;
 	bool equal = false;
 
 	ut_get_operands(state, op, v);
 
-	tag1 = json_object_get_userdata(v[0]);
-	tag2 = json_object_get_userdata(v[1]);
-	t1 = json_object_get_type(v[0]);
-	t2 = json_object_get_type(v[1]);
-
-	if ((tag1 ? tag1->type : 0) != (tag2 ? tag2->type : 0)) {
-		equal = false;
-	}
-	else if (t1 != t2) {
-		equal = false;
-	}
-	else {
-		switch (t1) {
-		case json_type_array:
-		case json_type_object:
-			equal = (v[0] == v[1]);
-			break;
-
-		case json_type_boolean:
-			equal = (json_object_get_boolean(v[0]) == json_object_get_boolean(v[1]));
-			break;
-
-		case json_type_double:
-			if (isnan(json_object_get_double(v[0])) || isnan(json_object_get_double(v[1])))
-				equal = false;
-			else
-				equal = (json_object_get_double(v[0]) == json_object_get_double(v[1]));
-
-			break;
-
-		case json_type_int:
-			equal = (json_object_get_int64(v[0]) == json_object_get_int64(v[1]));
-			break;
-
-		case json_type_string:
-			equal = !strcmp(json_object_get_string(v[0]), json_object_get_string(v[1]));
-			break;
-
-		case json_type_null:
-			equal = true;
-			break;
-		}
-	}
-
+	equal = ut_eq(v[0], v[1]);
 	rv = json_object_new_boolean((op->type == T_EQS) ? equal : !equal);
 
 	ut_putval(v[0]);
@@ -1459,6 +1456,74 @@ ut_execute_try_catch(struct ut_state *state, uint32_t off)
 	return rv;
 }
 
+static bool
+ut_match_case(struct ut_state *state, struct json_object *v, struct ut_op *Case)
+{
+	struct json_object *caseval = ut_execute_op_sequence(state, Case->tree.operand[0]);
+	bool rv = ut_eq(v, caseval);
+
+	ut_putval(caseval);
+	return rv;
+}
+
+static struct json_object *
+ut_execute_switch_case(struct ut_state *state, uint32_t off)
+{
+	struct ut_op *Default = NULL, *Case = NULL, *jmp = NULL;
+	struct ut_op *op = ut_get_op(state, off);
+	struct json_object *v[1], *rv = NULL;
+
+	ut_get_operands(state, op, v);
+
+	/* First try to find matching case... */
+	for (Case = ut_get_child(state, off, 1);
+	     Case != NULL;
+	     Case = ut_get_op(state, Case->tree.next))
+	{
+		/* remember default case and throw on dupes */
+		if (Case->type == T_DEFAULT) {
+			if (Default) {
+				ut_putval(v[0]);
+
+				return ut_exception(state, ut_get_off(state, Case),
+				                    "Syntax error: more than one switch default case");
+			}
+
+			Default = Case;
+			continue;
+		}
+
+		/* Found a matching case, remember jump offset */
+		if (ut_match_case(state, v[0], Case)) {
+			jmp = Case;
+			break;
+		}
+	}
+
+	/* jump to matching case (or default) and continue until break */
+	for (Case = jmp ? jmp : Default;
+	     Case != NULL;
+	     Case = ut_get_op(state, Case->tree.next))
+	{
+		ut_putval(rv);
+
+		if (Case == Default)
+			rv = ut_execute_op_sequence(state, Default->tree.operand[0]);
+		else
+			rv = ut_execute_op_sequence(state, Case->tree.operand[1]);
+
+		if (ut_is_type(rv, T_BREAK)) {
+			ut_putval(rv);
+			rv = NULL;
+			break;
+		}
+	}
+
+	ut_putval(v[0]);
+
+	return rv;
+}
+
 static struct json_object *
 ut_execute_op(struct ut_state *state, uint32_t off)
 {
@@ -1620,6 +1685,9 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 
 	case T_TRY:
 		return ut_execute_try_catch(state, off);
+
+	case T_SWITCH:
+		return ut_execute_switch_case(state, off);
 
 	default:
 		return ut_exception(state, off, "Runtime error: Unrecognized opcode %d", op->type);

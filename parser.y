@@ -115,6 +115,7 @@ stmt(A) ::= sel_stmt(B).								{ A = B; }
 stmt(A) ::= iter_stmt(B).								{ A = B; }
 stmt(A) ::= func_stmt(B).								{ A = B; }
 stmt(A) ::= try_stmt(B).								{ A = B; }
+stmt(A) ::= switch_stmt(B).								{ A = B; }
 stmt(A) ::= ret_stmt(B).								{ A = B; }
 stmt(A) ::= break_stmt(B).								{ A = B; }
 stmt(A) ::= decl_stmt(B).								{ A = B; }
@@ -173,6 +174,15 @@ try_stmt(A) ::= T_TRY(B) try_catch_block(C) T_CATCH try_catch_block(D).
 
 try_catch_block(A) ::= cpd_stmt(B).						{ A = B; }
 try_catch_block(A) ::= empty_object.					{ A = 0; }
+
+switch_stmt(A) ::= T_SWITCH(B) T_LPAREN exp(C) T_RPAREN T_LBRACE switch_cases(D) T_RBRACE.
+														{ A = wrap_op(B, C, D); }
+
+switch_cases(A) ::= switch_cases(B) switch_case(C).		{ A = append_op(B, C); }
+switch_cases(A) ::= switch_case(B).						{ A = B; }
+
+switch_case(A) ::= T_CASE(B) exp(C) T_COLON stmts(D).	{ A = wrap_op(B, C, D); }
+switch_case(A) ::= T_DEFAULT(B) T_COLON stmts(C).		{ A = wrap_op(B, C); }
 
 args(A) ::= args(B) T_COMMA T_LABEL(C).					{ A = append_op(B, C); }
 args(A) ::= T_LABEL(B).									{ A = B; }
