@@ -1137,7 +1137,13 @@ ut_execute_call(struct ut_state *state, uint32_t off)
 		rv = ut_exception(state, op->tree.operand[0], p ? p : "Type error: left-hand side expression is not a function");
 	}
 	else {
-		rv = ut_invoke(state, off, NULL, v[0], v[1]);
+		if (v[1] == NULL)
+			v[1] = json_object_new_array();
+
+		if (v[1] == NULL)
+			rv = ut_exception(state, off, UT_ERRMSG_OOM);
+		else
+			rv = ut_invoke(state, off, NULL, v[0], v[1]);
 	}
 
 	ut_putval(v[0]);
