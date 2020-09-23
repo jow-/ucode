@@ -367,17 +367,23 @@ ut_getref_required(struct ut_state *state, uint32_t off, struct json_object **ke
 
 	if (!json_object_is_type(scope, json_type_array) &&
 		!json_object_is_type(scope, json_type_object)) {
-		lhs = off1 ? ut_ref_to_str(state, off1) : NULL;
+		if (!ut_is_type(scope, T_EXCEPTION)) {
+			lhs = off1 ? ut_ref_to_str(state, off1) : NULL;
 
-		if (lhs) {
-			p = alloca_sprintf("Type error: the result of `%s` is %s", lhs,
-			                   scope ? "not an array or object" : "null");
-			free(lhs);
+			if (lhs) {
+				p = alloca_sprintf("Type error: the result of `%s` is %s", lhs,
+				                   scope ? "not an array or object" : "null");
+				free(lhs);
+			}
+
+			json_object_put(scope);
+			rv = ut_exception(state, off1, p ? p : "Type error: left-hand side is not an array or object");
+		}
+		else {
+			rv = scope;
 		}
 
-		json_object_put(scope);
 		json_object_put(skey);
-		rv = ut_exception(state, off1, p ? p : "Type error: left-hand side is not an array or object");
 
 		*key = NULL;
 		return rv;
