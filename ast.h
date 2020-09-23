@@ -83,6 +83,7 @@ struct ut_state {
 	uint8_t trim_blocks:1;
 	uint8_t lstrip_blocks:1;
 	uint8_t strict_declarations:1;
+	uint8_t skip_shebang:1;
 	size_t off;
 	enum ut_block_type blocktype;
 	struct {

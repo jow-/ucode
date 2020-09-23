@@ -148,6 +148,16 @@ parse(struct ut_state *state, const char *source, bool dumponly,
 	enum ut_error_type err;
 	char *msg;
 
+	if (state->skip_shebang) {
+		if (source[0] == '#' && source[1] == '!') {
+			while (source[0] != '\0' && source[0] != '\n')
+				source++;
+
+			if (source[0] == '\n')
+				source++;
+		}
+	}
+
 	err = ut_parse(state, source);
 
 	if (!err) {
@@ -333,6 +343,16 @@ main(int argc, char **argv)
 			json_object_array_add(modules, json_object_new_string(optarg));
 
 			break;
+		}
+	}
+
+	if (!srcstr && !srcfile && argv[optind] != NULL) {
+		srcfile = read_file(argv[optind]);
+		state->skip_shebang = 1;
+
+		if (!srcfile) {
+			rv = UT_ERROR_EXCEPTION;
+			goto out;
 		}
 	}
 
