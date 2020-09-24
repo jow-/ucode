@@ -19,7 +19,7 @@
 
 #include "ast.h"
 
-#define __T_MAX 78
+#define __T_MAX 79
 #define T_EXCEPTION	(__T_MAX + 0)
 #define T_CFUNC		(__T_MAX + 1)
 #define T_RESSOURCE	(__T_MAX + 2)

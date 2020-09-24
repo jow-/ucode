@@ -24,6 +24,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <math.h>
+#include <regex.h>
 
 static size_t ut_ext_types_count = 0;
 static struct ut_extended_type *ut_ext_types = NULL;
@@ -194,6 +195,104 @@ ut_new_object(struct json_object *proto) {
 	op->tag.proto = json_object_get(proto);
 
 	json_object_set_serializer(val, NULL, op, obj_free);
+
+	return op->val;
+}
+
+static void
+re_free(struct json_object *v, void *ud)
+{
+	struct ut_op *op = ud;
+
+	regfree((regex_t *)op->tag.data);
+	free(op);
+}
+
+static int
+re_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
+{
+	struct ut_op *op = json_object_get_userdata(v);
+	struct json_object *s;
+	const char *p;
+	size_t len;
+
+	sprintbuf(pb, "%s/", level ? "\"" : "");
+
+	s = json_object_new_string((char *)op + sizeof(*op) + sizeof(regex_t));
+
+	if (s) {
+		if (level) {
+			for (p = json_object_to_json_string(s) + 1, len = strlen(p) - 1; len > 0; len--, p++)
+				sprintbuf(pb, "%c", *p);
+		}
+		else {
+			sprintbuf(pb, "%s", json_object_get_string(s));
+		}
+	}
+	else {
+		sprintbuf(pb, "...");
+	}
+
+	json_object_put(s);
+
+	return sprintbuf(pb, "/%s%s%s%s",
+		             op->is_reg_global  ? "g" : "",
+		             op->is_reg_icase   ? "i" : "",
+		             op->is_reg_newline ? "s" : "",
+		             level ? "\"" : "");
+}
+
+struct json_object *
+ut_new_regexp(const char *source, bool icase, bool newline, bool global, char **err) {
+	int cflags = REG_EXTENDED, res;
+	struct ut_op *op;
+	regex_t *re;
+	size_t len;
+
+	op = calloc(1, sizeof(*op) + sizeof(*re) + strlen(source) + 1);
+
+	if (!op)
+		return NULL;
+
+	re = (regex_t *)((char *)op + sizeof(*op));
+	strcpy((char *)op + sizeof(*op) + sizeof(*re), source);
+
+	if (icase)
+		cflags |= REG_ICASE;
+
+	if (newline)
+		cflags |= REG_NEWLINE;
+
+	op->type = T_REGEXP;
+	op->tag.data = re;
+	op->is_reg_icase = icase;
+	op->is_reg_global = global;
+	op->is_reg_newline = newline;
+
+	res = regcomp(re, source, cflags);
+
+	if (res != 0) {
+		len = regerror(res, re, NULL, 0);
+		*err = calloc(1, len);
+
+		if (*err)
+			regerror(res, re, *err, len);
+
+		free(op);
+
+		return NULL;
+	}
+
+	//op->val = json_object_new_string(source);
+	op->val = json_object_new_object();
+
+	if (!op->val) {
+		free(op);
+
+		return NULL;
+	}
+
+	json_object_set_serializer(op->val, re_to_string, op, re_free);
 
 	return op->val;
 }

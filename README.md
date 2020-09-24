@@ -770,14 +770,17 @@ If `off` is negative then it starts that far from the end of the array. If
 removes the elements from `off` onward except for `-len` elements at the end of
 the array. If both `off` and `len` are omitted, removes everything.
 
-#### 6.34. `split(sep, str)`
+#### 6.34. `split(str, sep)`
 
-Split the given string using the separator passed as first argument and return
+Split the given string using the separator passed as second argument and return
 an array containing the resulting pieces.
 
+The separator may either be a plain string or a regular expression.
+
 ```javascript
-split(",", "foo,bar,baz")   // ["foo", "bar", "baz"]
-split("", "foobar")         // ["f", "o", "o", "b", "a", "r"]
+split("foo,bar,baz", ",")     // ["foo", "bar", "baz"]
+split("foobar", "")           // ["f", "o", "o", "b", "a", "r"]
+split("foo,bar,baz", /[ao]/)  // ["f", "", ",b", "r,b", "z"]
 ```
 
 #### 6.35. `sqrt(x)`
@@ -889,3 +892,52 @@ Formats the given arguments according to the given format string and returns the
 resulting string.
 
 See `printf()` for details.
+
+#### 6.47. `match(str, /pattern/)`
+
+Match the given string against the regular expression pattern specified as
+second argument.
+
+If the passed regular expression uses the `g` flag, the return value will be an
+array of arrays describing all found occurences within the string.
+
+Without the `g` modifier, an array describing the first match is returned.
+Returns `null` if the pattern was not found within the given string.
+
+```javascript
+match("foobarbaz", /b.(.)/)   // ["bar", "r"]
+match("foobarbaz", /b.(.)/g)  // [["bar", "r"], ["baz", "z"]]
+```
+
+#### 6.48. `replace(str, /pattern/, replace)`
+
+Replace occurences of the specified pattern in the string passed as first
+argument. The pattern value may be either a regular expression or a plain
+string. The replace value may be a function which is invoked for each found
+pattern or any other value which is converted into a plain string and used as
+replacement.
+
+If the pattern is a regular expression and not using the `g` flag, then only the
+first occurence in the string is replaced, if the `g` flag is used or if the
+pattern is not a regular expression, all occurrences are replaced.
+
+If the replace value is a callback function, it is invoked with the found
+substring as first and any capture group values as subsequent parameters.
+
+If the replace value is a string, the following special substrings are
+substituted before it is inserted into the result:
+
+ - `$$` - replaced by a literal `$`
+ - ``$` `` - replaced by the text before the match
+ - `$'` - replaced by the text after the match
+ - `$&` - replaced by the matched substring
+ - `$1`..`$9` - replaced by the value of the corresponding capture group, if the capture group is not defined, it is not substituted
+
+```javascript
+replace("barfoobaz", /(f)(o+)/g, "[$$|$`|$&|$'|$1|$2|$3]")  // bar[$|bar|foo|baz|f|oo|$3]baz
+replace("barfoobaz", /(f)(o+)/g, uc)                        // barFOObaz
+replace("barfoobaz", "a", "X")                              // bXrfoobXz
+replace("barfoobaz", /(.)(.)(.)/g, function(m, c1, c2, c3) {
+    return c3 + c2 + c1;
+})                                                          // raboofzab
+```

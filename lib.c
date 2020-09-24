@@ -201,6 +201,13 @@ ut_format_error(struct ut_state *state, const char *expr)
 		sprintf_append(&msg, &msglen, "\n");
 		break;
 
+	case UT_ERROR_INVALID_REGEXP:
+		if (state->error.info.regexp_error)
+			sprintf_append(&msg, &msglen, "Syntax error: %s\n", state->error.info.regexp_error);
+		else
+			sprintf_append(&msg, &msglen, "Runtime error: Out of memory while compiling regexp\n");
+		break;
+
 	case UT_ERROR_EXCEPTION:
 		tag = json_object_get_userdata(state->error.info.exception);
 		off = (tag && tag->tree.operand[0]) ? ut_get_op(state, tag->tree.operand[0])->off : 0;
@@ -1020,35 +1027,62 @@ ut_splice(struct ut_state *s, uint32_t off, struct json_object *args)
 static struct json_object *
 ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
 {
-	struct json_object *sep = json_object_array_get_idx(args, 0);
-	struct json_object *str = json_object_array_get_idx(args, 1);
+	struct json_object *str = json_object_array_get_idx(args, 0);
+	struct json_object *sep = json_object_array_get_idx(args, 1);
 	struct json_object *arr = NULL;
 	const char *p, *sepstr, *splitstr;
+	int eflags = 0, res;
+	regmatch_t pmatch;
+	struct ut_op *tag;
 	size_t seplen;
 
-	if (!json_object_is_type(sep, json_type_string) || !json_object_is_type(str, json_type_string))
+	if (!sep || !json_object_is_type(str, json_type_string))
 		return NULL;
 
 	arr = json_object_new_array();
+	splitstr = json_object_get_string(str);
 
 	if (!arr)
 		return ut_exception(s, off, UT_ERRMSG_OOM);
 
-	sepstr = json_object_get_string(sep);
-	splitstr = json_object_get_string(str);
+	if (ut_is_type(sep, T_REGEXP)) {
+		tag = json_object_get_userdata(sep);
 
-	for (p = splitstr + (*sepstr ? 1 : 0), seplen = strlen(sepstr); *p; p++) {
-		if (!strncmp(p, sepstr, seplen)) {
-			if (*sepstr || p > splitstr)
-				json_object_array_add(arr, json_object_new_string_len(splitstr, p - splitstr));
+		while (true) {
+			res = regexec((regex_t *)tag->tag.data, splitstr, 1, &pmatch, eflags);
 
-			splitstr = p + seplen;
-			p = splitstr - (*sepstr ? 1 : 0);
+			if (res == REG_NOMATCH)
+				break;
+
+			json_object_array_add(arr, json_object_new_string_len(splitstr, pmatch.rm_so));
+
+			splitstr += pmatch.rm_eo;
+			eflags |= REG_NOTBOL;
 		}
-	}
 
-	if (*splitstr)
-		json_object_array_add(arr, json_object_new_string_len(splitstr, p - splitstr));
+		json_object_array_add(arr, json_object_new_string(splitstr));
+	}
+	else if (json_object_is_type(sep, json_type_string)) {
+		sepstr = json_object_get_string(sep);
+
+		for (p = splitstr + (*sepstr ? 1 : 0), seplen = strlen(sepstr); *p; p++) {
+			if (!strncmp(p, sepstr, seplen)) {
+				if (*sepstr || p > splitstr)
+					json_object_array_add(arr, json_object_new_string_len(splitstr, p - splitstr));
+
+				splitstr = p + seplen;
+				p = splitstr - (*sepstr ? 1 : 0);
+			}
+		}
+
+		if (*splitstr)
+			json_object_array_add(arr, json_object_new_string_len(splitstr, p - splitstr));
+	}
+	else {
+		json_object_put(arr);
+
+		return NULL;
+	}
 
 	return arr;
 }
@@ -1750,6 +1784,240 @@ ut_arrtoip(struct ut_state *s, uint32_t off, struct json_object *args)
 	}
 }
 
+static struct json_object *
+ut_match(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *subject = json_object_array_get_idx(args, 0);
+	struct json_object *pattern = json_object_array_get_idx(args, 1);
+	struct ut_op *tag = json_object_get_userdata(pattern);
+	struct json_object *rv = NULL, *m;
+	int eflags = 0, res, i;
+	regmatch_t pmatch[10];
+	const char *p;
+
+	if (!ut_is_type(pattern, T_REGEXP) || !subject)
+		return NULL;
+
+	p = json_object_get_string(subject);
+
+	while (true) {
+		res = regexec((regex_t *)tag->tag.data, p, ARRAY_SIZE(pmatch), pmatch, eflags);
+
+		if (res == REG_NOMATCH)
+			break;
+
+		m = json_object_new_array();
+
+		for (i = 0; i < ARRAY_SIZE(pmatch) && pmatch[i].rm_so != -1; i++) {
+			json_object_array_add(m,
+				json_object_new_string_len(p + pmatch[i].rm_so,
+				                           pmatch[i].rm_eo - pmatch[i].rm_so));
+		}
+
+		if (tag->is_reg_global) {
+			if (!rv)
+				rv = json_object_new_array();
+
+			json_object_array_add(rv, m);
+
+			p += pmatch[0].rm_eo;
+			eflags |= REG_NOTBOL;
+		}
+		else {
+			rv = m;
+			break;
+		}
+	}
+
+	return rv;
+}
+
+static struct json_object *
+ut_replace_cb(struct ut_state *s, uint32_t off, struct json_object *func,
+              const char *subject, regmatch_t *pmatch, size_t plen,
+              char **sp, size_t *sl)
+{
+	struct json_object *cbargs = json_object_new_array();
+	struct json_object *rv;
+	size_t i;
+
+	if (!cbargs)
+		return NULL;
+
+	for (i = 0; i < plen && pmatch[i].rm_so != -1; i++) {
+		json_object_array_add(cbargs,
+			json_object_new_string_len(subject + pmatch[i].rm_so,
+			                           pmatch[i].rm_eo - pmatch[i].rm_so));
+	}
+
+	rv = ut_invoke(s, off, NULL, func, cbargs);
+
+	if (ut_is_type(rv, T_EXCEPTION))
+		return rv;
+
+	sprintf_append(sp, sl, "%s", rv ? json_object_get_string(rv) : "null");
+
+	json_object_put(cbargs);
+	json_object_put(rv);
+
+	return NULL;
+}
+
+static void
+ut_replace_str(struct ut_state *s, uint32_t off, struct json_object *str,
+               const char *subject, regmatch_t *pmatch, size_t plen,
+               char **sp, size_t *sl)
+{
+	const char *r = str ? json_object_get_string(str) : "null";
+	const char *p = r;
+	bool esc = false;
+	int i;
+
+	for (p = r; *p; p++) {
+		if (esc) {
+			switch (*p) {
+			case '&':
+				if (pmatch[0].rm_so != -1)
+					snprintf_append(sp, sl, "%s", pmatch[0].rm_eo - pmatch[0].rm_so,
+					                subject + pmatch[0].rm_so);
+				break;
+
+			case '`':
+				if (pmatch[0].rm_so != -1)
+					snprintf_append(sp, sl, "%s", pmatch[0].rm_so, subject);
+				break;
+
+			case '\'':
+				if (pmatch[0].rm_so != -1)
+					sprintf_append(sp, sl, "%s", subject + pmatch[0].rm_eo);
+				break;
+
+			case '1':
+			case '2':
+			case '3':
+			case '4':
+			case '5':
+			case '6':
+			case '7':
+			case '8':
+			case '9':
+				i = *p - '0';
+				if (i < plen && pmatch[i].rm_so != -1)
+					snprintf_append(sp, sl, "%s", pmatch[i].rm_eo - pmatch[i].rm_so,
+					                subject + pmatch[i].rm_so);
+				else
+					sprintf_append(sp, sl, "$%c", *p);
+				break;
+
+			case '$':
+				sprintf_append(sp, sl, "$");
+				break;
+
+			default:
+				sprintf_append(sp, sl, "$%c", *p);
+			}
+
+			esc = false;
+		}
+		else if (*p == '$') {
+			esc = true;
+		}
+		else {
+			sprintf_append(sp, sl, "%c", *p);
+		}
+	}
+}
+
+static struct json_object *
+ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *subject = json_object_array_get_idx(args, 0);
+	struct json_object *pattern = json_object_array_get_idx(args, 1);
+	struct json_object *replace = json_object_array_get_idx(args, 2);
+	struct ut_op *tag = json_object_get_userdata(pattern);
+	struct json_object *rv = NULL;
+	const char *sb, *p, *l;
+	regmatch_t pmatch[10];
+	int eflags = 0, res;
+	size_t sl = 0, pl;
+	char *sp = NULL;
+
+	if (!pattern || !subject || !replace)
+		return NULL;
+
+	if (ut_is_type(pattern, T_REGEXP)) {
+		p = json_object_get_string(subject);
+
+		while (true) {
+			res = regexec((regex_t *)tag->tag.data, p, ARRAY_SIZE(pmatch), pmatch, eflags);
+
+			if (res == REG_NOMATCH)
+				break;
+
+			snprintf_append(&sp, &sl, "%s", pmatch[0].rm_so, p);
+
+			if (ut_is_type(replace, T_FUNC) || ut_is_type(replace, T_CFUNC)) {
+				rv = ut_replace_cb(s, off, replace, p, pmatch, ARRAY_SIZE(pmatch), &sp, &sl);
+
+				if (rv) {
+					free(s);
+
+					return rv;
+				}
+			}
+			else {
+				ut_replace_str(s, off, replace, p, pmatch, ARRAY_SIZE(pmatch), &sp, &sl);
+			}
+
+			p += pmatch[0].rm_eo;
+
+			if (tag->is_reg_global)
+				eflags |= REG_NOTBOL;
+			else
+				break;
+		}
+
+		sprintf_append(&sp, &sl, "%s", p);
+	}
+	else {
+		sb = json_object_get_string(subject);
+		p = json_object_get_string(pattern);
+		pl = strlen(p);
+
+		for (l = sb; *sb; sb++) {
+			if (!strncmp(sb, p, pl)) {
+				snprintf_append(&sp, &sl, "%s", sb - l, l);
+
+				pmatch[0].rm_so = sb - l;
+				pmatch[0].rm_eo = pmatch[0].rm_so + pl;
+
+				if (ut_is_type(replace, T_FUNC) || ut_is_type(replace, T_CFUNC)) {
+					rv = ut_replace_cb(s, off, replace, l, pmatch, 1, &sp, &sl);
+
+					if (rv) {
+						free(s);
+
+						return rv;
+					}
+				}
+				else {
+					ut_replace_str(s, off, replace, l, pmatch, 1, &sp, &sl);
+				}
+
+				l = sb + pl;
+				sb += pl - 1;
+			}
+		}
+
+		sprintf_append(&sp, &sl, "%s", l);
+	}
+
+	rv = json_object_new_string_len(sp, sl);
+	free(sp);
+
+	return rv;
+}
+
 const struct ut_ops ut = {
 	.register_function = ut_register_function,
 	.register_type = ut_register_extended_type,
@@ -1802,7 +2070,10 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "require",	ut_require },
 	{ "iptoarr",	ut_iptoarr },
 	{ "arrtoip",	ut_arrtoip },
+	{ "match",		ut_match },
+	{ "replace",	ut_replace },
 };
+
 
 void
 ut_lib_init(struct ut_state *state, struct json_object *scope)

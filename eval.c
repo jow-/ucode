@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <regex.h>
 
 char exception_tag_space[sizeof(struct ut_op) + sizeof(struct ut_op *)];
 static struct ut_op *exception_tag = (struct ut_op *)exception_tag_space;
@@ -1549,6 +1550,7 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 	case T_BOOL:
 	case T_STRING:
 	case T_NULL:
+	case T_REGEXP:
 		return json_object_get(op->val);
 
 	case T_THIS:

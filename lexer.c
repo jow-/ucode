@@ -45,6 +45,7 @@ struct token {
 
 static int parse_comment(const char *, struct ut_op *, struct ut_state *);
 static int parse_string(const char *, struct ut_op *, struct ut_state *);
+static int parse_regexp(const char *, struct ut_op *, struct ut_state *);
 static int parse_number(const char *, struct ut_op *, struct ut_state *);
 static int parse_label(const char *, struct ut_op *, struct ut_state *);
 static int parse_bool(const char *, struct ut_op *, struct ut_state *);
@@ -68,7 +69,7 @@ static const struct token tokens[] = {
 	{ T_ASBAND,		"&=",    2 },
 	{ T_ASBOR,		"|=",    2 },
 	{ T_ASBXOR,		"^=",    2 },
-	{ T_ASDIV,		"/=",    2 },
+	//{ T_ASDIV,		"/=",    2 },
 	{ T_ASMOD,		"%=",    2 },
 	{ T_ASMUL,		"*=",    2 },
 	{ T_ASSUB,		"-=",    2 },
@@ -100,7 +101,7 @@ static const struct token tokens[] = {
 	{ T_COLON,		":",     1 },
 	{ T_COMMA,		",",     1 },
 	{ T_COMPL,		"~",     1 },
-	{ T_DIV,		"/",     1 },
+	//{ T_DIV,		"/",     1 },
 	{ T_GT,			">",     1 },
 	{ T_NOT,		"!",     1 },
 	{ T_LT,			"<",     1 },
@@ -114,6 +115,7 @@ static const struct token tokens[] = {
 	{ T_DOT,		".",     1 },
 	{ T_STRING,		"'",	 1, parse_string },
 	{ T_STRING,		"\"",	 1, parse_string },
+	{ T_REGEXP,		"/",     1, parse_regexp },
 	{ T_LABEL,		"_",     1, parse_label  },
 	{ T_LABEL,		"az",    0, parse_label  },
 	{ T_LABEL,		"AZ",    0, parse_label  },
@@ -209,6 +211,7 @@ const char *tokennames[__T_MAX] = {
 	[T_NUMBER]		= "Number",
 	[T_DOUBLE]		= "Double",
 	[T_BOOL]		= "Bool",
+	[T_REGEXP]		= "Regexp",
 	[T_TEXT]		= "Text",
 	[T_ENDIF]		= "'endif'",
 	[T_ENDFOR]		= "'endfor'",
@@ -415,8 +418,6 @@ next:
 
 				/* \xFF */
 				if (in[0] == 'x') {
-
-
 					if (isxdigit(in[1]) && isxdigit(in[2])) {
 						if (!utf8enc(&out, &rem, hex(in[1]) * 16 + hex(in[2]))) {
 							s->off += (in - buf);
@@ -431,6 +432,19 @@ next:
 
 						return -UT_ERROR_INVALID_ESCAPE;
 					}
+				}
+
+				/* \1 .. \9 (regex backreference) */
+				else if (q == '/' && in[0] >= '0' && in[0] <= '9') {
+					/* in regexp mode, retain backslash */
+					if (rem-- < 1) {
+						s->off += (in - buf);
+
+						return -UT_ERROR_OVERLONG_STRING;
+					}
+
+					*out++ = '\\';
+					*out = *in;
 				}
 
 				/* \377, \77 or \7 */
@@ -518,6 +532,17 @@ next:
 					case 't': *out = '\t'; break;
 					case 'v': *out = '\v'; break;
 					default:
+						/* in regexp mode, retain backslash */
+						if (q == '/') {
+							if (rem-- < 1) {
+								s->off += (in - buf);
+
+								return -UT_ERROR_OVERLONG_STRING;
+							}
+
+							*out++ = '\\';
+						}
+
 						*out = *in;
 						break;
 					}
@@ -570,6 +595,81 @@ next:
 	}
 
 	return -UT_ERROR_UNTERMINATED_STRING;
+}
+
+
+/*
+ * Parses a regexp literal from the given buffer.
+ *
+ * Returns a negative value on error, otherwise the amount of consumed
+ * characters from the given buffer.
+ *
+ * Error values:
+ *  -UT_ERROR_UNTERMINATED_STRING	Unterminated regexp
+ *  -UT_ERROR_INVALID_ESCAPE		Invalid escape sequence
+ *  -UT_ERROR_OVERLONG_STRING		Regexp literal too long
+ *  -UT_ERROR_INVALID_REGEXP        Could not compile regexp
+ */
+
+static int
+parse_regexp(const char *buf, struct ut_op *op, struct ut_state *s)
+{
+	struct json_object *rv;
+	const char *p;
+	char *err;
+	int len;
+
+	if (s->expect_div == 1) {
+		if (!strncmp(buf, "/=", 2)) {
+			op->type = T_ASDIV;
+			return 2;
+		}
+		else {
+			op->type = T_DIV;
+			return 1;
+		}
+	}
+
+	len = parse_string(buf, op, s);
+
+	if (len < 2) {
+		json_object_put(op->val);
+
+		return (len < 0) ? len : -UT_ERROR_UNTERMINATED_STRING;
+	}
+
+	for (p = buf + len; strchr("gis", *p); p++) {
+		switch (*p) {
+		case 'g':
+			op->is_reg_global = 1;
+			len++;
+			break;
+
+		case 'i':
+			op->is_reg_icase = 1;
+			len++;
+			break;
+
+		case 's':
+			op->is_reg_newline = 1;
+			len++;
+			break;
+		}
+	}
+
+	p = json_object_get_string(op->val);
+	rv = ut_new_regexp(p, op->is_reg_icase, op->is_reg_newline, op->is_reg_global, &err);
+
+	json_object_put(op->val);
+	op->val = rv;
+
+	if (!rv) {
+		s->error.info.regexp_error = err;
+
+		return -UT_ERROR_INVALID_REGEXP;
+	}
+
+	return len;
 }
 
 
@@ -837,8 +937,63 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 
 			rv = ut_new_op(s, op.type, op.val, UINT32_MAX);
 
-			if (rv)
+			if (rv) {
 				s->pool[rv - 1].is_overflow = op.is_overflow;
+				s->pool[rv - 1].is_reg_icase = op.is_reg_icase;
+				s->pool[rv - 1].is_reg_global = op.is_reg_global;
+				s->pool[rv - 1].is_reg_newline = op.is_reg_newline;
+			}
+
+			/* Follow JSLint logic and treat a slash after any of the
+			 * `(,=:[!&|?{};` characters as the beginning of a regex
+			 * literal... */
+			switch (op.type) {
+			case T_LPAREN:
+			case T_COMMA:
+
+			case T_ASADD:
+			case T_ASBAND:
+			case T_ASBOR:
+			case T_ASBXOR:
+			case T_ASDIV:
+			case T_ASLEFT:
+			case T_ASMOD:
+			case T_ASMUL:
+			case T_ASRIGHT:
+			case T_ASSIGN:
+			case T_ASSUB:
+			case T_EQ:
+			case T_EQS:
+			case T_GE:
+			case T_LE:
+			case T_NE:
+			case T_NES:
+
+			case T_COLON:
+			case T_LBRACK:
+			case T_NOT:
+
+			case T_AND:
+			case T_BAND:
+
+			case T_OR:
+			case T_BOR:
+
+			case T_QMARK:
+
+			case T_LBRACE:
+			case T_RBRACE:
+
+			case T_LSTM:
+			case T_LEXP:
+
+			case T_SCOL:
+				s->expect_div = 0;
+				break;
+
+			default:
+				s->expect_div = 1;
+			}
 
 			return rv;
 		}

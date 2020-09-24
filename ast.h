@@ -40,6 +40,7 @@ enum ut_error_type {
 	UT_ERROR_OVERLONG_STRING,
 	UT_ERROR_INVALID_ESCAPE,
 	UT_ERROR_NESTED_BLOCKS,
+	UT_ERROR_INVALID_REGEXP,
 	UT_ERROR_EXCEPTION
 };
 
@@ -58,6 +59,9 @@ struct ut_op {
 	uint16_t is_postfix:1;
 	uint16_t is_for_in:1;
 	uint16_t is_list:1;
+	uint16_t is_reg_icase:1;
+	uint16_t is_reg_newline:1;
+	uint16_t is_reg_global:1;
 	uint32_t off;
 	struct json_object *val;
 	union {
@@ -84,6 +88,7 @@ struct ut_state {
 	uint8_t lstrip_blocks:1;
 	uint8_t strict_declarations:1;
 	uint8_t skip_shebang:1;
+	uint8_t expect_div:1;
 	size_t off;
 	enum ut_block_type blocktype;
 	struct {
@@ -91,6 +96,7 @@ struct ut_state {
 		union {
 			struct json_object *exception;
 			uint64_t tokens[2];
+			char *regexp_error;
 		} info;
 	} error;
 	struct {
@@ -130,6 +136,7 @@ struct json_object *ut_new_func(struct ut_op *decl);
 struct json_object *ut_new_object(struct json_object *proto);
 struct json_object *ut_new_double(double v);
 struct json_object *ut_new_null(void);
+struct json_object *ut_new_regexp(const char *source, bool icase, bool newline, bool global, char **err);
 
 bool ut_register_extended_type(const char *name, struct json_object *proto, void (*freefn)(void *));
 struct json_object *ut_set_extended_type(struct json_object *v, const char *name, void *data);
