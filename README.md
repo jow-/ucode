@@ -873,6 +873,9 @@ Utpl supports a restricted subset of the formats allowed by the underlying
 libc's `printf()` implementation, namely it allows the `d`, `i`, `o`, `u`, `x`,
 `X`, `e`, `E`, `f`, `F`, `g`, `G`, `c` and `s` conversions.
 
+Additionally, an utpl specific `J` format is implemented, which causes the
+corresponding value to be formatted as JSON string.
+
 Other format specifiers such as `n` or `z` are not accepted and returned
 verbatim. Format specifiers including `*` and `$` directives are rejected as
 well.
@@ -883,6 +886,7 @@ well.
   printf("%08x\n", 123);          // 0000007b
   printf("%c%c%c\n", 65, 98, 99); // Abc
   printf("%g\n", 10 / 3.0);       // 3.33333
+  printf("%J", [1,2,3]);          // [ 1, 2, 3 ]
 %}
 ```
 

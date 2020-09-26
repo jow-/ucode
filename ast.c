@@ -125,16 +125,17 @@ ut_append_op(struct ut_state *s, uint32_t a, uint32_t b)
 static int
 double_rounded_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
+	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT);
 	double d = json_object_get_double(v);
 
 	if (isnan(d))
-		return sprintbuf(pb, level ? "\"NaN\"" : "NaN");
+		return sprintbuf(pb, strict ? "\"NaN\"" : "NaN");
 
 	if (d == INFINITY)
-		return sprintbuf(pb, level ? "1e309" : "Infinity");
+		return sprintbuf(pb, strict ? "1e309" : "Infinity");
 
 	if (d == -INFINITY)
-		return sprintbuf(pb, level ? "-1e309" : "-Infinity");
+		return sprintbuf(pb, strict ? "-1e309" : "-Infinity");
 
 	return sprintbuf(pb, "%g", d);
 }
@@ -211,17 +212,18 @@ re_free(struct json_object *v, void *ud)
 static int
 re_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
+	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT);
 	struct ut_op *op = json_object_get_userdata(v);
 	struct json_object *s;
 	const char *p;
 	size_t len;
 
-	sprintbuf(pb, "%s/", level ? "\"" : "");
+	sprintbuf(pb, "%s/", strict ? "\"" : "");
 
 	s = json_object_new_string((char *)op + sizeof(*op) + sizeof(regex_t));
 
 	if (s) {
-		if (level) {
+		if (strict) {
 			for (p = json_object_to_json_string(s) + 1, len = strlen(p) - 1; len > 0; len--, p++)
 				sprintbuf(pb, "%c", *p);
 		}
@@ -239,7 +241,7 @@ re_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 		             op->is_reg_global  ? "g" : "",
 		             op->is_reg_icase   ? "i" : "",
 		             op->is_reg_newline ? "s" : "",
-		             level ? "\"" : "");
+		             strict ? "\"" : "");
 }
 
 struct json_object *
@@ -300,6 +302,7 @@ ut_new_regexp(const char *source, bool icase, bool newline, bool global, char **
 static int
 func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
+	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT);
 	struct ut_op *op = json_object_get_userdata(v);
 	struct ut_op *base, *decl, *name, *args, *arg;
 
@@ -314,7 +317,7 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 	args = base + (decl->tree.operand[1] ? decl->tree.operand[1] - 1 : 0);
 
 	sprintbuf(pb, "%sfunction%s%s(",
-	          level ? "\"" : "",
+	          strict ? "\"" : "",
 	          (name != base) ? " " : "",
 	          (name != base) ? json_object_get_string(name->val) : "");
 
@@ -323,7 +326,7 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 		          (arg != args) ? ", " : "",
 		          json_object_get_string(arg->val));
 
-	return sprintbuf(pb, ") { ... }%s", level ? "\"" : "");
+	return sprintbuf(pb, ") { ... }%s", strict ? "\"" : "");
 }
 
 struct json_object *
@@ -466,6 +469,7 @@ ut_register_extended_type(const char *name, struct json_object *proto, void (*fr
 static int
 ut_extended_type_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
+	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT);
 	struct ut_op *op = json_object_get_userdata(v);
 	struct ut_extended_type *et;
 
@@ -474,7 +478,10 @@ ut_extended_type_to_string(struct json_object *v, struct printbuf *pb, int level
 
 	et = &ut_ext_types[op->tag.type - 1];
 
-	return sprintbuf(pb, "%s<%s %p>%s", level ? "\"" : "", et->name, op->tag.data, level ? "\"" : "");
+	return sprintbuf(pb, "%s<%s %p>%s",
+	                 strict ? "\"" : "",
+	                 et->name, op->tag.data,
+	                 strict ? "\"" : "");
 }
 
 static void

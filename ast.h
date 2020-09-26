@@ -27,6 +27,8 @@
 	#include <json-c/json.h>
 #endif
 
+#define JSON_C_TO_STRING_STRICT (1<<31)
+
 #define UT_ERRMSG_OOM "Runtime error: Memory allocation failure"
 
 enum ut_error_type {

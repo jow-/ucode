@@ -1451,6 +1451,20 @@ ut_printf_common(struct ut_state *s, uint32_t off, struct json_object *args, cha
 
 				break;
 
+			case 'J':
+				t = json_type_string;
+
+				if (argidx < arglen)
+					arg.s = json_object_to_json_string_ext(
+						json_object_array_get_idx(args, argidx++),
+						JSON_C_TO_STRING_SPACED|JSON_C_TO_STRING_NOSLASHESCAPE|JSON_C_TO_STRING_STRICT);
+				else
+					arg.s = NULL;
+
+				arg.s = arg.s ? arg.s : "null";
+
+				break;
+
 			case '%':
 				t = json_type_null;
 
@@ -1463,7 +1477,7 @@ ut_printf_common(struct ut_state *s, uint32_t off, struct json_object *args, cha
 			if (fp + 2 >= sfmt + sizeof(sfmt))
 				goto next;
 
-			*fp++ = *p;
+			*fp++ = (t == json_type_string) ? 's' : *p;
 			*fp = 0;
 
 			switch (t) {
