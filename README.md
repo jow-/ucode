@@ -945,3 +945,13 @@ replace("barfoobaz", /(.)(.)(.)/g, function(m, c1, c2, c3) {
     return c3 + c2 + c1;
 })                                                          // raboofzab
 ```
+
+#### 6.49. `json(str)`
+
+Parse the given string as JSON and return the resulting value. Throws an
+exception on parse errors, trailing garbage or premature EOF.
+
+```javascript
+json('{"a":true, "b":123}')   // { "a": true, "b": 123 }
+json('[1,2,')                 // Throws exception
+```

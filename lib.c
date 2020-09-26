@@ -2032,6 +2032,48 @@ ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
 	return rv;
 }
 
+static struct json_object *
+ut_json(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *rv, *src = json_object_array_get_idx(args, 0);
+	struct json_tokener *tok = NULL;
+	enum json_tokener_error err;
+	const char *str;
+	size_t len;
+
+	if (!json_object_is_type(src, json_type_string))
+		return ut_exception(s, off, "Passed value is not a string");
+
+	tok = json_tokener_new();
+
+	if (!tok)
+		return ut_exception(s, off, UT_ERRMSG_OOM);
+
+	str = json_object_get_string(src);
+	len = json_object_get_string_len(src);
+
+	rv = json_tokener_parse_ex(tok, str, len);
+	err = json_tokener_get_error(tok);
+
+	if (err == json_tokener_continue) {
+		json_object_put(rv);
+		rv = ut_exception(s, off, "Unexpected end of string in JSON data");
+	}
+	else if (err != json_tokener_success) {
+		json_object_put(rv);
+		rv = ut_exception(s, off, "Failed to parse JSON string: %s",
+		                  json_tokener_error_desc(err));
+	}
+	else if (json_tokener_get_parse_end(tok) < len) {
+		json_object_put(rv);
+		rv = ut_exception(s, off, "Trailing garbage after JSON data");
+	}
+
+	json_tokener_free(tok);
+
+	return rv;
+}
+
 const struct ut_ops ut = {
 	.register_function = ut_register_function,
 	.register_type = ut_register_extended_type,
@@ -2086,6 +2128,7 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "arrtoip",	ut_arrtoip },
 	{ "match",		ut_match },
 	{ "replace",	ut_replace },
+	{ "json",		ut_json },
 };
 
 
