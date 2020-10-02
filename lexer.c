@@ -579,7 +579,7 @@ next:
 
 		/* terminating quote */
 		if (*in == q) {
-			op->val = json_object_new_string_len(str, sizeof(str) - 1 - rem);
+			op->val = xjs_new_string_len(str, sizeof(str) - 1 - rem);
 
 			return (in - buf) + 2;
 		}
@@ -715,7 +715,7 @@ parse_label(const char *buf, struct ut_op *op, struct ut_state *s)
 		}
 	}
 
-	op->val = json_object_new_string(str);
+	op->val = xjs_new_string(str);
 
 	return (in - buf);
 }
@@ -767,7 +767,7 @@ parse_number(const char *buf, struct ut_op *op, struct ut_state *s)
 
 
 		op->type = T_NUMBER;
-		op->val = json_object_new_int64(n);
+		op->val = xjs_new_int64(n);
 		op->is_overflow = (errno == ERANGE);
 
 		return (e - buf);
@@ -787,12 +787,12 @@ static int
 parse_bool(const char *buf, struct ut_op *op, struct ut_state *s)
 {
 	if (!strncmp(buf, "false", 5)) {
-		op->val = json_object_new_boolean(false);
+		op->val = xjs_new_boolean(false);
 
 		return 5;
 	}
 	else if (!strncmp(buf, "true", 4)) {
-		op->val = json_object_new_boolean(true);
+		op->val = xjs_new_boolean(true);
 
 		return 4;
 	}
@@ -860,7 +860,7 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 				if (p == o)
 					return 0;
 
-				return ut_new_op(s, T_TEXT, json_object_new_string_len(o, p - o), UINT32_MAX);
+				return ut_new_op(s, T_TEXT, xjs_new_string_len(o, p - o), UINT32_MAX);
 			}
 		}
 		else if (s->blocktype == UT_BLOCK_COMMENT) {
@@ -1010,7 +1010,7 @@ ut_get_token(struct ut_state *s, const char *input, int *mlen)
 		*mlen = p - input;
 		s->off += *mlen;
 
-		return ut_new_op(s, T_TEXT, json_object_new_string_len(o, p - o), UINT32_MAX);
+		return ut_new_op(s, T_TEXT, xjs_new_string_len(o, p - o), UINT32_MAX);
 	}
 
 	return 0;

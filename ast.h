@@ -19,7 +19,10 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <stdbool.h>
+#include <stdarg.h>
 
 #ifdef JSONC
 	#include <json.h>
@@ -28,8 +31,6 @@
 #endif
 
 #define JSON_C_TO_STRING_STRICT (1<<31)
-
-#define UT_ERRMSG_OOM "Runtime error: Memory allocation failure"
 
 enum ut_error_type {
 	UT_ERROR_NO_ERROR,
@@ -157,6 +158,133 @@ static inline uint32_t getrefcnt(struct json_object *v) {
 	} *spy = (void *)v;
 
 	return spy ? spy->_ref_count : 0;
+}
+
+static inline void *xalloc(size_t size) {
+	void *ptr = calloc(1, size);
+
+	if (!ptr) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return ptr;
+}
+
+static inline void *xrealloc(void *ptr, size_t size) {
+	ptr = realloc(ptr, size);
+
+	if (!ptr) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return ptr;
+}
+
+static inline struct json_object *xjs_new_object(void) {
+	struct json_object *ptr = json_object_new_object();
+
+	if (!ptr) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return ptr;
+}
+
+static inline struct json_object *xjs_new_array(void) {
+	struct json_object *ptr = json_object_new_array();
+
+	if (!ptr) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return ptr;
+}
+
+static inline struct json_object *xjs_new_int64(int64_t n) {
+	struct json_object *ptr = json_object_new_int64(n);
+
+	if (!ptr) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return ptr;
+}
+
+static inline struct json_object *xjs_new_string(const char *s) {
+	struct json_object *ptr = json_object_new_string(s);
+
+	if (!ptr) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return ptr;
+}
+
+static inline struct json_object *xjs_new_string_len(const char *s, size_t len) {
+	struct json_object *ptr = json_object_new_string_len(s, len);
+
+	if (!ptr) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return ptr;
+}
+
+static inline struct json_object *xjs_new_boolean(bool v) {
+	struct json_object *ptr = json_object_new_boolean(v);
+
+	if (!ptr) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return ptr;
+}
+
+
+static inline struct json_tokener *xjs_new_tokener(void) {
+	struct json_tokener *tok = json_tokener_new();
+
+	if (!tok) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return tok;
+}
+
+static inline int xasprintf(char **strp, const char *fmt, ...) {
+	va_list ap;
+	int len;
+
+	va_start(ap, fmt);
+	len = vasprintf(strp, fmt, ap);
+	va_end(ap);
+
+	if (len == -1) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return len;
+}
+
+static inline int xvasprintf(char **strp, const char *fmt, va_list ap) {
+	int len = vasprintf(strp, fmt, ap);
+
+	if (len == -1) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return len;
 }
 
 #endif /* __AST_H_ */

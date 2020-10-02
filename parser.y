@@ -95,7 +95,7 @@ ut_no_empty_obj(struct ut_state *s, uint32_t off)
 
 
 input ::= chunks(A).									{ s->main = new_op(T_FUNC, NULL, 0, 0, A); }
-input ::= .												{ s->main = new_op(T_TEXT, json_object_new_string("")); s->main = new_op(T_FUNC, NULL, 0, 0, s->main); }
+input ::= .												{ s->main = new_op(T_TEXT, xjs_new_string("")); s->main = new_op(T_FUNC, NULL, 0, 0, s->main); }
 
 chunks(A) ::= chunks(B) T_TEXT(C).						{ A = B ? append_op(B, C) : C; }
 chunks(A) ::= chunks(B) tplexp(C).						{ A = B ? append_op(B, C) : C; }

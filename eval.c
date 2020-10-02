@@ -38,16 +38,11 @@ ut_exception(struct ut_state *state, uint32_t off, const char *fmt, ...)
 	int len;
 
 	va_start(ap, fmt);
-	len = vasprintf(&s, fmt, ap);
+	len = xvasprintf(&s, fmt, ap);
 	va_end(ap);
 
-	if (len < 0) {
-		msg = json_object_new_string(UT_ERRMSG_OOM);
-	}
-	else {
-		msg = json_object_new_string_len(s, len);
-		free(s);
-	}
+	msg = xjs_new_string_len(s, len);
+	free(s);
 
  	exception_tag->type = T_EXCEPTION;
 	exception_tag->tree.operand[0] = off;
@@ -179,26 +174,17 @@ ut_getscope(struct ut_state *state, uint8_t depth)
 static struct json_object *
 ut_addscope(struct ut_state *state, uint32_t decl)
 {
-	struct json_object *scope, **tmp;
+	struct json_object *scope;
 
 	if (state->stack.off >= 255)
 		return ut_exception(state, decl, "Runtime error: Too much recursion");
 
 	if (state->stack.off >= state->stack.size) {
-		tmp = realloc(state->stack.scope, (state->stack.size + 1) * sizeof(*state->stack.scope));
-
-		if (!tmp)
-			return ut_exception(state, decl, UT_ERRMSG_OOM);
-
-		state->stack.scope = tmp;
+		state->stack.scope = xrealloc(state->stack.scope, (state->stack.size + 1) * sizeof(*state->stack.scope));
 		state->stack.size++;
 	}
 
 	scope = ut_new_object(NULL);
-
-	if (!scope)
-		return ut_exception(state, decl, UT_ERRMSG_OOM);
-
 	state->stack.scope[state->stack.off++] = scope;
 
 	return scope;
@@ -618,7 +604,7 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 		}
 		else if (json_object_is_type(val, json_type_object)) {
 			json_object_object_foreach(val, key, item) {
-				ut_setval(scope, ivar->val, json_object_new_string(key));
+				ut_setval(scope, ivar->val, xjs_new_string(key));
 				ut_putval(rv);
 
 				rv = ut_execute_op_sequence(state, ut_get_off(state, body));
@@ -858,7 +844,7 @@ ut_execute_rel(struct ut_state *state, uint32_t off)
 
 	ut_get_operands(state, op, v);
 
-	rv = json_object_new_boolean(ut_cmp(op->type, v[0], v[1]));
+	rv = xjs_new_boolean(ut_cmp(op->type, v[0], v[1]));
 
 	ut_putval(v[0]);
 	ut_putval(v[1]);
@@ -917,7 +903,7 @@ ut_execute_equality(struct ut_state *state, uint32_t off)
 	ut_get_operands(state, op, v);
 
 	equal = ut_eq(v[0], v[1]);
-	rv = json_object_new_boolean((op->type == T_EQS) ? equal : !equal);
+	rv = xjs_new_boolean((op->type == T_EQS) ? equal : !equal);
 
 	ut_putval(v[0]);
 	ut_putval(v[1]);
@@ -955,7 +941,7 @@ ut_execute_in(struct ut_state *state, uint32_t off)
 	ut_putval(v[0]);
 	ut_putval(v[1]);
 
-	return json_object_new_boolean(found);
+	return xjs_new_boolean(found);
 }
 
 static struct json_object *
@@ -980,7 +966,7 @@ ut_execute_inc_dec(struct ut_state *state, uint32_t off)
 	if (ut_cast_number(val, &n, &d) == json_type_double)
 		nval = ut_new_double(d + (op->type == T_INC ? 1.0 : -1.0));
 	else
-		nval = json_object_new_int64(n + (op->type == T_INC ? 1 : -1));
+		nval = xjs_new_int64(n + (op->type == T_INC ? 1 : -1));
 
 	ut_putval(ut_setval(scope, key, nval));
 
@@ -997,10 +983,7 @@ static struct json_object *
 ut_execute_list(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
-	struct json_object *val, *arr = json_object_new_array();
-
-	if (!arr)
-		return ut_exception(state, off, UT_ERRMSG_OOM);
+	struct json_object *val, *arr = xjs_new_array();
 
 	while (op) {
 		val = ut_execute_op(state, ut_get_off(state, op));
@@ -1023,9 +1006,6 @@ ut_execute_object(struct ut_state *state, uint32_t off)
 {
 	struct json_object *v, *obj = ut_new_object(NULL);
 	struct ut_op *key, *val;
-
-	if (!obj)
-		return ut_exception(state, off, UT_ERRMSG_OOM);
 
 	for (key = ut_get_child(state, off, 0), val = ut_get_op(state, key ? key->tree.next : 0);
 	     key != NULL && val != NULL;
@@ -1139,12 +1119,9 @@ ut_execute_call(struct ut_state *state, uint32_t off)
 	}
 	else {
 		if (v[1] == NULL)
-			v[1] = json_object_new_array();
+			v[1] = xjs_new_array();
 
-		if (v[1] == NULL)
-			rv = ut_exception(state, off, UT_ERRMSG_OOM);
-		else
-			rv = ut_invoke(state, off, NULL, v[0], v[1]);
+		rv = ut_invoke(state, off, NULL, v[0], v[1]);
 	}
 
 	ut_putval(v[0]);
@@ -1225,9 +1202,9 @@ ut_execute_unary_plus_minus(struct ut_state *state, uint32_t off)
 	switch (t) {
 	case json_type_int:
 		if (op1->is_overflow)
-			return json_object_new_int64(((n >= 0) == (op->type == T_SUB)) ? INT64_MIN : INT64_MAX);
+			return xjs_new_int64(((n >= 0) == (op->type == T_SUB)) ? INT64_MIN : INT64_MAX);
 
-		return json_object_new_int64((op->type == T_SUB) ? -n : n);
+		return xjs_new_int64((op->type == T_SUB) ? -n : n);
 
 	default:
 		return ut_new_double((op->type == T_SUB) ? -d : d);
@@ -1258,18 +1235,11 @@ ut_execute_arith(struct ut_state *state, uint32_t off)
 		s2 = v[1] ? json_object_get_string(v[1]) : "null";
 		len1 = strlen(s1);
 		len2 = strlen(s2);
-		s = calloc(1, len1 + len2 + 1);
-
-		if (!s) {
-			ut_putval(v[0]);
-			ut_putval(v[1]);
-
-			return NULL;
-		}
+		s = xalloc(len1 + len2 + 1);
 
 		snprintf(s, len1 + len2 + 1, "%s%s", s1, s2);
 
-		rv = json_object_new_string(s);
+		rv = xjs_new_string(s);
 
 		ut_putval(v[0]);
 		ut_putval(v[1]);
@@ -1315,22 +1285,22 @@ ut_execute_arith(struct ut_state *state, uint32_t off)
 
 	switch (op->type) {
 	case T_ADD:
-		return json_object_new_int64(n1 + n2);
+		return xjs_new_int64(n1 + n2);
 
 	case T_SUB:
-		return json_object_new_int64(n1 - n2);
+		return xjs_new_int64(n1 - n2);
 
 	case T_MUL:
-		return json_object_new_int64(n1 * n2);
+		return xjs_new_int64(n1 * n2);
 
 	case T_DIV:
 		if (n2 == 0)
 			return ut_new_double(INFINITY);
 
-		return json_object_new_int64(n1 / n2);
+		return xjs_new_int64(n1 / n2);
 
 	case T_MOD:
-		return json_object_new_int64(n1 % n2);
+		return xjs_new_int64(n1 % n2);
 	}
 
 	return ut_new_double(NAN);
@@ -1357,19 +1327,19 @@ ut_execute_bitop(struct ut_state *state, uint32_t off)
 
 	switch (op->type) {
 	case T_LSHIFT:
-		return json_object_new_int64(n1 << n2);
+		return xjs_new_int64(n1 << n2);
 
 	case T_RSHIFT:
-		return json_object_new_int64(n1 >> n2);
+		return xjs_new_int64(n1 >> n2);
 
 	case T_BAND:
-		return json_object_new_int64(n1 & n2);
+		return xjs_new_int64(n1 & n2);
 
 	case T_BXOR:
-		return json_object_new_int64(n1 ^ n2);
+		return xjs_new_int64(n1 ^ n2);
 
 	case T_BOR:
-		return json_object_new_int64(n1 | n2);
+		return xjs_new_int64(n1 | n2);
 
 	default:
 		return NULL;
@@ -1381,7 +1351,7 @@ ut_execute_not(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
 
-	return json_object_new_boolean(!ut_test_condition(state, op ? op->tree.operand[0] : 0));
+	return xjs_new_boolean(!ut_test_condition(state, op ? op->tree.operand[0] : 0));
 }
 
 static struct json_object *
@@ -1399,7 +1369,7 @@ ut_execute_compl(struct ut_state *state, uint32_t off)
 
 	ut_putval(v[0]);
 
-	return json_object_new_int64(~n);
+	return xjs_new_int64(~n);
 }
 
 static struct json_object *
@@ -1422,7 +1392,7 @@ static struct json_object *
 ut_execute_break_cont(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
-	struct json_object *rv = json_object_new_int64(0);
+	struct json_object *rv = xjs_new_int64(0);
 
 	json_object_set_userdata(rv, op, NULL);
 
@@ -1434,9 +1404,6 @@ ut_execute_function(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
 	struct json_object *obj = ut_new_func(op);
-
-	if (!obj)
-		return ut_exception(state, off, UT_ERRMSG_OOM);
 
 	return obj;
 }
@@ -1458,7 +1425,7 @@ ut_execute_try_catch(struct ut_state *state, uint32_t off)
 	if (ut_is_type(rv, T_EXCEPTION)) {
 		if (op->tree.operand[1])
 			ut_putval(ut_setval(ut_getscope(state, 0), ut_get_child(state, off, 1)->val,
-			                    json_object_new_string(json_object_get_string(rv))));
+			                    xjs_new_string(json_object_get_string(rv))));
 
 		memset(&state->error, 0, sizeof(state->error));
 
@@ -1739,15 +1706,12 @@ ut_execute_op_sequence(struct ut_state *state, uint32_t off)
 static void
 ut_globals_init(struct ut_state *state, struct json_object *scope)
 {
-	struct json_object *arr = json_object_new_array();
+	struct json_object *arr = xjs_new_array();
 	const char *p, *last;
-
-	if (!arr)
-		return;
 
 	for (p = last = LIB_SEARCH_PATH;; p++) {
 		if (*p == ':' || *p == '\0') {
-			json_object_array_add(arr, json_object_new_string_len(last, p - last));
+			json_object_array_add(arr, xjs_new_string_len(last, p - last));
 
 			if (!*p)
 				break;
@@ -1809,7 +1773,7 @@ ut_run(struct ut_state *state, struct json_object *env, struct json_object *modu
 	ut_globals_init(state, scope);
 	ut_lib_init(state, scope);
 
-	args = json_object_new_array();
+	args = xjs_new_array();
 
 	if (modules) {
 		for (i = 0; i < json_object_array_length(modules); i++) {

@@ -36,7 +36,7 @@
 #include <sys/types.h>
 
 
-static bool
+static void
 snprintf_append(char **dptr, size_t *dlen, const char *fmt, ssize_t sz, ...)
 {
 	va_list ap;
@@ -47,15 +47,10 @@ snprintf_append(char **dptr, size_t *dlen, const char *fmt, ssize_t sz, ...)
 	n = vsnprintf(NULL, 0, fmt, ap);
 	va_end(ap);
 
-	if (n < 0)
-		return false;
-	else if (sz >= 0 && n > sz)
+	if (sz >= 0 && n > sz)
 		n = sz;
 
-	tmp = realloc(*dptr, *dlen + n + 1);
-
-	if (!tmp)
-		return false;
+	tmp = xrealloc(*dptr, *dlen + n + 1);
 
 	va_start(ap, sz);
 	vsnprintf(tmp + *dlen, n + 1, fmt, ap);
@@ -63,8 +58,6 @@ snprintf_append(char **dptr, size_t *dlen, const char *fmt, ssize_t sz, ...)
 
 	*dptr = tmp;
 	*dlen += n;
-
-	return true;
 }
 
 #define sprintf_append(dptr, dlen, fmt, ...) \
@@ -293,19 +286,8 @@ ut_c_fn_free(struct json_object *v, void *ud)
 static bool
 ut_register_function(struct json_object *scope, const char *name, ut_c_fn *fn)
 {
-	struct json_object *val = json_object_new_object();
-	struct ut_op *op;
-
-	if (!val)
-		return NULL;
-
-	op = calloc(1, sizeof(*op));
-
-	if (!op) {
-		json_object_put(val);
-
-		return NULL;
-	}
+	struct json_object *val = xjs_new_object();
+	struct ut_op *op = xalloc(sizeof(*op));
 
 	op->val = val;
 	op->type = T_CFUNC;
@@ -342,7 +324,7 @@ ut_print(struct ut_state *s, uint32_t off, struct json_object *args)
 		reslen += fwrite(p, 1, len, stdout);
 	}
 
-	return json_object_new_int64(reslen);
+	return xjs_new_int64(reslen);
 }
 
 static struct json_object *
@@ -352,10 +334,10 @@ ut_length(struct ut_state *s, uint32_t off, struct json_object *args)
 
 	switch (json_object_get_type(arg)) {
 	case json_type_array:
-		return json_object_new_int64(json_object_array_length(arg));
+		return xjs_new_int64(json_object_array_length(arg));
 
 	case json_type_string:
-		return json_object_new_int64(json_object_get_string_len(arg));
+		return xjs_new_int64(json_object_get_string_len(arg));
 
 	default:
 		return NULL;
@@ -381,7 +363,7 @@ ut_index(struct ut_state *s, uint32_t off, struct json_object *args, bool right)
 			}
 		}
 
-		return json_object_new_int64(ret);
+		return xjs_new_int64(ret);
 
 	case json_type_string:
 		sstr = json_object_get_string(stack);
@@ -397,7 +379,7 @@ ut_index(struct ut_state *s, uint32_t off, struct json_object *args, bool right)
 			}
 		}
 
-		return json_object_new_int64(ret);
+		return xjs_new_int64(ret);
 
 	default:
 		return NULL;
@@ -517,12 +499,9 @@ ut_chr(struct ut_state *s, uint32_t off, struct json_object *args)
 	char *str;
 
 	if (!len)
-		return json_object_new_string_len("", 0);
+		return xjs_new_string_len("", 0);
 
-	str = calloc(1, len);
-
-	if (!str)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
+	str = xalloc(len);
 
 	for (idx = 0; idx < len; idx++) {
 		n = ut_cast_int64(json_object_array_get_idx(args, idx));
@@ -535,7 +514,7 @@ ut_chr(struct ut_state *s, uint32_t off, struct json_object *args)
 		str[idx] = (char)n;
 	}
 
-	return json_object_new_string_len(str, len);
+	return xjs_new_string_len(str, len);
 }
 
 static struct json_object *
@@ -578,7 +557,7 @@ ut_exists(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!json_object_is_type(obj, json_type_object))
 		return false;
 
-	return json_object_new_boolean(json_object_object_get_ex(obj, key ? key : "null", NULL));
+	return xjs_new_boolean(json_object_object_get_ex(obj, key ? key : "null", NULL));
 }
 
 __attribute__((noreturn)) static struct json_object *
@@ -595,7 +574,7 @@ ut_getenv(struct ut_state *s, uint32_t off, struct json_object *args)
 	const char *key = json_object_get_string(json_object_array_get_idx(args, 0));
 	char *val = key ? getenv(key) : NULL;
 
-	return val ? json_object_new_string(val) : NULL;
+	return val ? xjs_new_string(val) : NULL;
 }
 
 static struct json_object *
@@ -609,21 +588,14 @@ ut_filter(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!json_object_is_type(obj, json_type_array))
 		return NULL;
 
-	arr = json_object_new_array();
-	cmpargs = json_object_new_array();
-
-	if (!arr || !cmpargs) {
-		ut_putval(arr);
-		ut_putval(cmpargs);
-
-		return ut_exception(s, off, UT_ERRMSG_OOM);
-	}
+	arr = xjs_new_array();
+	cmpargs = xjs_new_array();
 
 	json_object_array_put_idx(cmpargs, 2, json_object_get(obj));
 
 	for (arrlen = json_object_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
 		json_object_array_put_idx(cmpargs, 0, json_object_get(json_object_array_get_idx(obj, arridx)));
-		json_object_array_put_idx(cmpargs, 1, json_object_new_int64(arridx));
+		json_object_array_put_idx(cmpargs, 1, xjs_new_int64(arridx));
 
 		rv = ut_invoke(s, off, NULL, func, cmpargs);
 
@@ -653,7 +625,7 @@ ut_hex(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (e == val || *e)
 		return ut_new_double(NAN);
 
-	return json_object_new_int64(n);
+	return xjs_new_int64(n);
 }
 
 static struct json_object *
@@ -664,7 +636,7 @@ ut_int(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (errno == EINVAL || errno == EOVERFLOW)
 		return ut_new_double(NAN);
 
-	return json_object_new_int64(n);
+	return xjs_new_int64(n);
 }
 
 static struct json_object *
@@ -689,10 +661,7 @@ ut_join(struct ut_state *s, uint32_t off, struct json_object *args)
 		len += item ? strlen(item) : 0;
 	}
 
-	p = res = calloc(1, len);
-
-	if (!res)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
+	p = res = xalloc(len);
 
 	for (arrlen = json_object_array_length(arr), arridx = 0; arridx < arrlen; arridx++) {
 		if (arridx > 0) {
@@ -718,7 +687,7 @@ ut_join(struct ut_state *s, uint32_t off, struct json_object *args)
 		}
 	}
 
-	rv = json_object_new_string(res);
+	rv = xjs_new_string(res);
 
 out:
 	free(res);
@@ -735,13 +704,10 @@ ut_keys(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!json_object_is_type(obj, json_type_object))
 		return NULL;
 
-	arr = json_object_new_array();
-
-	if (!arr)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
+	arr = xjs_new_array();
 
 	json_object_object_foreach(obj, key, val)
-		json_object_array_add(arr, json_object_new_string(key));
+		json_object_array_add(arr, xjs_new_string(key));
 
 	return arr;
 }
@@ -757,10 +723,7 @@ ut_lc(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!str)
 		return NULL;
 
-	res = p = calloc(1, len);
-
-	if (!res)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
+	res = p = xalloc(len);
 
 	while (*str)
 		if (*str >= 'A' && *str <= 'Z')
@@ -768,7 +731,7 @@ ut_lc(struct ut_state *s, uint32_t off, struct json_object *args)
 		else
 			*p++ = *str++;
 
-	rv = json_object_new_string_len(res, len);
+	rv = xjs_new_string_len(res, len);
 	free(res);
 
 	return rv;
@@ -785,21 +748,14 @@ ut_map(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!json_object_is_type(obj, json_type_array))
 		return NULL;
 
-	arr = json_object_new_array();
-	cmpargs = json_object_new_array();
-
-	if (!arr || !cmpargs) {
-		ut_putval(arr);
-		ut_putval(cmpargs);
-
-		return ut_exception(s, off, UT_ERRMSG_OOM);
-	}
+	arr = xjs_new_array();
+	cmpargs = xjs_new_array();
 
 	json_object_array_put_idx(cmpargs, 2, json_object_get(obj));
 
 	for (arrlen = json_object_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
 		json_object_array_put_idx(cmpargs, 0, json_object_get(json_object_array_get_idx(obj, arridx)));
-		json_object_array_put_idx(cmpargs, 1, json_object_new_int64(arridx));
+		json_object_array_put_idx(cmpargs, 1, xjs_new_int64(arridx));
 
 		json_object_array_add(arr, ut_invoke(s, off, NULL, func, cmpargs));
 	}
@@ -823,7 +779,7 @@ ut_ord(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!str[0])
 		return NULL;
 
-	return json_object_new_int64((int64_t)str[0]);
+	return xjs_new_int64((int64_t)str[0]);
 }
 
 static struct json_object *
@@ -834,30 +790,30 @@ ut_type(struct ut_state *s, uint32_t off, struct json_object *args)
 
 	switch (tag ? tag->type : 0) {
 	case T_FUNC:
-		return json_object_new_string("function");
+		return xjs_new_string("function");
 
 	case T_RESSOURCE:
-		return json_object_new_string("ressource");
+		return xjs_new_string("ressource");
 
 	default:
 		switch (json_object_get_type(v)) {
 		case json_type_object:
-			return json_object_new_string("object");
+			return xjs_new_string("object");
 
 		case json_type_array:
-			return json_object_new_string("array");
+			return xjs_new_string("array");
 
 		case json_type_double:
-			return json_object_new_string("double");
+			return xjs_new_string("double");
 
 		case json_type_int:
-			return json_object_new_string("int");
+			return xjs_new_string("int");
 
 		case json_type_boolean:
-			return json_object_new_string("bool");
+			return xjs_new_string("bool");
 
 		case json_type_string:
-			return json_object_new_string("string");
+			return xjs_new_string("string");
 
 		default:
 			return NULL;
@@ -875,10 +831,7 @@ ut_reverse(struct ut_state *s, uint32_t off, struct json_object *args)
 	char *dup, *p;
 
 	if (json_object_is_type(obj, json_type_array)) {
-		rv = json_object_new_array();
-
-		if (!rv)
-			return ut_exception(s, off, UT_ERRMSG_OOM);
+		rv = xjs_new_array();
 
 		for (arridx = json_object_array_length(obj); arridx > 0; arridx--)
 			json_object_array_add(rv, json_object_get(json_object_array_get_idx(obj, arridx - 1)));
@@ -886,15 +839,12 @@ ut_reverse(struct ut_state *s, uint32_t off, struct json_object *args)
 	else if (json_object_is_type(obj, json_type_string)) {
 		len = json_object_get_string_len(obj);
 		str = json_object_get_string(obj);
-		p = dup = calloc(1, len + 1);
-
-		if (!dup)
-			return ut_exception(s, off, UT_ERRMSG_OOM);
+		p = dup = xalloc(len + 1);
 
 		while (len > 0)
 			*p++ = str[--len];
 
-		rv = json_object_new_string(dup);
+		rv = xjs_new_string(dup);
 
 		free(dup);
 	}
@@ -945,10 +895,7 @@ ut_sort(struct ut_state *s, uint32_t off, struct json_object *args)
 		sort_ctx.s = s;
 		sort_ctx.off = off;
 		sort_ctx.fn = fn;
-		sort_ctx.args = json_object_new_array();
-
-		if (!sort_ctx.args)
-			return ut_exception(s, off, UT_ERRMSG_OOM);
+		sort_ctx.args = xjs_new_array();
 	}
 
 	json_object_array_sort(arr, sort_fn);
@@ -1045,11 +992,8 @@ ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!sep || !json_object_is_type(str, json_type_string))
 		return NULL;
 
-	arr = json_object_new_array();
+	arr = xjs_new_array();
 	splitstr = json_object_get_string(str);
-
-	if (!arr)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	if (ut_is_type(sep, T_REGEXP)) {
 		tag = json_object_get_userdata(sep);
@@ -1060,13 +1004,13 @@ ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
 			if (res == REG_NOMATCH)
 				break;
 
-			json_object_array_add(arr, json_object_new_string_len(splitstr, pmatch.rm_so));
+			json_object_array_add(arr, xjs_new_string_len(splitstr, pmatch.rm_so));
 
 			splitstr += pmatch.rm_eo;
 			eflags |= REG_NOTBOL;
 		}
 
-		json_object_array_add(arr, json_object_new_string(splitstr));
+		json_object_array_add(arr, xjs_new_string(splitstr));
 	}
 	else if (json_object_is_type(sep, json_type_string)) {
 		sepstr = json_object_get_string(sep);
@@ -1074,7 +1018,7 @@ ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
 		for (p = splitstr + (*sepstr ? 1 : 0), seplen = strlen(sepstr); *p; p++) {
 			if (!strncmp(p, sepstr, seplen)) {
 				if (*sepstr || p > splitstr)
-					json_object_array_add(arr, json_object_new_string_len(splitstr, p - splitstr));
+					json_object_array_add(arr, xjs_new_string_len(splitstr, p - splitstr));
 
 				splitstr = p + seplen;
 				p = splitstr - (*sepstr ? 1 : 0);
@@ -1082,7 +1026,7 @@ ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
 		}
 
 		if (*splitstr)
-			json_object_array_add(arr, json_object_new_string_len(splitstr, p - splitstr));
+			json_object_array_add(arr, xjs_new_string_len(splitstr, p - splitstr));
 	}
 	else {
 		json_object_put(arr);
@@ -1154,7 +1098,7 @@ ut_substr(struct ut_state *s, uint32_t off, struct json_object *args)
 		break;
 	}
 
-	return json_object_new_string_len(p + ofs, sublen);
+	return xjs_new_string_len(p + ofs, sublen);
 }
 
 static struct json_object *
@@ -1162,7 +1106,7 @@ ut_time(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	time_t t = time(NULL);
 
-	return json_object_new_int64((int64_t)t);
+	return xjs_new_int64((int64_t)t);
 }
 
 static struct json_object *
@@ -1176,10 +1120,7 @@ ut_uc(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!str)
 		return NULL;
 
-	res = p = calloc(1, len);
-
-	if (!res)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
+	res = p = xalloc(len);
 
 	while (*str)
 		if (*str >= 'a' && *str <= 'z')
@@ -1187,7 +1128,7 @@ ut_uc(struct ut_state *s, uint32_t off, struct json_object *args)
 		else
 			*p++ = *str++;
 
-	rv = json_object_new_string_len(res, len);
+	rv = xjs_new_string_len(res, len);
 	free(res);
 
 	return rv;
@@ -1217,10 +1158,7 @@ ut_uchr(struct ut_state *s, uint32_t off, struct json_object *args)
 			ulen += 4;
 	}
 
-	str = calloc(1, ulen);
-
-	if (!str)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
+	str = xalloc(ulen);
 
 	for (idx = 0, p = str, rem = ulen; idx < len; idx++) {
 		n = ut_cast_int64(json_object_array_get_idx(args, idx));
@@ -1232,7 +1170,7 @@ ut_uchr(struct ut_state *s, uint32_t off, struct json_object *args)
 			break;
 	}
 
-	return json_object_new_string_len(str, ulen);
+	return xjs_new_string_len(str, ulen);
 }
 
 static struct json_object *
@@ -1244,10 +1182,7 @@ ut_values(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!json_object_is_type(obj, json_type_object))
 		return NULL;
 
-	arr = json_object_new_array();
-
-	if (!arr)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
+	arr = xjs_new_array();
 
 	json_object_object_foreach(obj, key, val) {
 		(void)key;
@@ -1294,7 +1229,7 @@ ut_trim_common(struct ut_state *s, uint32_t off, struct json_object *args, bool 
 		}
 	}
 
-	return json_object_new_string_len(p, len);
+	return xjs_new_string_len(p, len);
 }
 
 static struct json_object *
@@ -1324,7 +1259,6 @@ ut_printf_common(struct ut_state *s, uint32_t off, struct json_object *args, cha
 	size_t len = 0, arglen, argidx;
 	const char *fstr, *last, *p;
 	enum json_type t;
-	bool ok;
 
 	*res = NULL;
 
@@ -1338,8 +1272,7 @@ ut_printf_common(struct ut_state *s, uint32_t off, struct json_object *args, cha
 
 	for (last = p = fstr; *p; p++) {
 		if (*p == '%') {
-			if (!snprintf_append(res, &len, "%s", p - last, last))
-				goto err;
+			snprintf_append(res, &len, "%s", p - last, last);
 
 			last = p++;
 
@@ -1487,14 +1420,11 @@ ut_printf_common(struct ut_state *s, uint32_t off, struct json_object *args, cha
 			*fp = 0;
 
 			switch (t) {
-			case json_type_int:    ok = sprintf_append(res, &len, sfmt, arg.n); break;
-			case json_type_double: ok = sprintf_append(res, &len, sfmt, arg.d); break;
-			case json_type_string: ok = sprintf_append(res, &len, sfmt, arg.s); break;
-			default:               ok = sprintf_append(res, &len, sfmt);        break;
+			case json_type_int:    sprintf_append(res, &len, sfmt, arg.n); break;
+			case json_type_double: sprintf_append(res, &len, sfmt, arg.d); break;
+			case json_type_string: sprintf_append(res, &len, sfmt, arg.s); break;
+			default:               sprintf_append(res, &len, sfmt);        break;
 			}
-
-			if (!ok)
-				goto err;
 
 			last = p + 1;
 
@@ -1503,16 +1433,9 @@ next:
 		}
 	}
 
-	if (!snprintf_append(res, &len, "%s", p - last, last))
-		goto err;
+	snprintf_append(res, &len, "%s", p - last, last);
 
 	return len;
-
-err:
-	free(*res);
-	*res = NULL;
-
-	return 0;
 }
 
 static struct json_object *
@@ -1523,10 +1446,7 @@ ut_sprintf(struct ut_state *s, uint32_t off, struct json_object *args)
 
 	len = ut_printf_common(s, off, args, &str);
 
-	if (!str)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
-
-	return json_object_new_string_len(str, len);
+	return xjs_new_string_len(str, len);
 }
 
 static struct json_object *
@@ -1536,13 +1456,9 @@ ut_printf(struct ut_state *s, uint32_t off, struct json_object *args)
 	size_t len;
 
 	len = ut_printf_common(s, off, args, &str);
-
-	if (!str)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
-
 	len = fwrite(str, 1, len, stdout);
 
-	return json_object_new_int64(len);
+	return xjs_new_int64(len);
 }
 
 static struct json_object *
@@ -1567,10 +1483,7 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 	if (!init)
 		return ut_exception(s, off, "Module %s provides no 'ut_module_init' function", path);
 
-	scope = json_object_new_object();
-
-	if (!scope)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
+	scope = xjs_new_object();
 
 	init(&ut, s, scope);
 
@@ -1593,13 +1506,7 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct json_
 	if (!sfile)
 		return ut_exception(s, off, "Unable to open file %s: %s", path, strerror(errno));
 
-	source = calloc(1, st.st_size + 1);
-
-	if (!source) {
-		fclose(sfile);
-
-		return ut_exception(s, off, UT_ERRMSG_OOM);
-	}
+	source = xalloc(st.st_size + 1);
 
 	fread(source, 1, st.st_size, sfile);
 	fclose(sfile);
@@ -1616,19 +1523,9 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct json_
 
 	free(source);
 
-	sc = scope ? scope : json_object_new_object();
-
-	if (!sc)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
+	sc = scope ? scope : xjs_new_object();
 
 	entry = ut_new_func(ut_get_op(s, s->main));
-
-	if (!entry) {
-		if (sc != scope)
-			json_object_put(sc);
-
-		return ut_exception(s, off, UT_ERRMSG_OOM);
-	}
 
 	rv = ut_invoke(s, off, sc, entry, NULL);
 
@@ -1734,26 +1631,20 @@ ut_iptoarr(struct ut_state *s, uint32_t off, struct json_object *args)
 		return NULL;
 
 	if (inet_pton(AF_INET6, json_object_get_string(ip), &a)) {
-		res = json_object_new_array();
-
-		if (!res)
-			return NULL;
+		res = xjs_new_array();
 
 		for (i = 0; i < 16; i++)
-			json_object_array_add(res, json_object_new_int64(a.in6.s6_addr[i]));
+			json_object_array_add(res, xjs_new_int64(a.in6.s6_addr[i]));
 
 		return res;
 	}
 	else if (inet_pton(AF_INET, json_object_get_string(ip), &a)) {
-		res = json_object_new_array();
+		res = xjs_new_array();
 
-		if (!res)
-			return NULL;
-
-		json_object_array_add(res, json_object_new_int64(a.u8[0]));
-		json_object_array_add(res, json_object_new_int64(a.u8[1]));
-		json_object_array_add(res, json_object_new_int64(a.u8[2]));
-		json_object_array_add(res, json_object_new_int64(a.u8[3]));
+		json_object_array_add(res, xjs_new_int64(a.u8[0]));
+		json_object_array_add(res, xjs_new_int64(a.u8[1]));
+		json_object_array_add(res, xjs_new_int64(a.u8[2]));
+		json_object_array_add(res, xjs_new_int64(a.u8[3]));
 
 		return res;
 	}
@@ -1804,7 +1695,7 @@ ut_arrtoip(struct ut_state *s, uint32_t off, struct json_object *args)
 
 		inet_ntop(AF_INET, &a, buf, sizeof(buf));
 
-		return json_object_new_string(buf);
+		return xjs_new_string(buf);
 
 	case 16:
 		for (i = 0; i < 16; i++) {
@@ -1818,7 +1709,7 @@ ut_arrtoip(struct ut_state *s, uint32_t off, struct json_object *args)
 
 		inet_ntop(AF_INET6, &a, buf, sizeof(buf));
 
-		return json_object_new_string(buf);
+		return xjs_new_string(buf);
 
 	default:
 		return NULL;
@@ -1847,17 +1738,17 @@ ut_match(struct ut_state *s, uint32_t off, struct json_object *args)
 		if (res == REG_NOMATCH)
 			break;
 
-		m = json_object_new_array();
+		m = xjs_new_array();
 
 		for (i = 0; i < ARRAY_SIZE(pmatch) && pmatch[i].rm_so != -1; i++) {
 			json_object_array_add(m,
-				json_object_new_string_len(p + pmatch[i].rm_so,
-				                           pmatch[i].rm_eo - pmatch[i].rm_so));
+				xjs_new_string_len(p + pmatch[i].rm_so,
+				                   pmatch[i].rm_eo - pmatch[i].rm_so));
 		}
 
 		if (tag->is_reg_global) {
 			if (!rv)
-				rv = json_object_new_array();
+				rv = xjs_new_array();
 
 			json_object_array_add(rv, m);
 
@@ -1878,17 +1769,14 @@ ut_replace_cb(struct ut_state *s, uint32_t off, struct json_object *func,
               const char *subject, regmatch_t *pmatch, size_t plen,
               char **sp, size_t *sl)
 {
-	struct json_object *cbargs = json_object_new_array();
+	struct json_object *cbargs = xjs_new_array();
 	struct json_object *rv;
 	size_t i;
 
-	if (!cbargs)
-		return NULL;
-
 	for (i = 0; i < plen && pmatch[i].rm_so != -1; i++) {
 		json_object_array_add(cbargs,
-			json_object_new_string_len(subject + pmatch[i].rm_so,
-			                           pmatch[i].rm_eo - pmatch[i].rm_so));
+			xjs_new_string_len(subject + pmatch[i].rm_so,
+			                   pmatch[i].rm_eo - pmatch[i].rm_so));
 	}
 
 	rv = ut_invoke(s, off, NULL, func, cbargs);
@@ -2053,7 +1941,7 @@ ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
 		sprintf_append(&sp, &sl, "%s", l);
 	}
 
-	rv = json_object_new_string_len(sp, sl);
+	rv = xjs_new_string_len(sp, sl);
 	free(sp);
 
 	return rv;
@@ -2071,11 +1959,7 @@ ut_json(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!json_object_is_type(src, json_type_string))
 		return ut_exception(s, off, "Passed value is not a string");
 
-	tok = json_tokener_new();
-
-	if (!tok)
-		return ut_exception(s, off, UT_ERRMSG_OOM);
-
+	tok = xjs_new_tokener();
 	str = json_object_get_string(src);
 	len = json_object_get_string_len(src);
 

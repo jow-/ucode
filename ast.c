@@ -52,7 +52,7 @@ ut_get_child(struct ut_state *s, uint32_t off, int n)
 uint32_t
 ut_new_op(struct ut_state *s, int type, struct json_object *val, ...)
 {
-	struct ut_op *newop, *pool;
+	struct ut_op *newop;
 	uint32_t child;
 	int n_op = 0;
 	va_list ap;
@@ -62,14 +62,9 @@ ut_new_op(struct ut_state *s, int type, struct json_object *val, ...)
 		exit(127);
 	}
 
-	pool = realloc(s->pool, (s->poolsize + 1) * sizeof(*newop));
+	s->pool = xrealloc(s->pool, (s->poolsize + 1) * sizeof(*newop));
 
-	if (!pool) {
-		fprintf(stderr, "Out of memory\n");
-		exit(127);
-	}
-
-	newop = &pool[s->poolsize];
+	newop = &s->pool[s->poolsize];
 	memset(newop, 0, sizeof(*newop));
 
 	newop->is_first = !s->poolsize;
@@ -85,7 +80,6 @@ ut_new_op(struct ut_state *s, int type, struct json_object *val, ...)
 
 	va_end(ap);
 
-	s->pool = pool;
 	s->poolsize++;
 
 	return s->poolsize;
@@ -145,6 +139,11 @@ ut_new_double(double v)
 {
 	struct json_object *d = json_object_new_double(v);
 
+	if (!d) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
 	json_object_set_serializer(d, double_rounded_to_string, NULL, NULL);
 
 	return d;
@@ -160,6 +159,11 @@ struct json_object *
 ut_new_null(void)
 {
 	struct json_object *d = json_object_new_boolean(false);
+
+	if (!d) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
 
 	json_object_set_serializer(d, null_obj_to_string, NULL, NULL);
 
@@ -177,19 +181,8 @@ obj_free(struct json_object *v, void *ud)
 
 struct json_object *
 ut_new_object(struct json_object *proto) {
-	struct json_object *val = json_object_new_object();
-	struct ut_op *op;
-
-	if (!val)
-		return NULL;
-
-	op = calloc(1, sizeof(*op));
-
-	if (!op) {
-		json_object_put(val);
-
-		return NULL;
-	}
+	struct json_object *val = xjs_new_object();
+	struct ut_op *op = xalloc(sizeof(*op));
 
 	op->val = val;
 	op->type = T_LBRACE;
@@ -220,20 +213,13 @@ re_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 
 	sprintbuf(pb, "%s/", strict ? "\"" : "");
 
-	s = json_object_new_string((char *)op + sizeof(*op) + sizeof(regex_t));
+	s = xjs_new_string((char *)op + sizeof(*op) + sizeof(regex_t));
 
-	if (s) {
-		if (strict) {
-			for (p = json_object_to_json_string(s) + 1, len = strlen(p) - 1; len > 0; len--, p++)
-				sprintbuf(pb, "%c", *p);
-		}
-		else {
-			sprintbuf(pb, "%s", json_object_get_string(s));
-		}
-	}
-	else {
-		sprintbuf(pb, "...");
-	}
+	if (strict)
+		for (p = json_object_to_json_string(s) + 1, len = strlen(p) - 1; len > 0; len--, p++)
+			sprintbuf(pb, "%c", *p);
+	else
+		sprintbuf(pb, "%s", json_object_get_string(s));
 
 	json_object_put(s);
 
@@ -251,11 +237,7 @@ ut_new_regexp(const char *source, bool icase, bool newline, bool global, char **
 	regex_t *re;
 	size_t len;
 
-	op = calloc(1, sizeof(*op) + sizeof(*re) + strlen(source) + 1);
-
-	if (!op)
-		return NULL;
-
+	op = xalloc(sizeof(*op) + sizeof(*re) + strlen(source) + 1);
 	re = (regex_t *)((char *)op + sizeof(*op));
 	strcpy((char *)op + sizeof(*op) + sizeof(*re), source);
 
@@ -275,18 +257,15 @@ ut_new_regexp(const char *source, bool icase, bool newline, bool global, char **
 
 	if (res != 0) {
 		len = regerror(res, re, NULL, 0);
-		*err = calloc(1, len);
+		*err = xalloc(len);
 
-		if (*err)
-			regerror(res, re, *err, len);
-
+		regerror(res, re, *err, len);
 		free(op);
 
 		return NULL;
 	}
 
-	//op->val = json_object_new_string(source);
-	op->val = json_object_new_object();
+	op->val = xjs_new_object();
 
 	if (!op->val) {
 		free(op);
@@ -332,19 +311,8 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 struct json_object *
 ut_new_func(struct ut_op *decl)
 {
-	struct json_object *val = json_object_new_object();
-	struct ut_op *op;
-
-	if (!val)
-		return NULL;
-
-	op = calloc(1, sizeof(*op));
-
-	if (!op) {
-		json_object_put(val);
-
-		return NULL;
-	}
+	struct json_object *val = xjs_new_object();
+	struct ut_op *op = xalloc(sizeof(*op));
 
 	op->val = val;
 	op->type = T_FUNC;
@@ -451,14 +419,7 @@ out:
 bool
 ut_register_extended_type(const char *name, struct json_object *proto, void (*freefn)(void *))
 {
-	struct ut_extended_type *tmp;
-
-	tmp = realloc(ut_ext_types, (ut_ext_types_count + 1) * sizeof(*tmp));
-
-	if (!tmp)
-		return false;
-
-	ut_ext_types = tmp;
+	ut_ext_types = xrealloc(ut_ext_types, (ut_ext_types_count + 1) * sizeof(*ut_ext_types));
 	ut_ext_types[ut_ext_types_count].name = name;
 	ut_ext_types[ut_ext_types_count].free = freefn;
 	ut_ext_types[ut_ext_types_count].proto = proto;
@@ -520,11 +481,7 @@ ut_set_extended_type(struct json_object *v, const char *name, void *data)
 	if (!et)
 		return NULL;
 
-	op = calloc(1, sizeof(*op));
-
-	if (!op)
-		return NULL;
-
+	op = xalloc(sizeof(*op));
 	op->val = v;
 	op->type = T_RESSOURCE;
 	op->tag.proto = json_object_get(et->proto);

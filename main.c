@@ -190,7 +190,7 @@ static bool stdin_used = false;
 
 static char *
 read_file(const char *path) {
-	char buf[64], *s = NULL, *tmp;
+	char buf[64], *s = NULL;
 	size_t rlen, tlen = 0;
 	FILE *fp = NULL;
 
@@ -218,16 +218,7 @@ read_file(const char *path) {
 		if (rlen == 0)
 			break;
 
-		tmp = realloc(s, tlen + rlen + 1);
-
-		if (!tmp) {
-			fprintf(stderr, "Out or memory\n");
-			free(s);
-			s = NULL;
-			goto out;
-		}
-
-		s = tmp;
+		s = xrealloc(s, tlen + rlen + 1);
 		memcpy(s + tlen, buf, rlen);
 		s[tlen + rlen] = 0;
 		tlen += rlen;
@@ -255,13 +246,7 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	state = calloc(1, sizeof(*state));
-
-	if (!state) {
-		rv = UT_ERROR_OUT_OF_MEMORY;
-		goto out;
-	}
-
+	state = xalloc(sizeof(*state));
 	state->lstrip_blocks = 1;
 	state->trim_blocks = 1;
 
@@ -331,7 +316,7 @@ main(int argc, char **argv)
 				goto out;
 			}
 
-			env = env ? env : json_object_new_object();
+			env = env ? env : xjs_new_object();
 
 			json_object_object_foreach(o, key, val)
 				json_object_object_add(env, key, json_object_get(val));
@@ -341,9 +326,9 @@ main(int argc, char **argv)
 			break;
 
 		case 'm':
-			modules = modules ? modules : json_object_new_array();
+			modules = modules ? modules : xjs_new_array();
 
-			json_object_array_add(modules, json_object_new_string(optarg));
+			json_object_array_add(modules, xjs_new_string(optarg));
 
 			break;
 		}
