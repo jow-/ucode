@@ -1797,7 +1797,6 @@ ut_run(struct ut_state *state, struct json_object *env, struct json_object *modu
 	rv = ut_invoke(state, state->main, NULL, entry, args);
 
 out:
-	json_object_put(scope);
 	json_object_put(entry);
 	json_object_put(args);
 	json_object_put(rv);
