@@ -2067,7 +2067,7 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 		json_object_put(scope);
 	}
 
-	if (ut_is_type(rv, UT_ERROR_EXCEPTION))
+	if (ut_is_type(rv, T_EXCEPTION))
 		return rv;
 
 	json_object_put(rv);
