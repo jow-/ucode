@@ -288,6 +288,9 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 	struct json_object *val, *scope, *next;
 	uint8_t i;
 
+	if (key)
+		*key = NULL;
+
 	if (op && op->type == T_DOT) {
 		if (key)
 			*key = off2 ? json_object_get(ut_get_op(state, off2)->val) : NULL;
