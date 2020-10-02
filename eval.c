@@ -1069,7 +1069,9 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *scope,
 
 	/* store the function "this" context in the proto member of the scope tag structure */
 	tag = json_object_get_userdata(s);
-	tag->tag.proto = json_object_get(state->ctx);
+
+	if (tag)
+		tag->tag.proto = json_object_get(state->ctx);
 
 	rv = ut_execute_op_sequence(state, decl->tree.operand[2]);
 	tag = json_object_get_userdata(rv);
@@ -1097,8 +1099,11 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *scope,
 
 	/* we left the function, remove the "this" context from the scope tag structure */
 	tag = json_object_get_userdata(s);
-	json_object_put(tag->tag.proto);
-	tag->tag.proto = NULL;
+
+	if (tag) {
+		json_object_put(tag->tag.proto);
+		tag->tag.proto = NULL;
+	}
 
 	if (!scope) {
 		state->stack.scope[--state->stack.off] = NULL;
