@@ -49,6 +49,9 @@ ut_exception(struct ut_state *state, uint32_t off, const char *fmt, ...)
 
 	json_object_set_userdata(msg, exception_tag, NULL);
 
+	if (state->error.code == UT_ERROR_EXCEPTION)
+		json_object_put(state->error.info.exception);
+
 	state->error.code = UT_ERROR_EXCEPTION;
 	state->error.info.exception = msg;
 
