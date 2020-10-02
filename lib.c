@@ -1574,7 +1574,7 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 static struct json_object *
 ut_require_utpl(struct ut_state *s, uint32_t off, const char *path)
 {
-	struct json_object *ex, *scope;
+	struct json_object *ex, *scope, *entry, *rv;
 	char *source, *msg;
 	struct stat st;
 	FILE *sfile;
@@ -1615,7 +1615,20 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path)
 	if (!scope)
 		return ut_exception(s, off, UT_ERRMSG_OOM);
 
-	return ut_invoke(s, off, scope, ut_get_op(s, s->main)->val, NULL);
+	entry = ut_new_func(ut_get_op(s, s->main));
+
+	if (!entry) {
+		json_object_put(scope);
+
+		return ut_exception(s, off, UT_ERRMSG_OOM);
+	}
+
+	rv = ut_invoke(s, off, scope, entry, NULL);
+
+	json_object_put(entry);
+	json_object_put(scope);
+
+	return rv;
 }
 
 static struct json_object *
