@@ -955,3 +955,34 @@ exception on parse errors, trailing garbage or premature EOF.
 json('{"a":true, "b":123}')   // { "a": true, "b": 123 }
 json('[1,2,')                 // Throws exception
 ```
+
+#### 6.50. `include(path, scope)`
+
+Evaluate and include the file at the given path and optionally override the
+execution scope with the given scope object.
+
+By default, the file is executed within the same scope as the calling
+`include()` but by passing an object as second argument, it is possible to
+override the scope available to the included file. This is useful to sandbox the
+included code and only grant it access to explicitely passed values and
+functions.
+
+If the given path argument is not absolute, it is interpreted relative to the
+directory of the current template file, that is the file that is invoking the
+`include()` function.
+
+If the utpl interpreter executes program code from stdin, the given path is
+interpreted relative to the current working directory of the process.
+
+```javascript
+// Load and execute "foo.utpl" immediately
+include("./foo.utpl")
+
+// Execute the "untrusted.utpl" in a sandboxed scope and make the "foo" and
+// "bar" variables as well as the "print" function available to it
+include("./untrusted.utpl", {
+  foo: true,
+  bar: 123,
+  print: print
+})
+```

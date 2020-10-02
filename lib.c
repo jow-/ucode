@@ -30,6 +30,7 @@
 #include <math.h>
 #include <time.h>
 #include <dlfcn.h>
+#include <libgen.h>
 #include <arpa/inet.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -1577,9 +1578,9 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 }
 
 static struct json_object *
-ut_require_utpl(struct ut_state *s, uint32_t off, const char *path)
+ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct json_object *scope)
 {
-	struct json_object *ex, *scope, *entry, *rv;
+	struct json_object *ex, *sc, *entry, *rv;
 	char *source, *msg;
 	struct stat st;
 	FILE *sfile;
@@ -1615,23 +1616,26 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path)
 
 	free(source);
 
-	scope = json_object_new_object();
+	sc = scope ? scope : json_object_new_object();
 
-	if (!scope)
+	if (!sc)
 		return ut_exception(s, off, UT_ERRMSG_OOM);
 
 	entry = ut_new_func(ut_get_op(s, s->main));
 
 	if (!entry) {
-		json_object_put(scope);
+		if (sc != scope)
+			json_object_put(sc);
 
 		return ut_exception(s, off, UT_ERRMSG_OOM);
 	}
 
-	rv = ut_invoke(s, off, scope, entry, NULL);
+	rv = ut_invoke(s, off, sc, entry, NULL);
 
 	json_object_put(entry);
-	json_object_put(scope);
+
+	if (sc != scope)
+		json_object_put(sc);
 
 	return rv;
 }
@@ -1672,7 +1676,7 @@ ut_require_path(struct ut_state *s, uint32_t off, const char *path_template, con
 	if (!strcmp(p, ".so"))
 		rv = ut_require_so(s, off, path);
 	else if (!strcmp(p, ".utpl"))
-		rv = ut_require_utpl(s, off, path);
+		rv = ut_require_utpl(s, off, path, NULL);
 
 	s->filename = filename;
 
@@ -2097,6 +2101,91 @@ ut_json(struct ut_state *s, uint32_t off, struct json_object *args)
 	return rv;
 }
 
+static char *
+include_path(const char *curpath, const char *incpath)
+{
+	char *dup, *res;
+	int len;
+
+	if (*incpath == '/')
+		return realpath(incpath, NULL);
+
+	if (curpath) {
+		dup = strdup(curpath);
+
+		if (!dup)
+			return NULL;
+
+		len = asprintf(&res, "%s/%s", dirname(dup), incpath);
+
+		free(dup);
+	}
+	else {
+		len = asprintf(&res, "./%s", incpath);
+	}
+
+	if (len == -1)
+		return NULL;
+
+	dup = realpath(res, NULL);
+
+	free(res);
+
+	return dup;
+}
+
+static struct json_object *
+ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *rv, *path = json_object_array_get_idx(args, 0);
+	struct json_object *scope = json_object_array_get_idx(args, 1);
+	struct json_object *prev_scope;
+	size_t prev_stack_offset;
+	char *p, *filename;
+
+	if (!json_object_is_type(path, json_type_string))
+		return ut_exception(s, off, "Passed filename is not a string");
+
+	if (scope && !json_object_is_type(scope, json_type_object))
+		return ut_exception(s, off, "Passed scope value is not an object");
+
+	p = include_path(s->filename, json_object_get_string(path));
+
+	if (!p)
+		return ut_exception(s, off, "Include file not found");
+
+	if (scope) {
+		prev_stack_offset = s->stack.off;
+		prev_scope = s->stack.scope[0];
+
+		s->stack.scope[0] = json_object_get(scope);
+		s->stack.off = 1;
+	}
+
+	filename = s->filename;
+	s->filename = p;
+
+	rv = ut_require_utpl(s, off, p, s->stack.scope[s->stack.off - 1]);
+
+	s->filename = filename;
+
+	free(p);
+
+	if (scope) {
+		s->stack.scope[0] = prev_scope;
+		s->stack.off = prev_stack_offset;
+
+		json_object_put(scope);
+	}
+
+	if (ut_is_type(rv, UT_ERROR_EXCEPTION))
+		return rv;
+
+	json_object_put(rv);
+
+	return NULL;
+}
+
 const struct ut_ops ut = {
 	.register_function = ut_register_function,
 	.register_type = ut_register_extended_type,
@@ -2152,6 +2241,7 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "match",		ut_match },
 	{ "replace",	ut_replace },
 	{ "json",		ut_json },
+	{ "include",	ut_include },
 };
 
 
