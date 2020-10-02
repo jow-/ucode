@@ -412,7 +412,7 @@ ut_push(struct ut_state *s, uint32_t off, struct json_object *args)
 		json_object_array_add(arr, json_object_get(item));
 	}
 
-	return item;
+	return json_object_get(item);
 }
 
 static struct json_object *
