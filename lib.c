@@ -125,8 +125,6 @@ format_error_context(char **msg, size_t *msglen, const char *path, const char *e
 
 		sprintf_append(msg, msglen, "^\n");
 	}
-
-	sprintf_append(msg, msglen, "\n");
 }
 
 char *

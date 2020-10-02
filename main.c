@@ -177,7 +177,7 @@ parse(struct ut_state *state, const char *source, bool dumponly,
 	if (err) {
 		msg = ut_format_error(state, source);
 
-		fprintf(stderr, "%s\n", msg);
+		fprintf(stderr, "%s\n\n", msg);
 		free(msg);
 	}
 
