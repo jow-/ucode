@@ -1519,13 +1519,20 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct json_
 		return ex;
 	}
 
-	free(source);
-
 	sc = scope ? scope : xjs_new_object();
 
 	entry = ut_new_func(ut_get_op(s, s->main));
 
 	rv = ut_invoke(s, off, sc, entry, NULL);
+
+	if (ut_is_type(rv, T_EXCEPTION)) {
+		msg = ut_format_error(s, source);
+		ut_putval(rv);
+		rv = ut_exception(s, off, "%s", msg);
+		free(msg);
+	}
+
+	free(source);
 
 	json_object_put(entry);
 
