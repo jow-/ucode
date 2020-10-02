@@ -582,6 +582,12 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 
 		scope = local ? ut_getscope(state, 0) : ut_getref(state, ut_get_off(state, ivar), NULL);
 
+		if (ut_is_type(scope, T_EXCEPTION)) {
+			ut_putval(val);
+
+			return scope;
+		}
+
 		if (json_object_is_type(val, json_type_array)) {
 			for (arridx = 0, arrlen = json_object_array_length(val);
 			     arridx < arrlen; arridx++) {
