@@ -938,8 +938,11 @@ ut_uci_foreach(struct ut_state *s, uint32_t off, struct json_object *args)
 		rv = ops->invoke(s, off, NULL, func, fnargs);
 
 		/* forward exceptions from callback function */
-		if (ut_is_type(rv, T_EXCEPTION))
+		if (ut_is_type(rv, T_EXCEPTION)) {
+			json_object_put(fnargs);
+
 			return rv;
+		}
 
 		ret = true;
 		stop = (json_object_is_type(rv, json_type_boolean) && !json_object_get_boolean(rv));
@@ -949,6 +952,8 @@ ut_uci_foreach(struct ut_state *s, uint32_t off, struct json_object *args)
 		if (stop)
 			break;
 	}
+
+	json_object_put(fnargs);
 
 	return json_object_new_boolean(ret);
 }
