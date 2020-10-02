@@ -397,6 +397,7 @@ ut_free(struct ut_state *s)
 		json_object_put(ut_ext_types[--ut_ext_types_count].proto);
 
 	free(ut_ext_types);
+	free(s->filename);
 	free(s);
 }
 

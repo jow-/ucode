@@ -280,6 +280,9 @@ main(int argc, char **argv)
 				goto out;
 			}
 
+			if (strcmp(optarg, "-"))
+				state->filename = strdup(optarg);
+
 			break;
 
 		case 'd':
@@ -349,6 +352,7 @@ main(int argc, char **argv)
 	if (!srcstr && !srcfile && argv[optind] != NULL) {
 		srcfile = read_file(argv[optind]);
 		state->skip_shebang = 1;
+		state->filename = strdup(argv[optind]);
 
 		if (!srcfile) {
 			rv = UT_ERROR_EXCEPTION;

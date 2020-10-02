@@ -47,7 +47,7 @@ run_testcase() {
 	local code=$6
 	local fail=0
 
-	./utpl -i "$in" >"$dir/res.out" 2>"$dir/res.err"
+	./utpl -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
 
 	printf "%d\n" $? > "$dir/res.code"
 

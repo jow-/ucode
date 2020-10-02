@@ -107,6 +107,7 @@ struct ut_state {
 		uint8_t off;
 	} stack;
 	struct json_object *ctx;
+	char *filename;
 };
 
 struct ut_extended_type {

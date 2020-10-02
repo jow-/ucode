@@ -70,7 +70,7 @@ snprintf_append(char **dptr, size_t *dlen, const char *fmt, ssize_t sz, ...)
 	snprintf_append(dptr, dlen, fmt, -1, ##__VA_ARGS__)
 
 static void
-format_error_context(char **msg, size_t *msglen, const char *expr, size_t off)
+format_error_context(char **msg, size_t *msglen, const char *path, const char *expr, size_t off)
 {
 	int eoff, eline, padlen;
 	const char *p, *nl;
@@ -86,7 +86,12 @@ format_error_context(char **msg, size_t *msglen, const char *expr, size_t off)
 
 	eoff = p - nl;
 
-	sprintf_append(msg, msglen, "In line %u, byte %d:\n\n `", eline + 1, eoff);
+	if (path)
+		sprintf_append(msg, msglen, "In %s, ", path);
+	else
+		sprintf_append(msg, msglen, "In ");
+
+	sprintf_append(msg, msglen, "line %u, byte %d:\n\n `", eline + 1, eoff);
 
 	for (p = nl, padlen = 0; *p != '\n' && *p != '\0'; p++) {
 		switch (*p) {
@@ -217,7 +222,7 @@ ut_format_error(struct ut_state *state, const char *expr)
 	}
 
 	if (off)
-		format_error_context(&msg, &msglen, expr, off);
+		format_error_context(&msg, &msglen, state->filename, expr, off);
 
 	return msg;
 }
@@ -1635,8 +1640,8 @@ static struct json_object *
 ut_require_path(struct ut_state *s, uint32_t off, const char *path_template, const char *name)
 {
 	struct json_object *rv = NULL;
+	char *path = NULL, *filename;
 	const char *p, *q, *last;
-	char *path = NULL;
 	size_t plen = 0;
 
 	p = strchr(path_template, '*');
@@ -1661,10 +1666,15 @@ ut_require_path(struct ut_state *s, uint32_t off, const char *path_template, con
 		}
 	}
 
+	filename = s->filename;
+	s->filename = path;
+
 	if (!strcmp(p, ".so"))
 		rv = ut_require_so(s, off, path);
 	else if (!strcmp(p, ".utpl"))
 		rv = ut_require_utpl(s, off, path);
+
+	s->filename = filename;
 
 invalid:
 	free(path);
