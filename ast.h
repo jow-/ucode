@@ -72,6 +72,7 @@ struct ut_op {
 			struct json_object *proto;
 			size_t type;
 			void *data;
+			uint32_t off;
 		} tag;
 		struct {
 			uint32_t next;

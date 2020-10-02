@@ -285,13 +285,11 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 	struct ut_op *op = json_object_get_userdata(v);
 	struct ut_op *base, *decl, *name, *args, *arg;
 
-	if (!op->tag.data)
-		return 0;
-
 	/* find start of operand array */
-	for (decl = op->tag.data, base = decl; base && !base->is_first; base--)
+	for (base = op; base && !base->is_first; base--)
 		;
 
+	decl = base + (op->tag.off ? op->tag.off - 1 : 0);
 	name = base + (decl->tree.operand[0] ? decl->tree.operand[0] - 1 : 0);
 	args = base + (decl->tree.operand[1] ? decl->tree.operand[1] - 1 : 0);
 
@@ -313,10 +311,15 @@ ut_new_func(struct ut_op *decl)
 {
 	struct json_object *val = xjs_new_object();
 	struct ut_op *op = xalloc(sizeof(*op));
+	struct ut_op *base;
+
+	/* find start of operand array */
+	for (base = decl; base && !base->is_first; base--)
+		;
 
 	op->val = val;
 	op->type = T_FUNC;
-	op->tag.data = decl;
+	op->tag.off = (decl - base) + 1;
 
 	json_object_set_serializer(val, func_to_string, op, obj_free);
 

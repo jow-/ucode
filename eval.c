@@ -1050,7 +1050,7 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *scope,
 		return cfn ? cfn(state, off, argvals) : NULL;
 	}
 
-	decl = tag->tag.data;
+	decl = ut_get_op(state, tag->tag.off);
 	arg = ut_get_op(state, decl ? decl->tree.operand[1] : 0);
 
 	s = scope ? scope : ut_addscope(state, ut_get_off(state, decl));
