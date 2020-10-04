@@ -1,0 +1,35 @@
+Testing closure scopes.
+
+
+1. Ensure that the declaring scope is retained in functions.
+
+-- Expect stdout --
+Make function with x=1
+Make function with x=2
+Make function with x=3
+x is 1
+x is 2
+x is 3
+-- End --
+
+-- Testcase --
+{%
+	local count=0;
+
+	function a() {
+		local x = ++count;
+		print("Make function with x=", x, "\n");
+		return function() {
+			print("x is ", x, "\n");
+		};
+	}
+
+	local fn1 = a();
+	local fn2 = a();
+	local fn3 = a();
+
+	fn1();
+	fn2();
+	fn3();
+%}
+-- End --

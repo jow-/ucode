@@ -527,7 +527,7 @@ ut_delete(struct ut_state *s, uint32_t off, struct json_object *args)
 		return NULL;
 
 	for (arrlen = json_object_array_length(args), arridx = 1; arridx < arrlen; arridx++) {
-		ut_putval(rv);
+		json_object_put(rv);
 
 		key = json_object_get_string(json_object_array_get_idx(args, arridx));
 		rv = json_object_get(json_object_object_get(obj, key ? key : "null"));
@@ -600,10 +600,10 @@ ut_filter(struct ut_state *s, uint32_t off, struct json_object *args)
 		if (ut_val_is_truish(rv))
 			json_object_array_add(arr, json_object_get(json_object_array_get_idx(obj, arridx)));
 
-		ut_putval(rv);
+		json_object_put(rv);
 	}
 
-	ut_putval(cmpargs);
+	json_object_put(cmpargs);
 
 	return arr;
 }
@@ -758,7 +758,7 @@ ut_map(struct ut_state *s, uint32_t off, struct json_object *args)
 		json_object_array_add(arr, ut_invoke(s, off, NULL, func, cmpargs));
 	}
 
-	ut_putval(cmpargs);
+	json_object_put(cmpargs);
 
 	return arr;
 }
@@ -875,7 +875,7 @@ sort_fn(const void *k1, const void *k2)
 	rv = ut_invoke(sort_ctx.s, sort_ctx.off, NULL, sort_ctx.fn, sort_ctx.args);
 	ret = !ut_val_is_truish(rv);
 
-	ut_putval(rv);
+	json_object_put(rv);
 
 	return ret;
 }
@@ -897,7 +897,7 @@ ut_sort(struct ut_state *s, uint32_t off, struct json_object *args)
 	}
 
 	json_object_array_sort(arr, sort_fn);
-	ut_putval(sort_ctx.args);
+	json_object_put(sort_ctx.args);
 
 	return json_object_get(arr);
 }
@@ -1489,9 +1489,9 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 }
 
 static struct json_object *
-ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct json_object *scope)
+ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct ut_scope *scope)
 {
-	struct json_object *ex, *sc, *entry, *rv;
+	struct json_object *ex, *entry, *rv;
 	char *source, *msg;
 	struct stat st;
 	FILE *sfile;
@@ -1519,15 +1519,13 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct json_
 		return ex;
 	}
 
-	sc = scope ? scope : xjs_new_object();
+	entry = ut_new_func(s, ut_get_op(s, s->main), scope ? scope : s->scope);
 
-	entry = ut_new_func(ut_get_op(s, s->main));
-
-	rv = ut_invoke(s, off, sc, entry, NULL);
+	rv = ut_invoke(s, off, NULL, entry, NULL);
 
 	if (ut_is_type(rv, T_EXCEPTION)) {
 		msg = ut_format_error(s, source);
-		ut_putval(rv);
+		json_object_put(rv);
 		rv = ut_exception(s, off, "%s", msg);
 		free(msg);
 	}
@@ -1535,9 +1533,6 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct json_
 	free(source);
 
 	json_object_put(entry);
-
-	if (sc != scope)
-		json_object_put(sc);
 
 	return rv;
 }
@@ -1593,14 +1588,25 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *val = json_object_array_get_idx(args, 0);
 	struct json_object *search, *se, *res;
+	struct ut_scope *sc, *scparent;
 	size_t arridx, arrlen;
 	const char *name;
 
 	if (!json_object_is_type(val, json_type_string))
 		return NULL;
 
+	/* find root scope */
+	for (sc = s->scope; sc; ) {
+		scparent = ut_parent_scope(sc);
+
+		if (!scparent)
+			break;
+
+		sc = scparent;
+	}
+
 	name = json_object_get_string(val);
-	search = json_object_object_get(s->stack.scope[0], "REQUIRE_SEARCH_PATH");
+	search = sc ? json_object_object_get(sc->scope, "REQUIRE_SEARCH_PATH") : NULL;
 
 	if (!json_object_is_type(search, json_type_array))
 		return ut_exception(s, off, "Global require search path not set");
@@ -2028,8 +2034,7 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *rv, *path = json_object_array_get_idx(args, 0);
 	struct json_object *scope = json_object_array_get_idx(args, 1);
-	struct json_object *prev_scope;
-	size_t prev_stack_offset;
+	struct ut_scope *sc;
 	char *p, *filename;
 
 	if (!json_object_is_type(path, json_type_string))
@@ -2044,28 +2049,26 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 		return ut_exception(s, off, "Include file not found");
 
 	if (scope) {
-		prev_stack_offset = s->stack.off;
-		prev_scope = s->stack.scope[0];
+		sc = ut_new_scope(s, NULL);
 
-		s->stack.scope[0] = json_object_get(scope);
-		s->stack.off = 1;
+		json_object_object_foreach(scope, key, val)
+			json_object_object_add(sc->scope, key, json_object_get(val));
+	}
+	else {
+		sc = s->scope;
 	}
 
 	filename = s->filename;
 	s->filename = p;
 
-	rv = ut_require_utpl(s, off, p, s->stack.scope[s->stack.off - 1]);
+	rv = ut_require_utpl(s, off, p, sc);
 
 	s->filename = filename;
 
 	free(p);
 
-	if (scope) {
-		s->stack.scope[0] = prev_scope;
-		s->stack.off = prev_stack_offset;
-
-		json_object_put(scope);
-	}
+	if (scope)
+		json_object_put(sc->scope);
 
 	if (ut_is_type(rv, T_EXCEPTION))
 		return rv;

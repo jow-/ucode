@@ -278,52 +278,151 @@ ut_new_regexp(const char *source, bool icase, bool newline, bool global, char **
 	return op->val;
 }
 
+static void
+func_free(struct json_object *v, void *ud)
+{
+	struct ut_op *op = ud;
+	struct ut_function *fn = op->tag.data;
+
+	json_object_put(fn->args);
+	ut_release_scope(fn->parent_scope);
+
+	free(op);
+}
+
 static int
 func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
 	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT);
 	struct ut_op *op = json_object_get_userdata(v);
-	struct ut_op *base, *decl, *name, *args, *arg;
-
-	/* find start of operand array */
-	for (base = op; base && !base->is_first; base--)
-		;
-
-	decl = base + (op->tag.off ? op->tag.off - 1 : 0);
-	name = base + (decl->tree.operand[0] ? decl->tree.operand[0] - 1 : 0);
-	args = base + (decl->tree.operand[1] ? decl->tree.operand[1] - 1 : 0);
+	struct ut_function *fn = op->tag.data;
+	size_t i;
 
 	sprintbuf(pb, "%sfunction%s%s(",
 	          strict ? "\"" : "",
-	          (name != base) ? " " : "",
-	          (name != base) ? json_object_get_string(name->val) : "");
+	          fn->name ? " " : "",
+	          fn->name ? fn->name : "");
 
-	for (arg = args; arg != base; arg = base + (arg->tree.next ? arg->tree.next - 1 : 0))
-		sprintbuf(pb, "%s%s",
-		          (arg != args) ? ", " : "",
-		          json_object_get_string(arg->val));
+	if (fn->args) {
+		for (i = 0; i < json_object_array_length(fn->args); i++) {
+			sprintbuf(pb, "%s%s",
+			          i ? ", " : "",
+			          json_object_get_string(json_object_array_get_idx(fn->args, i)));
+		}
+	}
 
 	return sprintbuf(pb, ") { ... }%s", strict ? "\"" : "");
 }
 
+#define ALIGN(x) (((x) + sizeof(size_t) - 1) & -sizeof(size_t))
+
 struct json_object *
-ut_new_func(struct ut_op *decl)
+ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 {
 	struct json_object *val = xjs_new_object();
-	struct ut_op *op = xalloc(sizeof(*op));
-	struct ut_op *base;
+	struct ut_op *op, *name, *args, *arg;
+	struct ut_function *fn;
+	size_t sz;
 
-	/* find start of operand array */
-	for (base = decl; base && !base->is_first; base--)
-		;
+	sz = ALIGN(sizeof(*op)) + ALIGN(sizeof(*fn));
+
+	name = ut_get_op(s, decl->tree.operand[0]);
+	args = ut_get_op(s, decl->tree.operand[1]);
+
+	if (name)
+		sz += ALIGN(json_object_get_string_len(name->val) + 1);
+
+	op = xalloc(sz);
+
+	fn = (void *)op + ALIGN(sizeof(*op));
+	fn->entry = decl->tree.operand[2];
+
+	if (name) {
+		fn->name = (char *)fn + ALIGN(sizeof(*fn));
+		strcpy(fn->name, json_object_get_string(name->val));
+	}
+
+	if (args) {
+		fn->args = xjs_new_array();
+
+		for (arg = args; arg; arg = ut_get_op(s, arg->tree.next))
+			json_object_array_add(fn->args, json_object_get(arg->val));
+	}
+
+	fn->parent_scope = ut_acquire_scope(scope);
 
 	op->val = val;
 	op->type = T_FUNC;
-	op->tag.off = (decl - base) + 1;
+	op->tag.data = fn;
 
-	json_object_set_serializer(val, func_to_string, op, obj_free);
+	json_object_set_serializer(val, func_to_string, op, func_free);
 
 	return op->val;
+}
+
+static void
+scope_free(struct json_object *v, void *ud)
+{
+	struct ut_scope *sc = ud;
+
+	if (sc->parent) {
+		ut_release_scope(json_object_get_userdata(sc->parent));
+		sc->parent = NULL;
+	}
+
+	sc->scope = NULL;
+}
+
+void
+ut_release_scope(struct ut_scope *sc)
+{
+	if (sc->refs == 0)
+		abort();
+
+	sc->refs--;
+
+	if (sc->refs == 0) {
+		json_object_put(sc->scope);
+		sc->scope = NULL;
+
+		if (sc->parent) {
+			ut_release_scope(json_object_get_userdata(sc->parent));
+			sc->parent = NULL;
+		}
+	}
+}
+
+struct ut_scope *
+ut_acquire_scope(struct ut_scope *sc)
+{
+	sc->refs++;
+
+	return sc;
+}
+
+struct ut_scope *
+ut_new_scope(struct ut_state *s, struct ut_scope *parent)
+{
+	struct ut_scope *sc;
+
+	sc = xalloc(sizeof(*sc));
+	sc->scope = xjs_new_object();
+
+	if (parent)
+		sc->parent = ut_acquire_scope(parent)->scope;
+
+	json_object_set_userdata(sc->scope, sc, scope_free);
+
+	sc->next = s->scopelist;
+	s->scopelist = sc;
+
+	return ut_acquire_scope(sc);
+}
+
+struct ut_scope *
+ut_parent_scope(struct ut_scope *scope)
+{
+	return json_object_get_userdata(scope->parent);
 }
 
 static void
@@ -343,15 +442,11 @@ ut_reset(struct ut_state *s)
 void
 ut_free(struct ut_state *s)
 {
+	struct ut_scope *sc, *sc_next;
 	size_t n;
 
 	if (s) {
 		json_object_put(s->ctx);
-
-		while (s->stack.off > 0)
-			json_object_put(s->stack.scope[--s->stack.off]);
-
-		free(s->stack.scope);
 
 		for (n = 0; n < s->poolsize; n++)
 			json_object_put(s->pool[n].val);
@@ -366,6 +461,18 @@ ut_free(struct ut_state *s)
 
 	while (ut_ext_types_count > 0)
 		json_object_put(ut_ext_types[--ut_ext_types_count].proto);
+
+	json_object_put(s->rval);
+
+	for (sc = s->scopelist; sc; sc = sc->next) {
+		json_object_put(sc->scope);
+		sc->scope = NULL;
+	}
+
+	for (sc = s->scopelist; sc; sc = sc_next) {
+		sc_next = sc->next;
+		free(sc);
+	}
 
 	free(ut_ext_types);
 	free(s->filename);

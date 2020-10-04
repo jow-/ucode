@@ -81,6 +81,19 @@ struct ut_op {
 	};
 };
 
+struct ut_scope {
+	struct ut_scope *next;
+	struct json_object *scope, *ctx, *parent;
+	size_t refs;
+};
+
+struct ut_function {
+	char *name;
+	struct json_object *args;
+	struct ut_scope *scope, *parent_scope;
+	uint32_t entry;
+};
+
 struct ut_state {
 	struct ut_op *pool;
 	uint32_t poolsize;
@@ -103,12 +116,8 @@ struct ut_state {
 			char *regexp_error;
 		} info;
 	} error;
-	struct {
-		struct json_object **scope;
-		uint8_t size;
-		uint8_t off;
-	} stack;
-	struct json_object *ctx;
+	struct ut_scope *scopelist, *scope;
+	struct json_object *ctx, *rval;
 	char *filename;
 };
 
@@ -137,11 +146,16 @@ uint32_t ut_append_op(struct ut_state *s, uint32_t a, uint32_t b);
 enum ut_error_type ut_parse(struct ut_state *s, const char *expr);
 void ut_free(struct ut_state *s);
 
-struct json_object *ut_new_func(struct ut_op *decl);
+struct json_object *ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope);
 struct json_object *ut_new_object(struct json_object *proto);
 struct json_object *ut_new_double(double v);
 struct json_object *ut_new_null(void);
 struct json_object *ut_new_regexp(const char *source, bool icase, bool newline, bool global, char **err);
+
+struct ut_scope *ut_new_scope(struct ut_state *s, struct ut_scope *parent);
+struct ut_scope *ut_parent_scope(struct ut_scope *scope);
+struct ut_scope *ut_acquire_scope(struct ut_scope *scope);
+void ut_release_scope(struct ut_scope *scope);
 
 bool ut_register_extended_type(const char *name, struct json_object *proto, void (*freefn)(void *));
 struct json_object *ut_set_extended_type(struct json_object *v, const char *name, void *data);
