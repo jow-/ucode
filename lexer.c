@@ -75,7 +75,6 @@ static const struct token tokens[] = {
 	{ T_ASSUB,		"-=",    2 },
 	{ T_DEC,		"--",    2 },
 	{ T_INC,		"++",    2 },
-	{ T_IF,			"if",    2 },
 	{ T_EQ,			"==",    2 },
 	{ T_NE,			"!=",    2 },
 	{ T_LE,			"<=",    2 },
@@ -146,6 +145,7 @@ static const struct token reserved_words[] = {
 	{ T_NUMBER,		"NaN",   3, parse_number },
 	{ T_TRY,		"try",   3 },
 	{ T_FOR,		"for",   3 },
+	{ T_IF,			"if",    2 },
 	{ T_IN,			"in",    2 },
 };
 
