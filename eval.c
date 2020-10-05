@@ -1003,6 +1003,7 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 	struct ut_op *tag = json_object_get_userdata(func);
 	struct json_object *rv = NULL;
 	struct ut_function *fn;
+	struct ut_scope *sc;
 	size_t arridx;
 	ut_c_fn *cfn;
 
@@ -1020,7 +1021,7 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 	fn->scope = ut_new_scope(state, fn->parent_scope);
 	fn->scope->ctx = json_object_get(this ? this : state->ctx);
 
-	ut_release_scope(state->scope);
+	sc = state->scope;
 	state->scope = ut_acquire_scope(fn->scope);
 
 	if (fn->args)
@@ -1048,7 +1049,7 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 
 	/* we left the function, pop the function scope... */
 	ut_release_scope(state->scope);
-	state->scope = ut_acquire_scope(ut_parent_scope(fn->scope));
+	state->scope = sc;
 
 	/* ... and remove the "this" context... */
 	json_object_put(fn->scope->ctx);
