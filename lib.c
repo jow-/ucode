@@ -177,11 +177,11 @@ ut_format_error(struct ut_state *state, const char *expr)
 		sprintf_append(&msg, &msglen, "Syntax error: Unexpected token\n");
 
 		for (i = 0, max_i = 0; i < sizeof(state->error.info.tokens) * 8; i++)
-			if ((state->error.info.tokens[i / 64] & ((unsigned)1 << (i % 64))) && tokennames[i])
+			if (ut_is_error_token(state, i) && tokennames[i])
 				max_i = i;
 
 		for (i = 0; i < sizeof(state->error.info.tokens) * 8; i++) {
-			if ((state->error.info.tokens[i / 64] & ((unsigned)1 << (i % 64))) && tokennames[i]) {
+			if (ut_is_error_token(state, i) && tokennames[i]) {
 				if (first) {
 					sprintf_append(&msg, &msglen, "Expecting %s", tokennames[i]);
 					first = false;

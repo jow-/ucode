@@ -140,6 +140,19 @@ static inline bool ut_is_type(struct json_object *val, int type) {
 	return (tag && tag->type == type);
 };
 
+
+#define UT_ET_DIV (sizeof(s->error.info.tokens[0]) * 8)
+#define UT_ET_TYPE typeof(s->error.info.tokens[0])
+
+static inline void ut_set_error_token(struct ut_state *s, int tokennr) {
+	s->error.info.tokens[tokennr / UT_ET_DIV] |= ((UT_ET_TYPE)1 << (tokennr % UT_ET_DIV));
+}
+
+static inline bool ut_is_error_token(struct ut_state *s, int tokennr) {
+	return (s->error.info.tokens[tokennr / UT_ET_DIV] & ((UT_ET_TYPE)1 << (tokennr % UT_ET_DIV)));
+}
+
+
 uint32_t ut_new_op(struct ut_state *s, int type, struct json_object *val, ...);
 uint32_t ut_wrap_op(struct ut_state *s, uint32_t parent, ...);
 uint32_t ut_append_op(struct ut_state *s, uint32_t a, uint32_t b);

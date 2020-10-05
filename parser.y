@@ -90,7 +90,7 @@ ut_no_empty_obj(struct ut_state *s, uint32_t off)
 
 	for (i = 0; i < sizeof(tokennames) / sizeof(tokennames[0]); i++)
 		if (yy_find_shift_action(yypParser, (YYCODETYPE)i) < YYNSTATE + YYNRULE)
-			s->error.info.tokens[i / 64] |= ((unsigned)1 << (i % 64));
+			ut_set_error_token(s, i);
 }
 
 
