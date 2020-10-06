@@ -23,3 +23,25 @@ true
 	print(o.test(), "\n");
 %}
 -- End --
+
+Test that the context is properly restored if function call arguments are
+dot or bracket expressions as well.
+
+-- Expect stdout --
+true
+true
+-- End --
+
+-- Testcase --
+{%
+	local o = {
+		test: function() {
+			return (this === o);
+		}
+	};
+
+	local dummy = { foo: true, bar: false };
+
+	print(o.test(dummy.foo, dummy.bar), "\n");
+	print(o.test(dummy.foo, o.test(dummy.foo, dummy.bar)), "\n");
+%}

@@ -746,6 +746,7 @@ ut_cmp(int how, struct json_object *v1, struct json_object *v2)
 static struct json_object *
 _ut_get_operands(struct ut_state *state, struct ut_op *op, size_t n, struct json_object **v)
 {
+	struct json_object *ctx = NULL;
 	struct ut_op *child;
 	size_t i, j;
 
@@ -759,13 +760,21 @@ _ut_get_operands(struct ut_state *state, struct ut_op *op, size_t n, struct json
 		else
 			v[i] = NULL;
 
+		if (i == 0)
+			ctx = json_object_get(state->ctx);
+
 		if (ut_is_type(v[i], T_EXCEPTION)) {
+			json_object_put(ctx);
+
 			for (j = 0; j < i; j++)
 				json_object_put(v[j]);
 
 			return v[i];
 		}
 	}
+
+	json_object_put(state->ctx);
+	state->ctx = ctx;
 
 	return NULL;
 }
