@@ -734,4 +734,8 @@ void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_obj
 	ops->register_type("fs.proc", proc_proto, close_proc);
 	ops->register_type("fs.file", file_proto, close_file);
 	ops->register_type("fs.dir", dir_proto, close_dir);
+
+	json_object_object_add(scope, "stdin",  ops->set_type(xjs_new_object(), "fs.file", stdin));
+	json_object_object_add(scope, "stdout", ops->set_type(xjs_new_object(), "fs.file", stdout));
+	json_object_object_add(scope, "stderr", ops->set_type(xjs_new_object(), "fs.file", stderr));
 }
