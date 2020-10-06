@@ -1449,6 +1449,9 @@ ut_execute_switch_case(struct ut_state *state, uint32_t off)
 			rv = NULL;
 			break;
 		}
+		else if (ut_is_type(rv, T_RETURN) || ut_is_type(rv, T_EXCEPTION) || ut_is_type(rv, T_CONTINUE)) {
+			break;
+		}
 	}
 
 	json_object_put(v[0]);

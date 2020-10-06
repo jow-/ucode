@@ -177,3 +177,96 @@ true
 	print(x, "\n");
 %}
 -- End --
+
+
+8. Ensure that `return` breaks out of switch statements.
+
+-- Expect stdout --
+one
+two
+-- End --
+
+-- Testcase --
+{%
+	function test(n) {
+		switch (n) {
+		case 1:
+			return "one";
+
+		case 2:
+			return "two";
+
+		default:
+			return "three";
+		}
+	}
+
+	print(test(1), "\n");
+	print(test(2), "\n");
+%}
+-- End --
+
+
+9. Ensure that `continue` breaks out of switch statements.
+
+-- Expect stdout --
+one
+two
+-- End --
+
+-- Testcase --
+{%
+	for (n in [1,2]) {
+		switch (n) {
+		case 1:
+			print("one\n");
+			continue;
+
+		case 2:
+			print("two\n");
+			continue;
+
+		default:
+			print("three\n");
+		}
+	}
+%}
+-- End --
+
+
+10. Ensure that exceptions break out of switch statements.
+
+-- Expect stdout --
+one
+-- End --
+
+-- Expect stderr --
+Died
+In line 6, byte 7:
+
+ `            die();`
+  Near here ------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	function test(n) {
+		switch (n) {
+		case 1:
+			print("one\n");
+			die();
+
+		case 2:
+			print("two\n");
+			die();
+
+		default:
+			print("three\n");
+		}
+	}
+
+	print(test(1), "\n");
+%}
+-- End --
