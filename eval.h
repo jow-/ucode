@@ -24,9 +24,6 @@
 
 #include "ast.h"
 
-__attribute__((format(printf, 3, 0))) struct json_object *
-ut_exception(struct ut_state *state, uint32_t op, const char *fmt, ...);
-
 bool
 ut_cmp(int how, struct json_object *v1, struct json_object *v2);
 

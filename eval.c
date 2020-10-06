@@ -26,38 +26,6 @@
 #include <stdarg.h>
 #include <regex.h>
 
-char exception_tag_space[sizeof(struct ut_op) + sizeof(struct ut_op *)];
-static struct ut_op *exception_tag = (struct ut_op *)exception_tag_space;
-
-__attribute__((format(printf, 3, 0))) struct json_object *
-ut_exception(struct ut_state *state, uint32_t off, const char *fmt, ...)
-{
-	struct json_object *msg;
-	va_list ap;
-	char *s;
-	int len;
-
-	va_start(ap, fmt);
-	len = xvasprintf(&s, fmt, ap);
-	va_end(ap);
-
-	msg = xjs_new_string_len(s, len);
-	free(s);
-
- 	exception_tag->type = T_EXCEPTION;
-	exception_tag->tree.operand[0] = off;
-
-	json_object_set_userdata(msg, exception_tag, NULL);
-
-	if (state->error.code == UT_ERROR_EXCEPTION)
-		json_object_put(state->error.info.exception);
-
-	state->error.code = UT_ERROR_EXCEPTION;
-	state->error.info.exception = msg;
-
-	return json_object_get(msg);
-}
-
 bool
 ut_val_is_truish(struct json_object *val)
 {

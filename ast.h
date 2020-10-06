@@ -165,6 +165,11 @@ struct json_object *ut_new_double(double v);
 struct json_object *ut_new_null(void);
 struct json_object *ut_new_regexp(const char *source, bool icase, bool newline, bool global, char **err);
 
+__attribute__((format(printf, 3, 0)))
+struct json_object *ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...);
+
+#define ut_exception ut_new_exception
+
 struct ut_scope *ut_new_scope(struct ut_state *s, struct ut_scope *parent);
 struct ut_scope *ut_parent_scope(struct ut_scope *scope);
 struct ut_scope *ut_acquire_scope(struct ut_scope *scope);

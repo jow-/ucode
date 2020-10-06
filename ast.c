@@ -370,6 +370,54 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 }
 
 static void
+exception_free(struct json_object *v, void *ud)
+{
+	free(ud);
+}
+
+__attribute__((format(printf, 3, 0))) struct json_object *
+ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
+{
+	struct ut_op *op, *failing_op;
+	va_list ap;
+	ssize_t sz;
+	char *p;
+
+	sz = ALIGN(sizeof(*op));
+
+	if (s->filename)
+		sz += ALIGN(strlen(s->filename) + 1);
+
+	failing_op = ut_get_op(s, off);
+
+	op = xalloc(sz);
+	op->type = T_EXCEPTION;
+	op->off = failing_op ? failing_op->off : 0;
+
+	if (s->filename) {
+		p = (char *)op + ALIGN(sizeof(*op));
+		op->tag.data = strcpy(p, s->filename);
+	}
+
+	va_start(ap, fmt);
+	sz = xvasprintf(&p, fmt, ap);
+	va_end(ap);
+
+	op->val = xjs_new_string_len(p, sz);
+	free(p);
+
+	json_object_set_userdata(op->val, op, exception_free);
+
+	if (s->error.code == UT_ERROR_EXCEPTION)
+		json_object_put(s->error.info.exception);
+
+	s->error.code = UT_ERROR_EXCEPTION;
+	s->error.info.exception = op->val;
+
+	return json_object_get(op->val);
+}
+
+static void
 scope_free(struct json_object *v, void *ud)
 {
 	struct ut_scope *sc = ud;

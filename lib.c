@@ -64,47 +64,29 @@ snprintf_append(char **dptr, size_t *dlen, const char *fmt, ssize_t sz, ...)
 	snprintf_append(dptr, dlen, fmt, -1, ##__VA_ARGS__)
 
 static void
-format_error_context(char **msg, size_t *msglen, const char *path, const char *expr, size_t off)
+format_context_line(char **msg, size_t *msglen, const char *line, size_t off)
 {
-	int eoff, eline, padlen;
-	const char *p, *nl;
-	int i;
+	const char *p;
+	int padlen, i;
 
-	/* skip lines until error line */
-	for (p = nl = expr, eline = 0; *p && p < expr + off; p++) {
-		if (*p == '\n') {
-			nl = p + 1;
-			eline++;
-		}
-	}
-
-	eoff = p - nl;
-
-	if (path)
-		sprintf_append(msg, msglen, "In %s, ", path);
-	else
-		sprintf_append(msg, msglen, "In ");
-
-	sprintf_append(msg, msglen, "line %u, byte %d:\n\n `", eline + 1, eoff);
-
-	for (p = nl, padlen = 0; *p != '\n' && *p != '\0'; p++) {
+	for (p = line, padlen = 0; *p != '\n' && *p != '\0'; p++) {
 		switch (*p) {
 		case '\t':
 			sprintf_append(msg, msglen, "    ");
-			if (p < nl + eoff)
+			if (p < line + off)
 				padlen += 4;
 			break;
 
 		case '\r':
 		case '\v':
 			sprintf_append(msg, msglen, " ");
-			if (p < nl + eoff)
+			if (p < line + off)
 				padlen++;
 			break;
 
 		default:
 			sprintf_append(msg, msglen, "%c", *p);
-			if (p < nl + eoff)
+			if (p < line + off)
 				padlen++;
 		}
 	}
@@ -127,14 +109,72 @@ format_error_context(char **msg, size_t *msglen, const char *path, const char *e
 	}
 }
 
+static void
+format_error_context(char **msg, size_t *msglen, const char *path, const char *expr, size_t off)
+{
+	const char *p, *nl;
+	size_t len, rlen;
+	bool truncated;
+	char buf[256];
+	int eline;
+	FILE *f;
+
+	if (path) {
+		f = fopen(path, "rb");
+
+		if (f) {
+			truncated = false;
+			eline = 1;
+			rlen = 0;
+
+			while (fgets(buf, sizeof(buf), f)) {
+				len = strlen(buf);
+				rlen += len;
+
+				if (rlen > off) {
+					sprintf_append(msg, msglen, "In %s, line %u, byte %d:\n\n `%s",
+					               path, eline, len - (rlen - off) + (truncated ? sizeof(buf) : 1),
+					               truncated ? "..." : "");
+
+					format_context_line(msg, msglen, buf,
+					                    len - (rlen - off) + (truncated ? 3 : 0));
+
+					break;
+				}
+
+				truncated = (len > 0 && buf[len-1] != '\n');
+				eline += !truncated;
+			}
+		}
+		else {
+			sprintf_append(msg, msglen, "In %s, byte offset %zu [Unable to read source context]\n",
+			               path, off);
+		}
+
+		fclose(f);
+	}
+	else if (expr) {
+		/* skip lines until error line */
+		for (p = nl = expr, eline = 1; *p && p < expr + off; p++) {
+			if (*p == '\n') {
+				nl = p + 1;
+				eline++;
+			}
+		}
+
+		sprintf_append(msg, msglen, "In line %u, byte %d:\n\n `", eline, p - nl);
+		format_context_line(msg, msglen, nl, p - nl);
+	}
+}
+
 char *
 ut_format_error(struct ut_state *state, const char *expr)
 {
+	char *msg = NULL, *filename = state->filename;
 	size_t off = state ? state->off : 0;
 	struct ut_op *tag;
 	bool first = true;
 	size_t msglen = 0;
-	char *msg = NULL;
 	int i, max_i;
 
 	switch (state ? state->error.code : UT_ERROR_OUT_OF_MEMORY) {
@@ -207,14 +247,18 @@ ut_format_error(struct ut_state *state, const char *expr)
 
 	case UT_ERROR_EXCEPTION:
 		tag = json_object_get_userdata(state->error.info.exception);
-		off = (tag && tag->tree.operand[0]) ? ut_get_op(state, tag->tree.operand[0])->off : 0;
+
+		if (tag && tag->type == T_EXCEPTION) {
+			off = tag->off;
+			filename = tag->tag.data;
+		}
 
 		sprintf_append(&msg, &msglen, "%s\n", json_object_get_string(state->error.info.exception));
 		break;
 	}
 
 	if (off)
-		format_error_context(&msg, &msglen, state->filename, expr, off);
+		format_error_context(&msg, &msglen, filename, expr, off);
 
 	return msg;
 }
