@@ -381,15 +381,8 @@ ut_release_scope(struct ut_scope *sc)
 
 	sc->refs--;
 
-	if (sc->refs == 0) {
+	if (sc->refs == 0)
 		json_object_put(sc->scope);
-		sc->scope = NULL;
-
-		if (sc->parent) {
-			ut_release_scope(json_object_get_userdata(sc->parent));
-			sc->parent = NULL;
-		}
-	}
 }
 
 struct ut_scope *
