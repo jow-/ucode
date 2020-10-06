@@ -341,7 +341,7 @@ ut_register_function(struct json_object *scope, const char *name, ut_c_fn *fn)
 }
 
 static struct json_object *
-ut_print(struct ut_state *s, uint32_t off, struct json_object *args)
+ut_print_common(struct ut_state *s, uint32_t off, struct json_object *args, FILE *fh)
 {
 	struct json_object *item;
 	size_t arridx, arrlen;
@@ -363,10 +363,17 @@ ut_print(struct ut_state *s, uint32_t off, struct json_object *args)
 			len = strlen(p);
 		}
 
-		reslen += fwrite(p, 1, len, stdout);
+		reslen += fwrite(p, 1, len, fh);
 	}
 
 	return xjs_new_int64(reslen);
+}
+
+
+static struct json_object *
+ut_print(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	return ut_print_common(s, off, args, stdout);
 }
 
 static struct json_object *
@@ -2122,6 +2129,12 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 	return NULL;
 }
 
+static struct json_object *
+ut_warn(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	return ut_print_common(s, off, args, stderr);
+}
+
 const struct ut_ops ut = {
 	.register_function = ut_register_function,
 	.register_type = ut_register_extended_type,
@@ -2178,6 +2191,7 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "replace",	ut_replace },
 	{ "json",		ut_json },
 	{ "include",	ut_include },
+	{ "warn",		ut_warn },
 };
 
 

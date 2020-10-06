@@ -986,3 +986,10 @@ include("./untrusted.utpl", {
   print: print
 })
 ```
+
+#### 6.51. `warn(x, ...)`
+
+Print any of the given values to stderr. Arrays and objects are converted to
+their JSON representation.
+
+Returns the amount of bytes printed.
