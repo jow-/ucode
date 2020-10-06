@@ -1004,6 +1004,7 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 	struct json_object *rv = NULL;
 	struct ut_function *fn;
 	struct ut_scope *sc;
+	char *filename;
 	size_t arridx;
 	ut_c_fn *cfn;
 
@@ -1022,7 +1023,10 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 	fn->scope->ctx = json_object_get(this ? this : state->ctx);
 
 	sc = state->scope;
+	filename = state->filename;
+
 	state->scope = ut_acquire_scope(fn->scope);
+	state->filename = fn->filename;
 
 	if (fn->args)
 		for (arridx = 0; arridx < json_object_array_length(fn->args); arridx++)
@@ -1055,9 +1059,12 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 	json_object_put(fn->scope->ctx);
 	fn->scope->ctx = NULL;
 
-	/* ... and reset the function scope */
+	/* ... and reset the function scope... */
 	ut_release_scope(fn->scope);
 	fn->scope = NULL;
+
+	/* ... and the file name context */
+	state->filename = filename;
 
 	return rv;
 }

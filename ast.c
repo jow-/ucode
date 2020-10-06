@@ -323,6 +323,7 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 	struct ut_op *op, *name, *args, *arg;
 	struct ut_function *fn;
 	size_t sz;
+	char *p;
 
 	sz = ALIGN(sizeof(*op)) + ALIGN(sizeof(*fn));
 
@@ -332,15 +333,23 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 	if (name)
 		sz += ALIGN(json_object_get_string_len(name->val) + 1);
 
+	if (s->filename)
+		sz += ALIGN(strlen(s->filename) + 1);
+
 	op = xalloc(sz);
 
 	fn = (void *)op + ALIGN(sizeof(*op));
 	fn->entry = decl->tree.operand[2];
 
+	p = (char *)fn + ALIGN(sizeof(*fn));
+
 	if (name) {
-		fn->name = (char *)fn + ALIGN(sizeof(*fn));
-		strcpy(fn->name, json_object_get_string(name->val));
+		fn->name = strcpy(p, json_object_get_string(name->val));
+		p += ALIGN(json_object_get_string_len(name->val) + 1);
 	}
+
+	if (s->filename)
+		fn->filename = strcpy(p, s->filename);
 
 	if (args) {
 		fn->args = xjs_new_array();

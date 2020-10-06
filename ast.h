@@ -88,7 +88,7 @@ struct ut_scope {
 };
 
 struct ut_function {
-	char *name;
+	char *name, *filename;
 	struct json_object *args;
 	struct ut_scope *scope, *parent_scope;
 	uint32_t entry;
