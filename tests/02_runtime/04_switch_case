@@ -89,10 +89,10 @@ default
 
 -- Expect stderr --
 Syntax error: more than one switch default case
-In line 6, byte 9:
+In line 6, byte 2:
 
  `        default:`
-  Near here -----^
+          ^-- Near here
 
 
 -- End --
@@ -242,10 +242,10 @@ one
 
 -- Expect stderr --
 Died
-In line 6, byte 7:
+In line 6, byte 6:
 
  `            die();`
-  Near here ------^
+  Near here -----^
 
 
 -- End --

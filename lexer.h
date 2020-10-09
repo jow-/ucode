@@ -24,12 +24,13 @@
 #define T_CFUNC		(__T_MAX + 1)
 #define T_RESSOURCE	(__T_MAX + 2)
 
-extern const char *tokennames[__T_MAX];
-
 bool
 utf8enc(char **out, int *rem, int code);
 
 uint32_t
-ut_get_token(struct ut_state *s, const char *input, int *mlen);
+ut_get_token(struct ut_state *s, FILE *fp);
+
+const char *
+ut_get_tokenname(int type);
 
 #endif /* __LEXER_H_ */

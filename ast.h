@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <string.h>
 
 #ifdef JSONC
 	#include <json.h>
@@ -47,11 +48,16 @@ enum ut_error_type {
 	UT_ERROR_EXCEPTION
 };
 
-enum ut_block_type {
-	UT_BLOCK_NONE,
-	UT_BLOCK_STATEMENT,
-	UT_BLOCK_EXPRESSION,
-	UT_BLOCK_COMMENT
+enum ut_lex_state {
+	UT_LEX_IDENTIFY_BLOCK,
+	UT_LEX_BLOCK_COMMENT_START,
+	UT_LEX_BLOCK_EXPRESSION_START,
+	UT_LEX_BLOCK_EXPRESSION_EMIT_TAG,
+	UT_LEX_BLOCK_STATEMENT_START,
+	UT_LEX_BLOCK_COMMENT,
+	UT_LEX_IDENTIFY_TOKEN,
+	UT_LEX_PARSE_TOKEN,
+	UT_LEX_EOF
 };
 
 struct ut_op {
@@ -98,16 +104,31 @@ struct ut_state {
 	struct ut_op *pool;
 	uint32_t poolsize;
 	uint32_t main;
-	uint8_t semicolon_emitted:1;
-	uint8_t start_tag_seen:1;
 	uint8_t srand_called:1;
 	uint8_t trim_blocks:1;
 	uint8_t lstrip_blocks:1;
 	uint8_t strict_declarations:1;
 	uint8_t skip_shebang:1;
-	uint8_t expect_div:1;
-	size_t off;
-	enum ut_block_type blocktype;
+	struct {
+		enum ut_lex_state state;
+		uint8_t eof:1;
+		uint8_t skip_leading_whitespace:1;
+		uint8_t skip_leading_newline:1;
+		uint8_t within_expression_block:1;
+		uint8_t within_statement_block:1;
+		uint8_t semicolon_emitted:1;
+		uint8_t expect_div:1;
+		uint8_t is_escape:1;
+		size_t buflen;
+		char *buf, *bufstart, *bufend;
+		size_t lookbehindlen;
+		char *lookbehind;
+		const void *tok;
+		char esc[5];
+		uint8_t esclen;
+		int lead_surrogate;
+		size_t off, lastoff;
+	} lex;
 	struct {
 		enum ut_error_type code;
 		union {

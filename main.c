@@ -74,7 +74,7 @@ static void dump_node(struct ut_op *op) {
 	case T_STRING:
 	case T_LABEL:
 	case T_TEXT:
-		printf("n%p [label=\"%s<", op, tokennames[op->type]);
+		printf("n%p [label=\"%s<", op, ut_get_tokenname(op->type));
 
 		for (p = json_object_get_string(op->val); *p; p++)
 			switch (*p) {
@@ -98,7 +98,7 @@ static void dump_node(struct ut_op *op) {
 		break;
 
 	default:
-		printf("n%p [label=\"%s", op, tokennames[op->type]);
+		printf("n%p [label=\"%s", op, ut_get_tokenname(op->type));
 
 		if (op->is_postfix)
 			printf(", postfix");

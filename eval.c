@@ -1019,7 +1019,7 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 		json_object_put(rv);
 		rv = ut_exception(state, ut_get_off(state, tag),
 		                  "Syntax error: %s statement must be inside loop",
-		                  tokennames[tag->type]);
+		                  ut_get_tokenname(tag->type));
 		break;
 
 	case T_RETURN:

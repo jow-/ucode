@@ -171,7 +171,7 @@ char *
 ut_format_error(struct ut_state *state, const char *expr)
 {
 	char *msg = NULL, *filename = state->filename;
-	size_t off = state ? state->off : 0;
+	size_t off = state ? state->lex.off : 0;
 	struct ut_op *tag;
 	bool first = true;
 	size_t msglen = 0;
@@ -217,20 +217,20 @@ ut_format_error(struct ut_state *state, const char *expr)
 		sprintf_append(&msg, &msglen, "Syntax error: Unexpected token\n");
 
 		for (i = 0, max_i = 0; i < sizeof(state->error.info.tokens) * 8; i++)
-			if (ut_is_error_token(state, i) && tokennames[i])
+			if (ut_is_error_token(state, i))
 				max_i = i;
 
 		for (i = 0; i < sizeof(state->error.info.tokens) * 8; i++) {
-			if (ut_is_error_token(state, i) && tokennames[i]) {
+			if (ut_is_error_token(state, i)) {
 				if (first) {
-					sprintf_append(&msg, &msglen, "Expecting %s", tokennames[i]);
+					sprintf_append(&msg, &msglen, "Expecting %s", ut_get_tokenname(i));
 					first = false;
 				}
 				else if (i < max_i) {
-					sprintf_append(&msg, &msglen, ", %s", tokennames[i]);
+					sprintf_append(&msg, &msglen, ", %s", ut_get_tokenname(i));
 				}
 				else {
-					sprintf_append(&msg, &msglen, " or %s", tokennames[i]);
+					sprintf_append(&msg, &msglen, " or %s", ut_get_tokenname(i));
 				}
 			}
 		}

@@ -69,7 +69,6 @@ ut_new_op(struct ut_state *s, int type, struct json_object *val, ...)
 
 	newop->is_first = !s->poolsize;
 	newop->is_op = true;
-	newop->off = s->off;
 	newop->type = type;
 	newop->val = val;
 
@@ -478,15 +477,16 @@ ut_parent_scope(struct ut_scope *scope)
 static void
 ut_reset(struct ut_state *s)
 {
-	s->semicolon_emitted = false;
-	s->start_tag_seen = false;
-	s->blocktype = UT_BLOCK_NONE;
-	s->off = 0;
-
 	if (s->error.code == UT_ERROR_EXCEPTION)
 		json_object_put(s->error.info.exception);
+	else if (s->error.code == UT_ERROR_INVALID_REGEXP)
+		free(s->error.info.regexp_error);
 
 	memset(&s->error, 0, sizeof(s->error));
+
+	free(s->lex.lookbehind);
+	free(s->lex.buf);
+	memset(&s->lex, 0, sizeof(s->lex));
 }
 
 void
@@ -532,11 +532,9 @@ ut_free(struct ut_state *s)
 enum ut_error_type
 ut_parse(struct ut_state *s, const char *expr)
 {
-	int len = strlen(expr);
-	const char *ptr = expr;
+	FILE *fp = fmemopen((char *)expr, strlen(expr), "r");
 	struct ut_op *op;
 	void *pParser;
-	int mlen = 0;
 	uint32_t off;
 
 	if (!s)
@@ -549,29 +547,26 @@ ut_parse(struct ut_state *s, const char *expr)
 	if (!pParser)
 		return UT_ERROR_OUT_OF_MEMORY;
 
-	while (len > 0) {
-		off = ut_get_token(s, ptr, &mlen);
+	while (s->lex.state != UT_LEX_EOF) {
+		off = ut_get_token(s, fp);
 		op = ut_get_op(s, off);
 
-		if (mlen < 0) {
-			s->error.code = -mlen;
+		if (s->error.code)
 			goto out;
-		}
 
 		if (op)
 			Parse(pParser, op->type, off, s);
 
 		if (s->error.code)
 			goto out;
-
-		len -= mlen;
-		ptr += mlen;
 	}
 
 	Parse(pParser, 0, 0, s);
 
 out:
 	ParseFree(pParser, free);
+
+	fclose(fp);
 
 	return s->error.code;
 }
