@@ -36,7 +36,7 @@
 #include <sys/types.h>
 
 
-static void
+__attribute__((format(printf, 3, 5))) static void
 snprintf_append(char **dptr, size_t *dlen, const char *fmt, ssize_t sz, ...)
 {
 	va_list ap;
@@ -110,68 +110,88 @@ format_context_line(char **msg, size_t *msglen, const char *line, size_t off)
 }
 
 static void
-format_error_context(char **msg, size_t *msglen, const char *path, const char *expr, size_t off)
+format_error_context(char **msg, size_t *msglen, const char *path, FILE *fp, struct json_object *stacktrace, size_t off)
 {
-	const char *p, *nl;
-	size_t len, rlen;
+	struct json_object *e, *fn, *file;
+	size_t len, rlen, idx;
 	bool truncated;
 	char buf[256];
 	int eline;
-	FILE *f;
 
-	if (path) {
-		f = fopen(path, "rb");
+	if (stacktrace) {
+		for (idx = 0; idx < json_object_array_length(stacktrace); idx++) {
+			e = json_object_array_get_idx(stacktrace, idx);
+			fn = json_object_object_get(e, "function");
+			file = json_object_object_get(e, "filename");
 
-		if (f) {
-			truncated = false;
-			eline = 1;
-			rlen = 0;
+			if (idx == 0) {
+				path = (file && strcmp(json_object_get_string(file), "[stdin]"))
+					? json_object_get_string(file) : NULL;
 
-			while (fgets(buf, sizeof(buf), f)) {
-				len = strlen(buf);
-				rlen += len;
+				if (path && fn)
+					sprintf_append(msg, msglen, "In %s(), file %s, ",
+					               json_object_get_string(fn), path);
+				else if (fn)
+					sprintf_append(msg, msglen, "In %s(), ",
+					               json_object_get_string(fn));
+				else if (path)
+					sprintf_append(msg, msglen, "In %s, ", path);
+				else
+					sprintf_append(msg, msglen, "In ");
 
-				if (rlen > off) {
-					sprintf_append(msg, msglen, "In %s, line %u, byte %d:\n\n `%s",
-					               path, eline, len - (rlen - off) + (truncated ? sizeof(buf) : 1),
-					               truncated ? "..." : "");
-
-					format_context_line(msg, msglen, buf,
-					                    len - (rlen - off) + (truncated ? 3 : 0));
-
-					break;
-				}
-
-				truncated = (len > 0 && buf[len-1] != '\n');
-				eline += !truncated;
+				sprintf_append(msg, msglen, "line %" PRId64 ", byte %" PRId64 ":\n",
+				               json_object_get_int64(json_object_object_get(e, "line")),
+				               json_object_get_int64(json_object_object_get(e, "byte")));
+			}
+			else {
+				sprintf_append(msg, msglen, "  at %s%s (%s:%" PRId64 ":%" PRId64 ")\n",
+				               fn ? "function " : "main function",
+				               fn ? json_object_get_string(fn) : "",
+				               json_object_get_string(file),
+				               json_object_get_int64(json_object_object_get(e, "line")),
+				               json_object_get_int64(json_object_object_get(e, "byte")));
 			}
 		}
-		else {
-			sprintf_append(msg, msglen, "In %s, byte offset %zu [Unable to read source context]\n",
-			               path, off);
-		}
-
-		fclose(f);
 	}
-	else if (expr) {
-		/* skip lines until error line */
-		for (p = nl = expr, eline = 1; *p && p < expr + off; p++) {
-			if (*p == '\n') {
-				nl = p + 1;
-				eline++;
+
+	fseek(fp, 0, SEEK_SET);
+
+	truncated = false;
+	eline = 1;
+	rlen = 0;
+
+	while (fgets(buf, sizeof(buf), fp)) {
+		len = strlen(buf);
+		rlen += len;
+
+		if (rlen > off) {
+			if (!stacktrace) {
+				if (path && strcmp(path, "[stdin]"))
+					sprintf_append(msg, msglen, "In %s, ", path);
+				else
+					sprintf_append(msg, msglen, "In ");
+
+				sprintf_append(msg, msglen, "line %d, byte %zu:\n",
+				               eline, len - (rlen - off) + (truncated ? sizeof(buf) : 0));
 			}
+
+			sprintf_append(msg, msglen, "\n `%s", truncated ? "..." : "");
+			format_context_line(msg, msglen, buf, len - (rlen - off) + (truncated ? 3 : 0));
+
+			break;
 		}
 
-		sprintf_append(msg, msglen, "In line %u, byte %d:\n\n `", eline, p - nl);
-		format_context_line(msg, msglen, nl, p - nl);
+		truncated = (len > 0 && buf[len-1] != '\n');
+		eline += !truncated;
 	}
 }
 
 char *
-ut_format_error(struct ut_state *state, const char *expr)
+ut_format_error(struct ut_state *state, FILE *fp)
 {
-	char *msg = NULL, *filename = state->filename;
-	size_t off = state ? state->lex.off : 0;
+	char *msg = NULL, *filename = state->source->filename;
+	struct json_object *stacktrace = NULL;
+	size_t off = state ? state->source->off : 0;
 	struct ut_op *tag;
 	bool first = true;
 	size_t msglen = 0;
@@ -253,12 +273,16 @@ ut_format_error(struct ut_state *state, const char *expr)
 			filename = tag->tag.data;
 		}
 
-		sprintf_append(&msg, &msglen, "%s\n", json_object_get_string(state->error.info.exception));
+		stacktrace = json_object_object_get(state->error.info.exception, "stacktrace");
+
+		sprintf_append(&msg, &msglen, "%s\n",
+		               json_object_get_string(json_object_object_get(state->error.info.exception, "message")));
+
 		break;
 	}
 
 	if (off)
-		format_error_context(&msg, &msglen, filename, expr, off);
+		format_error_context(&msg, &msglen, filename, fp, stacktrace, off);
 
 	return msg;
 }
@@ -1543,28 +1567,32 @@ static struct json_object *
 ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct ut_scope *scope)
 {
 	struct json_object *ex, *entry, *rv;
-	char *source, *msg;
+	struct ut_source *src;
 	struct stat st;
-	FILE *sfile;
+	char *msg;
 
 	if (stat(path, &st))
 		return NULL;
 
-	sfile = fopen(path, "rb");
+	src = xalloc(sizeof(*src));
+	src->fp = fopen(path, "rb");
 
-	if (!sfile)
+	if (!src->fp) {
+		free(src);
+
 		return ut_exception(s, off, "Unable to open file %s: %s", path, strerror(errno));
+	}
 
-	source = xalloc(st.st_size + 1);
+	src->next = s->sources;
+	s->sources = src;
+	s->source = src;
 
-	fread(source, 1, st.st_size, sfile);
-	fclose(sfile);
-
-	if (ut_parse(s, source)) {
-		msg = ut_format_error(s, source);
+	if (ut_parse(s, src->fp)) {
+		msg = ut_format_error(s, src->fp);
 		ex = ut_exception(s, off, "Module loading failed: %s", msg);
 
-		free(source);
+		fclose(src->fp);
+		free(src);
 		free(msg);
 
 		return ex;
@@ -1575,15 +1603,15 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct ut_sc
 	rv = ut_invoke(s, off, NULL, entry, NULL);
 
 	if (ut_is_type(rv, T_EXCEPTION)) {
-		msg = ut_format_error(s, source);
+		msg = ut_format_error(s, src->fp);
 		json_object_put(rv);
 		rv = ut_exception(s, off, "%s", msg);
 		free(msg);
 	}
 
-	free(source);
-
 	json_object_put(entry);
+
+	s->source = src->next;
 
 	return rv;
 }
@@ -1592,8 +1620,8 @@ static struct json_object *
 ut_require_path(struct ut_state *s, uint32_t off, const char *path_template, const char *name)
 {
 	struct json_object *rv = NULL;
-	char *path = NULL, *filename;
 	const char *p, *q, *last;
+	char *path = NULL;
 	size_t plen = 0;
 
 	p = strchr(path_template, '*');
@@ -1618,15 +1646,10 @@ ut_require_path(struct ut_state *s, uint32_t off, const char *path_template, con
 		}
 	}
 
-	filename = s->filename;
-	s->filename = path;
-
 	if (!strcmp(p, ".so"))
 		rv = ut_require_so(s, off, path);
 	else if (!strcmp(p, ".utpl"))
 		rv = ut_require_utpl(s, off, path, NULL);
-
-	s->filename = filename;
 
 invalid:
 	free(path);
@@ -2086,7 +2109,7 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 	struct json_object *rv, *path = json_object_array_get_idx(args, 0);
 	struct json_object *scope = json_object_array_get_idx(args, 1);
 	struct ut_scope *sc;
-	char *p, *filename;
+	char *p;
 
 	if (!json_object_is_type(path, json_type_string))
 		return ut_exception(s, off, "Passed filename is not a string");
@@ -2094,7 +2117,7 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (scope && !json_object_is_type(scope, json_type_object))
 		return ut_exception(s, off, "Passed scope value is not an object");
 
-	p = include_path(s->filename, json_object_get_string(path));
+	p = include_path(s->source->filename, json_object_get_string(path));
 
 	if (!p)
 		return ut_exception(s, off, "Include file not found");
@@ -2109,12 +2132,7 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 		sc = s->scope;
 	}
 
-	filename = s->filename;
-	s->filename = p;
-
 	rv = ut_require_utpl(s, off, p, sc);
-
-	s->filename = filename;
 
 	free(p);
 

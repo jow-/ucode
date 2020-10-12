@@ -93,11 +93,26 @@ struct ut_scope {
 	size_t refs;
 };
 
+struct ut_source {
+	struct ut_source *next;
+	char *filename;
+	uint32_t off;
+	FILE *fp;
+};
+
 struct ut_function {
-	char *name, *filename;
+	char *name;
 	struct json_object *args;
 	struct ut_scope *scope, *parent_scope;
+	struct ut_source *source;
 	uint32_t entry;
+};
+
+struct ut_callstack {
+	struct ut_callstack *next;
+	struct ut_source *source;
+	char *funcname;
+	uint32_t off;
 };
 
 struct ut_state {
@@ -127,7 +142,7 @@ struct ut_state {
 		char esc[5];
 		uint8_t esclen;
 		int lead_surrogate;
-		size_t off, lastoff;
+		size_t lastoff;
 	} lex;
 	struct {
 		enum ut_error_type code;
@@ -137,9 +152,11 @@ struct ut_state {
 			char *regexp_error;
 		} info;
 	} error;
-	struct ut_scope *scopelist, *scope;
 	struct json_object *ctx, *rval;
-	char *filename;
+	struct ut_scope *scopelist, *scope;
+	struct ut_source *sources, *source;
+	struct ut_callstack *callstack;
+	struct ut_function *function;
 };
 
 struct ut_extended_type {
@@ -177,7 +194,7 @@ static inline bool ut_is_error_token(struct ut_state *s, int tokennr) {
 uint32_t ut_new_op(struct ut_state *s, int type, struct json_object *val, ...);
 uint32_t ut_wrap_op(struct ut_state *s, uint32_t parent, ...);
 uint32_t ut_append_op(struct ut_state *s, uint32_t a, uint32_t b);
-enum ut_error_type ut_parse(struct ut_state *s, const char *expr);
+enum ut_error_type ut_parse(struct ut_state *s, FILE *fp);
 void ut_free(struct ut_state *s);
 
 struct json_object *ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope);
@@ -227,6 +244,17 @@ static inline void *xalloc(size_t size) {
 
 static inline void *xrealloc(void *ptr, size_t size) {
 	ptr = realloc(ptr, size);
+
+	if (!ptr) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return ptr;
+}
+
+static inline char *xstrdup(const char *s) {
+	char *ptr = strdup(s);
 
 	if (!ptr) {
 		fprintf(stderr, "Out of memory\n");

@@ -242,7 +242,8 @@ one
 
 -- Expect stderr --
 Died
-In line 6, byte 6:
+In test(), line 6, byte 6:
+  at main function ([stdin]:17:11)
 
  `            die();`
   Near here -----^

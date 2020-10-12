@@ -316,7 +316,7 @@ static inline bool _buf_startswith(struct ut_state *s, const char *str, size_t l
 
 static void buf_consume(struct ut_state *s, ssize_t len) {
 	s->lex.bufstart += len;
-	s->lex.off += len;
+	s->source->off += len;
 }
 
 /*
@@ -398,7 +398,7 @@ parse_string(struct ut_state *s)
 
 	if (!buf_remaining(s)) {
 		s->error.code = UT_ERROR_UNTERMINATED_STRING;
-		s->lex.off = s->lex.lastoff;
+		s->source->off = s->lex.lastoff;
 
 		return 0;
 	}
@@ -465,7 +465,7 @@ parse_string(struct ut_state *s)
 				case 'u':
 					if (s->lex.esclen < 5) {
 						if (!isxdigit(*ptr)) {
-							s->lex.off += s->lex.esclen + 1;
+							s->source->off += s->lex.esclen + 1;
 							s->error.code = UT_ERROR_INVALID_ESCAPE;
 
 							return 0;
@@ -521,7 +521,7 @@ parse_string(struct ut_state *s)
 				case 'x':
 					if (s->lex.esclen < 3) {
 						if (!isxdigit(*ptr)) {
-							s->lex.off += s->lex.esclen + 1;
+							s->source->off += s->lex.esclen + 1;
 							s->error.code = UT_ERROR_INVALID_ESCAPE;
 							return 0;
 						}
@@ -575,7 +575,7 @@ parse_string(struct ut_state *s)
 						       dec(s->lex.esc[3]);
 
 						if (code > 255) {
-							s->lex.off += s->lex.esclen + 1;
+							s->source->off += s->lex.esclen + 1;
 							s->error.code = UT_ERROR_INVALID_ESCAPE;
 
 							return 0;
@@ -655,10 +655,10 @@ parse_regexp(struct ut_state *s)
 			if (buf_startswith(s, "=")) {
 				buf_consume(s, 1);
 
-				return emit_op(s, s->lex.off, T_ASDIV, NULL);
+				return emit_op(s, s->source->off, T_ASDIV, NULL);
 			}
 
-			return emit_op(s, s->lex.off, T_DIV, NULL);
+			return emit_op(s, s->source->off, T_DIV, NULL);
 		}
 
 		s->lex.esc[0] = UT_LEX_PARSE_REGEX_PATTERN;
@@ -711,7 +711,7 @@ parse_regexp(struct ut_state *s)
 				if (!pattern) {
 					s->error.info.regexp_error = err;
 					s->error.code = UT_ERROR_INVALID_REGEXP;
-					s->lex.off = s->lex.lastoff;
+					s->source->off = s->lex.lastoff;
 
 					return 0;
 				}
@@ -756,22 +756,22 @@ parse_label(struct ut_state *s)
 
 				switch (word->type) {
 				case T_DOUBLE:
-					rv = emit_op(s, s->lex.off - word->plen, word->type, ut_new_double(word->d));
+					rv = emit_op(s, s->source->off - word->plen, word->type, ut_new_double(word->d));
 					break;
 
 				case T_BOOL:
-					rv = emit_op(s, s->lex.off - word->plen, word->type, xjs_new_boolean(word->b));
+					rv = emit_op(s, s->source->off - word->plen, word->type, xjs_new_boolean(word->b));
 					break;
 
 				default:
-					rv = emit_op(s, s->lex.off - word->plen, word->type, NULL);
+					rv = emit_op(s, s->source->off - word->plen, word->type, NULL);
 				}
 
 				return rv;
 			}
 		}
 
-		return lookbehind_to_text(s, s->lex.off - s->lex.lookbehindlen, T_LABEL, NULL);
+		return lookbehind_to_text(s, s->source->off - s->lex.lookbehindlen, T_LABEL, NULL);
 	}
 
 	for (ptr = s->lex.bufstart; ptr < s->lex.bufend && (*ptr == '_' || isalnum(*ptr)); ptr++)
@@ -822,20 +822,20 @@ parse_number(struct ut_state *s)
 			d = strtod(s->lex.lookbehind, &e);
 
 			if (e > s->lex.lookbehind && *e == 0) {
-				rv = emit_op(s, s->lex.off - (e - s->lex.lookbehind), T_DOUBLE, ut_new_double(d));
+				rv = emit_op(s, s->source->off - (e - s->lex.lookbehind), T_DOUBLE, ut_new_double(d));
 			}
 			else {
 				s->error.code = UT_ERROR_INVALID_ESCAPE;
-				s->lex.off -= s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1;
+				s->source->off -= s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1;
 			}
 		}
 		else if (*e == 0) {
-			rv = emit_op(s, s->lex.off - (e - s->lex.lookbehind), T_NUMBER, xjs_new_int64(n));
+			rv = emit_op(s, s->source->off - (e - s->lex.lookbehind), T_NUMBER, xjs_new_int64(n));
 			ut_get_op(s, rv)->is_overflow = (errno == ERANGE);
 		}
 		else {
 			s->error.code = UT_ERROR_INVALID_ESCAPE;
-			s->lex.off -= s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1;
+			s->source->off -= s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1;
 		}
 
 		lookbehind_reset(s);
@@ -906,7 +906,7 @@ lex_step(struct ut_state *s, FILE *fp)
 			if (!strncmp(ptr, "{#", 2)) {
 				lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
 				buf_consume(s, (ptr + 2) - s->lex.bufstart);
-				s->lex.lastoff = s->lex.off - 2;
+				s->lex.lastoff = s->source->off - 2;
 				s->lex.state = UT_LEX_BLOCK_COMMENT_START;
 
 				return 0;
@@ -916,7 +916,7 @@ lex_step(struct ut_state *s, FILE *fp)
 			else if (!strncmp(ptr, "{{", 2)) {
 				lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
 				buf_consume(s, (ptr + 2) - s->lex.bufstart);
-				s->lex.lastoff = s->lex.off - 2;
+				s->lex.lastoff = s->source->off - 2;
 				s->lex.state = UT_LEX_BLOCK_EXPRESSION_START;
 
 				return 0;
@@ -926,7 +926,7 @@ lex_step(struct ut_state *s, FILE *fp)
 			else if (!strncmp(ptr, "{%", 2)) {
 				lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
 				buf_consume(s, (ptr + 2) - s->lex.bufstart);
-				s->lex.lastoff = s->lex.off - 2;
+				s->lex.lastoff = s->source->off - 2;
 				s->lex.state = UT_LEX_BLOCK_STATEMENT_START;
 
 				return 0;
@@ -954,7 +954,7 @@ lex_step(struct ut_state *s, FILE *fp)
 
 		/* strip whitespace before block */
 		if (buf_startswith(s, "-")) {
-			rv = lookbehind_to_text(s, s->lex.off, T_TEXT, " \n\t\v\f\r");
+			rv = lookbehind_to_text(s, s->source->off, T_TEXT, " \n\t\v\f\r");
 			buf_consume(s, 1);
 		}
 
@@ -962,17 +962,17 @@ lex_step(struct ut_state *s, FILE *fp)
 		else if (s->lex.state == UT_LEX_BLOCK_STATEMENT_START) {
 			/* disable lstrip flag */
 			if (buf_startswith(s, "+")) {
-				rv = lookbehind_to_text(s, s->lex.off, T_TEXT, NULL);
+				rv = lookbehind_to_text(s, s->source->off, T_TEXT, NULL);
 				buf_consume(s, 1);
 			}
 
 			/* global block lstrip */
 			else if (s->lstrip_blocks) {
-				rv = lookbehind_to_text(s, s->lex.off, T_TEXT, " \t\v\f\r");
+				rv = lookbehind_to_text(s, s->source->off, T_TEXT, " \t\v\f\r");
 			}
 		}
 		else {
-			rv = lookbehind_to_text(s, s->lex.off, T_TEXT, NULL);
+			rv = lookbehind_to_text(s, s->source->off, T_TEXT, NULL);
 		}
 
 		switch (s->lex.state) {
@@ -1003,14 +1003,14 @@ lex_step(struct ut_state *s, FILE *fp)
 				s->lex.state = UT_LEX_IDENTIFY_BLOCK;
 				s->lex.skip_leading_whitespace = 1;
 				buf_consume(s, 3);
-				s->lex.lastoff = s->lex.off;
+				s->lex.lastoff = s->source->off;
 				break;
 			}
 			else if (buf_startswith(s, "#}")) {
 				s->lex.state = UT_LEX_IDENTIFY_BLOCK;
 				s->lex.skip_leading_whitespace = 0;
 				buf_consume(s, 2);
-				s->lex.lastoff = s->lex.off;
+				s->lex.lastoff = s->source->off;
 				break;
 			}
 
@@ -1019,7 +1019,7 @@ lex_step(struct ut_state *s, FILE *fp)
 
 		/* we're at eof */
 		if (s->lex.eof) {
-			s->lex.off = s->lex.lastoff;
+			s->source->off = s->lex.lastoff;
 			s->error.code = UT_ERROR_UNTERMINATED_BLOCK;
 		}
 
@@ -1030,7 +1030,7 @@ lex_step(struct ut_state *s, FILE *fp)
 		s->lex.within_expression_block = 1;
 		s->lex.state = UT_LEX_IDENTIFY_TOKEN;
 
-		return emit_op(s, s->lex.off, T_LEXP, NULL);
+		return emit_op(s, s->source->off, T_LEXP, NULL);
 
 
 	case UT_LEX_IDENTIFY_TOKEN:
@@ -1045,11 +1045,12 @@ lex_step(struct ut_state *s, FILE *fp)
 			              : (c >= tok->pat[0] && c <= tok->pat[1])) {
 				buf_consume(s, tok->plen);
 
+				s->lex.lastoff = s->source->off - tok->plen;
+
 				/* token has a parse method, switch state */
 				if (tok->parse) {
 					s->lex.tok = tok;
 					s->lex.state = UT_LEX_PARSE_TOKEN;
-					s->lex.lastoff = s->lex.off - tok->plen;
 
 					return 0;
 				}
@@ -1060,7 +1061,7 @@ lex_step(struct ut_state *s, FILE *fp)
 				    (s->lex.within_statement_block &&
 				     (tok->type == T_LEXP || tok->type == T_REXP || tok->type == T_LSTM))) {
 					s->error.code = UT_ERROR_NESTED_BLOCKS;
-					s->lex.off -= tok->plen;
+					s->source->off -= tok->plen;
 
 					return 0;
 				}
@@ -1075,7 +1076,7 @@ lex_step(struct ut_state *s, FILE *fp)
 						/* rewind */
 						buf_consume(s, -tok->plen);
 
-						return emit_op(s, s->lex.off, T_SCOL, NULL);
+						return emit_op(s, s->source->off, T_SCOL, NULL);
 					}
 
 					/* strip whitespace after block */
@@ -1090,12 +1091,12 @@ lex_step(struct ut_state *s, FILE *fp)
 					s->lex.within_statement_block = false;
 					s->lex.within_expression_block = false;
 					s->lex.state = UT_LEX_IDENTIFY_BLOCK;
-					s->lex.lastoff = s->lex.off;
+					s->lex.lastoff = s->source->off;
 				}
 
 				/* do not report statement tags to the parser */
 				if (tok->type != 0 && tok->type != T_LSTM && tok->type != T_RSTM)
-					rv = emit_op(s, s->lex.off - tok->plen, tok->type, NULL);
+					rv = emit_op(s, s->source->off - tok->plen, tok->type, NULL);
 				else
 					rv = 0;
 

@@ -86,7 +86,7 @@ ut_no_empty_obj(struct ut_state *s, uint32_t off)
 	s->error.code = UT_ERROR_UNEXPECTED_TOKEN;
 
 	if (op)
-		s->lex.off = op->off;
+		s->source->off = op->off;
 
 	for (i = 0; i < __T_MAX; i++)
 		if (yy_find_shift_action(yypParser, (YYCODETYPE)i) < YYNSTATE + YYNRULE)

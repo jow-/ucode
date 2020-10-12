@@ -142,23 +142,33 @@ static void dump(struct ut_state *s, uint32_t off, int level) {
 #endif /* NDEBUG */
 
 static enum ut_error_type
-parse(struct ut_state *state, const char *source, bool dumponly,
+parse(struct ut_state *state, FILE *fp, bool dumponly,
       struct json_object *env, struct json_object *modules)
 {
 	enum ut_error_type err;
-	char *msg;
+	char c, c2, *msg;
 
 	if (state->skip_shebang) {
-		if (source[0] == '#' && source[1] == '!') {
-			while (source[0] != '\0' && source[0] != '\n')
-				source++;
+		c = fgetc(fp);
+		c2 = fgetc(fp);
 
-			if (source[0] == '\n')
-				source++;
+		if (c == '#' && c2 == '!') {
+			while ((c = fgetc(fp)) != EOF) {
+				state->source->off++;
+
+				if (c == '\n')
+					break;
+			}
 		}
+		else {
+			ungetc(c, fp);
+			ungetc(c2, fp);
+		}
+
+		state->skip_shebang = false;
 	}
 
-	err = ut_parse(state, source);
+	err = ut_parse(state, fp);
 
 	if (!err) {
 		if (dumponly) {
@@ -175,7 +185,7 @@ parse(struct ut_state *state, const char *source, bool dumponly,
 	}
 
 	if (err) {
-		msg = ut_format_error(state, source);
+		msg = ut_format_error(state, fp);
 
 		fprintf(stderr, "%s\n\n", msg);
 		free(msg);
@@ -186,58 +196,76 @@ parse(struct ut_state *state, const char *source, bool dumponly,
 	return err;
 }
 
-static bool stdin_used = false;
+static FILE *
+read_stdin(char **ptr)
+{
+	size_t rlen = 0, tlen = 0;
+	char buf[128];
 
-static char *
-read_file(const char *path) {
-	char buf[64], *s = NULL;
-	size_t rlen, tlen = 0;
-	FILE *fp = NULL;
+	if (*ptr) {
+		fprintf(stderr, "Can read from stdin only once\n");
+		errno = EINVAL;
 
-	if (!strcmp(path, "-")) {
-		if (stdin_used) {
-			fprintf(stderr, "Can read from stdin only once\n");
-			goto out;
-		}
-
-		fp = stdin;
-		stdin_used = true;
-	}
-	else {
-		fp = fopen(path, "r");
-
-		if (!fp) {
-			fprintf(stderr, "Failed to open %s: %s\n", path, strerror(errno));
-			goto out;
-		}
+		return NULL;
 	}
 
-	while (1) {
+	while (true) {
+		rlen = fread(buf, 1, sizeof(buf), stdin);
+
+		if (rlen == 0)
+			break;
+
+		*ptr = xrealloc(*ptr, tlen + rlen);
+		memcpy(*ptr + tlen, buf, rlen);
+		tlen += rlen;
+	}
+
+	return fmemopen(*ptr, tlen, "rb");
+}
+
+static struct json_object *
+parse_envfile(FILE *fp)
+{
+	struct json_object *rv = NULL;
+	enum json_tokener_error err;
+	struct json_tokener *tok;
+	char buf[128];
+	size_t rlen;
+
+	tok = xjs_new_tokener();
+
+	while (true) {
 		rlen = fread(buf, 1, sizeof(buf), fp);
 
 		if (rlen == 0)
 			break;
 
-		s = xrealloc(s, tlen + rlen + 1);
-		memcpy(s + tlen, buf, rlen);
-		s[tlen + rlen] = 0;
-		tlen += rlen;
+		rv = json_tokener_parse_ex(tok, buf, rlen);
+		err = json_tokener_get_error(tok);
+
+		if (err != json_tokener_continue)
+			break;
 	}
 
-out:
-	if (fp != NULL && fp != stdin)
-		fclose(fp);
+	if (err != json_tokener_success || !json_object_is_type(rv, json_type_object)) {
+		json_object_put(rv);
+		rv = NULL;
+	}
 
-	return s;
+	json_tokener_free(tok);
+
+	return rv;
 }
 
 int
 main(int argc, char **argv)
 {
-	char *srcstr = NULL, *srcfile = NULL, *envstr = NULL;
 	struct json_object *env = NULL, *modules = NULL, *o;
+	struct ut_source source = {};
 	struct ut_state *state;
 	bool dumponly = false;
+	FILE *envfile = NULL;
+	char *stdin = NULL;
 	int opt, rv = 0;
 
 	if (argc == 1)
@@ -258,15 +286,23 @@ main(int argc, char **argv)
 			goto out;
 
 		case 'i':
-			srcfile = read_file(optarg);
+			if (source.fp)
+				fprintf(stderr, "Options -i and -s are exclusive\n");
 
-			if (!srcfile) {
+			if (!strcmp(optarg, "-")) {
+				source.fp = read_stdin(&stdin);
+				source.filename = xstrdup("[stdin]");
+			}
+			else {
+				source.fp = fopen(optarg, "rb");
+				source.filename = xstrdup(optarg);
+			}
+
+			if (!source.fp) {
+				fprintf(stderr, "Failed to open %s: %s\n", optarg, strerror(errno));
 				rv = UT_ERROR_EXCEPTION;
 				goto out;
 			}
-
-			if (strcmp(optarg, "-"))
-				state->filename = strdup(optarg);
 
 			break;
 
@@ -283,7 +319,11 @@ main(int argc, char **argv)
 			break;
 
 		case 's':
-			srcstr = optarg;
+			if (source.fp)
+				fprintf(stderr, "Options -i and -s are exclusive\n");
+
+			source.fp = fmemopen(optarg, strlen(optarg), "rb");
+			source.filename = xstrdup("[-s argument]");
 			break;
 
 		case 'S':
@@ -291,25 +331,28 @@ main(int argc, char **argv)
 			break;
 
 		case 'e':
-			envstr = optarg;
+			envfile = fmemopen(optarg, strlen(optarg), "rb");
 			/* fallthrough */
 
 		case 'E':
-			if (!envstr) {
-				envstr = read_file(optarg);
+			if (!envfile) {
+				if (!strcmp(optarg, "-"))
+					envfile = read_stdin(&stdin);
+				else
+					envfile = fopen(optarg, "rb");
 
-				if (!envstr) {
+				if (!envfile) {
+					fprintf(stderr, "Failed to open %s: %s\n", optarg, strerror(errno));
 					rv = UT_ERROR_EXCEPTION;
 					goto out;
 				}
 			}
 
-			o = json_tokener_parse(envstr);
+			o = parse_envfile(envfile);
 
-			if (envstr != optarg)
-				free(envstr);
+			fclose(envfile);
 
-			if (!json_object_is_type(o, json_type_object)) {
+			if (!o) {
 				fprintf(stderr, "Option -%c must point to a valid JSON object\n", opt);
 
 				rv = UT_ERROR_EXCEPTION;
@@ -334,30 +377,35 @@ main(int argc, char **argv)
 		}
 	}
 
-	if (!srcstr && !srcfile && argv[optind] != NULL) {
-		srcfile = read_file(argv[optind]);
+	if (!source.fp && argv[optind] != NULL) {
+		source.fp = fopen(argv[optind], "rb");
+		source.filename = xstrdup(argv[optind]);
 		state->skip_shebang = 1;
-		state->filename = strdup(argv[optind]);
 
-		if (!srcfile) {
+		if (!source.fp) {
+			fprintf(stderr, "Failed to open %s: %s\n", argv[optind], strerror(errno));
 			rv = UT_ERROR_EXCEPTION;
 			goto out;
 		}
 	}
 
-	if ((srcstr && srcfile) || (!srcstr && !srcfile)) {
-		fprintf(stderr, srcstr ? "Options -i and -s are exclusive\n" : "One of -i or -s is required\n");
-
+	if (!source.fp) {
+		fprintf(stderr, "One of -i or -s is required\n");
 		rv = UT_ERROR_EXCEPTION;
 		goto out;
 	}
 
-	rv = parse(state, srcstr ? srcstr : srcfile, dumponly, env, modules);
+	state->source = xalloc(sizeof(source));
+	state->sources = state->source;
+	*state->source = source;
+
+	rv = parse(state, source.fp, dumponly, env, modules);
 
 out:
 	json_object_put(modules);
 	json_object_put(env);
-	free(srcfile);
+
+	free(stdin);
 
 	return rv;
 }

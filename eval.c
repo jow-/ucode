@@ -977,71 +977,83 @@ struct json_object *
 ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
           struct json_object *func, struct json_object *argvals)
 {
-	struct ut_op *tag = json_object_get_userdata(func);
+	struct ut_op *op, *tag = json_object_get_userdata(func);
+	struct ut_callstack callstack = {};
+	struct ut_function *fn, *prev_fn;
 	struct json_object *rv = NULL;
-	struct ut_function *fn;
 	struct ut_scope *sc;
-	char *filename;
 	size_t arridx;
 	ut_c_fn *cfn;
 
 	if (!tag)
 		return NULL;
 
+	op = ut_get_op(state, off);
+
+	callstack.next = state->callstack;
+	callstack.source = state->source;
+	callstack.funcname = state->function ? state->function->name : NULL;
+	callstack.off = op ? op->off : 0;
+	state->callstack = &callstack;
+
 	/* is native function */
 	if (tag->type == T_CFUNC) {
 		cfn = (ut_c_fn *)tag->tag.data;
-
-		return cfn ? cfn(state, off, argvals) : NULL;
+		rv = cfn ? cfn(state, off, argvals) : NULL;
 	}
 
-	fn = tag->tag.data;
-	fn->scope = ut_new_scope(state, fn->parent_scope);
-	fn->scope->ctx = json_object_get(this ? this : state->ctx);
+	/* is utpl function */
+	else {
+		fn = tag->tag.data;
+		fn->scope = ut_new_scope(state, fn->parent_scope);
+		fn->scope->ctx = json_object_get(this ? this : state->ctx);
 
-	sc = state->scope;
-	filename = state->filename;
+		sc = state->scope;
 
-	state->scope = ut_acquire_scope(fn->scope);
-	state->filename = fn->filename;
+		state->scope = ut_acquire_scope(fn->scope);
 
-	if (fn->args)
-		for (arridx = 0; arridx < json_object_array_length(fn->args); arridx++)
-			ut_setval(fn->scope->scope, json_object_array_get_idx(fn->args, arridx),
-			          argvals ? json_object_array_get_idx(argvals, arridx) : NULL);
+		prev_fn = state->function;
+		state->function = fn;
 
-	rv = ut_execute_op_sequence(state, fn->entry);
-	tag = json_object_get_userdata(rv);
+		if (fn->args)
+			for (arridx = 0; arridx < json_object_array_length(fn->args); arridx++)
+				ut_setval(fn->scope->scope, json_object_array_get_idx(fn->args, arridx),
+				          argvals ? json_object_array_get_idx(argvals, arridx) : NULL);
 
-	switch (tag ? tag->type : 0) {
-	case T_BREAK:
-	case T_CONTINUE:
-		json_object_put(rv);
-		rv = ut_exception(state, ut_get_off(state, tag),
-		                  "Syntax error: %s statement must be inside loop",
-		                  ut_get_tokenname(tag->type));
-		break;
+		rv = ut_execute_op_sequence(state, fn->entry);
+		tag = json_object_get_userdata(rv);
 
-	case T_RETURN:
-		json_object_put(rv);
-		rv = json_object_get(state->rval);
-		break;
+		switch (tag ? tag->type : 0) {
+		case T_BREAK:
+		case T_CONTINUE:
+			json_object_put(rv);
+			rv = ut_exception(state, ut_get_off(state, tag),
+			                  "Syntax error: %s statement must be inside loop",
+			                  ut_get_tokenname(tag->type));
+			break;
+
+		case T_RETURN:
+			json_object_put(rv);
+			rv = json_object_get(state->rval);
+			break;
+		}
+
+		/* we left the function, pop the function scope... */
+		ut_release_scope(state->scope);
+		state->scope = sc;
+
+		/* ... and remove the "this" context... */
+		json_object_put(fn->scope->ctx);
+		fn->scope->ctx = NULL;
+
+		/* ... and reset the function scope... */
+		ut_release_scope(fn->scope);
+		fn->scope = NULL;
+
+		state->function = prev_fn;
 	}
 
-	/* we left the function, pop the function scope... */
-	ut_release_scope(state->scope);
-	state->scope = sc;
-
-	/* ... and remove the "this" context... */
-	json_object_put(fn->scope->ctx);
-	fn->scope->ctx = NULL;
-
-	/* ... and reset the function scope... */
-	ut_release_scope(fn->scope);
-	fn->scope = NULL;
-
-	/* ... and the file name context */
-	state->filename = filename;
+	state->callstack = callstack.next;
 
 	return rv;
 }

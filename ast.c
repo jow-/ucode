@@ -322,7 +322,6 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 	struct ut_op *op, *name, *args, *arg;
 	struct ut_function *fn;
 	size_t sz;
-	char *p;
 
 	sz = ALIGN(sizeof(*op)) + ALIGN(sizeof(*fn));
 
@@ -332,23 +331,13 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 	if (name)
 		sz += ALIGN(json_object_get_string_len(name->val) + 1);
 
-	if (s->filename)
-		sz += ALIGN(strlen(s->filename) + 1);
-
 	op = xalloc(sz);
 
 	fn = (void *)op + ALIGN(sizeof(*op));
 	fn->entry = decl->tree.operand[2];
 
-	p = (char *)fn + ALIGN(sizeof(*fn));
-
-	if (name) {
-		fn->name = strcpy(p, json_object_get_string(name->val));
-		p += ALIGN(json_object_get_string_len(name->val) + 1);
-	}
-
-	if (s->filename)
-		fn->filename = strcpy(p, s->filename);
+	if (name)
+		fn->name = strcpy((char *)fn + ALIGN(sizeof(*fn)), json_object_get_string(name->val));
 
 	if (args) {
 		fn->args = xjs_new_array();
@@ -357,6 +346,7 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 			json_object_array_add(fn->args, json_object_get(arg->val));
 	}
 
+	fn->source = s->source;
 	fn->parent_scope = ut_acquire_scope(scope);
 
 	op->val = val;
@@ -374,18 +364,58 @@ exception_free(struct json_object *v, void *ud)
 	free(ud);
 }
 
-__attribute__((format(printf, 3, 0))) struct json_object *
+static int
+exception_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
+{
+	return sprintbuf(pb, "%s", json_object_get_string(json_object_object_get(v, "message")));
+}
+
+static void
+add_stacktrace(struct json_object *a, struct ut_source *source, const char *funcname, size_t off) {
+	struct json_object *o = xjs_new_object();
+	size_t line = 1, rlen = 0, len;
+	bool truncated = false;
+	char buf[256];
+
+	if (source->filename)
+		json_object_object_add(o, "filename", xjs_new_string(source->filename));
+
+	if (funcname)
+		json_object_object_add(o, "function", xjs_new_string(funcname));
+
+	fseek(source->fp, 0, SEEK_SET);
+
+	while (fgets(buf, sizeof(buf), source->fp)) {
+		len = strlen(buf);
+		rlen += len;
+
+		if (rlen > off) {
+			json_object_object_add(o, "line", xjs_new_int64(line));
+			json_object_object_add(o, "byte", xjs_new_int64(len - (rlen - off) + (truncated ? sizeof(buf) : 0)));
+			break;
+		}
+
+		truncated = (len > 0 && buf[len-1] != '\n');
+		line += !truncated;
+	}
+
+	json_object_array_add(a, o);
+}
+
+__attribute__((format(printf, 3, 4))) struct json_object *
 ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
 {
+	struct ut_callstack *callstack;
 	struct ut_op *op, *failing_op;
+	struct json_object *a;
 	va_list ap;
 	ssize_t sz;
 	char *p;
 
 	sz = ALIGN(sizeof(*op));
 
-	if (s->filename)
-		sz += ALIGN(strlen(s->filename) + 1);
+	if (s->source && s->source->filename)
+		sz += ALIGN(strlen(s->source->filename) + 1);
 
 	failing_op = ut_get_op(s, off);
 
@@ -393,25 +423,36 @@ ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
 	op->type = T_EXCEPTION;
 	op->off = failing_op ? failing_op->off : 0;
 
-	if (s->filename) {
+	if (s->source && s->source->filename) {
 		p = (char *)op + ALIGN(sizeof(*op));
-		op->tag.data = strcpy(p, s->filename);
+		op->tag.data = strcpy(p, s->source->filename);
 	}
 
 	va_start(ap, fmt);
 	sz = xvasprintf(&p, fmt, ap);
 	va_end(ap);
 
-	op->val = xjs_new_string_len(p, sz);
-	free(p);
+	op->val = xjs_new_object();
 
-	json_object_set_userdata(op->val, op, exception_free);
+	a = xjs_new_array();
+
+	add_stacktrace(a, s->function->source, s->function->name, failing_op ? failing_op->off : 0);
+
+	for (callstack = s->callstack ? s->callstack->next : NULL; callstack && callstack->next; callstack = callstack->next)
+		add_stacktrace(a, callstack->source, callstack->funcname, callstack->off);
+
+	json_object_object_add(op->val, "stacktrace", a);
+
+	json_object_object_add(op->val, "message", xjs_new_string_len(p, sz));
+	free(p);
 
 	if (s->error.code == UT_ERROR_EXCEPTION)
 		json_object_put(s->error.info.exception);
 
 	s->error.code = UT_ERROR_EXCEPTION;
 	s->error.info.exception = op->val;
+
+	json_object_set_serializer(op->val, exception_to_string, op, exception_free);
 
 	return json_object_get(op->val);
 }
@@ -492,6 +533,7 @@ ut_reset(struct ut_state *s)
 void
 ut_free(struct ut_state *s)
 {
+	struct ut_source *src, *src_next;
 	struct ut_scope *sc, *sc_next;
 	size_t n;
 
@@ -524,15 +566,20 @@ ut_free(struct ut_state *s)
 		free(sc);
 	}
 
+	for (src = s->sources; src; src = src_next) {
+		src_next = src->next;
+		fclose(src->fp);
+		free(src->filename);
+		free(src);
+	}
+
 	free(ut_ext_types);
-	free(s->filename);
 	free(s);
 }
 
 enum ut_error_type
-ut_parse(struct ut_state *s, const char *expr)
+ut_parse(struct ut_state *s, FILE *fp)
 {
-	FILE *fp = fmemopen((char *)expr, strlen(expr), "r");
 	struct ut_op *op;
 	void *pParser;
 	uint32_t off;
@@ -565,8 +612,6 @@ ut_parse(struct ut_state *s, const char *expr)
 
 out:
 	ParseFree(pParser, free);
-
-	fclose(fp);
 
 	return s->error.code;
 }
