@@ -1355,7 +1355,11 @@ static struct json_object *
 ut_execute_function(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
+	struct ut_op *op1 = ut_get_child(state, off, 0);
 	struct json_object *obj = ut_new_func(state, op, state->scope);
+
+	if (op1)
+		ut_setval(state->scope->scope, op1->val, obj);
 
 	return obj;
 }
@@ -1460,174 +1464,138 @@ ut_execute_switch_case(struct ut_state *state, uint32_t off)
 }
 
 static struct json_object *
+ut_execute_atom(struct ut_state *state, uint32_t off)
+{
+	return json_object_get(ut_get_op(state, off)->val);
+}
+
+static struct json_object *
+ut_execute_text(struct ut_state *state, uint32_t off)
+{
+	printf("%s", json_object_get_string(ut_get_op(state, off)->val));
+
+	return NULL;
+}
+
+static struct json_object *
+ut_execute_label(struct ut_state *state, uint32_t off)
+{
+	struct ut_op *op = ut_get_op(state, off);
+	struct json_object *scope, *key, *val;
+
+	scope = ut_getref(state, off, &key);
+
+	json_object_put(state->ctx);
+	state->ctx = NULL;
+
+	if (state->strict_declarations && scope == NULL) {
+		return ut_exception(state, off,
+		                    "Reference error: %s is not defined",
+		                    json_object_get_string(op->val));
+	}
+
+	val = ut_getval(scope, key);
+	json_object_put(scope);
+	json_object_put(key);
+
+	return val;
+}
+
+static struct json_object *
+ut_execute_dot(struct ut_state *state, uint32_t off)
+{
+	struct json_object *scope, *key, *val;
+
+	scope = ut_getref_required(state, off, &key);
+
+	json_object_put(state->ctx);
+	state->ctx = json_object_get(scope);
+
+	if (!key)
+		return scope;
+
+	val = ut_getval(scope, key);
+	json_object_put(scope);
+	json_object_put(key);
+
+	return val;
+}
+
+static struct json_object *
+ut_execute_lbrack(struct ut_state *state, uint32_t off)
+{
+	struct ut_op *op = ut_get_op(state, off);
+
+	/* postfix access */
+	if (op->is_postfix)
+		return ut_execute_dot(state, off);
+
+	return ut_execute_list(state, op->tree.operand[0]);
+}
+
+static struct json_object *(*fns[__T_MAX])(struct ut_state *, uint32_t) = {
+	[T_NUMBER]   = ut_execute_atom,
+	[T_DOUBLE]   = ut_execute_atom,
+	[T_STRING]   = ut_execute_atom,
+	[T_REGEXP]   = ut_execute_atom,
+	[T_BOOL]     = ut_execute_atom,
+	[T_NULL]     = ut_execute_atom,
+	[T_THIS]     = ut_execute_this,
+	[T_FUNC]     = ut_execute_function,
+	[T_TEXT]     = ut_execute_text,
+	[T_ASSIGN]   = ut_execute_assign,
+	[T_LOCAL]    = ut_execute_local,
+	[T_LABEL]    = ut_execute_label,
+	[T_DOT]      = ut_execute_dot,
+	[T_LBRACK]   = ut_execute_lbrack,
+	[T_LBRACE]   = ut_execute_object,
+	[T_IF]       = ut_execute_if,
+	[T_QMARK]    = ut_execute_if,
+	[T_FOR]      = ut_execute_for,
+	[T_WHILE]    = ut_execute_while,
+	[T_AND]      = ut_execute_and_or,
+	[T_OR]       = ut_execute_and_or,
+	[T_LT]       = ut_execute_rel,
+	[T_LE]       = ut_execute_rel,
+	[T_GT]       = ut_execute_rel,
+	[T_GE]       = ut_execute_rel,
+	[T_EQ]       = ut_execute_rel,
+	[T_NE]       = ut_execute_rel,
+	[T_EQS]      = ut_execute_equality,
+	[T_NES]      = ut_execute_equality,
+	[T_IN]       = ut_execute_in,
+	[T_INC]      = ut_execute_inc_dec,
+	[T_DEC]      = ut_execute_inc_dec,
+	[T_LPAREN]   = ut_execute_call,
+	[T_LEXP]     = ut_execute_exp,
+	[T_ADD]      = ut_execute_arith,
+	[T_SUB]      = ut_execute_arith,
+	[T_MUL]      = ut_execute_arith,
+	[T_DIV]      = ut_execute_arith,
+	[T_MOD]      = ut_execute_arith,
+	[T_LSHIFT]   = ut_execute_bitop,
+	[T_RSHIFT]   = ut_execute_bitop,
+	[T_BAND]     = ut_execute_bitop,
+	[T_BXOR]     = ut_execute_bitop,
+	[T_BOR]      = ut_execute_bitop,
+	[T_COMPL]    = ut_execute_compl,
+	[T_NOT]      = ut_execute_not,
+	[T_RETURN]   = ut_execute_return,
+	[T_BREAK]    = ut_execute_break_cont,
+	[T_CONTINUE] = ut_execute_break_cont,
+	[T_TRY]      = ut_execute_try_catch,
+	[T_SWITCH]   = ut_execute_switch_case,
+};
+
+static struct json_object *
 ut_execute_op(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
-	struct ut_op *op1 = ut_get_child(state, off, 0);
-	struct json_object *scope, *key, *val;
 
-	switch (op->type) {
-	case T_NUMBER:
-	case T_DOUBLE:
-	case T_BOOL:
-	case T_STRING:
-	case T_NULL:
-	case T_REGEXP:
-		return json_object_get(op->val);
-
-	case T_THIS:
-		return ut_execute_this(state, off);
-
-	case T_FUNC:
-		val = ut_execute_function(state, off);
-
-		if (op1)
-			ut_setval(state->scope->scope, op1->val, val);
-
-		return val;
-
-	case T_TEXT:
-		printf("%s", json_object_get_string(op->val));
-
-		return NULL;
-
-	case T_ASSIGN:
-		return ut_execute_assign(state, off);
-
-	case T_LOCAL:
-		return ut_execute_local(state, off);
-
-	case T_LABEL:
-		scope = ut_getref(state, off, &key);
-
-		json_object_put(state->ctx);
-		state->ctx = NULL;
-
-		if (state->strict_declarations && scope == NULL) {
-			return ut_exception(state, off,
-			                    "Reference error: %s is not defined",
-			                    json_object_get_string(op->val));
-		}
-
-		val = ut_getval(scope, key);
-		json_object_put(scope);
-		json_object_put(key);
-
-		return val;
-
-	case T_DOT:
-		scope = ut_getref_required(state, off, &key);
-
-		json_object_put(state->ctx);
-		state->ctx = json_object_get(scope);
-
-		if (!key)
-			return scope;
-
-		val = ut_getval(scope, key);
-		json_object_put(scope);
-		json_object_put(key);
-
-		return val;
-
-	case T_LBRACK:
-		/* postfix access */
-		if (op->is_postfix) {
-			scope = ut_getref_required(state, off, &key);
-
-			json_object_put(state->ctx);
-			state->ctx = json_object_get(scope);
-
-			if (!key)
-				return scope;
-
-			val = ut_getval(scope, key);
-			json_object_put(scope);
-			json_object_put(key);
-
-			return val;
-		}
-
-		return ut_execute_list(state, ut_get_off(state, op1));
-
-	case T_LBRACE:
-		return ut_execute_object(state, off);
-
-	case T_IF:
-	case T_QMARK:
-		return ut_execute_if(state, off);
-
-	case T_FOR:
-		return ut_execute_for(state, off);
-
-	case T_WHILE:
-		return ut_execute_while(state, off);
-
-	case T_AND:
-	case T_OR:
-		return ut_execute_and_or(state, off);
-
-	case T_LT:
-	case T_LE:
-	case T_GT:
-	case T_GE:
-	case T_EQ:
-	case T_NE:
-		return ut_execute_rel(state, off);
-
-	case T_EQS:
-	case T_NES:
-		return ut_execute_equality(state, off);
-
-	case T_IN:
-		return ut_execute_in(state, off);
-
-	case T_INC:
-	case T_DEC:
-		return ut_execute_inc_dec(state, off);
-
-	case T_LPAREN:
-		return ut_execute_call(state, off);
-
-	case T_LEXP:
-		return ut_execute_exp(state, off);
-
-	case T_ADD:
-	case T_SUB:
-	case T_MUL:
-	case T_DIV:
-	case T_MOD:
-		return ut_execute_arith(state, off);
-
-	case T_LSHIFT:
-	case T_RSHIFT:
-	case T_BAND:
-	case T_BXOR:
-	case T_BOR:
-		return ut_execute_bitop(state, off);
-
-	case T_COMPL:
-		return ut_execute_compl(state, off);
-
-	case T_NOT:
-		return ut_execute_not(state, off);
-
-	case T_RETURN:
-		return ut_execute_return(state, off);
-
-	case T_BREAK:
-	case T_CONTINUE:
-		return ut_execute_break_cont(state, off);
-
-	case T_TRY:
-		return ut_execute_try_catch(state, off);
-
-	case T_SWITCH:
-		return ut_execute_switch_case(state, off);
-
-	default:
+	if (!fns[op->type])
 		return ut_exception(state, off, "Runtime error: Unrecognized opcode %d", op->type);
-	}
+
+	return fns[op->type](state, off);
 }
 
 static struct json_object *
