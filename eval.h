@@ -36,7 +36,7 @@ ut_cast_number(struct json_object *v, int64_t *n, double *d);
 struct json_object *
 ut_invoke(struct ut_state *, uint32_t, struct json_object *, struct json_object *, struct json_object *);
 
-enum ut_error_type
+struct json_object *
 ut_run(struct ut_state *state, struct json_object *env, struct json_object *modules);
 
 #endif

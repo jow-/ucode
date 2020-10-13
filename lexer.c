@@ -319,16 +319,6 @@ static void buf_consume(struct ut_state *s, ssize_t len) {
 	s->source->off += len;
 }
 
-/*
- * Parses a comment from the given buffer.
- *
- * Returns a negative value on error, otherwise the amount of consumed
- * characters from the given buffer.
- *
- * Error values:
- *  -UT_ERROR_UNTERMINATED_COMMENT	Unterminated string
- */
-
 static uint32_t
 parse_comment(struct ut_state *s)
 {
@@ -337,7 +327,7 @@ parse_comment(struct ut_state *s)
 	size_t elen;
 
 	if (!buf_remaining(s)) {
-		s->error.code = UT_ERROR_UNTERMINATED_COMMENT;
+		ut_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated comment");
 
 		return 0;
 	}
@@ -375,18 +365,6 @@ static void append_utf8(struct ut_state *s, int code) {
 		lookbehind_append(s, ustr, up - ustr);
 }
 
-/*
- * Parses a string literal from the given buffer.
- *
- * Returns a negative value on error, otherwise the amount of consumed
- * characters from the given buffer.
- *
- * Error values:
- *  -UT_ERROR_UNTERMINATED_STRING	Unterminated string
- *  -UT_ERROR_INVALID_ESCAPE		Invalid escape sequence
- *  -UT_ERROR_OVERLONG_STRING		String literal too long
- */
-
 static uint32_t
 parse_string(struct ut_state *s)
 {
@@ -397,8 +375,7 @@ parse_string(struct ut_state *s)
 	int code;
 
 	if (!buf_remaining(s)) {
-		s->error.code = UT_ERROR_UNTERMINATED_STRING;
-		s->source->off = s->lex.lastoff;
+		ut_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated string");
 
 		return 0;
 	}
@@ -465,8 +442,7 @@ parse_string(struct ut_state *s)
 				case 'u':
 					if (s->lex.esclen < 5) {
 						if (!isxdigit(*ptr)) {
-							s->source->off += s->lex.esclen + 1;
-							s->error.code = UT_ERROR_INVALID_ESCAPE;
+							ut_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
 
 							return 0;
 						}
@@ -521,8 +497,8 @@ parse_string(struct ut_state *s)
 				case 'x':
 					if (s->lex.esclen < 3) {
 						if (!isxdigit(*ptr)) {
-							s->source->off += s->lex.esclen + 1;
-							s->error.code = UT_ERROR_INVALID_ESCAPE;
+							ut_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
+
 							return 0;
 						}
 
@@ -575,8 +551,7 @@ parse_string(struct ut_state *s)
 						       dec(s->lex.esc[3]);
 
 						if (code > 255) {
-							s->source->off += s->lex.esclen + 1;
-							s->error.code = UT_ERROR_INVALID_ESCAPE;
+							ut_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
 
 							return 0;
 						}
@@ -709,9 +684,8 @@ parse_regexp(struct ut_state *s)
 				op->val = pattern;
 
 				if (!pattern) {
-					s->error.info.regexp_error = err;
-					s->error.code = UT_ERROR_INVALID_REGEXP;
-					s->source->off = s->lex.lastoff;
+					ut_new_exception(s, op->off, "Syntax error: %s", err);
+					free(err);
 
 					return 0;
 				}
@@ -821,21 +795,19 @@ parse_number(struct ut_state *s)
 		if (*e == '.' || *e == 'e' || *e == 'E') {
 			d = strtod(s->lex.lookbehind, &e);
 
-			if (e > s->lex.lookbehind && *e == 0) {
+			if (e > s->lex.lookbehind && *e == 0)
 				rv = emit_op(s, s->source->off - (e - s->lex.lookbehind), T_DOUBLE, ut_new_double(d));
-			}
-			else {
-				s->error.code = UT_ERROR_INVALID_ESCAPE;
-				s->source->off -= s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1;
-			}
+			else
+				ut_new_exception(s, s->source->off - (s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1),
+				                 "Syntax error: Invalid number literal");
 		}
 		else if (*e == 0) {
 			rv = emit_op(s, s->source->off - (e - s->lex.lookbehind), T_NUMBER, xjs_new_int64(n));
 			ut_get_op(s, rv)->is_overflow = (errno == ERANGE);
 		}
 		else {
-			s->error.code = UT_ERROR_INVALID_ESCAPE;
-			s->source->off -= s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1;
+			ut_new_exception(s, s->source->off - (s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1),
+			                 "Syntax error: Invalid number literal");
 		}
 
 		lookbehind_reset(s);
@@ -1018,10 +990,8 @@ lex_step(struct ut_state *s, FILE *fp)
 		}
 
 		/* we're at eof */
-		if (s->lex.eof) {
-			s->source->off = s->lex.lastoff;
-			s->error.code = UT_ERROR_UNTERMINATED_BLOCK;
-		}
+		if (s->lex.eof)
+			ut_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated template block");
 
 		break;
 
@@ -1060,8 +1030,7 @@ lex_step(struct ut_state *s, FILE *fp)
 				     (tok->type == T_LSTM || tok->type == T_RSTM || tok->type == T_LEXP)) ||
 				    (s->lex.within_statement_block &&
 				     (tok->type == T_LEXP || tok->type == T_REXP || tok->type == T_LSTM))) {
-					s->error.code = UT_ERROR_NESTED_BLOCKS;
-					s->source->off -= tok->plen;
+					ut_new_exception(s, s->source->off - tok->plen, "Syntax error: Template blocks may not be nested");
 
 					return 0;
 				}
@@ -1106,7 +1075,7 @@ lex_step(struct ut_state *s, FILE *fp)
 
 		/* no token matched and we do have remaining data, junk */
 		if (buf_remaining(s)) {
-			s->error.code = UT_ERROR_UNEXPECTED_CHAR;
+			ut_new_exception(s, s->source->off, "Syntax error: Unexpected character");
 
 			return 0;
 		}
@@ -1119,7 +1088,7 @@ lex_step(struct ut_state *s, FILE *fp)
 		}
 
 		/* premature EOF */
-		s->error.code = UT_ERROR_UNTERMINATED_BLOCK;
+		ut_new_exception(s, s->source->off, "Syntax error: Unterminated template block");
 
 		break;
 
@@ -1157,7 +1126,7 @@ ut_get_token(struct ut_state *s, FILE *fp)
 	while (s->lex.state != UT_LEX_EOF) {
 		rv = lex_step(s, fp);
 
-		if (rv == 0 && s->error.code)
+		if (rv == 0 && s->exception)
 			break;
 
 		if (rv > 0)

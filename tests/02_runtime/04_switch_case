@@ -89,7 +89,7 @@ default
 
 -- Expect stderr --
 Syntax error: more than one switch default case
-In line 6, byte 2:
+In line 6, byte 3:
 
  `        default:`
           ^-- Near here
@@ -242,8 +242,8 @@ one
 
 -- Expect stderr --
 Died
-In test(), line 6, byte 6:
-  at main function ([stdin]:17:11)
+In test(), line 6, byte 7:
+  at main function ([stdin]:17:12)
 
  `            die();`
   Near here -----^

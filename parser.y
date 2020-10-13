@@ -51,6 +51,7 @@
 #include <string.h>
 
 #include "ast.h"
+#include "lib.h"
 #include "lexer.h"
 #include "parser.h"
 
@@ -80,17 +81,17 @@ ut_no_empty_obj(struct ut_state *s, uint32_t off)
 }
 
 %syntax_error {
-	struct ut_op *op = TOKEN ? ut_get_op(s, TOKEN) : NULL;
-	int i;
+	uint64_t tokens[(__T_MAX + 63) & -64];
+	int i, max_token = 0;
 
-	s->error.code = UT_ERROR_UNEXPECTED_TOKEN;
+	for (i = 0; i < __T_MAX; i++) {
+		if (yy_find_shift_action(yypParser, (YYCODETYPE)i) < YYNSTATE + YYNRULE) {
+			tokens[i / 64] |= ((uint64_t)1 << (i % 64));
+			max_token = i;
+		}
+	}
 
-	if (op)
-		s->source->off = op->off;
-
-	for (i = 0; i < __T_MAX; i++)
-		if (yy_find_shift_action(yypParser, (YYCODETYPE)i) < YYNSTATE + YYNRULE)
-			ut_set_error_token(s, i);
+	ut_parse_error(s, TOKEN, tokens, max_token);
 }
 
 

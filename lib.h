@@ -28,6 +28,10 @@ typedef struct json_object *(ut_c_fn)(struct ut_state *, uint32_t, struct json_o
 
 void ut_lib_init(struct ut_state *state, struct json_object *scope);
 
+struct json_object *ut_execute_source(struct ut_state *s, struct ut_source *src, struct ut_scope *scope);
+
+struct json_object *ut_parse_error(struct ut_state *s, uint32_t off, uint64_t *tokens, int max_token);
+
 char *ut_format_error(struct ut_state *state, FILE *fp);
 
 #endif /* __LIB_H_ */

@@ -33,21 +33,6 @@
 
 #define JSON_C_TO_STRING_STRICT (1<<31)
 
-enum ut_error_type {
-	UT_ERROR_NO_ERROR,
-	UT_ERROR_OUT_OF_MEMORY,
-	UT_ERROR_UNTERMINATED_COMMENT,
-	UT_ERROR_UNTERMINATED_STRING,
-	UT_ERROR_UNTERMINATED_BLOCK,
-	UT_ERROR_UNEXPECTED_TOKEN,
-	UT_ERROR_UNEXPECTED_CHAR,
-	UT_ERROR_OVERLONG_STRING,
-	UT_ERROR_INVALID_ESCAPE,
-	UT_ERROR_NESTED_BLOCKS,
-	UT_ERROR_INVALID_REGEXP,
-	UT_ERROR_EXCEPTION
-};
-
 enum ut_lex_state {
 	UT_LEX_IDENTIFY_BLOCK,
 	UT_LEX_BLOCK_COMMENT_START,
@@ -123,7 +108,6 @@ struct ut_state {
 	uint8_t trim_blocks:1;
 	uint8_t lstrip_blocks:1;
 	uint8_t strict_declarations:1;
-	uint8_t skip_shebang:1;
 	struct {
 		enum ut_lex_state state;
 		uint8_t eof:1;
@@ -144,15 +128,7 @@ struct ut_state {
 		int lead_surrogate;
 		size_t lastoff;
 	} lex;
-	struct {
-		enum ut_error_type code;
-		union {
-			struct json_object *exception;
-			uint64_t tokens[2];
-			char *regexp_error;
-		} info;
-	} error;
-	struct json_object *ctx, *rval;
+	struct json_object *ctx, *rval, *exception;
 	struct ut_scope *scopelist, *scope;
 	struct ut_source *sources, *source;
 	struct ut_callstack *callstack;
@@ -179,22 +155,10 @@ static inline bool ut_is_type(struct json_object *val, int type) {
 };
 
 
-#define UT_ET_DIV (sizeof(s->error.info.tokens[0]) * 8)
-#define UT_ET_TYPE typeof(s->error.info.tokens[0])
-
-static inline void ut_set_error_token(struct ut_state *s, int tokennr) {
-	s->error.info.tokens[tokennr / UT_ET_DIV] |= ((UT_ET_TYPE)1 << (tokennr % UT_ET_DIV));
-}
-
-static inline bool ut_is_error_token(struct ut_state *s, int tokennr) {
-	return (s->error.info.tokens[tokennr / UT_ET_DIV] & ((UT_ET_TYPE)1 << (tokennr % UT_ET_DIV)));
-}
-
-
 uint32_t ut_new_op(struct ut_state *s, int type, struct json_object *val, ...);
 uint32_t ut_wrap_op(struct ut_state *s, uint32_t parent, ...);
 uint32_t ut_append_op(struct ut_state *s, uint32_t a, uint32_t b);
-enum ut_error_type ut_parse(struct ut_state *s, FILE *fp);
+struct json_object *ut_parse(struct ut_state *s, FILE *fp);
 void ut_free(struct ut_state *s);
 
 struct json_object *ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope);
@@ -205,8 +169,6 @@ struct json_object *ut_new_regexp(const char *source, bool icase, bool newline, 
 
 __attribute__((format(printf, 3, 0)))
 struct json_object *ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...);
-
-#define ut_exception ut_new_exception
 
 struct ut_scope *ut_new_scope(struct ut_state *s, struct ut_scope *parent);
 struct ut_scope *ut_parent_scope(struct ut_scope *scope);

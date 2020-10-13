@@ -391,7 +391,7 @@ add_stacktrace(struct json_object *a, struct ut_source *source, const char *func
 
 		if (rlen > off) {
 			json_object_object_add(o, "line", xjs_new_int64(line));
-			json_object_object_add(o, "byte", xjs_new_int64(len - (rlen - off) + (truncated ? sizeof(buf) : 0)));
+			json_object_object_add(o, "byte", xjs_new_int64(len - (rlen - off) + (truncated ? sizeof(buf) : 0) + 1));
 			break;
 		}
 
@@ -406,51 +406,42 @@ __attribute__((format(printf, 3, 4))) struct json_object *
 ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
 {
 	struct ut_callstack *callstack;
-	struct ut_op *op, *failing_op;
 	struct json_object *a;
+	struct ut_op *op;
 	va_list ap;
-	ssize_t sz;
 	char *p;
+	int len;
 
-	sz = ALIGN(sizeof(*op));
-
-	if (s->source && s->source->filename)
-		sz += ALIGN(strlen(s->source->filename) + 1);
-
-	failing_op = ut_get_op(s, off);
-
-	op = xalloc(sz);
+	op = xalloc(sizeof(*op));
 	op->type = T_EXCEPTION;
-	op->off = failing_op ? failing_op->off : 0;
-
-	if (s->source && s->source->filename) {
-		p = (char *)op + ALIGN(sizeof(*op));
-		op->tag.data = strcpy(p, s->source->filename);
-	}
-
-	va_start(ap, fmt);
-	sz = xvasprintf(&p, fmt, ap);
-	va_end(ap);
-
 	op->val = xjs_new_object();
+	op->off = off;
+	op->tag.data = s->source;
 
 	a = xjs_new_array();
 
-	add_stacktrace(a, s->function->source, s->function->name, failing_op ? failing_op->off : 0);
+	add_stacktrace(a,
+	               s->function ? s->function->source : s->source,
+	               s->function ? s->function->name : NULL,
+	               off);
 
-	for (callstack = s->callstack ? s->callstack->next : NULL; callstack && callstack->next; callstack = callstack->next)
-		add_stacktrace(a, callstack->source, callstack->funcname, callstack->off);
+	for (callstack = s->callstack ? s->callstack->next : NULL; callstack; callstack = callstack->next)
+		if (callstack->off)
+			add_stacktrace(a, callstack->source, callstack->funcname, callstack->off);
 
 	json_object_object_add(op->val, "stacktrace", a);
 
-	json_object_object_add(op->val, "message", xjs_new_string_len(p, sz));
+	va_start(ap, fmt);
+	len = xvasprintf(&p, fmt, ap);
+	va_end(ap);
+
+	json_object_object_add(op->val, "message", xjs_new_string_len(p, len));
 	free(p);
 
-	if (s->error.code == UT_ERROR_EXCEPTION)
-		json_object_put(s->error.info.exception);
+	if (s->exception)
+		json_object_put(s->exception);
 
-	s->error.code = UT_ERROR_EXCEPTION;
-	s->error.info.exception = op->val;
+	s->exception = op->val;
 
 	json_object_set_serializer(op->val, exception_to_string, op, exception_free);
 
@@ -518,12 +509,8 @@ ut_parent_scope(struct ut_scope *scope)
 static void
 ut_reset(struct ut_state *s)
 {
-	if (s->error.code == UT_ERROR_EXCEPTION)
-		json_object_put(s->error.info.exception);
-	else if (s->error.code == UT_ERROR_INVALID_REGEXP)
-		free(s->error.info.regexp_error);
-
-	memset(&s->error, 0, sizeof(s->error));
+	json_object_put(s->exception);
+	s->exception = NULL;
 
 	free(s->lex.lookbehind);
 	free(s->lex.buf);
@@ -577,34 +564,28 @@ ut_free(struct ut_state *s)
 	free(s);
 }
 
-enum ut_error_type
+struct json_object *
 ut_parse(struct ut_state *s, FILE *fp)
 {
 	struct ut_op *op;
 	void *pParser;
 	uint32_t off;
 
-	if (!s)
-		return UT_ERROR_OUT_OF_MEMORY;
-
 	ut_reset(s);
 
-	pParser = ParseAlloc(malloc);
-
-	if (!pParser)
-		return UT_ERROR_OUT_OF_MEMORY;
+	pParser = ParseAlloc(xalloc);
 
 	while (s->lex.state != UT_LEX_EOF) {
 		off = ut_get_token(s, fp);
 		op = ut_get_op(s, off);
 
-		if (s->error.code)
+		if (s->exception)
 			goto out;
 
 		if (op)
 			Parse(pParser, op->type, off, s);
 
-		if (s->error.code)
+		if (s->exception)
 			goto out;
 	}
 
@@ -613,7 +594,7 @@ ut_parse(struct ut_state *s, FILE *fp)
 out:
 	ParseFree(pParser, free);
 
-	return s->error.code;
+	return s->exception;
 }
 
 bool

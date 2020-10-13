@@ -141,59 +141,56 @@ static void dump(struct ut_state *s, uint32_t off, int level) {
 }
 #endif /* NDEBUG */
 
-static enum ut_error_type
-parse(struct ut_state *state, FILE *fp, bool dumponly,
-      struct json_object *env, struct json_object *modules)
+static int
+parse(struct ut_state *state, struct ut_source *src, bool dumponly,
+      bool skip_shebang, struct json_object *env, struct json_object *modules)
 {
-	enum ut_error_type err;
+	struct json_object *rv;
 	char c, c2, *msg;
+	int rc = 0;
 
-	if (state->skip_shebang) {
-		c = fgetc(fp);
-		c2 = fgetc(fp);
+	if (skip_shebang) {
+		c = fgetc(src->fp);
+		c2 = fgetc(src->fp);
 
 		if (c == '#' && c2 == '!') {
-			while ((c = fgetc(fp)) != EOF) {
-				state->source->off++;
+			while ((c = fgetc(src->fp)) != EOF) {
+				src->off++;
 
 				if (c == '\n')
 					break;
 			}
 		}
 		else {
-			ungetc(c, fp);
-			ungetc(c2, fp);
+			ungetc(c, src->fp);
+			ungetc(c2, src->fp);
 		}
-
-		state->skip_shebang = false;
 	}
 
-	err = ut_parse(state, fp);
-
-	if (!err) {
-		if (dumponly) {
+	if (dumponly) {
 #ifdef NDEBUG
-			fprintf(stderr, "Debug support not compiled in\n");
-			err = UT_ERROR_EXCEPTION;
+		rv = ut_new_exception(state, 0, "Debug support not compiled in");
 #else /* NDEBUG */
+		rv = ut_parse(state, src->fp);
+
+		if (!ut_is_type(rv, T_EXCEPTION))
 			dump(state, state->main, 0);
 #endif /* NDEBUG */
-		}
-		else {
-			err = ut_run(state, env, modules);
-		}
+	}
+	else {
+		rv = ut_run(state, env, modules);
 	}
 
-	if (err) {
-		msg = ut_format_error(state, fp);
-
+	if (ut_is_type(rv, T_EXCEPTION)) {
+		msg = ut_format_error(state, src->fp);
 		fprintf(stderr, "%s\n\n", msg);
 		free(msg);
+		rc = 1;
 	}
 
-	ut_free(state);
+	json_object_put(rv);
 
-	return err;
+	return rc;
 }
 
 static FILE *
@@ -261,9 +258,10 @@ int
 main(int argc, char **argv)
 {
 	struct json_object *env = NULL, *modules = NULL, *o;
+	struct ut_state *state = NULL;
 	struct ut_source source = {};
-	struct ut_state *state;
 	bool dumponly = false;
+	bool shebang = false;
 	FILE *envfile = NULL;
 	char *stdin = NULL;
 	int opt, rv = 0;
@@ -300,7 +298,7 @@ main(int argc, char **argv)
 
 			if (!source.fp) {
 				fprintf(stderr, "Failed to open %s: %s\n", optarg, strerror(errno));
-				rv = UT_ERROR_EXCEPTION;
+				rv = 1;
 				goto out;
 			}
 
@@ -343,7 +341,7 @@ main(int argc, char **argv)
 
 				if (!envfile) {
 					fprintf(stderr, "Failed to open %s: %s\n", optarg, strerror(errno));
-					rv = UT_ERROR_EXCEPTION;
+					rv = 1;
 					goto out;
 				}
 			}
@@ -354,8 +352,7 @@ main(int argc, char **argv)
 
 			if (!o) {
 				fprintf(stderr, "Option -%c must point to a valid JSON object\n", opt);
-
-				rv = UT_ERROR_EXCEPTION;
+				rv = 1;
 				goto out;
 			}
 
@@ -380,18 +377,19 @@ main(int argc, char **argv)
 	if (!source.fp && argv[optind] != NULL) {
 		source.fp = fopen(argv[optind], "rb");
 		source.filename = xstrdup(argv[optind]);
-		state->skip_shebang = 1;
 
 		if (!source.fp) {
 			fprintf(stderr, "Failed to open %s: %s\n", argv[optind], strerror(errno));
-			rv = UT_ERROR_EXCEPTION;
+			rv = 1;
 			goto out;
 		}
+
+		shebang = true;
 	}
 
 	if (!source.fp) {
 		fprintf(stderr, "One of -i or -s is required\n");
-		rv = UT_ERROR_EXCEPTION;
+		rv = 1;
 		goto out;
 	}
 
@@ -399,12 +397,13 @@ main(int argc, char **argv)
 	state->sources = state->source;
 	*state->source = source;
 
-	rv = parse(state, source.fp, dumponly, env, modules);
+	rv = parse(state, state->source, dumponly, shebang, env, modules);
 
 out:
 	json_object_put(modules);
 	json_object_put(env);
 
+	ut_free(state);
 	free(stdin);
 
 	return rv;

@@ -2,7 +2,7 @@ Nesting blocks into non-comment blocks should fail.
 
 -- Expect stderr --
 Syntax error: Template blocks may not be nested
-In line 2, byte 60:
+In line 2, byte 61:
 
  `We may not nest statement blocks into expression blocks: {{ {% print(1 + 2) %} }}.`
   Near here --------------------------------------------------^

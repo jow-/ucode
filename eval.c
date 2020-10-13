@@ -252,9 +252,9 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 
 			if (!next) {
 				if (state->strict_declarations) {
-					return ut_exception(state, off,
-					                    "Reference error: access to undeclared variable %s",
-					                    json_object_get_string(op->val));
+					return ut_new_exception(state, op->off,
+					                        "Reference error: access to undeclared variable %s",
+					                        json_object_get_string(op->val));
 				}
 
 				break;
@@ -279,8 +279,7 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 static struct json_object *
 ut_getref_required(struct ut_state *state, uint32_t off, struct json_object **key)
 {
-	struct ut_op *op = ut_get_op(state, off);
-	uint32_t off1 = op ? op->tree.operand[0] : 0;
+	struct ut_op *op1 = ut_get_child(state, off, 0);
 	struct json_object *scope, *skey, *rv;
 	char *lhs, *p = NULL;
 
@@ -289,7 +288,7 @@ ut_getref_required(struct ut_state *state, uint32_t off, struct json_object **ke
 	if (!json_object_is_type(scope, json_type_array) &&
 		!json_object_is_type(scope, json_type_object)) {
 		if (!ut_is_type(scope, T_EXCEPTION)) {
-			lhs = off1 ? ut_ref_to_str(state, off1) : NULL;
+			lhs = op1 ? ut_ref_to_str(state, ut_get_off(state, op1)) : NULL;
 
 			if (lhs) {
 				p = alloca_sprintf("Type error: the result of `%s` is %s", lhs,
@@ -298,7 +297,7 @@ ut_getref_required(struct ut_state *state, uint32_t off, struct json_object **ke
 			}
 
 			json_object_put(scope);
-			rv = ut_exception(state, off1, p ? p : "Type error: left-hand side is not an array or object");
+			rv = ut_new_exception(state, op1->off, p ? p : "Type error: left-hand side is not an array or object");
 		}
 		else {
 			rv = scope;
@@ -494,14 +493,14 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 		}
 
 		if (init->type != T_IN)
-			return ut_exception(state, ut_get_off(state, init),
-			                    "Syntax error: missing ';' after for loop initializer");
+			return ut_new_exception(state, init->off,
+			                        "Syntax error: missing ';' after for loop initializer");
 
 		ivar = ut_get_op(state, init->tree.operand[0]);
 
 		if (!ivar || ivar->type != T_LABEL)
-			return ut_exception(state, ut_get_off(state, init),
-			                    "Syntax error: invalid for-in left-hand side");
+			return ut_new_exception(state, init->off,
+			                        "Syntax error: invalid for-in left-hand side");
 
 		val = ut_execute_op(state, init->tree.operand[1]);
 
@@ -1027,9 +1026,9 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 		case T_BREAK:
 		case T_CONTINUE:
 			json_object_put(rv);
-			rv = ut_exception(state, ut_get_off(state, tag),
-			                  "Syntax error: %s statement must be inside loop",
-			                  ut_get_tokenname(tag->type));
+			rv = ut_new_exception(state, ut_get_off(state, tag),
+			                      "Syntax error: %s statement must be inside loop",
+			                      ut_get_tokenname(tag->type));
 			break;
 
 		case T_RETURN:
@@ -1062,6 +1061,7 @@ static struct json_object *
 ut_execute_call(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *decl, *op = ut_get_op(state, off);
+	struct ut_op *op1 = ut_get_child(state, off, 0);
 	struct json_object *v[2], *rv;
 	char *lhs, *p = NULL;
 
@@ -1070,14 +1070,14 @@ ut_execute_call(struct ut_state *state, uint32_t off)
 	decl = json_object_get_userdata(v[0]);
 
 	if (!decl || (decl->type != T_FUNC && decl->type != T_CFUNC)) {
-		lhs = ut_ref_to_str(state, op->tree.operand[0]);
+		lhs = ut_ref_to_str(state, ut_get_off(state, op1));
 
 		if (lhs) {
 			p = alloca_sprintf("Type error: %s is not a function", lhs);
 			free(lhs);
 		}
 
-		rv = ut_exception(state, op->tree.operand[0], p ? p : "Type error: left-hand side expression is not a function");
+		rv = ut_new_exception(state, op1->off, p ? p : "Type error: left-hand side expression is not a function");
 	}
 	else {
 		if (v[1] == NULL)
@@ -1395,7 +1395,8 @@ ut_execute_try_catch(struct ut_state *state, uint32_t off)
 			json_object_put(ut_setval(state->scope->scope, ut_get_child(state, off, 1)->val,
 			                    xjs_new_string(json_object_get_string(rv))));
 
-		memset(&state->error, 0, sizeof(state->error));
+		json_object_put(state->exception);
+		state->exception = NULL;
 
 		json_object_put(rv);
 		rv = ut_execute_op_sequence(state, op->tree.operand[2]);
@@ -1433,8 +1434,8 @@ ut_execute_switch_case(struct ut_state *state, uint32_t off)
 			if (Default) {
 				json_object_put(v[0]);
 
-				return ut_exception(state, ut_get_off(state, Case),
-				                    "Syntax error: more than one switch default case");
+				return ut_new_exception(state, Case->off,
+				                        "Syntax error: more than one switch default case");
 			}
 
 			Default = Case;
@@ -1501,9 +1502,9 @@ ut_execute_label(struct ut_state *state, uint32_t off)
 	state->ctx = NULL;
 
 	if (state->strict_declarations && scope == NULL) {
-		return ut_exception(state, off,
-		                    "Reference error: %s is not defined",
-		                    json_object_get_string(op->val));
+		return ut_new_exception(state, op->off,
+		                        "Reference error: %s is not defined",
+		                        json_object_get_string(op->val));
 	}
 
 	val = ut_getval(scope, key);
@@ -1605,7 +1606,7 @@ ut_execute_op(struct ut_state *state, uint32_t off)
 	struct ut_op *op = ut_get_op(state, off);
 
 	if (!fns[op->type])
-		return ut_exception(state, off, "Runtime error: Unrecognized opcode %d", op->type);
+		return ut_new_exception(state, op->off, "Runtime error: Unrecognized opcode %d", op->type);
 
 	return fns[op->type](state, off);
 }
@@ -1675,23 +1676,14 @@ ut_register_variable(struct json_object *scope, const char *key, struct json_obj
 	free(name);
 }
 
-enum ut_error_type
+struct json_object *
 ut_run(struct ut_state *state, struct json_object *env, struct json_object *modules)
 {
-	struct ut_op *op = ut_get_op(state, state->main);
-	struct json_object *entry, *args, *rv;
+	struct json_object *args, *rv;
 	size_t i;
-
-	if (!op || op->type != T_FUNC) {
-		ut_exception(state, state->main, "Runtime error: Invalid root operation in AST");
-
-		return UT_ERROR_EXCEPTION;
-	}
 
 	state->scope = ut_new_scope(state, NULL);
 	state->ctx = NULL;
-
-	entry = ut_execute_function(state, state->main);
 
 	if (env) {
 		json_object_object_foreach(env, key, val)
@@ -1701,9 +1693,9 @@ ut_run(struct ut_state *state, struct json_object *env, struct json_object *modu
 	ut_globals_init(state, state->scope->scope);
 	ut_lib_init(state, state->scope->scope);
 
-	args = xjs_new_array();
-
 	if (modules) {
+		args = xjs_new_array();
+
 		for (i = 0; i < json_object_array_length(modules); i++) {
 			json_object_array_put_idx(args, 0, json_object_get(json_object_array_get_idx(modules, i)));
 
@@ -1719,17 +1711,13 @@ ut_run(struct ut_state *state, struct json_object *env, struct json_object *modu
 			                     rv);
 		}
 
-		json_object_array_del_idx(args, 0, 1);
+		json_object_put(args);
 	}
 
-	rv = ut_invoke(state, state->main, NULL, entry, args);
+	rv = ut_execute_source(state, state->source, state->scope);
 
 out:
 	ut_release_scope(state->scope);
 
-	json_object_put(entry);
-	json_object_put(args);
-	json_object_put(rv);
-
-	return state->error.code;
+	return rv;
 }

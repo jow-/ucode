@@ -110,74 +110,62 @@ format_context_line(char **msg, size_t *msglen, const char *line, size_t off)
 }
 
 static void
-format_error_context(char **msg, size_t *msglen, const char *path, FILE *fp, struct json_object *stacktrace, size_t off)
+format_error_context(char **msg, size_t *msglen, struct ut_source *src, struct json_object *stacktrace, size_t off)
 {
 	struct json_object *e, *fn, *file;
 	size_t len, rlen, idx;
+	const char *path;
 	bool truncated;
 	char buf[256];
 	int eline;
 
-	if (stacktrace) {
-		for (idx = 0; idx < json_object_array_length(stacktrace); idx++) {
-			e = json_object_array_get_idx(stacktrace, idx);
-			fn = json_object_object_get(e, "function");
-			file = json_object_object_get(e, "filename");
+	for (idx = 0; idx < json_object_array_length(stacktrace); idx++) {
+		e = json_object_array_get_idx(stacktrace, idx);
+		fn = json_object_object_get(e, "function");
+		file = json_object_object_get(e, "filename");
 
-			if (idx == 0) {
-				path = (file && strcmp(json_object_get_string(file), "[stdin]"))
-					? json_object_get_string(file) : NULL;
+		if (idx == 0) {
+			path = (file && strcmp(json_object_get_string(file), "[stdin]"))
+				? json_object_get_string(file) : NULL;
 
-				if (path && fn)
-					sprintf_append(msg, msglen, "In %s(), file %s, ",
-					               json_object_get_string(fn), path);
-				else if (fn)
-					sprintf_append(msg, msglen, "In %s(), ",
-					               json_object_get_string(fn));
-				else if (path)
-					sprintf_append(msg, msglen, "In %s, ", path);
-				else
-					sprintf_append(msg, msglen, "In ");
+			if (path && fn)
+				sprintf_append(msg, msglen, "In %s(), file %s, ",
+				               json_object_get_string(fn), path);
+			else if (fn)
+				sprintf_append(msg, msglen, "In %s(), ",
+				               json_object_get_string(fn));
+			else if (path)
+				sprintf_append(msg, msglen, "In %s, ", path);
+			else
+				sprintf_append(msg, msglen, "In ");
 
-				sprintf_append(msg, msglen, "line %" PRId64 ", byte %" PRId64 ":\n",
-				               json_object_get_int64(json_object_object_get(e, "line")),
-				               json_object_get_int64(json_object_object_get(e, "byte")));
-			}
-			else {
-				sprintf_append(msg, msglen, "  at %s%s (%s:%" PRId64 ":%" PRId64 ")\n",
-				               fn ? "function " : "main function",
-				               fn ? json_object_get_string(fn) : "",
-				               json_object_get_string(file),
-				               json_object_get_int64(json_object_object_get(e, "line")),
-				               json_object_get_int64(json_object_object_get(e, "byte")));
-			}
+			sprintf_append(msg, msglen, "line %" PRId64 ", byte %" PRId64 ":\n",
+			               json_object_get_int64(json_object_object_get(e, "line")),
+			               json_object_get_int64(json_object_object_get(e, "byte")));
+		}
+		else {
+			sprintf_append(msg, msglen, "  at %s%s (%s:%" PRId64 ":%" PRId64 ")\n",
+			               fn ? "function " : "main function",
+			               fn ? json_object_get_string(fn) : "",
+			               json_object_get_string(file),
+			               json_object_get_int64(json_object_object_get(e, "line")),
+			               json_object_get_int64(json_object_object_get(e, "byte")));
 		}
 	}
 
-	fseek(fp, 0, SEEK_SET);
+	fseek(src->fp, 0, SEEK_SET);
 
 	truncated = false;
 	eline = 1;
 	rlen = 0;
 
-	while (fgets(buf, sizeof(buf), fp)) {
+	while (fgets(buf, sizeof(buf), src->fp)) {
 		len = strlen(buf);
 		rlen += len;
 
 		if (rlen > off) {
-			if (!stacktrace) {
-				if (path && strcmp(path, "[stdin]"))
-					sprintf_append(msg, msglen, "In %s, ", path);
-				else
-					sprintf_append(msg, msglen, "In ");
-
-				sprintf_append(msg, msglen, "line %d, byte %zu:\n",
-				               eline, len - (rlen - off) + (truncated ? sizeof(buf) : 0));
-			}
-
 			sprintf_append(msg, msglen, "\n `%s", truncated ? "..." : "");
 			format_context_line(msg, msglen, buf, len - (rlen - off) + (truncated ? 3 : 0));
-
 			break;
 		}
 
@@ -186,103 +174,55 @@ format_error_context(char **msg, size_t *msglen, const char *path, FILE *fp, str
 	}
 }
 
+struct json_object *
+ut_parse_error(struct ut_state *s, uint32_t off, uint64_t *tokens, int max_token)
+{
+	struct ut_op *op = ut_get_op(s, off);
+	struct json_object *rv;
+	size_t msglen = 0;
+	bool first = true;
+	char *msg = NULL;
+	int i;
+
+	for (i = 0; i <= max_token; i++) {
+		if (tokens[i / 64] & ((uint64_t)1 << (i % 64))) {
+			if (first) {
+				sprintf_append(&msg, &msglen, "Expecting %s", ut_get_tokenname(i));
+				first = false;
+			}
+			else if (i < max_token) {
+				sprintf_append(&msg, &msglen, ", %s", ut_get_tokenname(i));
+			}
+			else {
+				sprintf_append(&msg, &msglen, " or %s", ut_get_tokenname(i));
+			}
+		}
+	}
+
+	rv = ut_new_exception(s, op->off, "Syntax error: Unexpected token\n%s", msg);
+	free(msg);
+
+	return rv;
+}
+
 char *
 ut_format_error(struct ut_state *state, FILE *fp)
 {
-	char *msg = NULL, *filename = state->source->filename;
-	struct json_object *stacktrace = NULL;
-	size_t off = state ? state->source->off : 0;
+	struct ut_source *src;
 	struct ut_op *tag;
-	bool first = true;
 	size_t msglen = 0;
-	int i, max_i;
+	char *msg = NULL;
 
-	switch (state ? state->error.code : UT_ERROR_OUT_OF_MEMORY) {
-	case UT_ERROR_NO_ERROR:
-		return NULL;
+	tag = json_object_get_userdata(state->exception);
+	src = tag->tag.data;
 
-	case UT_ERROR_OUT_OF_MEMORY:
-		sprintf_append(&msg, &msglen, "Runtime error: Out of memory\n");
-		break;
+	sprintf_append(&msg, &msglen, "%s\n",
+	               json_object_get_string(json_object_object_get(state->exception, "message")));
 
-	case UT_ERROR_UNTERMINATED_COMMENT:
-		sprintf_append(&msg, &msglen, "Syntax error: Unterminated comment\n");
-		break;
-
-	case UT_ERROR_UNTERMINATED_STRING:
-		sprintf_append(&msg, &msglen, "Syntax error: Unterminated string\n");
-		break;
-
-	case UT_ERROR_UNTERMINATED_BLOCK:
-		sprintf_append(&msg, &msglen, "Syntax error: Unterminated template block\n");
-		break;
-
-	case UT_ERROR_UNEXPECTED_CHAR:
-		sprintf_append(&msg, &msglen, "Syntax error: Unexpected character\n");
-		break;
-
-	case UT_ERROR_OVERLONG_STRING:
-		sprintf_append(&msg, &msglen, "Syntax error: String or label literal too long\n");
-		break;
-
-	case UT_ERROR_INVALID_ESCAPE:
-		sprintf_append(&msg, &msglen, "Syntax error: Invalid escape sequence\n");
-		break;
-
-	case UT_ERROR_NESTED_BLOCKS:
-		sprintf_append(&msg, &msglen, "Syntax error: Template blocks may not be nested\n");
-		break;
-
-	case UT_ERROR_UNEXPECTED_TOKEN:
-		sprintf_append(&msg, &msglen, "Syntax error: Unexpected token\n");
-
-		for (i = 0, max_i = 0; i < sizeof(state->error.info.tokens) * 8; i++)
-			if (ut_is_error_token(state, i))
-				max_i = i;
-
-		for (i = 0; i < sizeof(state->error.info.tokens) * 8; i++) {
-			if (ut_is_error_token(state, i)) {
-				if (first) {
-					sprintf_append(&msg, &msglen, "Expecting %s", ut_get_tokenname(i));
-					first = false;
-				}
-				else if (i < max_i) {
-					sprintf_append(&msg, &msglen, ", %s", ut_get_tokenname(i));
-				}
-				else {
-					sprintf_append(&msg, &msglen, " or %s", ut_get_tokenname(i));
-				}
-			}
-		}
-
-		sprintf_append(&msg, &msglen, "\n");
-		break;
-
-	case UT_ERROR_INVALID_REGEXP:
-		if (state->error.info.regexp_error)
-			sprintf_append(&msg, &msglen, "Syntax error: %s\n", state->error.info.regexp_error);
-		else
-			sprintf_append(&msg, &msglen, "Runtime error: Out of memory while compiling regexp\n");
-		break;
-
-	case UT_ERROR_EXCEPTION:
-		tag = json_object_get_userdata(state->error.info.exception);
-
-		if (tag && tag->type == T_EXCEPTION) {
-			off = tag->off;
-			filename = tag->tag.data;
-		}
-
-		stacktrace = json_object_object_get(state->error.info.exception, "stacktrace");
-
-		sprintf_append(&msg, &msglen, "%s\n",
-		               json_object_get_string(json_object_object_get(state->error.info.exception, "message")));
-
-		break;
-	}
-
-	if (off)
-		format_error_context(&msg, &msglen, filename, fp, stacktrace, off);
+	if (tag->off)
+		format_error_context(&msg, &msglen, src,
+		                     json_object_object_get(state->exception, "stacktrace"),
+		                     tag->off);
 
 	return msg;
 }
@@ -617,8 +557,9 @@ static struct json_object *
 ut_die(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	const char *msg = json_object_get_string(json_object_array_get_idx(args, 0));
+	struct ut_op *op = ut_get_op(s, off);
 
-	return ut_exception(s, off, "%s", msg ? msg : "Died");
+	return ut_new_exception(s, op->off, "%s", msg ? msg : "Died");
 }
 
 static struct json_object *
@@ -1538,6 +1479,7 @@ static struct json_object *
 ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 {
 	void (*init)(const struct ut_ops *, struct ut_state *, struct json_object *);
+	struct ut_op *op = ut_get_op(s, off);
 	struct json_object *scope;
 	struct stat st;
 	void *dlh;
@@ -1549,12 +1491,12 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 	dlh = dlopen(path, RTLD_LAZY|RTLD_LOCAL);
 
 	if (!dlh)
-		return ut_exception(s, off, "Unable to dlopen file %s: %s", path, dlerror());
+		return ut_new_exception(s, op->off, "Unable to dlopen file %s: %s", path, dlerror());
 
 	init = dlsym(dlh, "ut_module_init");
 
 	if (!init)
-		return ut_exception(s, off, "Module %s provides no 'ut_module_init' function", path);
+		return ut_new_exception(s, op->off, "Module %s provides no 'ut_module_init' function", path);
 
 	scope = xjs_new_object();
 
@@ -1563,57 +1505,55 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 	return scope;
 }
 
+struct json_object *
+ut_execute_source(struct ut_state *s, struct ut_source *src, struct ut_scope *scope)
+{
+	struct json_object *entry, *rv;
+	struct ut_source *prev_src;
+
+	prev_src = s->source;
+	s->source = src;
+
+	rv = ut_parse(s, src->fp);
+
+	if (!ut_is_type(rv, T_EXCEPTION)) {
+		entry = ut_new_func(s, ut_get_op(s, s->main), scope ? scope : s->scope);
+
+		json_object_put(rv);
+		rv = ut_invoke(s, s->main, NULL, entry, NULL);
+
+		json_object_put(entry);
+	}
+
+	s->source = prev_src;
+
+	return rv;
+}
+
 static struct json_object *
 ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct ut_scope *scope)
 {
-	struct json_object *ex, *entry, *rv;
+	struct ut_op *op = ut_get_op(s, off);
 	struct ut_source *src;
 	struct stat st;
-	char *msg;
+	FILE *fp;
 
 	if (stat(path, &st))
 		return NULL;
 
+	fp = fopen(path, "rb");
+
+	if (!fp)
+		return ut_new_exception(s, op->off, "Unable to open file %s: %s", path, strerror(errno));
+
 	src = xalloc(sizeof(*src));
-	src->fp = fopen(path, "rb");
-
-	if (!src->fp) {
-		free(src);
-
-		return ut_exception(s, off, "Unable to open file %s: %s", path, strerror(errno));
-	}
-
+	src->fp = fp;
+	src->filename = path ? xstrdup(path) : NULL;
 	src->next = s->sources;
+
 	s->sources = src;
-	s->source = src;
 
-	if (ut_parse(s, src->fp)) {
-		msg = ut_format_error(s, src->fp);
-		ex = ut_exception(s, off, "Module loading failed: %s", msg);
-
-		fclose(src->fp);
-		free(src);
-		free(msg);
-
-		return ex;
-	}
-
-	entry = ut_new_func(s, ut_get_op(s, s->main), scope ? scope : s->scope);
-
-	rv = ut_invoke(s, off, NULL, entry, NULL);
-
-	if (ut_is_type(rv, T_EXCEPTION)) {
-		msg = ut_format_error(s, src->fp);
-		json_object_put(rv);
-		rv = ut_exception(s, off, "%s", msg);
-		free(msg);
-	}
-
-	json_object_put(entry);
-
-	s->source = src->next;
-
-	return rv;
+	return ut_execute_source(s, src, scope);
 }
 
 static struct json_object *
@@ -1662,6 +1602,7 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *val = json_object_array_get_idx(args, 0);
 	struct json_object *search, *se, *res;
+	struct ut_op *op = ut_get_op(s, off);
 	struct ut_scope *sc, *scparent;
 	size_t arridx, arrlen;
 	const char *name;
@@ -1683,7 +1624,7 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 	search = sc ? json_object_object_get(sc->scope, "REQUIRE_SEARCH_PATH") : NULL;
 
 	if (!json_object_is_type(search, json_type_array))
-		return ut_exception(s, off, "Global require search path not set");
+		return ut_new_exception(s, op->off, "Global require search path not set");
 
 	for (arridx = 0, arrlen = json_object_array_length(search); arridx < arrlen; arridx++) {
 		se = json_object_array_get_idx(search, arridx);
@@ -1697,7 +1638,7 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 			return res;
 	}
 
-	return ut_exception(s, off, "No module named '%s' could be found", name);
+	return ut_new_exception(s, op->off, "No module named '%s' could be found", name);
 }
 
 static struct json_object *
@@ -2036,13 +1977,14 @@ static struct json_object *
 ut_json(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *rv, *src = json_object_array_get_idx(args, 0);
+	struct ut_op *op = ut_get_op(s, off);
 	struct json_tokener *tok = NULL;
 	enum json_tokener_error err;
 	const char *str;
 	size_t len;
 
 	if (!json_object_is_type(src, json_type_string))
-		return ut_exception(s, off, "Passed value is not a string");
+		return ut_new_exception(s, op->off, "Passed value is not a string");
 
 	tok = xjs_new_tokener();
 	str = json_object_get_string(src);
@@ -2053,16 +1995,16 @@ ut_json(struct ut_state *s, uint32_t off, struct json_object *args)
 
 	if (err == json_tokener_continue) {
 		json_object_put(rv);
-		rv = ut_exception(s, off, "Unexpected end of string in JSON data");
+		rv = ut_new_exception(s, op->off, "Unexpected end of string in JSON data");
 	}
 	else if (err != json_tokener_success) {
 		json_object_put(rv);
-		rv = ut_exception(s, off, "Failed to parse JSON string: %s",
+		rv = ut_new_exception(s, op->off, "Failed to parse JSON string: %s",
 		                  json_tokener_error_desc(err));
 	}
 	else if (json_tokener_get_parse_end(tok) < len) {
 		json_object_put(rv);
-		rv = ut_exception(s, off, "Trailing garbage after JSON data");
+		rv = ut_new_exception(s, op->off, "Trailing garbage after JSON data");
 	}
 
 	json_tokener_free(tok);
@@ -2108,19 +2050,20 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *rv, *path = json_object_array_get_idx(args, 0);
 	struct json_object *scope = json_object_array_get_idx(args, 1);
+	struct ut_op *op = ut_get_op(s, off);
 	struct ut_scope *sc;
 	char *p;
 
 	if (!json_object_is_type(path, json_type_string))
-		return ut_exception(s, off, "Passed filename is not a string");
+		return ut_new_exception(s, op->off, "Passed filename is not a string");
 
 	if (scope && !json_object_is_type(scope, json_type_object))
-		return ut_exception(s, off, "Passed scope value is not an object");
+		return ut_new_exception(s, op->off, "Passed scope value is not an object");
 
 	p = include_path(s->source->filename, json_object_get_string(path));
 
 	if (!p)
-		return ut_exception(s, off, "Include file not found");
+		return ut_new_exception(s, op->off, "Include file not found");
 
 	if (scope) {
 		sc = ut_new_scope(s, NULL);
