@@ -1433,12 +1433,16 @@ ut_printf_common(struct ut_state *s, uint32_t off, struct json_object *args, cha
 			*fp++ = (t == json_type_string) ? 's' : *p;
 			*fp = 0;
 
+#pragma GCC diagnostic ignored "-Wformat-security"
+
 			switch (t) {
 			case json_type_int:    sprintf_append(res, &len, sfmt, arg.n); break;
 			case json_type_double: sprintf_append(res, &len, sfmt, arg.d); break;
 			case json_type_string: sprintf_append(res, &len, sfmt, arg.s); break;
 			default:               sprintf_append(res, &len, sfmt);        break;
 			}
+
+#pragma GCC diagnostic pop
 
 			last = p + 1;
 
