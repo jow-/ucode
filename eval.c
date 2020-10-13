@@ -200,17 +200,6 @@ ut_ref_to_str(struct ut_state *state, uint32_t off)
 	}
 }
 
-#define alloca_sprintf(...) \
-	({ \
-		char *__p = NULL; \
-		int __n = snprintf(NULL, 0, __VA_ARGS__); \
-		if (__n >= 0) { \
-			__p = alloca(__n + 1); \
-			snprintf(__p, __n + 1, __VA_ARGS__); \
-		} \
-		__p; \
-	})
-
 static struct json_object *
 ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 {
@@ -281,7 +270,7 @@ ut_getref_required(struct ut_state *state, uint32_t off, struct json_object **ke
 {
 	struct ut_op *op1 = ut_get_child(state, off, 0);
 	struct json_object *scope, *skey, *rv;
-	char *lhs, *p = NULL;
+	char *lhs;
 
 	scope = ut_getref(state, off, &skey);
 
@@ -291,13 +280,15 @@ ut_getref_required(struct ut_state *state, uint32_t off, struct json_object **ke
 			lhs = op1 ? ut_ref_to_str(state, ut_get_off(state, op1)) : NULL;
 
 			if (lhs) {
-				p = alloca_sprintf("Type error: the result of `%s` is %s", lhs,
-				                   scope ? "not an array or object" : "null");
+				rv = ut_new_exception(state, op1->off, "Type error: `%s` is %s",
+				                      lhs, scope ? "not an array or object" : "null");
 				free(lhs);
+			}
+			else {
+				rv = ut_new_exception(state, op1->off, "Type error: left-hand side is not an array or object");
 			}
 
 			json_object_put(scope);
-			rv = ut_new_exception(state, op1->off, p ? p : "Type error: left-hand side is not an array or object");
 		}
 		else {
 			rv = scope;
@@ -1063,7 +1054,7 @@ ut_execute_call(struct ut_state *state, uint32_t off)
 	struct ut_op *decl, *op = ut_get_op(state, off);
 	struct ut_op *op1 = ut_get_child(state, off, 0);
 	struct json_object *v[2], *rv;
-	char *lhs, *p = NULL;
+	char *lhs;
 
 	ut_get_operands(state, op, v);
 
@@ -1072,12 +1063,10 @@ ut_execute_call(struct ut_state *state, uint32_t off)
 	if (!decl || (decl->type != T_FUNC && decl->type != T_CFUNC)) {
 		lhs = ut_ref_to_str(state, ut_get_off(state, op1));
 
-		if (lhs) {
-			p = alloca_sprintf("Type error: %s is not a function", lhs);
-			free(lhs);
-		}
+		rv = ut_new_exception(state, op1->off, "Type error: %s is not a function",
+		                      lhs ? lhs : "left-hand side expression");
 
-		rv = ut_new_exception(state, op1->off, p ? p : "Type error: left-hand side expression is not a function");
+		free(lhs);
 	}
 	else {
 		if (v[1] == NULL)
