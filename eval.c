@@ -1374,15 +1374,21 @@ ut_execute_this(struct ut_state *state, uint32_t off)
 static struct json_object *
 ut_execute_try_catch(struct ut_state *state, uint32_t off)
 {
-	struct ut_op *op = ut_get_op(state, off);
+	struct ut_op *tag, *op = ut_get_op(state, off);
 	struct json_object *rv;
 
 	rv = ut_execute_op_sequence(state, op->tree.operand[0]);
 
 	if (ut_is_type(rv, T_EXCEPTION)) {
-		if (op->tree.operand[1])
+		if (op->tree.operand[1]) {
+			/* remove the T_EXCEPTION type from the object to avoid handling
+			 * it as a new exception in the catch block */
+			tag = json_object_get_userdata(rv);
+			tag->type = T_LBRACE;
+
 			json_object_put(ut_setval(state->scope->scope, ut_get_child(state, off, 1)->val,
-			                    xjs_new_string(json_object_get_string(rv))));
+			                json_object_get(rv)));
+		}
 
 		json_object_put(state->exception);
 		state->exception = NULL;
