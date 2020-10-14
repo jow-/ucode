@@ -454,8 +454,11 @@ ut_execute_if(struct ut_state *state, uint32_t off)
 	uint32_t cond = op ? op->tree.operand[0] : 0;
 	uint32_t Then = op ? op->tree.operand[1] : 0;
 	uint32_t Else = op ? op->tree.operand[2] : 0;
+	bool res = ut_test_condition(state, cond);
 
-	if (ut_test_condition(state, cond))
+	if (state->exception)
+		return json_object_get(state->exception);
+	else if (res)
 		return ut_execute_op_sequence(state, Then);
 	else if (Else)
 		return ut_execute_op_sequence(state, Else);
