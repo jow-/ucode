@@ -271,3 +271,29 @@ In test(), line 6, byte 7:
 	print(test(1), "\n");
 %}
 -- End --
+
+
+11. Ensure that consecutive cases values are properly handled.
+
+-- Expect stdout --
+three and four
+-- End --
+
+-- Testcase --
+{%
+	switch (3) {
+	case 1:
+	case 2:
+		print("one and two\n");
+		break;
+
+	case 3:
+	case 4:
+		print("three and four\n");
+		break;
+
+	default:
+		print("five\n");
+	}
+%}
+-- End --

@@ -185,6 +185,7 @@ switch_cases(A) ::= switch_cases(B) switch_case(C).		{ A = append_op(B, C); }
 switch_cases(A) ::= switch_case(B).						{ A = B; }
 
 switch_case(A) ::= T_CASE(B) exp(C) T_COLON stmts(D).	{ A = wrap_op(B, C, D); }
+switch_case(A) ::= T_CASE(B) exp(C) T_COLON.			{ A = wrap_op(B, C); }
 switch_case(A) ::= T_DEFAULT(B) T_COLON stmts(C).		{ A = wrap_op(B, C); }
 
 args(A) ::= args(B) T_COMMA T_LABEL(C).					{ A = append_op(B, C); }
