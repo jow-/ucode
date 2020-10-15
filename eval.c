@@ -469,12 +469,12 @@ ut_execute_if(struct ut_state *state, uint32_t off)
 static struct json_object *
 ut_execute_for(struct ut_state *state, uint32_t off)
 {
-	struct json_object *scope, *val, *item, *rv = NULL;
+	struct json_object *scope, *val, *item, *iv, *rv = NULL;
 	struct ut_op *loop = ut_get_op(state, off);
 	struct ut_op *init = ut_get_child(state, off, 0);
-	struct ut_op *test = ut_get_child(state, off, 1);
-	struct ut_op *incr = ut_get_child(state, off, 2);
-	struct ut_op *body = ut_get_child(state, off, 3);
+	uint32_t test = loop ? loop->tree.operand[1] : 0;
+	uint32_t incr = loop ? loop->tree.operand[2] : 0;
+	uint32_t body = loop ? loop->tree.operand[3] : 0;
 	struct ut_op *ivar, *tag;
 	size_t arridx, arrlen;
 	bool local = false;
@@ -496,28 +496,26 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 			return ut_new_exception(state, init->off,
 			                        "Syntax error: invalid for-in left-hand side");
 
+		iv = ivar->val;
+		scope = local ? state->scope->scope : ut_getref(state, ut_get_off(state, ivar), NULL);
+
+		if (ut_is_type(scope, T_EXCEPTION))
+			return scope;
+
 		val = ut_execute_op(state, init->tree.operand[1]);
 
 		if (ut_is_type(val, T_EXCEPTION))
 			return val;
-
-		scope = local ? state->scope->scope : ut_getref(state, ut_get_off(state, ivar), NULL);
-
-		if (ut_is_type(scope, T_EXCEPTION)) {
-			json_object_put(val);
-
-			return scope;
-		}
 
 		if (json_object_is_type(val, json_type_array)) {
 			for (arridx = 0, arrlen = json_object_array_length(val);
 			     arridx < arrlen; arridx++) {
 				item = json_object_array_get_idx(val, arridx);
 
-				ut_setval(scope, ivar->val, item);
+				ut_setval(scope, iv, item);
 				json_object_put(rv);
 
-				rv = ut_execute_op_sequence(state, ut_get_off(state, body));
+				rv = ut_execute_op_sequence(state, body);
 				tag = json_object_get_userdata(rv);
 
 				switch (tag ? tag->type : 0) {
@@ -537,10 +535,10 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 		}
 		else if (json_object_is_type(val, json_type_object)) {
 			json_object_object_foreach(val, key, item) {
-				ut_setval(scope, ivar->val, xjs_new_string(key));
+				ut_setval(scope, iv, xjs_new_string(key));
 				json_object_put(rv);
 
-				rv = ut_execute_op_sequence(state, ut_get_off(state, body));
+				rv = ut_execute_op_sequence(state, body);
 				tag = json_object_get_userdata(rv);
 
 				switch (tag ? tag->type : 0) {
@@ -574,10 +572,10 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 		json_object_put(val);
 	}
 
-	while (test ? ut_test_condition(state, ut_get_off(state, test)) : true) {
+	while (test ? ut_test_condition(state, test) : true) {
 		json_object_put(rv);
 
-		rv = ut_execute_op_sequence(state, ut_get_off(state, body));
+		rv = ut_execute_op_sequence(state, body);
 		tag = json_object_get_userdata(rv);
 
 		switch (tag ? tag->type : 0) {
@@ -592,7 +590,7 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 		}
 
 		if (incr) {
-			val = ut_execute_op_sequence(state, ut_get_off(state, incr));
+			val = ut_execute_op_sequence(state, incr);
 
 			if (ut_is_type(val, T_EXCEPTION)) {
 				json_object_put(rv);
