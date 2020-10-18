@@ -405,7 +405,7 @@ add_stacktrace(struct json_object *a, struct ut_source *source, const char *func
 __attribute__((format(printf, 3, 4))) struct json_object *
 ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
 {
-	struct ut_callstack *callstack;
+	struct ut_callstack *callstack, *prevcall;
 	struct json_object *a;
 	struct ut_op *op;
 	va_list ap;
@@ -425,8 +425,11 @@ ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
 	               s->function ? s->function->name : NULL,
 	               off);
 
-	for (callstack = s->callstack ? s->callstack->next : NULL; callstack; callstack = callstack->next)
-		if (callstack->off)
+	for (callstack = s->callstack ? s->callstack->next : NULL, prevcall = NULL;
+	     callstack != NULL;
+	     prevcall = callstack, callstack = callstack->next)
+		if (callstack->off &&
+		    (!prevcall || callstack->source != prevcall->source || callstack->off != prevcall->off))
 			add_stacktrace(a, callstack->source, callstack->funcname, callstack->off);
 
 	json_object_object_add(op->val, "stacktrace", a);

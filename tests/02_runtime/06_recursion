@@ -33,3 +33,28 @@ Testing recursive invocations.
 	test(1);
 %}
 -- End --
+
+
+2. Testing infinite recursion.
+
+-- Expect stderr --
+Runtime error: Too much recursion
+In test(), line 3, byte 7:
+  at function test ([stdin]:3:7)
+  at main function ([stdin]:6:6)
+
+ `        test();`
+  Near here --^
+
+
+-- End --
+
+-- Testcase --
+{%
+	function test() {
+		test();
+	}
+
+	test();
+%}
+-- End --

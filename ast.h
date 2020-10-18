@@ -135,6 +135,7 @@ struct ut_state {
 	struct ut_source *sources, *source;
 	struct ut_callstack *callstack;
 	struct ut_function *function;
+	size_t calldepth;
 };
 
 struct ut_extended_type {

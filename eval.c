@@ -981,12 +981,16 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 
 	op = ut_get_op(state, off);
 
+	if (state->calldepth >= 1000)
+		return ut_new_exception(state, op->off, "Runtime error: Too much recursion");
+
 	callstack.next = state->callstack;
 	callstack.source = state->source;
 	callstack.funcname = state->function ? state->function->name : NULL;
 	callstack.off = op ? op->off : 0;
 	callstack.ctx = json_object_get(this ? this : state->ctx);
 	state->callstack = &callstack;
+	state->calldepth++;
 
 	/* is native function */
 	if (tag->type == T_CFUNC) {
@@ -1042,6 +1046,7 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 
 	json_object_put(callstack.ctx);
 	state->callstack = callstack.next;
+	state->calldepth--;
 
 	return rv;
 }
