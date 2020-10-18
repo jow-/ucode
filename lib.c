@@ -199,7 +199,9 @@ ut_parse_error(struct ut_state *s, uint32_t off, uint64_t *tokens, int max_token
 		}
 	}
 
-	rv = ut_new_exception(s, op->off, "Syntax error: Unexpected token\n%s", msg);
+	rv = ut_new_exception(s,
+	                      op ? op->off : s->lex.lastoff,
+	                      "Syntax error: Unexpected token\n%s", msg);
 	free(msg);
 
 	return rv;
