@@ -74,7 +74,7 @@ struct ut_op {
 
 struct ut_scope {
 	struct ut_scope *next;
-	struct json_object *scope, *ctx, *parent;
+	struct json_object *scope, *parent;
 	size_t refs;
 };
 
@@ -88,7 +88,7 @@ struct ut_source {
 struct ut_function {
 	char *name;
 	struct json_object *args;
-	struct ut_scope *scope, *parent_scope;
+	struct ut_scope *parent_scope;
 	struct ut_source *source;
 	uint32_t entry;
 };
@@ -96,6 +96,8 @@ struct ut_function {
 struct ut_callstack {
 	struct ut_callstack *next;
 	struct ut_source *source;
+	struct ut_scope *scope;
+	struct json_object *ctx;
 	char *funcname;
 	uint32_t off;
 };

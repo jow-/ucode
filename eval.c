@@ -985,6 +985,7 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 	callstack.source = state->source;
 	callstack.funcname = state->function ? state->function->name : NULL;
 	callstack.off = op ? op->off : 0;
+	callstack.ctx = json_object_get(this ? this : state->ctx);
 	state->callstack = &callstack;
 
 	/* is native function */
@@ -996,19 +997,19 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 	/* is utpl function */
 	else {
 		fn = tag->tag.data;
-		fn->scope = ut_new_scope(state, fn->parent_scope);
-		fn->scope->ctx = json_object_get(this ? this : state->ctx);
+
+		callstack.scope = ut_new_scope(state, fn->parent_scope);
 
 		sc = state->scope;
 
-		state->scope = ut_acquire_scope(fn->scope);
+		state->scope = ut_acquire_scope(callstack.scope);
 
 		prev_fn = state->function;
 		state->function = fn;
 
 		if (fn->args)
 			for (arridx = 0; arridx < json_object_array_length(fn->args); arridx++)
-				ut_setval(fn->scope->scope, json_object_array_get_idx(fn->args, arridx),
+				ut_setval(callstack.scope->scope, json_object_array_get_idx(fn->args, arridx),
 				          argvals ? json_object_array_get_idx(argvals, arridx) : NULL);
 
 		rv = ut_execute_op_sequence(state, fn->entry);
@@ -1033,17 +1034,13 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 		ut_release_scope(state->scope);
 		state->scope = sc;
 
-		/* ... and remove the "this" context... */
-		json_object_put(fn->scope->ctx);
-		fn->scope->ctx = NULL;
-
-		/* ... and reset the function scope... */
-		ut_release_scope(fn->scope);
-		fn->scope = NULL;
+		/* ... and release it */
+		ut_release_scope(callstack.scope);
 
 		state->function = prev_fn;
 	}
 
+	json_object_put(callstack.ctx);
 	state->callstack = callstack.next;
 
 	return rv;
@@ -1369,7 +1366,7 @@ ut_execute_function(struct ut_state *state, uint32_t off)
 static struct json_object *
 ut_execute_this(struct ut_state *state, uint32_t off)
 {
-	return json_object_get(state->scope->ctx);
+	return json_object_get(state->callstack->ctx);
 }
 
 static struct json_object *
