@@ -1515,12 +1515,16 @@ next:
 static struct json_object *
 ut_sprintf(struct ut_state *s, uint32_t off, struct json_object *args)
 {
+	struct json_object *rv;
 	char *str = NULL;
 	size_t len;
 
 	len = ut_printf_common(s, off, args, &str);
+	rv = xjs_new_string_len(str, len);
 
-	return xjs_new_string_len(str, len);
+	free(str);
+
+	return rv;
 }
 
 static struct json_object *
@@ -1531,6 +1535,8 @@ ut_printf(struct ut_state *s, uint32_t off, struct json_object *args)
 
 	len = ut_printf_common(s, off, args, &str);
 	len = fwrite(str, 1, len, stdout);
+
+	free(str);
 
 	return xjs_new_int64(len);
 }
