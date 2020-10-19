@@ -536,7 +536,7 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 		}
 		else if (json_object_is_type(val, json_type_object)) {
 			json_object_object_foreach(val, key, item) {
-				ut_setval(scope, iv, xjs_new_string(key));
+				json_object_put(ut_setval(scope, iv, xjs_new_string(key)));
 				json_object_put(rv);
 
 				rv = ut_execute_op_sequence(state, body);
