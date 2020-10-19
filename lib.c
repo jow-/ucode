@@ -578,9 +578,17 @@ static struct json_object *
 ut_die(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	const char *msg = json_object_get_string(json_object_array_get_idx(args, 0));
-	struct ut_op *op = ut_get_op(s, off);
+	struct ut_function *prev_fn;
+	struct json_object *ex;
 
-	return ut_new_exception(s, op->off, "%s", msg ? msg : "Died");
+	prev_fn = s->function;
+	s->function = s->callstack->function;
+
+	ex = ut_new_exception(s, s->callstack->off, "%s", msg ? msg : "Died");
+
+	s->function = prev_fn;
+
+	return ex;
 }
 
 static struct json_object *
