@@ -313,8 +313,6 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 	return sprintbuf(pb, ") { ... }%s", strict ? "\"" : "");
 }
 
-#define ALIGN(x) (((x) + sizeof(size_t) - 1) & -sizeof(size_t))
-
 struct json_object *
 ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 {
@@ -346,7 +344,7 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 			json_object_array_add(fn->args, json_object_get(arg->val));
 	}
 
-	fn->source = s->source;
+	fn->source = s->function ? s->function->source : NULL;
 	fn->parent_scope = ut_acquire_scope(scope);
 
 	op->val = val;
@@ -371,32 +369,34 @@ exception_to_string(struct json_object *v, struct printbuf *pb, int level, int f
 }
 
 static void
-add_stacktrace(struct json_object *a, struct ut_source *source, const char *funcname, size_t off) {
+add_stacktrace(struct json_object *a, struct ut_function *function, size_t off) {
 	struct json_object *o = xjs_new_object();
 	size_t line = 1, rlen = 0, len;
 	bool truncated = false;
 	char buf[256];
 
-	if (source->filename)
-		json_object_object_add(o, "filename", xjs_new_string(source->filename));
+	if (function->source->filename)
+		json_object_object_add(o, "filename", xjs_new_string(function->source->filename));
 
-	if (funcname)
-		json_object_object_add(o, "function", xjs_new_string(funcname));
+	if (function->name)
+		json_object_object_add(o, "function", xjs_new_string(function->name));
 
-	fseek(source->fp, 0, SEEK_SET);
+	if (function->source->fp) {
+		fseek(function->source->fp, 0, SEEK_SET);
 
-	while (fgets(buf, sizeof(buf), source->fp)) {
-		len = strlen(buf);
-		rlen += len;
+		while (fgets(buf, sizeof(buf), function->source->fp)) {
+			len = strlen(buf);
+			rlen += len;
 
-		if (rlen > off) {
-			json_object_object_add(o, "line", xjs_new_int64(line));
-			json_object_object_add(o, "byte", xjs_new_int64(len - (rlen - off) + (truncated ? sizeof(buf) : 0) + 1));
-			break;
+			if (rlen > off) {
+				json_object_object_add(o, "line", xjs_new_int64(line));
+				json_object_object_add(o, "byte", xjs_new_int64(len - (rlen - off) + (truncated ? sizeof(buf) : 0) + 1));
+				break;
+			}
+
+			truncated = (len > 0 && buf[len-1] != '\n');
+			line += !truncated;
 		}
-
-		truncated = (len > 0 && buf[len-1] != '\n');
-		line += !truncated;
 	}
 
 	json_object_array_add(a, o);
@@ -405,7 +405,7 @@ add_stacktrace(struct json_object *a, struct ut_source *source, const char *func
 __attribute__((format(printf, 3, 4))) struct json_object *
 ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
 {
-	struct ut_callstack *callstack, *prevcall;
+	struct ut_callstack *callstack, *prevcall, here = {};
 	struct json_object *a;
 	struct ut_op *op;
 	va_list ap;
@@ -416,21 +416,19 @@ ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
 	op->type = T_EXCEPTION;
 	op->val = xjs_new_object();
 	op->off = off;
-	op->tag.data = s->source;
+	op->tag.data = s->function ? s->function->source : s->source;
 
 	a = xjs_new_array();
 
-	add_stacktrace(a,
-	               s->function ? s->function->source : s->source,
-	               s->function ? s->function->name : NULL,
-	               off);
+	here.next = s->callstack;
+	here.function = s->function;
+	here.off = off;
 
-	for (callstack = s->callstack ? s->callstack->next : NULL, prevcall = NULL;
-	     callstack != NULL;
+	for (callstack = &here, prevcall = NULL; callstack != NULL;
 	     prevcall = callstack, callstack = callstack->next)
-		if (callstack->off &&
-		    (!prevcall || callstack->source != prevcall->source || callstack->off != prevcall->off))
-			add_stacktrace(a, callstack->source, callstack->funcname, callstack->off);
+		if (callstack->off && callstack->function->source &&
+		    (!prevcall || callstack->function != prevcall->function || callstack->off != prevcall->off))
+			add_stacktrace(a, callstack->function, callstack->off);
 
 	json_object_object_add(op->val, "stacktrace", a);
 
@@ -560,7 +558,10 @@ ut_free(struct ut_state *s)
 
 	for (src = s->sources; src; src = src_next) {
 		src_next = src->next;
-		fclose(src->fp);
+
+		if (src->fp)
+			fclose(src->fp);
+
 		free(src->filename);
 		free(src);
 	}

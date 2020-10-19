@@ -40,8 +40,7 @@ Testing recursive invocations.
 -- Expect stderr --
 Runtime error: Too much recursion
 In test(), line 3, byte 7:
-  at function test ([stdin]:3:7)
-  at main function ([stdin]:6:6)
+  called from anonymous function ([stdin]:6:6)
 
  `        test();`
   Near here --^

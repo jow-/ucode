@@ -243,7 +243,7 @@ one
 -- Expect stderr --
 Died
 In test(), line 6, byte 7:
-  at main function ([stdin]:17:12)
+  called from anonymous function ([stdin]:17:12)
 
  `            die();`
   Near here -----^

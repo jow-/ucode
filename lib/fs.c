@@ -726,10 +726,10 @@ void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_obj
 	file_proto = ops->new_object(NULL);
 	dir_proto = ops->new_object(NULL);
 
-	register_functions(ops, global_fns, scope);
-	register_functions(ops, proc_fns, proc_proto);
-	register_functions(ops, file_fns, file_proto);
-	register_functions(ops, dir_fns, dir_proto);
+	register_functions(s, ops, global_fns, scope);
+	register_functions(s, ops, proc_fns, proc_proto);
+	register_functions(s, ops, file_fns, file_proto);
+	register_functions(s, ops, dir_fns, dir_proto);
 
 	ops->register_type("fs.proc", proc_proto, close_proc);
 	ops->register_type("fs.file", file_proto, close_file);

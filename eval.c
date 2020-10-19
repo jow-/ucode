@@ -975,7 +975,7 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 	struct json_object *rv = NULL;
 	struct ut_scope *sc;
 	size_t arridx;
-	ut_c_fn *cfn;
+	ut_c_fn *fptr;
 
 	if (!tag)
 		return NULL;
@@ -986,31 +986,29 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 		return ut_new_exception(state, op->off, "Runtime error: Too much recursion");
 
 	callstack.next = state->callstack;
-	callstack.source = state->source;
-	callstack.funcname = state->function ? state->function->name : NULL;
+	callstack.function = state->function;
 	callstack.off = op ? op->off : 0;
 	callstack.ctx = json_object_get(this ? this : state->ctx);
 	state->callstack = &callstack;
 	state->calldepth++;
 
+	fn = tag->tag.data;
+
+	prev_fn = state->function;
+	state->function = fn;
+
 	/* is native function */
 	if (tag->type == T_CFUNC) {
-		cfn = (ut_c_fn *)tag->tag.data;
-		rv = cfn ? cfn(state, off, argvals) : NULL;
+		fptr = (ut_c_fn *)fn->cfn;
+		rv = fptr ? fptr(state, off, argvals) : NULL;
 	}
 
 	/* is utpl function */
 	else {
-		fn = tag->tag.data;
-
 		callstack.scope = ut_new_scope(state, fn->parent_scope);
 
 		sc = state->scope;
-
 		state->scope = ut_acquire_scope(callstack.scope);
-
-		prev_fn = state->function;
-		state->function = fn;
 
 		if (fn->args)
 			for (arridx = 0; arridx < json_object_array_length(fn->args); arridx++)
@@ -1042,8 +1040,9 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 		/* ... and release it */
 		ut_release_scope(callstack.scope);
 
-		state->function = prev_fn;
 	}
+
+	state->function = prev_fn;
 
 	json_object_put(callstack.ctx);
 	state->callstack = callstack.next;
@@ -1679,10 +1678,14 @@ struct json_object *
 ut_run(struct ut_state *state, struct json_object *env, struct json_object *modules)
 {
 	struct json_object *args, *rv;
+	struct ut_function fn = {};
 	size_t i;
 
 	state->scope = ut_new_scope(state, NULL);
 	state->ctx = NULL;
+
+	fn.source = state->source;
+	state->function = &fn;
 
 	if (env) {
 		json_object_object_foreach(env, key, val)

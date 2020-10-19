@@ -1023,8 +1023,8 @@ void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_obj
 	ops = ut;
 	uci_proto = ops->new_object(NULL);
 
-	register_functions(ops, global_fns, scope);
-	register_functions(ops, cursor_fns, uci_proto);
+	register_functions(s, ops, global_fns, scope);
+	register_functions(s, ops, cursor_fns, uci_proto);
 
 	ops->register_type("uci.cursor", uci_proto, close_uci);
 }

@@ -320,8 +320,8 @@ void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_obj
 	ops = ut;
 	conn_proto = ops->new_object(NULL);
 
-	register_functions(ops, global_fns, scope);
-	register_functions(ops, conn_fns, conn_proto);
+	register_functions(s, ops, global_fns, scope);
+	register_functions(s, ops, conn_fns, conn_proto);
 
 	ops->register_type("ubus.connection", conn_proto, close_connection);
 }

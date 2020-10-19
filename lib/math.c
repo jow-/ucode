@@ -181,5 +181,5 @@ void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_obj
 {
 	ops = ut;
 
-	register_functions(ops, global_fns, scope);
+	register_functions(s, ops, global_fns, scope);
 }

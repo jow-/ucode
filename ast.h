@@ -31,6 +31,8 @@
 	#include <json-c/json.h>
 #endif
 
+#define ALIGN(x) (((x) + sizeof(size_t) - 1) & -sizeof(size_t))
+
 #define JSON_C_TO_STRING_STRICT (1<<31)
 
 enum ut_lex_state {
@@ -87,7 +89,10 @@ struct ut_source {
 
 struct ut_function {
 	char *name;
-	struct json_object *args;
+	union {
+		struct json_object *args;
+		void *cfn;
+	};
 	struct ut_scope *parent_scope;
 	struct ut_source *source;
 	uint32_t entry;
@@ -95,10 +100,9 @@ struct ut_function {
 
 struct ut_callstack {
 	struct ut_callstack *next;
-	struct ut_source *source;
+	struct ut_function *function;
 	struct ut_scope *scope;
 	struct json_object *ctx;
-	char *funcname;
 	uint32_t off;
 };
 

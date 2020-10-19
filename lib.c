@@ -112,7 +112,7 @@ format_context_line(char **msg, size_t *msglen, const char *line, size_t off)
 static void
 format_error_context(char **msg, size_t *msglen, struct ut_source *src, struct json_object *stacktrace, size_t off)
 {
-	struct json_object *e, *fn, *file;
+	struct json_object *e, *fn, *file, *line, *byte;
 	size_t len, rlen, idx;
 	const char *path;
 	bool truncated;
@@ -144,12 +144,20 @@ format_error_context(char **msg, size_t *msglen, struct ut_source *src, struct j
 			               json_object_get_int64(json_object_object_get(e, "byte")));
 		}
 		else {
-			sprintf_append(msg, msglen, "  at %s%s (%s:%" PRId64 ":%" PRId64 ")\n",
-			               fn ? "function " : "main function",
+			line = json_object_object_get(e, "line");
+			byte = json_object_object_get(e, "byte");
+
+			sprintf_append(msg, msglen, "  called from %s%s (%s",
+			               fn ? "function " : "anonymous function",
 			               fn ? json_object_get_string(fn) : "",
-			               json_object_get_string(file),
-			               json_object_get_int64(json_object_object_get(e, "line")),
-			               json_object_get_int64(json_object_object_get(e, "byte")));
+			               json_object_get_string(file));
+
+			if (line && byte)
+				sprintf_append(msg, msglen, ":%" PRId64 ":%" PRId64 ")\n",
+				               json_object_get_int64(line),
+				               json_object_get_int64(byte));
+			else
+				sprintf_append(msg, msglen, " [C])\n");
 		}
 	}
 
@@ -278,27 +286,38 @@ ut_cast_int64(struct json_object *v)
 static int
 ut_c_fn_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
-	return sprintbuf(pb, "%sfunction(...) { [native code] }%s",
-		level ? "\"" : "", level ? "\"" : "");
+	struct ut_op *op = json_object_get_userdata(v);
+	struct ut_function *fn = (void *)op + ALIGN(sizeof(*op));
+
+	return sprintbuf(pb, "%sfunction %s(...) { [native code] }%s",
+		level ? "\"" : "", fn->name, level ? "\"" : "");
 }
 
 static void
 ut_c_fn_free(struct json_object *v, void *ud)
 {
-	struct ut_op *op = json_object_get_userdata(v);
+	struct ut_op *op = ud;
 
 	json_object_put(op->tag.proto);
 	free(ud);
 }
 
 static bool
-ut_register_function(struct json_object *scope, const char *name, ut_c_fn *fn)
+ut_register_function(struct ut_state *state, struct json_object *scope, const char *name, ut_c_fn *cfn)
 {
 	struct json_object *val = xjs_new_object();
-	struct ut_op *op = xalloc(sizeof(*op));
+	struct ut_function *fn;
+	struct ut_op *op;
 
+	op = xalloc(ALIGN(sizeof(*op)) + ALIGN(sizeof(*fn)) + ALIGN(strlen(name) + 1));
 	op->val = val;
 	op->type = T_CFUNC;
+
+	fn = (void *)op + ALIGN(sizeof(*op));
+	fn->source = state->function ? state->function->source : NULL;
+	fn->name = strcpy((char *)fn + ALIGN(sizeof(*fn)), name);
+	fn->cfn = cfn;
+
 	op->tag.data = fn;
 
 	json_object_set_serializer(val, ut_c_fn_to_string, op, ut_c_fn_free);
@@ -1513,6 +1532,8 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 {
 	void (*init)(const struct ut_ops *, struct ut_state *, struct json_object *);
 	struct ut_op *op = ut_get_op(s, off);
+	struct ut_function fn = {}, *prev_fn;
+	struct ut_source *src, *prev_src;
 	struct json_object *scope;
 	struct stat st;
 	void *dlh;
@@ -1531,9 +1552,25 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 	if (!init)
 		return ut_new_exception(s, op->off, "Module %s provides no 'ut_module_init' function", path);
 
+	src = xalloc(sizeof(*src));
+	src->filename = xstrdup(path);
+	src->next = s->sources;
+
+	fn.name = "require";
+	fn.source = src;
+
+	prev_fn = s->function;
+	s->function = &fn;
+
+	prev_src = s->source;
+	s->source = s->sources = src;
+
 	scope = xjs_new_object();
 
 	init(&ut, s, scope);
+
+	s->source = prev_src;
+	s->function = prev_fn;
 
 	return scope;
 }
@@ -1542,10 +1579,6 @@ struct json_object *
 ut_execute_source(struct ut_state *s, struct ut_source *src, struct ut_scope *scope)
 {
 	struct json_object *entry, *rv;
-	struct ut_source *prev_src;
-
-	prev_src = s->source;
-	s->source = src;
 
 	rv = ut_parse(s, src->fp);
 
@@ -1558,8 +1591,6 @@ ut_execute_source(struct ut_state *s, struct ut_source *src, struct ut_scope *sc
 		json_object_put(entry);
 	}
 
-	s->source = prev_src;
-
 	return rv;
 }
 
@@ -1567,7 +1598,9 @@ static struct json_object *
 ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct ut_scope *scope)
 {
 	struct ut_op *op = ut_get_op(s, off);
-	struct ut_source *src;
+	struct ut_function fn = {}, *prev_fn;
+	struct ut_source *src, *prev_src;
+	struct json_object *rv;
 	struct stat st;
 	FILE *fp;
 
@@ -1584,9 +1617,21 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct ut_sc
 	src->filename = path ? xstrdup(path) : NULL;
 	src->next = s->sources;
 
-	s->sources = src;
+	prev_src = s->source;
+	s->source = s->sources = src;
 
-	return ut_execute_source(s, src, scope);
+	fn.name = "require";
+	fn.source = src;
+
+	prev_fn = s->function;
+	s->function = &fn;
+
+	rv = ut_execute_source(s, src, scope);
+
+	s->function = prev_fn;
+	s->source = prev_src;
+
+	return rv;
 }
 
 static struct json_object *
@@ -2096,7 +2141,7 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (scope && !json_object_is_type(scope, json_type_object))
 		return ut_new_exception(s, op->off, "Passed scope value is not an object");
 
-	p = include_path(s->source->filename, json_object_get_string(path));
+	p = include_path(s->callstack->function->source->filename, json_object_get_string(path));
 
 	if (!p)
 		return ut_new_exception(s, op->off, "Include file not found");
@@ -2198,5 +2243,5 @@ ut_lib_init(struct ut_state *state, struct json_object *scope)
 	int i;
 
 	for (i = 0; i < sizeof(functions) / sizeof(functions[0]); i++)
-		ut_register_function(scope, functions[i].name, functions[i].func);
+		ut_register_function(state, scope, functions[i].name, functions[i].func);
 }
