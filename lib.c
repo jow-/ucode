@@ -615,6 +615,13 @@ ut_filter(struct ut_state *s, uint32_t off, struct json_object *args)
 
 		rv = ut_invoke(s, off, NULL, func, cmpargs);
 
+		if (ut_is_type(rv, T_EXCEPTION)) {
+			json_object_put(cmpargs);
+			json_object_put(arr);
+
+			return rv;
+		}
+
 		if (ut_val_is_truish(rv))
 			json_object_array_add(arr, json_object_get(json_object_array_get_idx(obj, arridx)));
 
@@ -758,7 +765,7 @@ ut_map(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
 	struct json_object *func = json_object_array_get_idx(args, 1);
-	struct json_object *arr, *cmpargs;
+	struct json_object *arr, *cmpargs, *rv;
 	size_t arridx, arrlen;
 
 	if (!json_object_is_type(obj, json_type_array))
@@ -773,7 +780,16 @@ ut_map(struct ut_state *s, uint32_t off, struct json_object *args)
 		json_object_array_put_idx(cmpargs, 0, json_object_get(json_object_array_get_idx(obj, arridx)));
 		json_object_array_put_idx(cmpargs, 1, xjs_new_int64(arridx));
 
-		json_object_array_add(arr, ut_invoke(s, off, NULL, func, cmpargs));
+		rv = ut_invoke(s, off, NULL, func, cmpargs);
+
+		if (ut_is_type(rv, T_EXCEPTION)) {
+			json_object_put(cmpargs);
+			json_object_put(arr);
+
+			return rv;
+		}
+
+		json_object_array_add(arr, rv);
 	}
 
 	json_object_put(cmpargs);
@@ -874,6 +890,7 @@ static struct {
 	uint32_t off;
 	struct json_object *fn;
 	struct json_object *args;
+	struct json_object *ex;
 } sort_ctx;
 
 static int
@@ -887,10 +904,20 @@ sort_fn(const void *k1, const void *k2)
 	if (!sort_ctx.fn)
 		return !ut_cmp(T_LT, *v1, *v2);
 
-	json_object_array_put_idx(sort_ctx.args, 0, *v1);
-	json_object_array_put_idx(sort_ctx.args, 1, *v2);
+	if (sort_ctx.ex)
+		return 0;
+
+	json_object_array_put_idx(sort_ctx.args, 0, json_object_get(*v1));
+	json_object_array_put_idx(sort_ctx.args, 1, json_object_get(*v2));
 
 	rv = ut_invoke(sort_ctx.s, sort_ctx.off, NULL, sort_ctx.fn, sort_ctx.args);
+
+	if (ut_is_type(rv, T_EXCEPTION)) {
+		sort_ctx.ex = rv;
+
+		return 0;
+	}
+
 	ret = !ut_val_is_truish(rv);
 
 	json_object_put(rv);
@@ -917,7 +944,7 @@ ut_sort(struct ut_state *s, uint32_t off, struct json_object *args)
 	json_object_array_sort(arr, sort_fn);
 	json_object_put(sort_ctx.args);
 
-	return json_object_get(arr);
+	return sort_ctx.ex ? sort_ctx.ex : json_object_get(arr);
 }
 
 static struct json_object *
@@ -1813,8 +1840,11 @@ ut_replace_cb(struct ut_state *s, uint32_t off, struct json_object *func,
 
 	rv = ut_invoke(s, off, NULL, func, cbargs);
 
-	if (ut_is_type(rv, T_EXCEPTION))
+	if (ut_is_type(rv, T_EXCEPTION)) {
+		json_object_put(cbargs);
+
 		return rv;
+	}
 
 	sprintf_append(sp, sl, "%s", rv ? json_object_get_string(rv) : "null");
 
@@ -1921,7 +1951,7 @@ ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
 				rv = ut_replace_cb(s, off, replace, p, pmatch, ARRAY_SIZE(pmatch), &sp, &sl);
 
 				if (rv) {
-					free(s);
+					free(sp);
 
 					return rv;
 				}
@@ -1956,7 +1986,7 @@ ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
 					rv = ut_replace_cb(s, off, replace, l, pmatch, 1, &sp, &sl);
 
 					if (rv) {
-						free(s);
+						free(sp);
 
 						return rv;
 					}
