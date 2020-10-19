@@ -427,6 +427,7 @@ ut_execute_local(struct ut_state *state, uint32_t off)
 			if (ut_is_type(val, T_EXCEPTION))
 				return val;
 
+			json_object_put(rv);
 			rv = ut_setval(state->scope->scope, label, val);
 		}
 	}
