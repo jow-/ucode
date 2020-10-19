@@ -525,6 +525,7 @@ ut_free(struct ut_state *s)
 {
 	struct ut_source *src, *src_next;
 	struct ut_scope *sc, *sc_next;
+	struct json_object *scj;
 	size_t n;
 
 	if (s) {
@@ -547,8 +548,9 @@ ut_free(struct ut_state *s)
 	json_object_put(s->rval);
 
 	for (sc = s->scopelist; sc; sc = sc->next) {
-		json_object_put(sc->scope);
+		scj = sc->scope;
 		sc->scope = NULL;
+		json_object_put(scj);
 	}
 
 	for (sc = s->scopelist; sc; sc = sc_next) {
