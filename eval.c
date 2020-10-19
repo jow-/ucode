@@ -411,23 +411,24 @@ ut_execute_assign(struct ut_state *state, uint32_t off)
 static struct json_object *
 ut_execute_local(struct ut_state *state, uint32_t off)
 {
-	struct ut_op *as = ut_get_child(state, off, 0);
-	struct json_object *val, *rv = NULL;
-	struct ut_op *label;
+	struct ut_op *op = ut_get_op(state, off), *asop, *alop;
+	uint32_t as = op ? op->tree.operand[0] : 0;
+	struct json_object *label, *val, *rv = NULL;
 
 	while (as) {
-		label = ut_get_op(state, as->tree.operand[0]);
+		asop = ut_get_op(state, as);
+		alop = asop ? ut_get_child(state, as, 0) : NULL;
+		as = asop ? asop->tree.next : 0;
 
-		if (label) {
-			val = as->tree.operand[1] ? ut_execute_op(state, as->tree.operand[1]) : NULL;
+		if (alop) {
+			label = alop->val;
+			val = asop->tree.operand[1] ? ut_execute_op(state, asop->tree.operand[1]) : NULL;
 
 			if (ut_is_type(val, T_EXCEPTION))
 				return val;
 
-			rv = ut_setval(state->scope->scope, label->val, val);
+			rv = ut_setval(state->scope->scope, label, val);
 		}
-
-		as = ut_get_op(state, as->tree.next);
 	}
 
 	return rv;
