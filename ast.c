@@ -538,33 +538,33 @@ ut_free(struct ut_state *s)
 		s->poolsize = 0;
 
 		ut_reset(s);
+
+		json_object_put(s->rval);
+
+		for (sc = s->scopelist; sc; sc = sc->next) {
+			scj = sc->scope;
+			sc->scope = NULL;
+			json_object_put(scj);
+		}
+
+		for (sc = s->scopelist; sc; sc = sc_next) {
+			sc_next = sc->next;
+			free(sc);
+		}
+
+		for (src = s->sources; src; src = src_next) {
+			src_next = src->next;
+
+			if (src->fp)
+				fclose(src->fp);
+
+			free(src->filename);
+			free(src);
+		}
 	}
 
 	while (ut_ext_types_count > 0)
 		json_object_put(ut_ext_types[--ut_ext_types_count].proto);
-
-	json_object_put(s->rval);
-
-	for (sc = s->scopelist; sc; sc = sc->next) {
-		scj = sc->scope;
-		sc->scope = NULL;
-		json_object_put(scj);
-	}
-
-	for (sc = s->scopelist; sc; sc = sc_next) {
-		sc_next = sc->next;
-		free(sc);
-	}
-
-	for (src = s->sources; src; src = src_next) {
-		src_next = src->next;
-
-		if (src->fp)
-			fclose(src->fp);
-
-		free(src->filename);
-		free(src);
-	}
 
 	free(ut_ext_types);
 	free(s);
