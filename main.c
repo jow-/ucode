@@ -38,7 +38,7 @@ print_usage(char *app)
 {
 	printf(
 	"== Usage ==\n\n"
-	"  # %s [-d] [-l] [-r] [-S] [-e '{\"var\": ...}'] [-E env.json] {-i <file> | -s \"utpl script...\"}\n"
+	"  # %s [-d] [-l] [-r] [-S] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"utpl script...\"}\n"
 	"  -h, --help	Print this help\n"
 	"  -i file	Specify an utpl script to parse\n"
 	"  -s \"utpl script...\"	Specify an utpl code fragment to parse\n"
@@ -257,13 +257,13 @@ parse_envfile(FILE *fp)
 int
 main(int argc, char **argv)
 {
-	struct json_object *env = NULL, *modules = NULL, *o;
+	struct json_object *env = NULL, *modules = NULL, *o, *p;
 	struct ut_state *state = NULL;
 	struct ut_source source = {};
+	char *stdin = NULL, *c;
 	bool dumponly = false;
 	bool shebang = false;
 	FILE *envfile = NULL;
-	char *stdin = NULL;
 	int opt, rv = 0;
 
 	if (argc == 1)
@@ -329,18 +329,32 @@ main(int argc, char **argv)
 			break;
 
 		case 'e':
-			envfile = fmemopen(optarg, strlen(optarg), "rb");
+			c = strchr(optarg, '=');
+
+			if (c)
+				*c++ = 0;
+			else
+				c = optarg;
+
+			envfile = fmemopen(c, strlen(c), "rb");
 			/* fallthrough */
 
 		case 'E':
 			if (!envfile) {
-				if (!strcmp(optarg, "-"))
+				c = strchr(optarg, '=');
+
+				if (c)
+					*c++ = 0;
+				else
+					c = optarg;
+
+				if (!strcmp(c, "-"))
 					envfile = read_stdin(&stdin);
 				else
-					envfile = fopen(optarg, "rb");
+					envfile = fopen(c, "rb");
 
 				if (!envfile) {
-					fprintf(stderr, "Failed to open %s: %s\n", optarg, strerror(errno));
+					fprintf(stderr, "Failed to open %s: %s\n", c, strerror(errno));
 					rv = 1;
 					goto out;
 				}
@@ -358,8 +372,16 @@ main(int argc, char **argv)
 
 			env = env ? env : xjs_new_object();
 
+			if (c > optarg && optarg[0]) {
+				p = xjs_new_object();
+				json_object_object_add(env, optarg, p);
+			}
+			else {
+				p = env;
+			}
+
 			json_object_object_foreach(o, key, val)
-				json_object_object_add(env, key, json_object_get(val));
+				json_object_object_add(p, key, json_object_get(val));
 
 			json_object_put(o);
 
