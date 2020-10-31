@@ -1716,7 +1716,8 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 	search = sc ? json_object_object_get(sc->scope, "REQUIRE_SEARCH_PATH") : NULL;
 
 	if (!json_object_is_type(search, json_type_array))
-		return ut_new_exception(s, op->off, "Global require search path not set");
+		return ut_new_exception(s, op ? op->off : 0,
+		                        "Global require search path not set");
 
 	for (arridx = 0, arrlen = json_object_array_length(search); arridx < arrlen; arridx++) {
 		se = json_object_array_get_idx(search, arridx);
@@ -1730,7 +1731,8 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 			return res;
 	}
 
-	return ut_new_exception(s, op->off, "No module named '%s' could be found", name);
+	return ut_new_exception(s, op ? op->off : 0,
+	                        "No module named '%s' could be found", name);
 }
 
 static struct json_object *
