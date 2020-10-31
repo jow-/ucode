@@ -162,8 +162,8 @@ parse(struct ut_state *state, struct ut_source *src, bool dumponly,
 			}
 		}
 		else {
-			ungetc(c, src->fp);
 			ungetc(c2, src->fp);
+			ungetc(c, src->fp);
 		}
 	}
 
