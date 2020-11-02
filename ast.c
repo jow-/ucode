@@ -426,7 +426,7 @@ ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
 
 	for (callstack = &here, prevcall = NULL; callstack != NULL;
 	     prevcall = callstack, callstack = callstack->next)
-		if (callstack->off && callstack->function->source &&
+		if (callstack->off && callstack->function && callstack->function->source &&
 		    (!prevcall || callstack->function != prevcall->function || callstack->off != prevcall->off))
 			add_stacktrace(a, callstack->function, callstack->off);
 
