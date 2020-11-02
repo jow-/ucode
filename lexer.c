@@ -142,6 +142,7 @@ static const struct token reserved_words[] = {
 	{ T_CATCH,		"catch", 5 },
 	{ T_BOOL,		"false", 5, { .b = false } },
 	{ T_BOOL,		"true",  4, { .b = true } },
+	{ T_ELIF,		"elif",  4 },
 	{ T_ELSE,		"else",  4 },
 	{ T_THIS,		"this",  4 },
 	{ T_NULL,		"null",  4 },

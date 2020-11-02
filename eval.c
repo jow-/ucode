@@ -1562,6 +1562,7 @@ static struct json_object *(*fns[__T_MAX])(struct ut_state *, uint32_t) = {
 	[T_LBRACK]   = ut_execute_lbrack,
 	[T_LBRACE]   = ut_execute_object,
 	[T_IF]       = ut_execute_if,
+	[T_ELIF]     = ut_execute_if,
 	[T_QMARK]    = ut_execute_if,
 	[T_FOR]      = ut_execute_for,
 	[T_WHILE]    = ut_execute_while,

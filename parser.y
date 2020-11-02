@@ -78,6 +78,19 @@ ut_no_empty_obj(struct ut_state *s, uint32_t off)
 	return (!op || op->type != T_LBRACE || op->tree.operand[0]) ? off : 0;
 }
 
+static inline uint32_t
+ut_add_else(struct ut_state *s, uint32_t off, uint32_t add)
+{
+	struct ut_op *tail = ut_get_op(s, off);
+
+	while (tail && tail->tree.operand[2])
+		tail = ut_get_op(s, tail->tree.operand[2]);
+
+	tail->tree.operand[2] = add;
+
+	return off;
+}
+
 }
 
 %syntax_error {
@@ -133,9 +146,17 @@ sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN stmt(D) T_ELSE stmt(E).
 														{ A = wrap_op(B, C, no_empty_obj(D), no_empty_obj(E)); }
 sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN stmt(D). [T_IF]
 														{ A = wrap_op(B, C, no_empty_obj(D)); }
+sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D) sel_elifs(E) T_ELSE chunks(F) T_ENDIF.
+														{ A = ut_add_else(s, wrap_op(B, C, D, E), F); }
 sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D) T_ELSE chunks(E) T_ENDIF.
 														{ A = wrap_op(B, C, D, E); }
 sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D) T_ENDIF. [T_IF]
+														{ A = wrap_op(B, C, D); }
+
+sel_elifs(A) ::= sel_elifs(B) sel_elif(C).				{ A = ut_add_else(s, B, C); }
+sel_elifs(A) ::= sel_elif(B).							{ A = B; }
+
+sel_elif(A) ::= T_ELIF(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D).
 														{ A = wrap_op(B, C, D); }
 
 iter_stmt(A) ::= T_WHILE(B) T_LPAREN exp(C) T_RPAREN stmt(D).
