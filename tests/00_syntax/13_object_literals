@@ -49,3 +49,44 @@ either JSON or JavaScript notation.
 	print(third_obj, "\n");
 	print(nested_obj, "\n");
 -- End --
+
+
+Additionally, utpl implements ES6-like spread operators to allow shallow copying
+of object properties into other objects.
+
+-- Expect stdout --
+{ "foo": true, "bar": false }
+{ "foo": true, "bar": false, "baz": 123, "qrx": 456 }
+{ "foo": false, "bar": true, "baz": 123, "qrx": 456 }
+{ "foo": true, "bar": false }
+{ "foo": true, "bar": false, "level2": { "baz": 123, "qrx": 456 } }
+{ "foo": true, "bar": false, "0": 7, "1": 8, "2": 9 }
+-- End --
+
+-- Testcase --
+{%
+	o1 = { foo: true, bar: false };
+	o2 = { baz: 123, qrx: 456 };
+	arr = [7, 8, 9];
+
+	print(join("\n", [
+		// copying one object into another
+		{ ...o1 },
+
+		// combining two objects
+		{ ...o1, ...o2 },
+
+		// copying object and override properties
+		{ ...o1, ...o2, foo: false, bar: true },
+
+		// default properties overwritten by spread operator
+		{ foo: 123, bar: 456, ...o1 },
+
+		// nested spread operators
+		{ ...o1, level2: { ...o2 } },
+
+		// merging array into objects
+		{ ...o1, ...arr }
+	]), "\n");
+%}
+-- End --

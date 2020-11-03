@@ -23,3 +23,60 @@ The utpl script language supports declaring arrays using JSON notation.
 	print(empty_array, "\n");
 	print(json_array, "\n");
 -- End --
+
+
+Additionally, utpl implements ES6-like spread operators to allow shallow copying
+of array values into other arrays.
+
+-- Expect stdout --
+[ 1, 2, 3 ]
+[ 1, 2, 3, 4, 5, 6 ]
+[ 1, 2, 3, 4, 5, 6, false, true ]
+[ 1, 2, 3, false, true, 4, 5, 6 ]
+[ 1, 2, 3, [ 4, 5, 6 ] ]
+-- End --
+
+-- Testcase --
+{%
+	a1 = [ 1, 2, 3 ];
+	a2 = [ 4, 5, 6 ];
+
+	print(join("\n", [
+		// copying one array into another
+		[ ...a1 ],
+
+		// combining two arrays
+		[ ...a1, ...a2 ],
+
+		// copying array and append values
+		[ ...a1, ...a2, false, true ],
+
+		// copy array and interleave values
+		[ ...a1, false, true, ...a2 ],
+
+		// nested spread operators
+		[ ...a1, [ ...a2 ] ]
+	]), "\n");
+%}
+-- End --
+
+Contrary to merging arrays into objects, objects cannot be merged into arrays.
+
+-- Expect stderr --
+Type error: ({ "foo": true, "bar": false }) is not iterable
+In line 5, byte 21:
+
+ `    print([ ...arr, ...obj ], "\n");`
+  Near here -------------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	arr = [ 1, 2, 3 ];
+	obj = { foo: true, bar: false };
+
+	print([ ...arr, ...obj ], "\n");
+%}
+-- End --

@@ -925,7 +925,8 @@ static struct json_object *
 ut_execute_list(struct ut_state *state, uint32_t off)
 {
 	struct ut_op *op = ut_get_op(state, off);
-	struct json_object *val, *arr = xjs_new_array();
+	struct json_object *ex, *val, *arr = xjs_new_array();
+	size_t i;
 
 	while (op) {
 		val = ut_execute_op(state, ut_get_off(state, op));
@@ -936,7 +937,26 @@ ut_execute_list(struct ut_state *state, uint32_t off)
 			return val;
 		}
 
-		json_object_array_add(arr, val);
+		if (op->is_ellip) {
+			if (!json_object_is_type(val, json_type_array)) {
+				ex = ut_new_exception(state, op->off, "Type error: (%s) is not iterable",
+				                      json_object_get_string(val));
+
+				json_object_put(arr);
+				json_object_put(val);
+
+				return ex;
+			}
+
+			for (i = 0; i < json_object_array_length(val); i++)
+				json_object_array_add(arr, json_object_get(json_object_array_get_idx(val, i)));
+
+			json_object_put(val);
+		}
+		else {
+			json_object_array_add(arr, val);
+		}
+
 		op = ut_get_op(state, op->tree.next);
 	}
 
@@ -946,8 +966,10 @@ ut_execute_list(struct ut_state *state, uint32_t off)
 static struct json_object *
 ut_execute_object(struct ut_state *state, uint32_t off)
 {
-	struct json_object *v, *obj = ut_new_object(NULL);
+	struct json_object *ex, *v, *obj = ut_new_object(NULL);
 	struct ut_op *key, *val;
+	char *istr;
+	size_t i;
 
 	for (key = ut_get_child(state, off, 0), val = ut_get_op(state, key ? key->tree.next : 0);
 	     key != NULL && val != NULL;
@@ -960,7 +982,41 @@ ut_execute_object(struct ut_state *state, uint32_t off)
 			return v;
 		}
 
-		json_object_object_add(obj, json_object_get_string(key->val), v);
+		if (key->type == T_ELLIP) {
+			switch (json_object_get_type(v)) {
+			case json_type_object:
+				; /* a label can only be part of a statement and a declaration is not a statement */
+				json_object_object_foreach(v, vk, vv)
+					json_object_object_add(obj, vk, json_object_get(vv));
+
+				json_object_put(v);
+
+				break;
+
+			case json_type_array:
+				for (i = 0; i < json_object_array_length(v); i++) {
+					xasprintf(&istr, "%zu", i);
+					json_object_object_add(obj, istr, json_object_get(json_object_array_get_idx(v, i)));
+					free(istr);
+				}
+
+				json_object_put(v);
+
+				break;
+
+			default:
+				ex = ut_new_exception(state, val->off, "Type error: (%s) is not iterable",
+				                      json_object_get_string(v));
+
+				json_object_put(obj);
+				json_object_put(v);
+
+				return ex;
+			}
+		}
+		else {
+			json_object_object_add(obj, json_object_get_string(key->val), v);
+		}
 	}
 
 	return obj;
