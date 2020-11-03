@@ -1,0 +1,124 @@
+Besides the ordinary ES5-like function declarations, utpl supports ES6 inspired
+arrow function syntax as well. Such arrow functions are useful for callbacks to functions such as replace(), map() or filter().
+
+-- Expect stdout --
+() => { ... }
+test
+(a, b) => { ... }
+3
+(...args) => { ... }
+15
+(a) => { ... }
+10
+(a) => { ... }
+36
+-- End --
+
+-- Testcase --
+{%
+
+	// assign arrow function to variable
+	test1_fn = () => {
+		return "test";
+	};
+
+	// assign arrow function with parameters
+	test2_fn = (a, b) => {
+		return a + b;
+	};
+
+	// nesting functions is legal
+	test3_fn = (...args) => {
+		nested_fn = (a, b) => {
+			return a * b;
+		};
+
+		return args[0] + nested_fn(args[0], args[1]);
+	};
+
+	// parentheses may be omitted if arrow function takes only one argument
+	test4_fn = a => {
+		a * 2;
+	};
+
+	// curly braces may be omitted if function body is a single expression
+	test5_fn = a => a * a;
+
+	print(join("\n", [
+		test1_fn,
+		test1_fn(),
+		test2_fn,
+		test2_fn(1, 2),
+		test3_fn,
+		test3_fn(3, 4),
+		test4_fn,
+		test4_fn(5),
+		test5_fn,
+		test5_fn(6)
+	]), "\n");
+%}
+-- End --
+
+
+While the main advantage of arrow functions is the compact syntax, another
+important difference to normal functions is the "this" context behaviour -
+arrow functions do not have an own "this" context and simply inherit it from
+the outer calling scope.
+
+-- Expect stdout --
+this is set to obj: true
+arrow function uses outher this: true
+normal function has own this: true
+arrow function as method has no this: true
+-- End --
+
+-- Testcase --
+{%
+	obj = {
+		method: function() {
+			local that = this;
+			local arr = () => {
+				print("arrow function uses outher this: ", that == this, "\n");
+			};
+			local fn = function() {
+				print("normal function has own this: ", that != this, "\n");
+			};
+
+			print("this is set to obj: ", this == obj, "\n");
+
+			arr();
+			fn();
+		},
+
+		arrowfn: () => {
+			print("arrow function as method has no this: ", this == null, "\n");
+		}
+	};
+
+	obj.method();
+	obj.arrowfn();
+%}
+-- End --
+
+
+Due to the difficulty of recognizing arrow function expressions with an LR(1)
+grammar the parser has to use a generic expression rule on the lhs argument list
+and verify that it does not contain non-label nodes while building the ast. The
+subsequent testcase asserts that case.
+
+-- Expect stderr --
+Syntax error: Unexpected token
+Expecting Label
+In line 2, byte 5:
+
+ `    (a + 1) => { print("test\n") }`
+         ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{%
+	(a + 1) => { print("test\n") }
+%}
+-- End --

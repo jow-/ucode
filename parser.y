@@ -91,6 +91,26 @@ ut_add_else(struct ut_state *s, uint32_t off, uint32_t add)
 	return off;
 }
 
+static inline uint32_t
+ut_check_arglist(struct ut_state *s, uint32_t off)
+{
+	uint64_t tokens[(__T_MAX + 63) & -64] = {};
+	struct ut_op *arg = ut_get_op(s, off);
+
+	while (arg) {
+		if (arg->type != T_LABEL) {
+			tokens[T_LABEL / 64] |= ((uint64_t)1 << (T_LABEL % 64));
+			ut_parse_error(s, ut_get_off(s, arg), tokens, T_LABEL);
+
+			return 0;
+		}
+
+		arg = ut_get_op(s, arg->tree.next);
+	}
+
+	return off;
+}
+
 }
 
 %syntax_error {
@@ -233,26 +253,39 @@ decl_stmt(A) ::= T_LOCAL(B) decls(C) T_SCOL.			{ A = wrap_op(B, C); }
 decls(A) ::= decls(B) T_COMMA decl(C).					{ A = append_op(B, C); }
 decls(A) ::= decl(B).									{ A = B; }
 
-decl(A) ::= T_LABEL(B) T_ASSIGN(C) ternary_exp(D).		{ A = wrap_op(C, B, D); }
+decl(A) ::= T_LABEL(B) T_ASSIGN(C) arrow_exp(D).		{ A = wrap_op(C, B, D); }
 decl(A) ::= T_LABEL(B).									{ A = new_op(T_ASSIGN, NULL, B); }
+
+arrowfn_body(A) ::= cpd_stmt(B).						{ A = B; }
+arrowfn_body(A) ::= assign_exp(B).						{ A = no_empty_obj(B); }
 
 exp(A) ::= exp(B) T_COMMA assign_exp(C).				{ A = append_op(B, C); }
 exp(A) ::= assign_exp(B).								{ A = B; }
 
-assign_exp(A) ::= unary_exp(B) T_ASSIGN(C) ternary_exp(D).
+assign_exp(A) ::= unary_exp(B) T_ASSIGN(C) arrow_exp(D).
 														{ A = wrap_op(C, B, D); }
-assign_exp(A) ::= unary_exp(B) T_ASADD ternary_exp(C).	{ A = new_op(T_ADD, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
-assign_exp(A) ::= unary_exp(B) T_ASSUB ternary_exp(C).	{ A = new_op(T_SUB, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
-assign_exp(A) ::= unary_exp(B) T_ASMUL ternary_exp(C).	{ A = new_op(T_MUL, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
-assign_exp(A) ::= unary_exp(B) T_ASDIV ternary_exp(C).	{ A = new_op(T_DIV, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
-assign_exp(A) ::= unary_exp(B) T_ASMOD ternary_exp(C).	{ A = new_op(T_MOD, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
-assign_exp(A) ::= unary_exp(B) T_ASLEFT ternary_exp(C).	{ A = new_op(T_LSHIFT, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
-assign_exp(A) ::= unary_exp(B) T_ASRIGHT ternary_exp(C).
+assign_exp(A) ::= unary_exp(B) T_ASADD arrow_exp(C).	{ A = new_op(T_ADD, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
+assign_exp(A) ::= unary_exp(B) T_ASSUB arrow_exp(C).	{ A = new_op(T_SUB, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
+assign_exp(A) ::= unary_exp(B) T_ASMUL arrow_exp(C).	{ A = new_op(T_MUL, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
+assign_exp(A) ::= unary_exp(B) T_ASDIV arrow_exp(C).	{ A = new_op(T_DIV, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
+assign_exp(A) ::= unary_exp(B) T_ASMOD arrow_exp(C).	{ A = new_op(T_MOD, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
+assign_exp(A) ::= unary_exp(B) T_ASLEFT arrow_exp(C).	{ A = new_op(T_LSHIFT, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
+assign_exp(A) ::= unary_exp(B) T_ASRIGHT arrow_exp(C).
 														{ A = new_op(T_RSHIFT, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
-assign_exp(A) ::= unary_exp(B) T_ASBAND ternary_exp(C).	{ A = new_op(T_BAND, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
-assign_exp(A) ::= unary_exp(B) T_ASBXOR ternary_exp(C).	{ A = new_op(T_BXOR, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
-assign_exp(A) ::= unary_exp(B) T_ASBOR ternary_exp(C).	{ A = new_op(T_BOR, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
-assign_exp(A) ::= ternary_exp(B).						{ A = B; }
+assign_exp(A) ::= unary_exp(B) T_ASBAND arrow_exp(C).	{ A = new_op(T_BAND, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
+assign_exp(A) ::= unary_exp(B) T_ASBXOR arrow_exp(C).	{ A = new_op(T_BXOR, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
+assign_exp(A) ::= unary_exp(B) T_ASBOR arrow_exp(C).	{ A = new_op(T_BOR, NULL, B, C); A = new_op(T_ASSIGN, NULL, B, A); }
+assign_exp(A) ::= arrow_exp(B).							{ A = B; }
+
+arrow_exp(A) ::= unary_exp(B) T_ARROW(C) arrowfn_body(D).
+														{ A = wrap_op(C, 0, ut_check_arglist(s, B), D); }
+arrow_exp(A) ::= T_LPAREN T_RPAREN T_ARROW(C) arrowfn_body(D).
+														{ A = wrap_op(C, 0, 0, D); }
+arrow_exp(A) ::= T_LPAREN T_ELLIP T_LABEL(B) T_RPAREN T_ARROW(C) arrowfn_body(D).
+														{ A = wrap_op(C, 0, B, D); ut_get_op(s, B)->is_ellip = 1; }
+arrow_exp(A) ::= T_LPAREN exp(B) T_COMMA T_ELLIP T_LABEL(C) T_RPAREN T_ARROW(D) arrowfn_body(E).
+														{ A = append_op(B, C); A = wrap_op(D, 0, ut_check_arglist(s, A), E); ut_get_op(s, C)->is_ellip = 1; }
+arrow_exp(A) ::= ternary_exp(B).						{ A = B; }
 
 ternary_exp(A) ::= or_exp(B) T_QMARK(C) assign_exp(D) T_COLON ternary_exp(E).
 														{ A = wrap_op(C, B, D, E); }
@@ -327,7 +360,7 @@ primary_exp(A) ::= T_NULL(B).							{ A = B; }
 primary_exp(A) ::= T_THIS(B).							{ A = B; }
 primary_exp(A) ::= array(B).							{ A = B; }
 primary_exp(A) ::= object(B).							{ A = B; }
-primary_exp(A) ::= T_LPAREN assign_exp(B) T_RPAREN.		{ A = B; }
+primary_exp(A) ::= T_LPAREN exp(B) T_RPAREN.			{ A = B; }
 primary_exp(A) ::= T_FUNC T_LPAREN T_RPAREN empty_object.
 														{ A = new_op(T_FUNC, NULL, 0, 0, 0); }
 primary_exp(A) ::= T_FUNC T_LPAREN args(B) T_RPAREN empty_object.

@@ -1046,7 +1046,12 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 	callstack.next = state->callstack;
 	callstack.function = state->function;
 	callstack.off = op ? op->off : 0;
-	callstack.ctx = json_object_get(this ? this : state->ctx);
+
+	if (tag->is_arrow)
+		callstack.ctx = state->callstack ? json_object_get(state->callstack->ctx) : NULL;
+	else
+		callstack.ctx = json_object_get(this ? this : state->ctx);
+
 	state->callstack = &callstack;
 	state->calldepth++;
 
@@ -1630,6 +1635,7 @@ static struct json_object *(*fns[__T_MAX])(struct ut_state *, uint32_t) = {
 	[T_NULL]     = ut_execute_atom,
 	[T_THIS]     = ut_execute_this,
 	[T_FUNC]     = ut_execute_function,
+	[T_ARROW]    = ut_execute_function,
 	[T_TEXT]     = ut_execute_text,
 	[T_ASSIGN]   = ut_execute_assign,
 	[T_LOCAL]    = ut_execute_local,

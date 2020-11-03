@@ -297,10 +297,13 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 	struct ut_function *fn = op->tag.data;
 	size_t i, len;
 
-	sprintbuf(pb, "%sfunction%s%s(",
-	          strict ? "\"" : "",
-	          fn->name ? " " : "",
-	          fn->name ? fn->name : "");
+	if (op->is_arrow)
+		sprintbuf(pb, "%s(", strict ? "\"" : "");
+	else
+		sprintbuf(pb, "%sfunction%s%s(",
+		          strict ? "\"" : "",
+		          fn->name ? " " : "",
+		          fn->name ? fn->name : "");
 
 	if (fn->args) {
 		len = json_object_array_length(fn->args);
@@ -314,7 +317,9 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 		}
 	}
 
-	return sprintbuf(pb, ") { ... }%s", strict ? "\"" : "");
+	return sprintbuf(pb, ") %s{ ... }%s",
+	                 op->is_arrow ? "=> " : "",
+	                 strict ? "\"" : "");
 }
 
 struct json_object *
@@ -360,6 +365,7 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 
 	op->val = val;
 	op->type = T_FUNC;
+	op->is_arrow = (decl->type == T_ARROW);
 	op->tag.data = fn;
 
 	json_object_set_serializer(val, func_to_string, op, func_free);

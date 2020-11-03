@@ -93,6 +93,7 @@ static const struct token tokens[] = {
 	{ T_REXP,		"}}",    2 },
 	{ T_LSTM,		"{%",    2 },
 	{ T_RSTM,		"%}",    2 },
+	{ T_ARROW,		"=>",    2 },
 	{ T_ADD,		"+",     1 },
 	{ T_ASSIGN,		"=",     1 },
 	{ T_BAND,		"&",     1 },
