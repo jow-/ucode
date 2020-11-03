@@ -94,7 +94,7 @@ ut_add_else(struct ut_state *s, uint32_t off, uint32_t add)
 }
 
 %syntax_error {
-	uint64_t tokens[(__T_MAX + 63) & -64];
+	uint64_t tokens[(__T_MAX + 63) & -64] = {};
 	int i, max_token = 0;
 
 	for (i = 0; i < __T_MAX; i++) {
