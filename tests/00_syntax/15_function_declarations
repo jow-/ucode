@@ -124,3 +124,41 @@ used in function call arguments to pass arrays of values as argument list.
 	]), "\n");
 %}
 -- End --
+
+
+Rest arguments may be only used once in a declaration and they must always
+be the last item in the argument list.
+
+-- Expect stderr --
+Syntax error: Unexpected token
+Expecting ')'
+In line 2, byte 26:
+
+ `    function illegal(...args, ...args2) {}`
+  Near here ------------------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	function illegal(...args, ...args2) {}
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: Unexpected token
+Expecting ')'
+In line 2, byte 26:
+
+ `    function illegal(...args, a, b) {}`
+  Near here ------------------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	function illegal(...args, a, b) {}
+%}
+-- End --
