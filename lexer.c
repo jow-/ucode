@@ -68,6 +68,7 @@ static const struct token tokens[] = {
 	{ T_RSTM,		"-%}",   3 },
 	{ T_EQS,		"===",   3 },
 	{ T_NES,		"!==",   3 },
+	{ T_ELLIP,		"...",   3 },
 	{ T_AND,		"&&",    2 },
 	{ T_ASADD,		"+=",    2 },
 	{ T_ASBAND,		"&=",    2 },

@@ -292,10 +292,10 @@ func_free(struct json_object *v, void *ud)
 static int
 func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
-	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT);
+	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT), rest;
 	struct ut_op *op = json_object_get_userdata(v);
 	struct ut_function *fn = op->tag.data;
-	size_t i;
+	size_t i, len;
 
 	sprintbuf(pb, "%sfunction%s%s(",
 	          strict ? "\"" : "",
@@ -303,9 +303,13 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 	          fn->name ? fn->name : "");
 
 	if (fn->args) {
-		for (i = 0; i < json_object_array_length(fn->args); i++) {
-			sprintbuf(pb, "%s%s",
+		len = json_object_array_length(fn->args);
+		rest = (len > 1) && json_object_is_type(json_object_array_get_idx(fn->args, len - 1), json_type_null);
+
+		for (i = 0; i < len - rest; i++) {
+			sprintbuf(pb, "%s%s%s",
 			          i ? ", " : "",
+			          rest && i == len - 2 ? "..." : "",
 			          json_object_get_string(json_object_array_get_idx(fn->args, i)));
 		}
 	}
@@ -340,8 +344,15 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 	if (args) {
 		fn->args = xjs_new_array();
 
-		for (arg = args; arg; arg = ut_get_op(s, arg->tree.next))
+		for (arg = args; arg; arg = ut_get_op(s, arg->tree.next)) {
 			json_object_array_add(fn->args, json_object_get(arg->val));
+
+			/* if the last argument is a rest one (...arg), add extra null entry */
+			if (arg->is_ellip) {
+				json_object_array_add(fn->args, NULL);
+				break;
+			}
+		}
 	}
 
 	fn->source = s->function ? s->function->source : NULL;

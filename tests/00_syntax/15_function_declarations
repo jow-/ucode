@@ -55,3 +55,44 @@ The function was called with arguments {{ a }} and {{ b }}.
 {% endfunction %}
 {{ test3_fn(123, 456) }}
 -- End --
+
+
+Additionally, utpl implements ES6-like "rest" argument syntax to declare
+variadic functions.
+
+-- Expect stdout --
+function non_variadic(a, b, c, d, e) { ... }
+[ 1, 2, 3, 4, 5 ]
+function variadic_1(a, b, ...args) { ... }
+[ 1, 2, [ 3, 4, 5 ] ]
+function variadic_2(...args) { ... }
+[ [ 1, 2, 3, 4, 5 ] ]
+-- End --
+
+-- Testcase --
+{%
+	// ordinary, non-variadic function
+	function non_variadic(a, b, c, d, e) {
+		return [ a, b, c, d, e ];
+	}
+
+	// fixed amount of arguments with variable remainder
+	function variadic_1(a, b, ...args) {
+		return [ a, b, args ];
+	}
+
+	// only variable arguments
+	function variadic_2(...args) {
+		return [ args ];
+	}
+
+	print(join("\n", [
+		non_variadic,
+		non_variadic(1, 2, 3, 4, 5),
+		variadic_1,
+		variadic_1(1, 2, 3, 4, 5),
+		variadic_2,
+		variadic_2(1, 2, 3, 4, 5)
+	]), "\n");
+%}
+-- End --

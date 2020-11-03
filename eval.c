@@ -971,12 +971,13 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
           struct json_object *func, struct json_object *argvals)
 {
 	struct ut_op *op, *tag = json_object_get_userdata(func);
+	struct json_object *arr, *rv = NULL;
 	struct ut_callstack callstack = {};
 	struct ut_function *fn, *prev_fn;
-	struct json_object *rv = NULL;
+	size_t arridx, arglen;
 	struct ut_scope *sc;
-	size_t arridx;
 	ut_c_fn *fptr;
+	bool rest;
 
 	if (!tag)
 		return NULL;
@@ -1011,10 +1012,29 @@ ut_invoke(struct ut_state *state, uint32_t off, struct json_object *this,
 		sc = state->scope;
 		state->scope = ut_acquire_scope(callstack.scope);
 
-		if (fn->args)
-			for (arridx = 0; arridx < json_object_array_length(fn->args); arridx++)
+		if (fn->args) {
+			arglen = json_object_array_length(fn->args);
+			rest = (arglen > 1) && json_object_is_type(json_object_array_get_idx(fn->args, arglen - 1), json_type_null);
+
+			for (arridx = 0; arridx < arglen - rest; arridx++) {
+				/* if the last argument is a rest one (...arg), put all remaining parameter values in an array */
+				if (rest && arridx == arglen - 2) {
+					arr = xjs_new_array();
+
+					ut_setval(callstack.scope->scope,
+					          json_object_array_get_idx(fn->args, arridx),
+					          arr);
+
+					for (; argvals && arridx < json_object_array_length(argvals); arridx++)
+						json_object_array_add(arr, json_object_get(json_object_array_get_idx(argvals, arridx)));
+
+					break;
+				}
+
 				ut_setval(callstack.scope->scope, json_object_array_get_idx(fn->args, arridx),
 				          argvals ? json_object_array_get_idx(argvals, arridx) : NULL);
+			}
+		}
 
 		rv = ut_execute_op_sequence(state, fn->entry);
 		tag = json_object_get_userdata(rv);

@@ -58,6 +58,7 @@ struct ut_op {
 	uint16_t is_reg_icase:1;
 	uint16_t is_reg_newline:1;
 	uint16_t is_reg_global:1;
+	uint16_t is_ellip:1;
 	uint32_t off;
 	struct json_object *val;
 	union {

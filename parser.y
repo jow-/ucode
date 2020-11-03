@@ -209,8 +209,12 @@ switch_case(A) ::= T_CASE(B) exp(C) T_COLON stmts(D).	{ A = wrap_op(B, C, D); }
 switch_case(A) ::= T_CASE(B) exp(C) T_COLON.			{ A = wrap_op(B, C); }
 switch_case(A) ::= T_DEFAULT(B) T_COLON stmts(C).		{ A = wrap_op(B, C); }
 
-args(A) ::= args(B) T_COMMA T_LABEL(C).					{ A = append_op(B, C); }
-args(A) ::= T_LABEL(B).									{ A = B; }
+args(A) ::= sargs(B) T_COMMA T_ELLIP T_LABEL(C).		{ A = append_op(B, C); ut_get_op(s, C)->is_ellip = 1; }
+args(A) ::= T_ELLIP T_LABEL(B).							{ A = B; ut_get_op(s, B)->is_ellip = 1; }
+args(A) ::= sargs(B).									{ A = B; }
+
+sargs(A) ::= sargs(B) T_COMMA T_LABEL(C).				{ A = append_op(B, C); }
+sargs(A) ::= T_LABEL(B).								{ A = B; }
 
 for_in_exp(A) ::= rel_exp(B).							{ A = B; }
 for_in_exp(A) ::= T_LOCAL(B) rel_exp(C).				{ A = wrap_op(B, C); }
