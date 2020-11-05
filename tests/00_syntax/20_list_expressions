@@ -1,0 +1,41 @@
+Similar to ES5, utpl's language grammar allows comma separated list expressions
+in various contexts. Unless such lists happen to be part of a function call
+or array construction expression, only the last result of such an expression
+list should be used while still evaluating all sub-expressions, triggering
+side effects such as function calls or variable assignments.
+
+-- Expect stdout --
+4
+[ 1, 3 ]
+{ "a": true, "b": 1 }
+function call
+[ "test", "assigment" ]
+true
+true
+true
+-- End --
+
+-- Testcase --
+{%
+	// only the last value is considered
+	print(1 + (2, 3), "\n");
+
+	// in array constructors, parenthesized lists are reduced to the last value
+	print([ (0, 1), (2, 3) ], "\n");
+
+	// in object constructors, parenthesized lists are reduced to the last value
+	print({ a: (false, true), b: (0, 1) }, "\n");
+
+	// all list expressions are evaluated and may have side effects, even if
+	// results are discareded
+	x = (print("function call\n"), y = "assigment", "test");
+	print([x, y], "\n");
+
+	// property access operates on the last value of a parenthesized list expression
+	print(({foo: false}, {foo: true}).foo, "\n");
+	print(({foo: false}, {foo: true})["foo"], "\n");
+
+	// computed property access uses the last list expression value
+	print(({foo: true})["bar", "baz", "foo"], "\n");
+%}
+-- End --

@@ -137,6 +137,9 @@ static struct json_object *
 ut_execute_op(struct ut_state *state, uint32_t off);
 
 static struct json_object *
+ut_execute_op_sequence(struct ut_state *state, uint32_t off);
+
+static struct json_object *
 ut_execute_list(struct ut_state *state, uint32_t off);
 
 static char *
@@ -216,11 +219,11 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 		if (key)
 			*key = off2 ? json_object_get(ut_get_op(state, off2)->val) : NULL;
 
-		return ut_execute_op(state, off1);
+		return ut_execute_op_sequence(state, off1);
 	}
 	else if (op && op->type == T_LBRACK && op->is_postfix) {
 		if (key) {
-			val = off2 ? ut_execute_op(state, off2) : NULL;
+			val = off2 ? ut_execute_op_sequence(state, off2) : NULL;
 
 			if (ut_is_type(val, T_EXCEPTION))
 				return val;
@@ -228,7 +231,7 @@ ut_getref(struct ut_state *state, uint32_t off, struct json_object **key)
 			*key = val;
 		}
 
-		return ut_execute_op(state, off1);
+		return ut_execute_op_sequence(state, off1);
 	}
 	else if (op && op->type == T_LABEL) {
 		sc = state->scope;
@@ -397,7 +400,7 @@ ut_execute_assign(struct ut_state *state, uint32_t off)
 	if (!key)
 		return scope;
 
-	val = ut_execute_op(state, value);
+	val = ut_execute_op_sequence(state, value);
 
 	if (!ut_is_type(val, T_EXCEPTION))
 		ut_setval(scope, key, val);
@@ -422,7 +425,7 @@ ut_execute_local(struct ut_state *state, uint32_t off)
 
 		if (alop) {
 			label = alop->val;
-			val = asop->tree.operand[1] ? ut_execute_op(state, asop->tree.operand[1]) : NULL;
+			val = asop->tree.operand[1] ? ut_execute_op_sequence(state, asop->tree.operand[1]) : NULL;
 
 			if (ut_is_type(val, T_EXCEPTION))
 				return val;
@@ -504,7 +507,7 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 		if (ut_is_type(scope, T_EXCEPTION))
 			return scope;
 
-		val = ut_execute_op(state, init->tree.operand[1]);
+		val = ut_execute_op_sequence(state, init->tree.operand[1]);
 
 		if (ut_is_type(val, T_EXCEPTION))
 			return val;
@@ -663,7 +666,7 @@ ut_execute_and_or(struct ut_state *state, uint32_t off)
 	for (i = 0; i < ARRAY_SIZE(op->tree.operand) && op->tree.operand[i]; i++) {
 		json_object_put(val);
 
-		val = ut_execute_op(state, op->tree.operand[i]);
+		val = ut_execute_op_sequence(state, op->tree.operand[i]);
 
 		if (ut_is_type(val, T_EXCEPTION))
 			break;
@@ -749,7 +752,7 @@ _ut_get_operands(struct ut_state *state, struct ut_op *op, size_t n, struct json
 		if (child && child->is_list)
 			v[i] = ut_execute_list(state, ut_get_off(state, child));
 		else if (child)
-			v[i] = ut_execute_op(state, ut_get_off(state, child));
+			v[i] = ut_execute_op_sequence(state, ut_get_off(state, child));
 		else
 			v[i] = NULL;
 
@@ -967,14 +970,12 @@ static struct json_object *
 ut_execute_object(struct ut_state *state, uint32_t off)
 {
 	struct json_object *ex, *v, *obj = ut_new_object(NULL);
-	struct ut_op *key, *val;
+	struct ut_op *key;
 	char *istr;
 	size_t i;
 
-	for (key = ut_get_child(state, off, 0), val = ut_get_op(state, key ? key->tree.next : 0);
-	     key != NULL && val != NULL;
-	     key = ut_get_op(state, val->tree.next), val = ut_get_op(state, key ? key->tree.next : 0)) {
-		v = ut_execute_op(state, ut_get_off(state, val));
+	for (key = ut_get_child(state, off, 0); key; key = ut_get_op(state, key->tree.next)) {
+		v = ut_execute_op_sequence(state, key->tree.operand[0]);
 
 		if (ut_is_type(v, T_EXCEPTION)) {
 			json_object_put(obj);
@@ -1005,7 +1006,7 @@ ut_execute_object(struct ut_state *state, uint32_t off)
 				break;
 
 			default:
-				ex = ut_new_exception(state, val->off, "Type error: (%s) is not iterable",
+				ex = ut_new_exception(state, key->off, "Type error: (%s) is not iterable",
 				                      json_object_get_string(v));
 
 				json_object_put(obj);
@@ -1626,6 +1627,14 @@ ut_execute_lbrack(struct ut_state *state, uint32_t off)
 	return ut_execute_list(state, op->tree.operand[0]);
 }
 
+static struct json_object *
+ut_execute_exp_list(struct ut_state *state, uint32_t off)
+{
+	struct ut_op *op = ut_get_op(state, off);
+
+	return ut_execute_op_sequence(state, op->tree.operand[0]);
+}
+
 static struct json_object *(*fns[__T_MAX])(struct ut_state *, uint32_t) = {
 	[T_NUMBER]   = ut_execute_atom,
 	[T_DOUBLE]   = ut_execute_atom,
@@ -1680,6 +1689,7 @@ static struct json_object *(*fns[__T_MAX])(struct ut_state *, uint32_t) = {
 	[T_CONTINUE] = ut_execute_break_cont,
 	[T_TRY]      = ut_execute_try_catch,
 	[T_SWITCH]   = ut_execute_switch_case,
+	[T_COMMA]    = ut_execute_exp_list,
 };
 
 static struct json_object *

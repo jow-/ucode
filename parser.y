@@ -346,7 +346,7 @@ postfix_exp(A) ::= unary_exp(B) T_LPAREN(C) T_RPAREN.	{ A = wrap_op(C, B); }
 postfix_exp(A) ::= unary_exp(B) T_LPAREN(C) arg_exps(D) T_RPAREN.
 														{ A = wrap_op(C, B, D); }
 postfix_exp(A) ::= postfix_exp(B) T_DOT(C) T_LABEL(D).	{ A = wrap_op(C, B, D); }
-postfix_exp(A) ::= postfix_exp(B) T_LBRACK(C) assign_exp(D) T_RBRACK.
+postfix_exp(A) ::= postfix_exp(B) T_LBRACK(C) exp(D) T_RBRACK.
 														{ A = wrap_op(C, B, D); ut_get_op(s, A)->is_postfix = 1; }
 postfix_exp(A) ::= primary_exp(B).						{ A = B; }
 
@@ -376,8 +376,8 @@ array(A) ::= T_LBRACK(B) items(C) T_RBRACK.				{ A = wrap_op(B, C); }
 items(A) ::= items(B) T_COMMA item(C).					{ A = append_op(B, C); }
 items(A) ::= item(B).									{ A = B; }
 
-item(A) ::= T_ELLIP assign_exp(B).						{ A = B; ut_get_op(s, A)->is_ellip = 1; }
-item(A) ::= assign_exp(B).								{ A = B; }
+item(A) ::= T_ELLIP assign_exp(B).						{ A = ut_get_op(s, B)->tree.next ? new_op(T_COMMA, NULL, B) : B; ut_get_op(s, A)->is_ellip = 1; }
+item(A) ::= assign_exp(B).								{ A = ut_get_op(s, B)->tree.next ? new_op(T_COMMA, NULL, B) : B; }
 
 object(A) ::= empty_object(B).							{ A = B; }
 object(A) ::= T_LBRACE(B) tuples(C) T_RBRACE.			{ A = wrap_op(B, C); }
@@ -387,9 +387,9 @@ empty_object(A) ::= T_LBRACE(B) T_RBRACE.				{ A = B; }
 tuples(A) ::= tuples(B) T_COMMA tuple(C).				{ A = append_op(B, C); }
 tuples(A) ::= tuple(B).									{ A = B; }
 
-tuple(A) ::= T_LABEL(B) T_COLON exp(C).					{ A = append_op(B, C); }
-tuple(A) ::= T_STRING(B) T_COLON exp(C).				{ A = append_op(B, C); }
-tuple(A) ::= T_ELLIP(B) assign_exp(C).					{ A = append_op(B, C); }
+tuple(A) ::= T_LABEL(B) T_COLON exp(C).					{ A = wrap_op(B, C); }
+tuple(A) ::= T_STRING(B) T_COLON exp(C).				{ A = wrap_op(B, C); }
+tuple(A) ::= T_ELLIP(B) assign_exp(C).					{ A = wrap_op(B, C); }
 
 arg_exps(A) ::= arg_exps(B) T_COMMA arg_exp(C).			{ A = append_op(B, C); ut_get_op(s, A)->is_list = 1; }
 arg_exps(A) ::= arg_exp(B).								{ A = B; ut_get_op(s, A)->is_list = 1; }
