@@ -394,5 +394,5 @@ tuple(A) ::= T_ELLIP(B) assign_exp(C).					{ A = wrap_op(B, C); }
 arg_exps(A) ::= arg_exps(B) T_COMMA arg_exp(C).			{ A = append_op(B, C); ut_get_op(s, A)->is_list = 1; }
 arg_exps(A) ::= arg_exp(B).								{ A = B; ut_get_op(s, A)->is_list = 1; }
 
-arg_exp(A) ::= T_ELLIP assign_exp(B).					{ A = B; ut_get_op(s, A)->is_ellip = 1; }
-arg_exp(A) ::= assign_exp(B).							{ A = B; }
+arg_exp(A) ::= T_ELLIP assign_exp(B).					{ A = ut_get_op(s, B)->tree.next ? new_op(T_COMMA, NULL, B) : B; ut_get_op(s, A)->is_ellip = 1; }
+arg_exp(A) ::= assign_exp(B).							{ A = ut_get_op(s, B)->tree.next ? new_op(T_COMMA, NULL, B) : B; }

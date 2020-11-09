@@ -13,6 +13,7 @@ function call
 true
 true
 true
+[ 2, 3 ]
 -- End --
 
 -- Testcase --
@@ -37,5 +38,8 @@ true
 
 	// computed property access uses the last list expression value
 	print(({foo: true})["bar", "baz", "foo"], "\n");
+
+	// same list semantics apply to function call parameters
+	((...args) => print(args, "\n"))((1, 2), 3);
 %}
 -- End --
