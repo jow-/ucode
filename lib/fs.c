@@ -710,7 +710,10 @@ static void close_proc(void *ud) {
 }
 
 static void close_file(void *ud) {
-	fclose((FILE *)ud);
+	FILE *fp = ud;
+
+	if (fp != stdin && fp != stdout && fp != stderr)
+		fclose(fp);
 }
 
 static void close_dir(void *ud) {
