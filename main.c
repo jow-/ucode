@@ -364,6 +364,8 @@ main(int argc, char **argv)
 
 			fclose(envfile);
 
+			envfile = NULL;
+
 			if (!o) {
 				fprintf(stderr, "Option -%c must point to a valid JSON object\n", opt);
 				rv = 1;
