@@ -152,6 +152,7 @@ static const struct token reserved_words[] = {
 	{ T_DOUBLE,		"NaN",   3, { .d = NAN } },
 	{ T_TRY,		"try",   3 },
 	{ T_FOR,		"for",   3 },
+	{ T_LOCAL,		"let",   3 },
 	{ T_IF,			"if",    2 },
 	{ T_IN,			"in",    2 },
 };
