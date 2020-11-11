@@ -474,13 +474,13 @@ ut_execute_if(struct ut_state *state, uint32_t off)
 static struct json_object *
 ut_execute_for(struct ut_state *state, uint32_t off)
 {
-	struct json_object *scope, *val, *item, *iv, *rv = NULL;
+	struct json_object *kscope, *vscope, *val, *item, *ik, *iv = NULL, *rv = NULL;
 	struct ut_op *loop = ut_get_op(state, off);
 	struct ut_op *init = ut_get_child(state, off, 0);
 	uint32_t test = loop ? loop->tree.operand[1] : 0;
 	uint32_t incr = loop ? loop->tree.operand[2] : 0;
 	uint32_t body = loop ? loop->tree.operand[3] : 0;
-	struct ut_op *ivar, *tag;
+	struct ut_op *ikvar, *ivvar, *tag;
 	size_t arridx, arrlen;
 	bool local = false;
 
@@ -491,21 +491,21 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 			init = ut_get_op(state, init->tree.operand[0]);
 		}
 
-		if (init->type != T_IN)
-			return ut_new_exception(state, init->off,
-			                        "Syntax error: missing ';' after for loop initializer");
+		ikvar = ut_get_op(state, init->tree.operand[0]);
+		ik = ikvar->val;
+		kscope = local ? state->scope->scope : ut_getref(state, ut_get_off(state, ikvar), NULL);
 
-		ivar = ut_get_op(state, init->tree.operand[0]);
+		if (ut_is_type(kscope, T_EXCEPTION))
+			return kscope;
 
-		if (!ivar || ivar->type != T_LABEL)
-			return ut_new_exception(state, init->off,
-			                        "Syntax error: invalid for-in left-hand side");
+		if (ikvar->tree.next) {
+			ivvar = ut_get_op(state, ikvar->tree.next);
+			iv = ivvar->val;
+			vscope = local ? kscope : ut_getref(state, ut_get_off(state, ivvar), NULL);
 
-		iv = ivar->val;
-		scope = local ? state->scope->scope : ut_getref(state, ut_get_off(state, ivar), NULL);
-
-		if (ut_is_type(scope, T_EXCEPTION))
-			return scope;
+			if (ut_is_type(vscope, T_EXCEPTION))
+				return vscope;
+		}
 
 		val = ut_execute_op_sequence(state, init->tree.operand[1]);
 
@@ -517,7 +517,14 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 			     arridx < arrlen; arridx++) {
 				item = json_object_array_get_idx(val, arridx);
 
-				ut_setval(scope, iv, item);
+				if (iv) {
+					ut_setval(kscope, ik, xjs_new_int64(arridx));
+					ut_setval(vscope, iv, item);
+				}
+				else {
+					ut_setval(kscope, ik, item);
+				}
+
 				json_object_put(rv);
 
 				rv = ut_execute_op_sequence(state, body);
@@ -540,7 +547,11 @@ ut_execute_for(struct ut_state *state, uint32_t off)
 		}
 		else if (json_object_is_type(val, json_type_object)) {
 			json_object_object_foreach(val, key, item) {
-				json_object_put(ut_setval(scope, iv, xjs_new_string(key)));
+				json_object_put(ut_setval(kscope, ik, xjs_new_string(key)));
+
+				if (iv)
+					ut_setval(vscope, iv, item);
+
 				json_object_put(rv);
 
 				rv = ut_execute_op_sequence(state, body);

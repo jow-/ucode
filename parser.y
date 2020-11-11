@@ -92,20 +92,122 @@ ut_add_else(struct ut_state *s, uint32_t off, uint32_t add)
 }
 
 static inline uint32_t
-ut_check_arglist(struct ut_state *s, uint32_t off)
+ut_expect_token(struct ut_state *s, uint32_t off, int token)
 {
 	uint64_t tokens[(__T_MAX + 63) & -64] = {};
+
+	tokens[token / 64] |= ((uint64_t)1 << (token % 64));
+	ut_parse_error(s, off, tokens, token);
+
+	return 0;
+}
+
+static inline uint32_t
+ut_check_op_seq_type(struct ut_state *s, uint32_t off, int type)
+{
 	struct ut_op *arg = ut_get_op(s, off);
 
 	while (arg) {
-		if (arg->type != T_LABEL) {
-			tokens[T_LABEL / 64] |= ((uint64_t)1 << (T_LABEL % 64));
-			ut_parse_error(s, ut_get_off(s, arg), tokens, T_LABEL);
+		if (arg->type != type)
+			return ut_expect_token(s, ut_get_off(s, arg), type);
+
+		arg = ut_get_op(s, arg->tree.next);
+	}
+
+	return off;
+}
+
+static inline uint32_t
+ut_reject_local(struct ut_state *s, uint32_t off)
+{
+	struct ut_op *op = ut_get_op(s, off);
+
+	if (op->type == T_LOCAL) {
+		ut_new_exception(s, op->off, "Syntax error: Unexpected token\nDeclaration not allowed in this context");
+
+		return 0;
+	}
+
+	return off;
+}
+
+static inline uint32_t
+ut_check_for_in(struct ut_state *s, uint32_t off)
+{
+	struct ut_op *op = ut_get_op(s, off);
+	struct ut_op *arg;
+	uint32_t idx = 0;
+
+	/* for (let ... in ...) */
+	if (op->type == T_LOCAL) {
+		arg = ut_get_op(s, op->tree.operand[0]);
+
+		if (arg->type == T_ASSIGN) {
+			if (arg->tree.operand[1])
+				return ut_expect_token(s, op->tree.operand[0], T_COMMA);
+
+			if (!arg->tree.next) {
+				arg = ut_get_op(s, arg->tree.operand[0]);
+				ut_new_exception(s, arg->off + json_object_get_string_len(arg->val),
+				                 "Syntax error: Unexpected token\nExpecting ',' or 'in'");
+
+				return 0;
+			}
+
+			idx = arg->tree.operand[0];
+			arg = ut_get_op(s, arg->tree.next);
+		}
+
+		if (arg->type != T_IN || arg->tree.next) {
+			if (arg->type == T_IN && arg->tree.next)
+				arg = ut_get_op(s, arg->tree.next);
+
+			ut_new_exception(s, arg->off, "Syntax error: Invalid for-in expression");
 
 			return 0;
 		}
 
-		arg = ut_get_op(s, arg->tree.next);
+		/* transform T_LOCAL(T_ASSIGN(T_LABEL)->T_IN(T_LABEL,...)) into
+		 * T_LOCAL(T_IN(T_LABEL->T_LABEL,...)) */
+		if (idx)
+			arg->tree.operand[0] = append_op(idx, arg->tree.operand[0]);
+
+		op->tree.operand[0] = ut_get_off(s, arg);
+		op->tree.operand[1] = 0;
+	}
+
+	/* for (... in ...) */
+	else {
+		arg = op;
+
+		if (arg->type == T_LABEL) {
+			idx = off;
+
+			if (!arg->tree.next) {
+				ut_new_exception(s, arg->off + json_object_get_string_len(arg->val),
+				                 "Syntax error: Unexpected token\nExpecting ',' or 'in'");
+
+				return 0;
+			}
+
+			arg = ut_get_op(s, arg->tree.next);
+		}
+
+		if (arg->type != T_IN || arg->tree.next || ut_get_op(s, arg->tree.operand[0])->type != T_LABEL) {
+			if (arg->type == T_IN && arg->tree.next)
+				arg = ut_get_op(s, arg->tree.next);
+
+			ut_new_exception(s, arg->off, "Syntax error: Invalid for-in expression");
+
+			return 0;
+		}
+
+		/* transform T_LABEL->T_IN(T_LABEL,...) into T_IN(T_LABEL->T_LABEL,...) */
+		if (idx) {
+			op->tree.next = 0;
+			arg->tree.operand[0] = append_op(idx, arg->tree.operand[0]);
+			off = ut_get_off(s, arg);
+		}
 	}
 
 	return off;
@@ -183,10 +285,10 @@ iter_stmt(A) ::= T_WHILE(B) T_LPAREN exp(C) T_RPAREN stmt(D).
 														{ A = wrap_op(B, C, no_empty_obj(D)); }
 iter_stmt(A) ::= T_WHILE(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D) T_ENDWHILE.
 														{ A = wrap_op(B, C, D); }
-iter_stmt(A) ::= T_FOR(B) T_LPAREN for_in_exp(C) T_RPAREN stmt(D).
-														{ A = wrap_op(B, C, NULL, NULL, no_empty_obj(D)); ut_get_op(s, A)->is_for_in = 1; }
-iter_stmt(A) ::= T_FOR(B) T_LPAREN for_in_exp(C) T_RPAREN T_COLON chunks(D) T_ENDFOR.
-														{ A = wrap_op(B, C, NULL, NULL, no_empty_obj(D)); ut_get_op(s, A)->is_for_in = 1; }
+iter_stmt(A) ::= T_FOR(B) paren_exp(C) stmt(D).
+														{ A = wrap_op(B, ut_check_for_in(s, C), NULL, NULL, no_empty_obj(D)); ut_get_op(s, A)->is_for_in = 1; }
+iter_stmt(A) ::= T_FOR(B) paren_exp(C) T_COLON chunks(D) T_ENDFOR.
+														{ A = wrap_op(B, ut_check_for_in(s, C), NULL, NULL, no_empty_obj(D)); ut_get_op(s, A)->is_for_in = 1; }
 iter_stmt(A) ::= T_FOR(B) T_LPAREN decl_or_exp(C) exp_stmt(D) T_RPAREN stmt(E).
 														{ A = wrap_op(B, C, D, NULL, no_empty_obj(E)); }
 iter_stmt(A) ::= T_FOR(B) T_LPAREN decl_or_exp(C) exp_stmt(D) exp(E) T_RPAREN stmt(F).
@@ -236,9 +338,6 @@ args(A) ::= sargs(B).									{ A = B; }
 sargs(A) ::= sargs(B) T_COMMA T_LABEL(C).				{ A = append_op(B, C); }
 sargs(A) ::= T_LABEL(B).								{ A = B; }
 
-for_in_exp(A) ::= rel_exp(B).							{ A = B; }
-for_in_exp(A) ::= T_LOCAL(B) rel_exp(C).				{ A = wrap_op(B, C); }
-
 decl_or_exp(A) ::= exp_stmt(B).							{ A = B; }
 decl_or_exp(A) ::= decl_stmt(B).						{ A = B; }
 
@@ -248,13 +347,14 @@ ret_stmt(A) ::= T_RETURN(B) T_SCOL.						{ A = B; }
 break_stmt(A) ::= T_BREAK(B) T_SCOL.					{ A = B; }
 break_stmt(A) ::= T_CONTINUE(B) T_SCOL.					{ A = B; }
 
-decl_stmt(A) ::= T_LOCAL(B) decls(C) T_SCOL.			{ A = wrap_op(B, C); }
+decl_stmt(A) ::= T_LOCAL(B) decls(C) T_SCOL.			{ A = wrap_op(B, ut_check_op_seq_type(s, C, T_ASSIGN)); }
 
 decls(A) ::= decls(B) T_COMMA decl(C).					{ A = append_op(B, C); }
 decls(A) ::= decl(B).									{ A = B; }
 
 decl(A) ::= T_LABEL(B) T_ASSIGN(C) arrow_exp(D).		{ A = wrap_op(C, B, D); }
-decl(A) ::= T_LABEL(B).									{ A = new_op(T_ASSIGN, NULL, B); }
+decl(A) ::= T_LABEL(B) T_IN(C) arrow_exp(D).			{ A = wrap_op(C, B, D); }
+decl(A) ::= T_LABEL(B).									{ A = new_op(T_ASSIGN, NULL, B); ut_get_op(s, A)->off = ut_get_op(s, B)->off; }
 
 arrowfn_body(A) ::= cpd_stmt(B).						{ A = B; }
 arrowfn_body(A) ::= assign_exp(B).						{ A = no_empty_obj(B); }
@@ -278,13 +378,13 @@ assign_exp(A) ::= unary_exp(B) T_ASBOR arrow_exp(C).	{ A = new_op(T_BOR, NULL, B
 assign_exp(A) ::= arrow_exp(B).							{ A = B; }
 
 arrow_exp(A) ::= unary_exp(B) T_ARROW(C) arrowfn_body(D).
-														{ A = wrap_op(C, 0, ut_check_arglist(s, B), D); }
+														{ A = wrap_op(C, 0, ut_check_op_seq_type(s, B, T_LABEL), D); }
 arrow_exp(A) ::= T_LPAREN T_RPAREN T_ARROW(C) arrowfn_body(D).
 														{ A = wrap_op(C, 0, 0, D); }
 arrow_exp(A) ::= T_LPAREN T_ELLIP T_LABEL(B) T_RPAREN T_ARROW(C) arrowfn_body(D).
 														{ A = wrap_op(C, 0, B, D); ut_get_op(s, B)->is_ellip = 1; }
 arrow_exp(A) ::= T_LPAREN exp(B) T_COMMA T_ELLIP T_LABEL(C) T_RPAREN T_ARROW(D) arrowfn_body(E).
-														{ A = append_op(B, C); A = wrap_op(D, 0, ut_check_arglist(s, A), E); ut_get_op(s, C)->is_ellip = 1; }
+														{ A = append_op(B, C); A = wrap_op(D, 0, ut_check_op_seq_type(s, A, T_LABEL), E); ut_get_op(s, C)->is_ellip = 1; }
 arrow_exp(A) ::= ternary_exp(B).						{ A = B; }
 
 ternary_exp(A) ::= or_exp(B) T_QMARK(C) assign_exp(D) T_COLON ternary_exp(E).
@@ -360,7 +460,7 @@ primary_exp(A) ::= T_NULL(B).							{ A = B; }
 primary_exp(A) ::= T_THIS(B).							{ A = B; }
 primary_exp(A) ::= array(B).							{ A = B; }
 primary_exp(A) ::= object(B).							{ A = B; }
-primary_exp(A) ::= T_LPAREN exp(B) T_RPAREN.			{ A = B; }
+primary_exp(A) ::= paren_exp(B).						{ A = ut_reject_local(s, B); }
 primary_exp(A) ::= T_FUNC T_LPAREN T_RPAREN empty_object.
 														{ A = new_op(T_FUNC, NULL, 0, 0, 0); }
 primary_exp(A) ::= T_FUNC T_LPAREN args(B) T_RPAREN empty_object.
@@ -369,6 +469,9 @@ primary_exp(A) ::= T_FUNC T_LPAREN T_RPAREN cpd_stmt(B).
 														{ A = new_op(T_FUNC, NULL, 0, 0, B); }
 primary_exp(A) ::= T_FUNC T_LPAREN args(B) T_RPAREN cpd_stmt(C).
 														{ A = new_op(T_FUNC, NULL, 0, B, C); }
+
+paren_exp(A) ::= T_LPAREN exp(B) T_RPAREN.				{ A = B; }
+paren_exp(A) ::= T_LPAREN T_LOCAL(B) decls(C) T_RPAREN.	{ A = wrap_op(B, C); }
 
 array(A) ::= T_LBRACK(B) T_RBRACK.						{ A = B; }
 array(A) ::= T_LBRACK(B) items(C) T_RBRACK.				{ A = wrap_op(B, C); }

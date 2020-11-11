@@ -164,3 +164,134 @@ Iteration {{ i }}
 Item {{ n }}
 {% endfor %}
 -- End --
+
+
+By specifying two loop variables in for-in loop expressions, keys
+and values can be iterated simultaneously.
+
+-- Expect stdout --
+true
+false
+123
+456
+[ 0, true ]
+[ 1, false ]
+[ 2, 123 ]
+[ 3, 456 ]
+foo
+bar
+baz
+qrx
+[ "foo", true ]
+[ "bar", false ]
+[ "baz", 123 ]
+[ "qrx", 456 ]
+-- End --
+
+-- Testcase --
+{%
+	local arr = [ true, false, 123, 456 ];
+	local obj = { foo: true, bar: false, baz: 123, qrx: 456 };
+
+	// iterating arrays with one loop variable yields the array values
+	for (local x in arr)
+		print(x, "\n");
+
+	// iterating arrays with two loop variables yields the array indexes
+	// and their corresponding values
+	for (local x, y in arr)
+		print([x, y], "\n");
+
+	// iterating objects with one loop variable yields the object keys
+	for (local x in obj)
+		print(x, "\n");
+
+	// iterating objects with two loop variables yields the object keys
+	// and their corresponding values
+	for (local x, y in obj)
+		print([x, y], "\n");
+%}
+-- End --
+
+
+Ensure that for-in loop expressions with more than two variables are
+rejected.
+
+-- Expect stderr --
+Syntax error: Invalid for-in expression
+In line 2, byte 16:
+
+ `    for (local x, y, z in {})`
+  Near here --------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	for (local x, y, z in {})
+		;
+%}
+-- End --
+
+
+Ensure that assignments in for-in loop expressions are rejected.
+
+-- Expect stderr --
+Syntax error: Unexpected token
+Expecting ','
+In line 2, byte 15:
+
+ `    for (local x = 1, y in {})`
+  Near here -------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	for (local x = 1, y in {})
+		;
+%}
+-- End --
+
+
+Ensure that too short for-in loop expressions are rejected (1/2).
+
+-- Expect stderr --
+Syntax error: Unexpected token
+Expecting ',' or 'in'
+In line 2, byte 14:
+
+ `    for (local x)`
+  Near here ------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	for (local x)
+		;
+%}
+-- End --
+
+
+Ensure that too short for-in loop expressions are rejected (2/2).
+
+-- Expect stderr --
+Syntax error: Invalid for-in expression
+In line 2, byte 16:
+
+ `    for (local x, y)`
+  Near here --------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	for (local x, y)
+		;
+%}
+-- End --
