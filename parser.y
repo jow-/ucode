@@ -441,14 +441,14 @@ primary_exp(A) ::= T_THIS(B).							{ A = B; }
 primary_exp(A) ::= array(B).							{ A = B; }
 primary_exp(A) ::= object(B).							{ A = B; }
 primary_exp(A) ::= paren_exp(B).						{ A = ut_reject_local(s, B); }
-primary_exp(A) ::= T_FUNC T_LPAREN T_RPAREN empty_object.
-														{ A = new_op(T_FUNC, NULL, 0, 0, 0); }
-primary_exp(A) ::= T_FUNC T_LPAREN args(B) T_RPAREN empty_object.
-														{ A = new_op(T_FUNC, NULL, 0, B, 0); }
-primary_exp(A) ::= T_FUNC T_LPAREN T_RPAREN cpd_stmt(B).
-														{ A = new_op(T_FUNC, NULL, 0, 0, B); }
-primary_exp(A) ::= T_FUNC T_LPAREN args(B) T_RPAREN cpd_stmt(C).
-														{ A = new_op(T_FUNC, NULL, 0, B, C); }
+primary_exp(A) ::= T_FUNC(B) T_LPAREN T_RPAREN empty_object.
+														{ A = B; }
+primary_exp(A) ::= T_FUNC(B) T_LPAREN args(C) T_RPAREN empty_object.
+														{ A = wrap_op(B, 0, C, 0); }
+primary_exp(A) ::= T_FUNC(B) T_LPAREN T_RPAREN cpd_stmt(C).
+														{ A = wrap_op(B, 0, 0, C); }
+primary_exp(A) ::= T_FUNC(B) T_LPAREN args(C) T_RPAREN cpd_stmt(D).
+														{ A = wrap_op(B, 0, C, D); }
 
 paren_exp(A) ::= T_LPAREN exp(B) T_RPAREN.				{ A = B; }
 paren_exp(A) ::= T_LPAREN T_LOCAL(B) decls(C) T_RPAREN.	{ A = wrap_op(B, C); }
