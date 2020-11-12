@@ -238,8 +238,7 @@ In line 2, byte 16:
 Ensure that assignments in for-in loop expressions are rejected.
 
 -- Expect stderr --
-Syntax error: Unexpected token
-Expecting ','
+Syntax error: Invalid for-in expression
 In line 2, byte 15:
 
  `    for (local x = 1, y in {})`
