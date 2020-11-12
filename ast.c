@@ -29,26 +29,6 @@
 static size_t ut_ext_types_count = 0;
 static struct ut_extended_type *ut_ext_types = NULL;
 
-struct ut_op *
-ut_get_op(struct ut_state *s, uint32_t off)
-{
-	if (off == 0 || off > s->poolsize)
-		return NULL;
-
-	return &s->pool[off - 1];
-}
-
-struct ut_op *
-ut_get_child(struct ut_state *s, uint32_t off, int n)
-{
-	struct ut_op *op = ut_get_op(s, off);
-
-	if (!op || n >= ARRAY_SIZE(op->tree.operand) || !op->tree.operand[n])
-		return NULL;
-
-	return ut_get_op(s, op->tree.operand[n]);
-}
-
 uint32_t
 ut_new_op(struct ut_state *s, int type, struct json_object *val, ...)
 {

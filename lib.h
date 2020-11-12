@@ -20,10 +20,6 @@
 #include "ast.h"
 #include "lexer.h"
 
-#ifndef ARRAY_SIZE
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
-#endif
-
 typedef struct json_object *(ut_c_fn)(struct ut_state *, uint32_t, struct json_object *);
 
 void ut_lib_init(struct ut_state *state, struct json_object *scope);

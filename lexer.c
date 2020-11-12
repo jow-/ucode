@@ -23,6 +23,7 @@
 #include <regex.h>
 #include <math.h>
 #include <errno.h>
+#include <endian.h>
 
 #include "ast.h"
 #include "lib.h"
@@ -30,15 +31,24 @@
 #include "parser.h"
 
 
-struct token {
+struct keyword {
 	int type;
 	const char *pat;
 	int plen;
 	union {
-		uint32_t (*parse)(struct ut_state *s);
 		double d;
 		bool b;
 	};
+};
+
+struct token {
+	int type;
+	union {
+		uint32_t patn;
+		char pat[4];
+	};
+	int plen;
+	uint32_t (*parse)(struct ut_state *s);
 };
 
 #define dec(o) \
@@ -55,79 +65,75 @@ static uint32_t parse_number(struct ut_state *);
 static uint32_t parse_label(struct ut_state *);
 
 static const struct token tokens[] = {
-	{ 0,			" ",     1 },
-	{ 0,			"\t",    1 },
-	{ 0,			"\r",    1 },
-	{ 0,			"\n",    1 },
-	{ T_ASLEFT,		"<<=",   3 },
-	{ T_ASRIGHT,	">>=",   3 },
-	{ T_LEXP,		"{{-",   3 },
-	{ T_REXP,		"-}}",   3 },
-	{ T_LSTM,		"{%+",   3 },
-	{ T_LSTM,		"{%-",   3 },
-	{ T_RSTM,		"-%}",   3 },
-	{ T_EQS,		"===",   3 },
-	{ T_NES,		"!==",   3 },
-	{ T_ELLIP,		"...",   3 },
-	{ T_AND,		"&&",    2 },
-	{ T_ASADD,		"+=",    2 },
-	{ T_ASBAND,		"&=",    2 },
-	{ T_ASBOR,		"|=",    2 },
-	{ T_ASBXOR,		"^=",    2 },
-	//{ T_ASDIV,		"/=",    2 },
-	{ T_ASMOD,		"%=",    2 },
-	{ T_ASMUL,		"*=",    2 },
-	{ T_ASSUB,		"-=",    2 },
-	{ T_DEC,		"--",    2 },
-	{ T_INC,		"++",    2 },
-	{ T_EQ,			"==",    2 },
-	{ T_NE,			"!=",    2 },
-	{ T_LE,			"<=",    2 },
-	{ T_GE,			">=",    2 },
-	{ T_LSHIFT,		"<<",    2 },
-	{ T_RSHIFT,		">>",    2 },
-	{ 0,			"//",    2, { .parse = parse_comment } },
-	{ 0,			"/*",    2, { .parse = parse_comment } },
-	{ T_OR,			"||",    2 },
-	{ T_LEXP,		"{{",    2 },
-	{ T_REXP,		"}}",    2 },
-	{ T_LSTM,		"{%",    2 },
-	{ T_RSTM,		"%}",    2 },
-	{ T_ARROW,		"=>",    2 },
-	{ T_ADD,		"+",     1 },
-	{ T_ASSIGN,		"=",     1 },
-	{ T_BAND,		"&",     1 },
-	{ T_BOR,		"|",     1 },
-	{ T_LBRACK,		"[",     1 },
-	{ T_RBRACK,		"]",     1 },
-	{ T_BXOR,		"^",     1 },
-	{ T_LBRACE,		"{",     1 },
-	{ T_RBRACE,		"}",     1 },
-	{ T_COLON,		":",     1 },
-	{ T_COMMA,		",",     1 },
-	{ T_COMPL,		"~",     1 },
-	//{ T_DIV,		"/",     1 },
-	{ T_GT,			">",     1 },
-	{ T_NOT,		"!",     1 },
-	{ T_LT,			"<",     1 },
-	{ T_MOD,		"%",     1 },
-	{ T_MUL,		"*",     1 },
-	{ T_LPAREN,		"(",     1 },
-	{ T_RPAREN,		")",     1 },
-	{ T_QMARK,		"?",     1 },
-	{ T_SCOL,		";",     1 },
-	{ T_SUB,		"-",     1 },
-	{ T_DOT,		".",     1 },
-	{ T_STRING,		"'",	 1, { .parse = parse_string } },
-	{ T_STRING,		"\"",	 1, { .parse = parse_string } },
-	{ T_REGEXP,		"/",     1, { .parse = parse_regexp } },
-	{ T_LABEL,		"_",     1, { .parse = parse_label  } },
-	{ T_LABEL,		"az",    0, { .parse = parse_label  } },
-	{ T_LABEL,		"AZ",    0, { .parse = parse_label  } },
-	{ T_NUMBER,		"09",    0, { .parse = parse_number } },
+	{ T_ASLEFT,		{ .pat = "<<=" },   3 },
+	{ T_ASRIGHT,	{ .pat = ">>=" },   3 },
+	{ T_LEXP,		{ .pat = "{{-" },   3 },
+	{ T_REXP,		{ .pat = "-}}" },   3 },
+	{ T_LSTM,		{ .pat = "{%+" },   3 },
+	{ T_LSTM,		{ .pat = "{%-" },   3 },
+	{ T_RSTM,		{ .pat = "-%}" },   3 },
+	{ T_EQS,		{ .pat = "===" },   3 },
+	{ T_NES,		{ .pat = "!==" },   3 },
+	{ T_ELLIP,		{ .pat = "..." },   3 },
+	{ T_AND,		{ .pat = "&&" },    2 },
+	{ T_ASADD,		{ .pat = "+=" },    2 },
+	{ T_ASBAND,		{ .pat = "&=" },    2 },
+	{ T_ASBOR,		{ .pat = "|=" },    2 },
+	{ T_ASBXOR,		{ .pat = "^=" },    2 },
+	//{ T_ASDIV,		{ .pat = "/=" },    2 },
+	{ T_ASMOD,		{ .pat = "%=" },    2 },
+	{ T_ASMUL,		{ .pat = "*=" },    2 },
+	{ T_ASSUB,		{ .pat = "-=" },    2 },
+	{ T_DEC,		{ .pat = "--" },    2 },
+	{ T_INC,		{ .pat = "++" },    2 },
+	{ T_EQ,			{ .pat = "==" },    2 },
+	{ T_NE,			{ .pat = "!=" },    2 },
+	{ T_LE,			{ .pat = "<=" },    2 },
+	{ T_GE,			{ .pat = ">=" },    2 },
+	{ T_LSHIFT,		{ .pat = "<<" },    2 },
+	{ T_RSHIFT,		{ .pat = ">>" },    2 },
+	{ 0,			{ .pat = "//" },    2, parse_comment },
+	{ 0,			{ .pat = "/*" },    2, parse_comment },
+	{ T_OR,			{ .pat = "||" },    2 },
+	{ T_LEXP,		{ .pat = "{{" },    2 },
+	{ T_REXP,		{ .pat = "}}" },    2 },
+	{ T_LSTM,		{ .pat = "{%" },    2 },
+	{ T_RSTM,		{ .pat = "%}" },    2 },
+	{ T_ARROW,		{ .pat = "=>" },    2 },
+	{ T_ADD,		{ .pat = "+" },     1 },
+	{ T_ASSIGN,		{ .pat = "=" },     1 },
+	{ T_BAND,		{ .pat = "&" },     1 },
+	{ T_BOR,		{ .pat = "|" },     1 },
+	{ T_LBRACK,		{ .pat = "[" },     1 },
+	{ T_RBRACK,		{ .pat = "]" },     1 },
+	{ T_BXOR,		{ .pat = "^" },     1 },
+	{ T_LBRACE,		{ .pat = "{" },     1 },
+	{ T_RBRACE,		{ .pat = "}" },     1 },
+	{ T_COLON,		{ .pat = ":" },     1 },
+	{ T_COMMA,		{ .pat = "," },     1 },
+	{ T_COMPL,		{ .pat = "~" },     1 },
+	//{ T_DIV,		{ .pat = "/" },     1 },
+	{ T_GT,			{ .pat = ">" },     1 },
+	{ T_NOT,		{ .pat = "!" },     1 },
+	{ T_LT,			{ .pat = "<" },     1 },
+	{ T_MOD,		{ .pat = "%" },     1 },
+	{ T_MUL,		{ .pat = "*" },     1 },
+	{ T_LPAREN,		{ .pat = "(" },     1 },
+	{ T_RPAREN,		{ .pat = ")" },     1 },
+	{ T_QMARK,		{ .pat = "?" },     1 },
+	{ T_SCOL,		{ .pat = ";" },     1 },
+	{ T_SUB,		{ .pat = "-" },     1 },
+	{ T_DOT,		{ .pat = "." },     1 },
+	{ T_STRING,		{ .pat = "'" },     1, parse_string },
+	{ T_STRING,		{ .pat = "\"" },    1, parse_string },
+	{ T_REGEXP,		{ .pat = "/" },     1, parse_regexp },
+	{ T_LABEL,		{ .pat = "_" },     1, parse_label  },
+	{ T_LABEL,		{ .pat = "az" },    0, parse_label  },
+	{ T_LABEL,		{ .pat = "AZ" },    0, parse_label  },
+	{ T_NUMBER,		{ .pat = "09" },    0, parse_number },
 };
 
-static const struct token reserved_words[] = {
+static const struct keyword reserved_words[] = {
 	{ T_ENDFUNC,	"endfunction", 11 },
 	{ T_DOUBLE,		"Infinity", 8, { .d = INFINITY } },
 	{ T_CONTINUE,	"continue", 8 },
@@ -719,7 +725,7 @@ static uint32_t
 parse_label(struct ut_state *s)
 {
 	const struct token *tok = s->lex.tok;
-	const struct token *word;
+	const struct keyword *word;
 	uint32_t rv;
 	char *ptr;
 	size_t i;
@@ -831,6 +837,8 @@ parse_number(struct ut_state *s)
 static uint32_t
 lex_step(struct ut_state *s, FILE *fp)
 {
+	uint32_t masks[] = { 0, le32toh(0x000000ff), le32toh(0x0000ffff), le32toh(0x00ffffff), le32toh(0xffffffff) };
+	union { uint32_t n; char str[4]; } search;
 	const struct token *tok;
 	size_t rlen, rem;
 	char *ptr, c;
@@ -1008,6 +1016,18 @@ lex_step(struct ut_state *s, FILE *fp)
 
 
 	case UT_LEX_IDENTIFY_TOKEN:
+		/* skip leading whitespace */
+		for (i = 0; i < buf_remaining(s) && isspace(s->lex.bufstart[i]); i++)
+			;
+
+		buf_consume(s, i);
+
+		if (i > 0 && buf_remaining(s) < UT_LEX_MAX_TOKEN_LEN)
+			return 0;
+
+		for (i = 0; i < sizeof(search.str); i++)
+			search.str[i] = (i < buf_remaining(s)) ? s->lex.bufstart[i] : 0;
+
 		for (i = 0, tok = tokens; i < ARRAY_SIZE(tokens); tok = &tokens[++i]) {
 			/* remaining buffer data is shorter than token, skip */
 			if (tok->plen > buf_remaining(s))
@@ -1015,7 +1035,7 @@ lex_step(struct ut_state *s, FILE *fp)
 
 			c = s->lex.bufstart[0];
 
-			if (tok->plen ? !strncmp(s->lex.bufstart, tok->pat, tok->plen)
+			if (tok->plen ? ((search.n & masks[tok->plen]) == tok->patn)
 			              : (c >= tok->pat[0] && c <= tok->pat[1])) {
 				buf_consume(s, tok->plen);
 

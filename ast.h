@@ -33,6 +33,10 @@
 
 #define ALIGN(x) (((x) + sizeof(size_t) - 1) & -sizeof(size_t))
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
+#endif
+
 #define JSON_C_TO_STRING_STRICT (1<<31)
 
 enum ut_lex_state {
@@ -150,8 +154,23 @@ struct ut_extended_type {
 	void (*free)(void *);
 };
 
-struct ut_op *ut_get_op(struct ut_state *s, uint32_t off);
-struct ut_op *ut_get_child(struct ut_state *s, uint32_t off, int n);
+static inline struct ut_op *ut_get_op(struct ut_state *s, uint32_t off)
+{
+	if (off == 0 || off > s->poolsize)
+		return NULL;
+
+	return &s->pool[off - 1];
+}
+
+static inline struct ut_op *ut_get_child(struct ut_state *s, uint32_t off, int n)
+{
+	struct ut_op *op = ut_get_op(s, off);
+
+	if (!op || n >= ARRAY_SIZE(op->tree.operand) || !op->tree.operand[n])
+		return NULL;
+
+	return ut_get_op(s, op->tree.operand[n]);
+}
 
 static inline uint32_t ut_get_off(struct ut_state *s, struct ut_op *op) {
 	return op ? (op - s->pool + 1) : 0;
