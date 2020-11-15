@@ -171,14 +171,24 @@ static struct json_object *
 ut_fs_pclose(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.proc");
+	int rc;
 
 	if (!fp || !*fp)
 		err_return(EBADF);
 
-	pclose(*fp);
+	rc = pclose(*fp);
 	*fp = NULL;
 
-	return json_object_new_boolean(true);
+	if (rc == -1)
+		err_return(errno);
+
+	if (WIFEXITED(rc))
+		return xjs_new_int64(WEXITSTATUS(rc));
+
+	if (WIFSIGNALED(rc))
+		return xjs_new_int64(-WTERMSIG(rc));
+
+	return xjs_new_int64(0);
 }
 
 static struct json_object *
