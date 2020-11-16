@@ -681,12 +681,23 @@ a = map(["foo", 1, true, null, 2.2], type);
 // a = ["string", "int", "bool", null, "double"]
 ```
 
-#### 6.22. `ord(s)`
+#### 6.22. `ord(s, ...)`
 
-Returns the byte value of the first character in the given string.
+Without further arguments, this function returns the byte value of the first
+character in the given string.
+
+If one or more index arguments are supplied, an array containing the byte
+values at each given index is returned. If an invalid index is supplied, the
+corresponding array entry will be `null`. Negative index entries are counted
+towards the end of the string, e.g. `-2` will return the value of the second
+last character.
 
 ```javascript
-ord("Abc");  // 65
+ord("Abc");                 // 65
+ord("Abc", 0);              // [ 65 ]
+ord("Abc", 1, -1);          // [ 98, 99 ]
+ord("Abc", 2, 1, 0);        // [ 99, 98, 65 ]
+ord("Abc", 10, -10, "nan"); // [ null, null, null ]
 ```
 
 #### 6.23. `pop(arr)`

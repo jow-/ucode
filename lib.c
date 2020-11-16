@@ -831,17 +831,43 @@ static struct json_object *
 ut_ord(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
+	struct json_object *rv, *pos;
+	size_t i, len, nargs;
 	const char *str;
+	int64_t n;
 
 	if (!json_object_is_type(obj, json_type_string))
 		return NULL;
 
 	str = json_object_get_string(obj);
+	len = json_object_get_string_len(obj);
 
-	if (!str[0])
-		return NULL;
+	nargs = json_object_array_length(args);
 
-	return xjs_new_int64((int64_t)str[0]);
+	if (nargs == 1)
+		return str[0] ? xjs_new_int64((int64_t)str[0]) : NULL;
+
+	rv = xjs_new_array();
+
+	for (i = 1; i < nargs; i++) {
+		pos = json_object_array_get_idx(args, i);
+
+		if (json_object_is_type(pos, json_type_int)) {
+			n = json_object_get_int64(pos);
+
+			if (n < 0)
+				n += len;
+
+			if (n >= 0 && n < len) {
+				json_object_array_add(rv, xjs_new_int64((int64_t)str[n]));
+				continue;
+			}
+		}
+
+		json_object_array_add(rv, NULL);
+	}
+
+	return rv;
 }
 
 static struct json_object *
