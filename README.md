@@ -637,10 +637,23 @@ if the given argument is no object.
 Convert the given string to lowercase and return the resulting string.
 Returns `null` if the given argument could not be converted to a string.
 
-#### 6.18. `length(arr_or_str)`
+#### 6.18. `length(x)`
 
-Return the length of the given array or string. Returns `null` if the given
-argument is neither an array, nor a string.
+Return the length of the given object, array or string. Returns `null` if
+the given argument is neither an object, array, nor a string.
+
+For objects, the length is defined as the number of keys within the object,
+for arrays the length specifies the amount of contained items and for strings
+it represents the number of contained bytes.
+
+```javascript
+length("test")                             // 4
+length([true, false, null, 123, "test"])   // 5
+length({foo: true, bar: 123, baz: "test"}) // 3
+length({})                                 // 0
+length(true)                               // null
+length(10.0)                               // null
+```
 
 #### 6.19. `log(x)`
 

@@ -368,8 +368,20 @@ static struct json_object *
 ut_length(struct ut_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *arg = json_object_array_get_idx(args, 0);
+	size_t len;
 
 	switch (json_object_get_type(arg)) {
+	case json_type_object:
+		len = 0;
+
+		json_object_object_foreach(arg, k, v) {
+			(void)k;
+			(void)v;
+			len++;
+		}
+
+		return xjs_new_int64(len);
+
 	case json_type_array:
 		return xjs_new_int64(json_object_array_length(arg));
 
