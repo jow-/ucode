@@ -25,15 +25,18 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <signal.h>
 #include <ctype.h>
 #include <errno.h>
 #include <math.h>
 #include <time.h>
 #include <dlfcn.h>
 #include <libgen.h>
+#include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 
 __attribute__((format(printf, 3, 5))) static void
@@ -2193,6 +2196,118 @@ ut_warn(struct ut_state *s, uint32_t off, struct json_object *args)
 	return ut_print_common(s, off, args, stderr);
 }
 
+static struct json_object *
+ut_system(struct ut_state *s, uint32_t off, struct json_object *args)
+{
+	struct json_object *cmdline = json_object_array_get_idx(args, 0);
+	struct json_object *timeout = json_object_array_get_idx(args, 1);
+	struct ut_op *op = ut_get_op(s, off);
+	sigset_t sigmask, sigomask;
+	const char **arglist, *fn;
+	struct timespec ts;
+	int64_t tms;
+	pid_t cld;
+	size_t i;
+	int rc;
+
+	switch (json_object_get_type(cmdline)) {
+	case json_type_string:
+		arglist = xalloc(sizeof(*arglist) * 4);
+		arglist[0] = "/bin/sh";
+		arglist[1] = "-c";
+		arglist[2] = json_object_get_string(cmdline);
+		arglist[3] = NULL;
+		break;
+
+	case json_type_array:
+		arglist = xalloc(sizeof(*arglist) * (json_object_array_length(cmdline) + 1));
+
+		for (i = 0; i < json_object_array_length(cmdline); i++)
+			arglist[i] = json_object_get_string(json_object_array_get_idx(cmdline, i));
+
+		arglist[i] = NULL;
+
+		break;
+
+	default:
+		return ut_new_exception(s, op->off, "Passed command is neither string nor array");
+	}
+
+	if (timeout && (!json_object_is_type(timeout, json_type_int) || json_object_get_int64(timeout) < 0))
+		return ut_new_exception(s, op->off, "Invalid timeout specified");
+
+	tms = timeout ? json_object_get_int64(timeout) : 0;
+
+	if (tms > 0) {
+		sigemptyset(&sigmask);
+		sigaddset(&sigmask, SIGCHLD);
+
+		if (sigprocmask(SIG_BLOCK, &sigmask, &sigomask) < 0) {
+			fn = "sigprocmask";
+			goto fail;
+		}
+	}
+
+	cld = fork();
+
+	switch (cld) {
+	case -1:
+		fn = "fork";
+		goto fail;
+
+	case 0:
+		execv(arglist[0], (char * const *)arglist);
+		exit(-1);
+
+		break;
+
+	default:
+		if (tms > 0) {
+			ts.tv_sec = tms / 1000;
+			ts.tv_nsec = (tms % 1000) * 1000000;
+
+			while (1) {
+				if (sigtimedwait(&sigmask, NULL, &ts) < 0) {
+					if (errno == EINTR)
+						continue;
+
+					if (errno != EAGAIN) {
+						fn = "sigtimedwait";
+						goto fail;
+					}
+
+					kill(cld, SIGKILL);
+				}
+
+				break;
+			}
+		}
+
+		if (waitpid(cld, &rc, 0) < 0) {
+			fn = "waitpid";
+			goto fail;
+		}
+
+		sigprocmask(SIG_SETMASK, &sigomask, NULL);
+		free(arglist);
+
+		if (WIFEXITED(rc))
+			return xjs_new_int64(WEXITSTATUS(rc));
+		else if (WIFSIGNALED(rc))
+			return xjs_new_int64(-WTERMSIG(rc));
+		else if (WIFSTOPPED(rc))
+			return xjs_new_int64(-WSTOPSIG(rc));
+
+		return NULL;
+	}
+
+fail:
+	sigprocmask(SIG_SETMASK, &sigomask, NULL);
+	free(arglist);
+
+	return ut_new_exception(s, op->off, "%s(): %s", fn, strerror(errno));
+}
+
 const struct ut_ops ut = {
 	.register_function = ut_register_function,
 	.register_type = ut_register_extended_type,
@@ -2250,6 +2365,7 @@ static const struct { const char *name; ut_c_fn *func; } functions[] = {
 	{ "json",		ut_json },
 	{ "include",	ut_include },
 	{ "warn",		ut_warn },
+	{ "system",		ut_system },
 };
 
 

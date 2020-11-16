@@ -993,3 +993,33 @@ Print any of the given values to stderr. Arrays and objects are converted to
 their JSON representation.
 
 Returns the amount of bytes printed.
+
+#### 6.52. `system(command, timeout)`
+
+Executes the given command, waits for completion and returns the resulting
+exit code.
+
+The command argument may be either a string, in which case it is passed to
+`/bin/sh -c` or an array, which is directly converted into an `execv()`
+argument vector.
+
+If the program terminated normally, a positive integer holding the programs
+`exit()` code is returned. If the program was terminated by an uncatched
+signal, a negative signal number is returned, e.g. `-9` if the program was
+terminated by `SIGKILL`.
+
+If the optional timeout argument is specified, the program is terminated by
+`SIGKILL` after that many milliseconds if it didn't complete within the timeout.
+
+Omitting the timeout argument, or passing `0` disabled the command timeout.
+
+```javascript
+// Execute through `/bin/sh`
+system("echo 'Hello world' && exit 3");    // prints "Hello world" to stdout and returns 3
+
+// Execute argument vector
+system("/usr/bin/date", "+%s"]);           // prints the UNIX timestamp to stdout and returns 0
+
+// Apply a timeout
+system("sleep 3 && echo 'Success'", 1000); // returns -9
+```
