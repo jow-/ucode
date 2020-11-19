@@ -1,4 +1,4 @@
-Utpl implements function scoping, make sure that local variables are
+Utpl implements function scoping, make sure that let variables are
 invisible outside of the function scope.
 
 -- Expect stdout --
@@ -12,7 +12,7 @@ c_global=true
 c_local=false
 
 
-When seting a nonlocal variable, it is set in the nearest parent
+When seting a nonlet variable, it is set in the nearest parent
 scope containing the variable or in the root scope if the variable
 was not found.
 
@@ -46,15 +46,15 @@ outer f_e=3
 -- Testcase --
 {%
 	a_global = true;
-	local a_local = true;
+	let a_let = true;
 
 	function test() {
 		b_global = true;
-		local b_local = true;
+		let b_let = true;
 
 		function test2() {
 			c_global = true;
-			local c_local = true;
+			let c_let = true;
 		}
 
 		test2();
@@ -64,16 +64,16 @@ outer f_e=3
 -%}
 
 a_global={{ !!a_global }}
-a_local={{ !!a_local }}
+a_local={{ !!a_let }}
 
 b_global={{ !!b_global }}
-b_local={{ !!b_local }}
+b_local={{ !!b_let }}
 
 c_global={{ !!c_global }}
-c_local={{ !!c_local }}
+c_local={{ !!c_let }}
 
 
-When seting a nonlocal variable, it is set in the nearest parent
+When seting a nonlet variable, it is set in the nearest parent
 scope containing the variable or in the root scope if the variable
 was not found.
 
@@ -82,7 +82,7 @@ was not found.
 
 	function scope1() {
 		x = 2;
-		local y;
+		let y;
 
 		function scope2() {
 			// this does not set "y" in the root scope but overwrites the
@@ -110,22 +110,22 @@ scoping rules.
 
 {%
 	function scope3() {
-		// f_a is not declared local and be set i nthe root scope
+		// f_a is not declared let and be set i nthe root scope
 		for (f_a = 1; f_a < 3; f_a++)
 			;
 
-		for (local f_b = 1; f_b < 3; f_b++)
+		for (let f_b = 1; f_b < 3; f_b++)
 			;
 
-		local f_c;
+		let f_c;
 
 		function scope4() {
-			// f_c is not declared local but declared in the parent scope, it
+			// f_c is not declared let but declared in the parent scope, it
 			// will be set there
 			for (f_c in [1, 2, 3])
 				;
 
-			for (local f_d in [1, 2, 3])
+			for (let f_d in [1, 2, 3])
 				;
 
 			// f_e is not declared, it will be set in the root scope

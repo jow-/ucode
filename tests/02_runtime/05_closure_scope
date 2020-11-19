@@ -14,19 +14,19 @@ x is 3
 
 -- Testcase --
 {%
-	local count=0;
+	let count=0;
 
 	function a() {
-		local x = ++count;
+		let x = ++count;
 		print("Make function with x=", x, "\n");
 		return function() {
 			print("x is ", x, "\n");
 		};
 	}
 
-	local fn1 = a();
-	local fn2 = a();
-	local fn3 = a();
+	let fn1 = a();
+	let fn2 = a();
+	let fn3 = a();
 
 	fn1();
 	fn2();

@@ -76,11 +76,11 @@ arrow function as method has no this: true
 {%
 	obj = {
 		method: function() {
-			local that = this;
-			local arr = () => {
+			let that = this;
+			let arr = () => {
 				print("arrow function uses outher this: ", that == this, "\n");
 			};
-			local fn = function() {
+			let fn = function() {
 				print("normal function has own this: ", that != this, "\n");
 			};
 

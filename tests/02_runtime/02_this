@@ -13,7 +13,7 @@ true
 	}
 
 	// When invoked, "this" will point to the object containing the function
-	local o = {
+	let o = {
 		test: function() {
 			return (this === o);
 		}
@@ -34,13 +34,13 @@ true
 
 -- Testcase --
 {%
-	local o = {
+	let o = {
 		test: function() {
 			return (this === o);
 		}
 	};
 
-	local dummy = { foo: true, bar: false };
+	let dummy = { foo: true, bar: false };
 
 	print(o.test(dummy.foo, dummy.bar), "\n");
 	print(o.test(dummy.foo, o.test(dummy.foo, dummy.bar)), "\n");

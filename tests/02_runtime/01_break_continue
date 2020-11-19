@@ -26,7 +26,7 @@ Testing continue:
 -- Testcase --
 Testing break:
 {%
-	local i = 0;
+	let i = 0;
 
 	while (true) {
 		print(" - Iteration ", i, "\n");

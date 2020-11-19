@@ -156,11 +156,11 @@ Item {{ n }}
 {% endfor %}
 
 For-in and counting for loops may declare variables:
-{% for (local i = 0; i < 3; i++): %}
+{% for (let i = 0; i < 3; i++): %}
 Iteration {{ i }}
 {% endfor %}
 
-{% for (local n in [123, 456, 789]): %}
+{% for (let n in [123, 456, 789]): %}
 Item {{ n }}
 {% endfor %}
 -- End --
@@ -190,25 +190,25 @@ qrx
 
 -- Testcase --
 {%
-	local arr = [ true, false, 123, 456 ];
-	local obj = { foo: true, bar: false, baz: 123, qrx: 456 };
+	let arr = [ true, false, 123, 456 ];
+	let obj = { foo: true, bar: false, baz: 123, qrx: 456 };
 
 	// iterating arrays with one loop variable yields the array values
-	for (local x in arr)
+	for (let x in arr)
 		print(x, "\n");
 
 	// iterating arrays with two loop variables yields the array indexes
 	// and their corresponding values
-	for (local x, y in arr)
+	for (let x, y in arr)
 		print([x, y], "\n");
 
 	// iterating objects with one loop variable yields the object keys
-	for (local x in obj)
+	for (let x in obj)
 		print(x, "\n");
 
 	// iterating objects with two loop variables yields the object keys
 	// and their corresponding values
-	for (local x, y in obj)
+	for (let x, y in obj)
 		print([x, y], "\n");
 %}
 -- End --
@@ -221,7 +221,7 @@ rejected.
 Syntax error: Invalid for-in expression
 In line 2, byte 16:
 
- `    for (local x, y, z in {})`
+ `    for (let x, y, z in {})`
   Near here --------^
 
 
@@ -229,7 +229,7 @@ In line 2, byte 16:
 
 -- Testcase --
 {%
-	for (local x, y, z in {})
+	for (let x, y, z in {})
 		;
 %}
 -- End --
@@ -241,7 +241,7 @@ Ensure that assignments in for-in loop expressions are rejected.
 Syntax error: Invalid for-in expression
 In line 2, byte 15:
 
- `    for (local x = 1, y in {})`
+ `    for (let x = 1, y in {})`
   Near here -------^
 
 
@@ -249,7 +249,7 @@ In line 2, byte 15:
 
 -- Testcase --
 {%
-	for (local x = 1, y in {})
+	for (let x = 1, y in {})
 		;
 %}
 -- End --
@@ -262,7 +262,7 @@ Syntax error: Unexpected token
 Expecting ',' or 'in'
 In line 2, byte 14:
 
- `    for (local x)`
+ `    for (let x)`
   Near here ------^
 
 
@@ -270,7 +270,7 @@ In line 2, byte 14:
 
 -- Testcase --
 {%
-	for (local x)
+	for (let x)
 		;
 %}
 -- End --
@@ -282,7 +282,7 @@ Ensure that too short for-in loop expressions are rejected (2/2).
 Syntax error: Invalid for-in expression
 In line 2, byte 16:
 
- `    for (local x, y)`
+ `    for (let x, y)`
   Near here --------^
 
 
@@ -290,7 +290,7 @@ In line 2, byte 16:
 
 -- Testcase --
 {%
-	for (local x, y)
+	for (let x, y)
 		;
 %}
 -- End --
