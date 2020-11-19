@@ -1,6 +1,6 @@
 ## ABOUT
 
-An utpl template consists of arbitrary plain text which is outputted as-is
+An ucode template consists of arbitrary plain text which is outputted as-is
 while control flow or expression logic is embedded in blocks that may appear
 anywhere throughout the template.
 
@@ -18,7 +18,7 @@ Statement blocks are enclosed in an opening `{%` and a closing `%}` tag and
 may contain any number of script code statements, even entire programs.
 
 It is allowed to omit the closing `%}` of a statement block to parse the
-entire remaining source text after the opening tag as utpl script.
+entire remaining source text after the opening tag as ucode script.
 
 By default, statement blocks produce no output and the entire block is
 reduced to an empty string during template evaluation but contained script
@@ -39,7 +39,7 @@ is used as output when processing the block.
 
 For example the template `Hello world, {{ getenv("USER") }}!` would result in
 the output "Hello world, user!" where `user` would correspond to the name of
-the current user executing the utpl interpreter.
+the current user executing the ucode interpreter.
 
 
 ### 3. COMMENT BLOCKS
@@ -121,18 +121,18 @@ This is a first lineThis is item 1.This is item 2.This is item 3.This is the las
 
 ## SCRIPT LANGUAGE
 
-The utpl script language used within statement and expression blocks uses
+The ucode script language used within statement and expression blocks uses
 untyped variables and employs a simplified JavaScript like syntax.
 
-Utpl script implements function scoping and differentiates between local and
+Ucode script implements function scoping and differentiates between local and
 global variables. Each function has its own private scope while executing and
 local variables declared inside a function are not accessible in the outer
 calling scope.
 
 ### 1. Data types
 
-Utpl supports seven different basic types as well as an additional special
-function type. The supported types are:
+Ucode supports seven different basic types as well as two additional special
+types; function values and ressource values. The supported types are:
 
  - Boolean values (`true` or `false`)
  - Integer values (`-9223372036854775808` to `+9223372036854775807`)
@@ -142,7 +142,7 @@ function type. The supported types are:
  - Object values (e.g. `{ foo: true, "bar": 123 }`)
  - Null value (`null`)
 
-Utpl utilizes reference counting to manage memory used for variables and values
+Ucode utilizes reference counting to manage memory used for variables and values
 and frees data automatically as soon as values go out of scope.
 
 Numeric values are either stored as signed 64bit integers or as IEEE 756 double
@@ -154,7 +154,7 @@ through numeric operations, or explicitely, e.g. by invoking functions such as
 
 Variable names must start with a letter or an underscore and may only contain
 the characters `A`..`Z`, `a`..`z`, `0`..`9` or `_`. By prefixing a variable
-name with the keyword `local`, it is declared in the local function scope only
+name with the keyword `let`, it is declared in the local function scope only
 and not visible outside anymore.
 
 ```javascript
@@ -163,7 +163,7 @@ and not visible outside anymore.
   a = 1;  // global variable assignment
 
   function test() {
-    local b = 2;  // declare `b` as local variable
+    let b = 2;  // declare `b` as local variable
     a = 2;        // overwrite global a
   }
 
@@ -177,7 +177,7 @@ and not visible outside anymore.
 
 ### 3. Control statements
 
-Similar to JavaScript, utpl supports `if`, `for` and `while` statements to
+Similar to JavaScript, ucode supports `if`, `for` and `while` statements to
 control execution flow.
 
 #### 3.1. Conditional statement
@@ -216,7 +216,7 @@ curly braces may be omitted:
 
 #### 3.2. Loop statements
 
-Utpl script supports three different flavors of loop control statements; a
+Ucode script supports three different flavors of loop control statements; a
 `while` loop that executes enclosed statements as long as the loop condition is
 fulfilled, a `for in` loop that iterates keys of objects or items of arrays and
 a counting `for` loop that is a variation of the `while` loop.
@@ -257,7 +257,7 @@ a counting `for` loop that is a variation of the `while` loop.
 #### 3.3. Alternative syntax
 
 Since conditional statements and loops are often used for template formatting
-purposes, e.g. to repeat a specific markup for each item of a list, utpl
+purposes, e.g. to repeat a specific markup for each item of a list, ucode
 supports an alternative syntax that does not require curly braces to group
 statements but that uses explicit end keywords to denote the end of the control
 statement body for better readability instead.
@@ -291,7 +291,7 @@ For each control statement type, a corresponding alternative end keyword is defi
 
 ### 4. Functions
 
-Utpl scripts may define functions to group repeating operations into reusable
+Ucode scripts may define functions to group repeating operations into reusable
 operations. Functions can be both declared with a name, in which case they're
 automatically registered in the current scope, or anonymously which allows
 assigning the resulting value to a variable, e.g. to build arrays or objects of
@@ -304,7 +304,7 @@ functions:
        return n * 2;
   }
 
-  local utilities = {
+  let utilities = {
       concat: function(a, b) {
           return "" + a + b;
       },
@@ -340,7 +340,7 @@ keyword:
 
 ### 5. Operators
 
-Similar to JavaScript and C, utpl scripts support a range of different
+Similar to JavaScript and C, ucode scripts support a range of different
 operators to manipulate values and variables.
 
 #### 5.1. Arithmetic operations
@@ -512,7 +512,7 @@ The result of assignment expressions is the assigned value.
 
 ### 6. Functions
 
-Utpl scripts may call a number of builtin functions to manipulate values or
+Ucode scripts may call a number of builtin functions to manipulate values or
 to output information.
 
 #### 6.1. `abs(x)`
@@ -893,11 +893,11 @@ values({ foo: true, bar: false });   // [true, false]
 Formats the given arguments according to the given format string and outputs the
 result to stdout.
 
-Utpl supports a restricted subset of the formats allowed by the underlying
+Ucode supports a restricted subset of the formats allowed by the underlying
 libc's `printf()` implementation, namely it allows the `d`, `i`, `o`, `u`, `x`,
 `X`, `e`, `E`, `f`, `F`, `g`, `G`, `c` and `s` conversions.
 
-Additionally, an utpl specific `J` format is implemented, which causes the
+Additionally, an ucode specific `J` format is implemented, which causes the
 corresponding value to be formatted as JSON string.
 
 Other format specifiers such as `n` or `z` are not accepted and returned
@@ -995,16 +995,16 @@ If the given path argument is not absolute, it is interpreted relative to the
 directory of the current template file, that is the file that is invoking the
 `include()` function.
 
-If the utpl interpreter executes program code from stdin, the given path is
+If the ucode interpreter executes program code from stdin, the given path is
 interpreted relative to the current working directory of the process.
 
 ```javascript
-// Load and execute "foo.utpl" immediately
-include("./foo.utpl")
+// Load and execute "foo.uc" immediately
+include("./foo.uc")
 
-// Execute the "untrusted.utpl" in a sandboxed scope and make the "foo" and
+// Execute the "untrusted.ucode" in a sandboxed scope and make the "foo" and
 // "bar" variables as well as the "print" function available to it
-include("./untrusted.utpl", {
+include("./untrusted.uc", {
   foo: true,
   bar: 123,
   print: print

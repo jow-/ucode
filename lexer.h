@@ -28,9 +28,9 @@ bool
 utf8enc(char **out, int *rem, int code);
 
 uint32_t
-ut_get_token(struct ut_state *s, FILE *fp);
+uc_get_token(struct uc_state *s, FILE *fp);
 
 const char *
-ut_get_tokenname(int type);
+uc_get_tokenname(int type);
 
 #endif /* __LEXER_H_ */

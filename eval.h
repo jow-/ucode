@@ -25,18 +25,18 @@
 #include "ast.h"
 
 bool
-ut_cmp(int how, struct json_object *v1, struct json_object *v2);
+uc_cmp(int how, struct json_object *v1, struct json_object *v2);
 
 bool
-ut_val_is_truish(struct json_object *val);
+uc_val_is_truish(struct json_object *val);
 
 enum json_type
-ut_cast_number(struct json_object *v, int64_t *n, double *d);
+uc_cast_number(struct json_object *v, int64_t *n, double *d);
 
 struct json_object *
-ut_invoke(struct ut_state *, uint32_t, struct json_object *, struct json_object *, struct json_object *);
+uc_invoke(struct uc_state *, uint32_t, struct json_object *, struct json_object *, struct json_object *);
 
 struct json_object *
-ut_run(struct ut_state *state, struct json_object *env, struct json_object *modules);
+uc_run(struct uc_state *state, struct json_object *env, struct json_object *modules);
 
 #endif

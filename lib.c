@@ -113,7 +113,7 @@ format_context_line(char **msg, size_t *msglen, const char *line, size_t off)
 }
 
 static void
-format_error_context(char **msg, size_t *msglen, struct ut_source *src, struct json_object *stacktrace, size_t off)
+format_error_context(char **msg, size_t *msglen, struct uc_source *src, struct json_object *stacktrace, size_t off)
 {
 	struct json_object *e, *fn, *file, *line, *byte;
 	size_t len, rlen, idx;
@@ -186,9 +186,9 @@ format_error_context(char **msg, size_t *msglen, struct ut_source *src, struct j
 }
 
 struct json_object *
-ut_parse_error(struct ut_state *s, uint32_t off, uint64_t *tokens, int max_token)
+uc_parse_error(struct uc_state *s, uint32_t off, uint64_t *tokens, int max_token)
 {
-	struct ut_op *op = ut_get_op(s, off);
+	struct uc_op *op = uc_get_op(s, off);
 	struct json_object *rv;
 	size_t msglen = 0;
 	bool first = true;
@@ -198,19 +198,19 @@ ut_parse_error(struct ut_state *s, uint32_t off, uint64_t *tokens, int max_token
 	for (i = 0; i <= max_token; i++) {
 		if (tokens[i / 64] & ((uint64_t)1 << (i % 64))) {
 			if (first) {
-				sprintf_append(&msg, &msglen, "Expecting %s", ut_get_tokenname(i));
+				sprintf_append(&msg, &msglen, "Expecting %s", uc_get_tokenname(i));
 				first = false;
 			}
 			else if (i < max_token) {
-				sprintf_append(&msg, &msglen, ", %s", ut_get_tokenname(i));
+				sprintf_append(&msg, &msglen, ", %s", uc_get_tokenname(i));
 			}
 			else {
-				sprintf_append(&msg, &msglen, " or %s", ut_get_tokenname(i));
+				sprintf_append(&msg, &msglen, " or %s", uc_get_tokenname(i));
 			}
 		}
 	}
 
-	rv = ut_new_exception(s,
+	rv = uc_new_exception(s,
 	                      op ? op->off : s->lex.lastoff,
 	                      "Syntax error: Unexpected token\n%s", msg);
 	free(msg);
@@ -219,10 +219,10 @@ ut_parse_error(struct ut_state *s, uint32_t off, uint64_t *tokens, int max_token
 }
 
 char *
-ut_format_error(struct ut_state *state, FILE *fp)
+uc_format_error(struct uc_state *state, FILE *fp)
 {
-	struct ut_source *src;
-	struct ut_op *tag;
+	struct uc_source *src;
+	struct uc_op *tag;
 	size_t msglen = 0;
 	char *msg = NULL;
 
@@ -241,13 +241,13 @@ ut_format_error(struct ut_state *state, FILE *fp)
 }
 
 static double
-ut_cast_double(struct json_object *v)
+uc_cast_double(struct json_object *v)
 {
 	enum json_type t;
 	int64_t n;
 	double d;
 
-	t = ut_cast_number(v, &n, &d);
+	t = uc_cast_number(v, &n, &d);
 	errno = 0;
 
 	if (t == json_type_double) {
@@ -263,13 +263,13 @@ ut_cast_double(struct json_object *v)
 }
 
 static int64_t
-ut_cast_int64(struct json_object *v)
+uc_cast_int64(struct json_object *v)
 {
 	enum json_type t;
 	int64_t n;
 	double d;
 
-	t = ut_cast_number(v, &n, &d);
+	t = uc_cast_number(v, &n, &d);
 	errno = 0;
 
 	if (t == json_type_double) {
@@ -287,30 +287,30 @@ ut_cast_int64(struct json_object *v)
 }
 
 static int
-ut_c_fn_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
+uc_c_fn_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
-	struct ut_op *op = json_object_get_userdata(v);
-	struct ut_function *fn = (void *)op + ALIGN(sizeof(*op));
+	struct uc_op *op = json_object_get_userdata(v);
+	struct uc_function *fn = (void *)op + ALIGN(sizeof(*op));
 
 	return sprintbuf(pb, "%sfunction %s(...) { [native code] }%s",
 		level ? "\"" : "", fn->name, level ? "\"" : "");
 }
 
 static void
-ut_c_fn_free(struct json_object *v, void *ud)
+uc_c_fn_free(struct json_object *v, void *ud)
 {
-	struct ut_op *op = ud;
+	struct uc_op *op = ud;
 
 	json_object_put(op->tag.proto);
 	free(ud);
 }
 
 static bool
-ut_register_function(struct ut_state *state, struct json_object *scope, const char *name, ut_c_fn *cfn)
+uc_register_function(struct uc_state *state, struct json_object *scope, const char *name, uc_c_fn *cfn)
 {
 	struct json_object *val = xjs_new_object();
-	struct ut_function *fn;
-	struct ut_op *op;
+	struct uc_function *fn;
+	struct uc_op *op;
 
 	op = xalloc(ALIGN(sizeof(*op)) + ALIGN(sizeof(*fn)) + ALIGN(strlen(name) + 1));
 	op->val = val;
@@ -323,13 +323,13 @@ ut_register_function(struct ut_state *state, struct json_object *scope, const ch
 
 	op->tag.data = fn;
 
-	json_object_set_serializer(val, ut_c_fn_to_string, op, ut_c_fn_free);
+	json_object_set_serializer(val, uc_c_fn_to_string, op, uc_c_fn_free);
 
 	return json_object_object_add(scope, name, op->val);
 }
 
 static struct json_object *
-ut_print_common(struct ut_state *s, uint32_t off, struct json_object *args, FILE *fh)
+uc_print_common(struct uc_state *s, uint32_t off, struct json_object *args, FILE *fh)
 {
 	struct json_object *item;
 	size_t arridx, arrlen;
@@ -359,13 +359,13 @@ ut_print_common(struct ut_state *s, uint32_t off, struct json_object *args, FILE
 
 
 static struct json_object *
-ut_print(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_print(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_print_common(s, off, args, stdout);
+	return uc_print_common(s, off, args, stdout);
 }
 
 static struct json_object *
-ut_length(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_length(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *arg = json_object_array_get_idx(args, 0);
 
@@ -385,7 +385,7 @@ ut_length(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_index(struct ut_state *s, uint32_t off, struct json_object *args, bool right)
+uc_index(struct uc_state *s, uint32_t off, struct json_object *args, bool right)
 {
 	struct json_object *stack = json_object_array_get_idx(args, 0);
 	struct json_object *needle = json_object_array_get_idx(args, 1);
@@ -395,7 +395,7 @@ ut_index(struct ut_state *s, uint32_t off, struct json_object *args, bool right)
 	switch (json_object_get_type(stack)) {
 	case json_type_array:
 		for (arridx = 0, len = json_object_array_length(stack); arridx < len; arridx++) {
-			if (ut_cmp(T_EQ, json_object_array_get_idx(stack, arridx), needle)) {
+			if (uc_cmp(T_EQ, json_object_array_get_idx(stack, arridx), needle)) {
 				ret = arridx;
 
 				if (!right)
@@ -427,19 +427,19 @@ ut_index(struct ut_state *s, uint32_t off, struct json_object *args, bool right)
 }
 
 static struct json_object *
-ut_lindex(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_lindex(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_index(s, off, args, false);
+	return uc_index(s, off, args, false);
 }
 
 static struct json_object *
-ut_rindex(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_rindex(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_index(s, off, args, true);
+	return uc_index(s, off, args, true);
 }
 
 static struct json_object *
-ut_push(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_push(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *arr = json_object_array_get_idx(args, 0);
 	struct json_object *item = NULL;
@@ -458,7 +458,7 @@ ut_push(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_pop(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_pop(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *arr = json_object_array_get_idx(args, 0);
 	struct json_object *item = NULL;
@@ -481,7 +481,7 @@ ut_pop(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_shift(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_shift(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *arr = json_object_array_get_idx(args, 0);
 	struct json_object *item = NULL;
@@ -506,7 +506,7 @@ ut_shift(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_unshift(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_unshift(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *arr = json_object_array_get_idx(args, 0);
 	struct json_object *item = NULL;
@@ -531,7 +531,7 @@ ut_unshift(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_chr(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_chr(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	size_t len = json_object_array_length(args);
 	size_t idx;
@@ -544,7 +544,7 @@ ut_chr(struct ut_state *s, uint32_t off, struct json_object *args)
 	str = xalloc(len);
 
 	for (idx = 0; idx < len; idx++) {
-		n = ut_cast_int64(json_object_array_get_idx(args, idx));
+		n = uc_cast_int64(json_object_array_get_idx(args, idx));
 
 		if (n < 0)
 			n = 0;
@@ -558,7 +558,7 @@ ut_chr(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_delete(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_delete(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
 	struct json_object *rv = NULL;
@@ -581,16 +581,16 @@ ut_delete(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_die(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_die(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	const char *msg = json_object_get_string(json_object_array_get_idx(args, 0));
-	struct ut_function *prev_fn;
+	struct uc_function *prev_fn;
 	struct json_object *ex;
 
 	prev_fn = s->function;
 	s->function = s->callstack->function;
 
-	ex = ut_new_exception(s, s->callstack->off, "%s", msg ? msg : "Died");
+	ex = uc_new_exception(s, s->callstack->off, "%s", msg ? msg : "Died");
 
 	s->function = prev_fn;
 
@@ -598,7 +598,7 @@ ut_die(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_exists(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_exists(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
 	const char *key = json_object_get_string(json_object_array_get_idx(args, 1));
@@ -610,15 +610,15 @@ ut_exists(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 __attribute__((noreturn)) static struct json_object *
-ut_exit(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_exit(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	int64_t n = ut_cast_int64(json_object_array_get_idx(args, 0));
+	int64_t n = uc_cast_int64(json_object_array_get_idx(args, 0));
 
 	exit(n);
 }
 
 static struct json_object *
-ut_getenv(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_getenv(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	const char *key = json_object_get_string(json_object_array_get_idx(args, 0));
 	char *val = key ? getenv(key) : NULL;
@@ -627,7 +627,7 @@ ut_getenv(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_filter(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_filter(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
 	struct json_object *func = json_object_array_get_idx(args, 1);
@@ -646,16 +646,16 @@ ut_filter(struct ut_state *s, uint32_t off, struct json_object *args)
 		json_object_array_put_idx(cmpargs, 0, json_object_get(json_object_array_get_idx(obj, arridx)));
 		json_object_array_put_idx(cmpargs, 1, xjs_new_int64(arridx));
 
-		rv = ut_invoke(s, off, NULL, func, cmpargs);
+		rv = uc_invoke(s, off, NULL, func, cmpargs);
 
-		if (ut_is_type(rv, T_EXCEPTION)) {
+		if (uc_is_type(rv, T_EXCEPTION)) {
 			json_object_put(cmpargs);
 			json_object_put(arr);
 
 			return rv;
 		}
 
-		if (ut_val_is_truish(rv))
+		if (uc_val_is_truish(rv))
 			json_object_array_add(arr, json_object_get(json_object_array_get_idx(obj, arridx)));
 
 		json_object_put(rv);
@@ -667,36 +667,36 @@ ut_filter(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_hex(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_hex(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	const char *val = json_object_get_string(json_object_array_get_idx(args, 0));
 	int64_t n;
 	char *e;
 
 	if (!val || !isxdigit(*val))
-		return ut_new_double(NAN);
+		return uc_new_double(NAN);
 
 	n = strtoll(val, &e, 16);
 
 	if (e == val || *e)
-		return ut_new_double(NAN);
+		return uc_new_double(NAN);
 
 	return xjs_new_int64(n);
 }
 
 static struct json_object *
-ut_int(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_int(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	int64_t n = ut_cast_int64(json_object_array_get_idx(args, 0));
+	int64_t n = uc_cast_int64(json_object_array_get_idx(args, 0));
 
 	if (errno == EINVAL || errno == EOVERFLOW)
-		return ut_new_double(NAN);
+		return uc_new_double(NAN);
 
 	return xjs_new_int64(n);
 }
 
 static struct json_object *
-ut_join(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_join(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	const char *sep = json_object_get_string(json_object_array_get_idx(args, 0));
 	struct json_object *arr = json_object_array_get_idx(args, 1);
@@ -752,7 +752,7 @@ out:
 }
 
 static struct json_object *
-ut_keys(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_keys(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
 	struct json_object *arr = NULL;
@@ -769,7 +769,7 @@ ut_keys(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_lc(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_lc(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	const char *str = json_object_get_string(json_object_array_get_idx(args, 0));
 	size_t len = str ? strlen(str) : 0;
@@ -794,7 +794,7 @@ ut_lc(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_map(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_map(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
 	struct json_object *func = json_object_array_get_idx(args, 1);
@@ -813,9 +813,9 @@ ut_map(struct ut_state *s, uint32_t off, struct json_object *args)
 		json_object_array_put_idx(cmpargs, 0, json_object_get(json_object_array_get_idx(obj, arridx)));
 		json_object_array_put_idx(cmpargs, 1, xjs_new_int64(arridx));
 
-		rv = ut_invoke(s, off, NULL, func, cmpargs);
+		rv = uc_invoke(s, off, NULL, func, cmpargs);
 
-		if (ut_is_type(rv, T_EXCEPTION)) {
+		if (uc_is_type(rv, T_EXCEPTION)) {
 			json_object_put(cmpargs);
 			json_object_put(arr);
 
@@ -831,7 +831,7 @@ ut_map(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_ord(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_ord(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
 	struct json_object *rv, *pos;
@@ -874,10 +874,10 @@ ut_ord(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_type(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_type(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *v = json_object_array_get_idx(args, 0);
-	struct ut_op *tag = json_object_get_userdata(v);
+	struct uc_op *tag = json_object_get_userdata(v);
 
 	switch (tag ? tag->type : 0) {
 	case T_FUNC:
@@ -913,7 +913,7 @@ ut_type(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_reverse(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_reverse(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
 	struct json_object *rv = NULL;
@@ -945,7 +945,7 @@ ut_reverse(struct ut_state *s, uint32_t off, struct json_object *args)
 
 
 static struct {
-	struct ut_state *s;
+	struct uc_state *s;
 	uint32_t off;
 	struct json_object *fn;
 	struct json_object *args;
@@ -961,7 +961,7 @@ sort_fn(const void *k1, const void *k2)
 	int ret;
 
 	if (!sort_ctx.fn)
-		return !ut_cmp(T_LT, *v1, *v2);
+		return !uc_cmp(T_LT, *v1, *v2);
 
 	if (sort_ctx.ex)
 		return 0;
@@ -969,15 +969,15 @@ sort_fn(const void *k1, const void *k2)
 	json_object_array_put_idx(sort_ctx.args, 0, json_object_get(*v1));
 	json_object_array_put_idx(sort_ctx.args, 1, json_object_get(*v2));
 
-	rv = ut_invoke(sort_ctx.s, sort_ctx.off, NULL, sort_ctx.fn, sort_ctx.args);
+	rv = uc_invoke(sort_ctx.s, sort_ctx.off, NULL, sort_ctx.fn, sort_ctx.args);
 
-	if (ut_is_type(rv, T_EXCEPTION)) {
+	if (uc_is_type(rv, T_EXCEPTION)) {
 		sort_ctx.ex = rv;
 
 		return 0;
 	}
 
-	ret = !ut_val_is_truish(rv);
+	ret = !uc_val_is_truish(rv);
 
 	json_object_put(rv);
 
@@ -985,7 +985,7 @@ sort_fn(const void *k1, const void *k2)
 }
 
 static struct json_object *
-ut_sort(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_sort(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *arr = json_object_array_get_idx(args, 0);
 	struct json_object *fn = json_object_array_get_idx(args, 1);
@@ -1007,11 +1007,11 @@ ut_sort(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_splice(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_splice(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *arr = json_object_array_get_idx(args, 0);
-	int64_t ofs = ut_cast_int64(json_object_array_get_idx(args, 1));
-	int64_t remlen = ut_cast_int64(json_object_array_get_idx(args, 2));
+	int64_t ofs = uc_cast_int64(json_object_array_get_idx(args, 1));
+	int64_t remlen = uc_cast_int64(json_object_array_get_idx(args, 2));
 	size_t arrlen, addlen, idx;
 
 	if (!json_object_is_type(arr, json_type_array))
@@ -1080,7 +1080,7 @@ ut_splice(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_split(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *str = json_object_array_get_idx(args, 0);
 	struct json_object *sep = json_object_array_get_idx(args, 1);
@@ -1088,7 +1088,7 @@ ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
 	const char *p, *sepstr, *splitstr;
 	int eflags = 0, res;
 	regmatch_t pmatch;
-	struct ut_op *tag;
+	struct uc_op *tag;
 	size_t seplen;
 
 	if (!sep || !json_object_is_type(str, json_type_string))
@@ -1097,7 +1097,7 @@ ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
 	arr = xjs_new_array();
 	splitstr = json_object_get_string(str);
 
-	if (ut_is_type(sep, T_REGEXP)) {
+	if (uc_is_type(sep, T_REGEXP)) {
 		tag = json_object_get_userdata(sep);
 
 		while (true) {
@@ -1140,11 +1140,11 @@ ut_split(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_substr(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_substr(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *str = json_object_array_get_idx(args, 0);
-	int64_t ofs = ut_cast_int64(json_object_array_get_idx(args, 1));
-	int64_t sublen = ut_cast_int64(json_object_array_get_idx(args, 2));
+	int64_t ofs = uc_cast_int64(json_object_array_get_idx(args, 1));
+	int64_t sublen = uc_cast_int64(json_object_array_get_idx(args, 2));
 	const char *p;
 	size_t len;
 
@@ -1204,7 +1204,7 @@ ut_substr(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_time(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_time(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	time_t t = time(NULL);
 
@@ -1212,7 +1212,7 @@ ut_time(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_uc(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uc(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	const char *str = json_object_get_string(json_object_array_get_idx(args, 0));
 	size_t len = str ? strlen(str) : 0;
@@ -1237,7 +1237,7 @@ ut_uc(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_uchr(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uchr(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	size_t len = json_object_array_length(args);
 	size_t idx, ulen;
@@ -1246,7 +1246,7 @@ ut_uchr(struct ut_state *s, uint32_t off, struct json_object *args)
 	int rem;
 
 	for (idx = 0, ulen = 0; idx < len; idx++) {
-		n = ut_cast_int64(json_object_array_get_idx(args, idx));
+		n = uc_cast_int64(json_object_array_get_idx(args, idx));
 
 		if (errno == EINVAL || errno == EOVERFLOW || n < 0 || n > 0x10FFFF)
 			ulen += 3;
@@ -1263,7 +1263,7 @@ ut_uchr(struct ut_state *s, uint32_t off, struct json_object *args)
 	str = xalloc(ulen);
 
 	for (idx = 0, p = str, rem = ulen; idx < len; idx++) {
-		n = ut_cast_int64(json_object_array_get_idx(args, idx));
+		n = uc_cast_int64(json_object_array_get_idx(args, idx));
 
 		if (errno == EINVAL || errno == EOVERFLOW || n < 0 || n > 0x10FFFF)
 			n = 0xFFFD;
@@ -1276,7 +1276,7 @@ ut_uchr(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_values(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_values(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *obj = json_object_array_get_idx(args, 0);
 	struct json_object *arr;
@@ -1295,7 +1295,7 @@ ut_values(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_trim_common(struct ut_state *s, uint32_t off, struct json_object *args, bool start, bool end)
+uc_trim_common(struct uc_state *s, uint32_t off, struct json_object *args, bool start, bool end)
 {
 	struct json_object *str = json_object_array_get_idx(args, 0);
 	struct json_object *chr = json_object_array_get_idx(args, 1);
@@ -1335,25 +1335,25 @@ ut_trim_common(struct ut_state *s, uint32_t off, struct json_object *args, bool 
 }
 
 static struct json_object *
-ut_trim(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_trim(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_trim_common(s, off, args, true, true);
+	return uc_trim_common(s, off, args, true, true);
 }
 
 static struct json_object *
-ut_ltrim(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_ltrim(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_trim_common(s, off, args, true, false);
+	return uc_trim_common(s, off, args, true, false);
 }
 
 static struct json_object *
-ut_rtrim(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_rtrim(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_trim_common(s, off, args, false, true);
+	return uc_trim_common(s, off, args, false, true);
 }
 
 static size_t
-ut_printf_common(struct ut_state *s, uint32_t off, struct json_object *args, char **res)
+uc_printf_common(struct uc_state *s, uint32_t off, struct json_object *args, char **res)
 {
 	struct json_object *fmt = json_object_array_get_idx(args, 0);
 	char *fp, sfmt[sizeof("%0- 123456789.123456789%")];
@@ -1449,7 +1449,7 @@ ut_printf_common(struct ut_state *s, uint32_t off, struct json_object *args, cha
 				t = json_type_int;
 
 				if (argidx < arglen)
-					arg.n = ut_cast_int64(json_object_array_get_idx(args, argidx++));
+					arg.n = uc_cast_int64(json_object_array_get_idx(args, argidx++));
 				else
 					arg.n = 0;
 
@@ -1464,7 +1464,7 @@ ut_printf_common(struct ut_state *s, uint32_t off, struct json_object *args, cha
 				t = json_type_double;
 
 				if (argidx < arglen)
-					arg.d = ut_cast_double(json_object_array_get_idx(args, argidx++));
+					arg.d = uc_cast_double(json_object_array_get_idx(args, argidx++));
 				else
 					arg.d = 0;
 
@@ -1474,7 +1474,7 @@ ut_printf_common(struct ut_state *s, uint32_t off, struct json_object *args, cha
 				t = json_type_int;
 
 				if (argidx < arglen)
-					arg.n = ut_cast_int64(json_object_array_get_idx(args, argidx++)) & 0xff;
+					arg.n = uc_cast_int64(json_object_array_get_idx(args, argidx++)) & 0xff;
 				else
 					arg.n = 0;
 
@@ -1545,13 +1545,13 @@ next:
 }
 
 static struct json_object *
-ut_sprintf(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_sprintf(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *rv;
 	char *str = NULL;
 	size_t len;
 
-	len = ut_printf_common(s, off, args, &str);
+	len = uc_printf_common(s, off, args, &str);
 	rv = xjs_new_string_len(str, len);
 
 	free(str);
@@ -1560,12 +1560,12 @@ ut_sprintf(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_printf(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_printf(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	char *str = NULL;
 	size_t len;
 
-	len = ut_printf_common(s, off, args, &str);
+	len = uc_printf_common(s, off, args, &str);
 	len = fwrite(str, 1, len, stdout);
 
 	free(str);
@@ -1574,12 +1574,12 @@ ut_printf(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_require_so(struct ut_state *s, uint32_t off, const char *path)
+uc_require_so(struct uc_state *s, uint32_t off, const char *path)
 {
-	void (*init)(const struct ut_ops *, struct ut_state *, struct json_object *);
-	struct ut_op *op = ut_get_op(s, off);
-	struct ut_function fn = {}, *prev_fn;
-	struct ut_source *src, *prev_src;
+	void (*init)(const struct uc_ops *, struct uc_state *, struct json_object *);
+	struct uc_op *op = uc_get_op(s, off);
+	struct uc_function fn = {}, *prev_fn;
+	struct uc_source *src, *prev_src;
 	struct json_object *scope;
 	struct stat st;
 	void *dlh;
@@ -1591,12 +1591,12 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 	dlh = dlopen(path, RTLD_LAZY|RTLD_LOCAL);
 
 	if (!dlh)
-		return ut_new_exception(s, op->off, "Unable to dlopen file %s: %s", path, dlerror());
+		return uc_new_exception(s, op->off, "Unable to dlopen file %s: %s", path, dlerror());
 
-	init = dlsym(dlh, "ut_module_init");
+	init = dlsym(dlh, "uc_module_init");
 
 	if (!init)
-		return ut_new_exception(s, op->off, "Module %s provides no 'ut_module_init' function", path);
+		return uc_new_exception(s, op->off, "Module %s provides no 'uc_module_init' function", path);
 
 	src = xalloc(sizeof(*src));
 	src->filename = xstrdup(path);
@@ -1622,17 +1622,17 @@ ut_require_so(struct ut_state *s, uint32_t off, const char *path)
 }
 
 struct json_object *
-ut_execute_source(struct ut_state *s, struct ut_source *src, struct ut_scope *scope)
+uc_execute_source(struct uc_state *s, struct uc_source *src, struct uc_scope *scope)
 {
 	struct json_object *entry, *rv;
 
-	rv = ut_parse(s, src->fp);
+	rv = uc_parse(s, src->fp);
 
-	if (!ut_is_type(rv, T_EXCEPTION)) {
-		entry = ut_new_func(s, ut_get_op(s, s->main), scope ? scope : s->scope);
+	if (!uc_is_type(rv, T_EXCEPTION)) {
+		entry = uc_new_func(s, uc_get_op(s, s->main), scope ? scope : s->scope);
 
 		json_object_put(rv);
-		rv = ut_invoke(s, s->main, NULL, entry, NULL);
+		rv = uc_invoke(s, s->main, NULL, entry, NULL);
 
 		json_object_put(entry);
 	}
@@ -1641,11 +1641,11 @@ ut_execute_source(struct ut_state *s, struct ut_source *src, struct ut_scope *sc
 }
 
 static struct json_object *
-ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct ut_scope *scope)
+uc_require_utpl(struct uc_state *s, uint32_t off, const char *path, struct uc_scope *scope)
 {
-	struct ut_op *op = ut_get_op(s, off);
-	struct ut_function fn = {}, *prev_fn;
-	struct ut_source *src, *prev_src;
+	struct uc_op *op = uc_get_op(s, off);
+	struct uc_function fn = {}, *prev_fn;
+	struct uc_source *src, *prev_src;
 	struct json_object *rv;
 	struct stat st;
 	FILE *fp;
@@ -1656,7 +1656,7 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct ut_sc
 	fp = fopen(path, "rb");
 
 	if (!fp)
-		return ut_new_exception(s, op->off, "Unable to open file %s: %s", path, strerror(errno));
+		return uc_new_exception(s, op->off, "Unable to open file %s: %s", path, strerror(errno));
 
 	src = xalloc(sizeof(*src));
 	src->fp = fp;
@@ -1672,7 +1672,7 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct ut_sc
 	prev_fn = s->function;
 	s->function = &fn;
 
-	rv = ut_execute_source(s, src, scope);
+	rv = uc_execute_source(s, src, scope);
 
 	s->function = prev_fn;
 	s->source = prev_src;
@@ -1681,7 +1681,7 @@ ut_require_utpl(struct ut_state *s, uint32_t off, const char *path, struct ut_sc
 }
 
 static struct json_object *
-ut_require_path(struct ut_state *s, uint32_t off, const char *path_template, const char *name)
+uc_require_path(struct uc_state *s, uint32_t off, const char *path_template, const char *name)
 {
 	struct json_object *rv = NULL;
 	const char *p, *q, *last;
@@ -1711,9 +1711,9 @@ ut_require_path(struct ut_state *s, uint32_t off, const char *path_template, con
 	}
 
 	if (!strcmp(p, ".so"))
-		rv = ut_require_so(s, off, path);
-	else if (!strcmp(p, ".utpl"))
-		rv = ut_require_utpl(s, off, path, NULL);
+		rv = uc_require_so(s, off, path);
+	else if (!strcmp(p, ".uc"))
+		rv = uc_require_utpl(s, off, path, NULL);
 
 invalid:
 	free(path);
@@ -1722,12 +1722,12 @@ invalid:
 }
 
 static struct json_object *
-ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_require(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *val = json_object_array_get_idx(args, 0);
 	struct json_object *search, *se, *res;
-	struct ut_op *op = ut_get_op(s, off);
-	struct ut_scope *sc, *scparent;
+	struct uc_op *op = uc_get_op(s, off);
+	struct uc_scope *sc, *scparent;
 	size_t arridx, arrlen;
 	const char *name;
 
@@ -1736,7 +1736,7 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 
 	/* find root scope */
 	for (sc = s->scope; sc; ) {
-		scparent = ut_parent_scope(sc);
+		scparent = uc_parent_scope(sc);
 
 		if (!scparent)
 			break;
@@ -1748,7 +1748,7 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 	search = sc ? json_object_object_get(sc->scope, "REQUIRE_SEARCH_PATH") : NULL;
 
 	if (!json_object_is_type(search, json_type_array))
-		return ut_new_exception(s, op ? op->off : 0,
+		return uc_new_exception(s, op ? op->off : 0,
 		                        "Global require search path not set");
 
 	for (arridx = 0, arrlen = json_object_array_length(search); arridx < arrlen; arridx++) {
@@ -1757,18 +1757,18 @@ ut_require(struct ut_state *s, uint32_t off, struct json_object *args)
 		if (!json_object_is_type(se, json_type_string))
 			continue;
 
-		res = ut_require_path(s, off, json_object_get_string(se), name);
+		res = uc_require_path(s, off, json_object_get_string(se), name);
 
 		if (res)
 			return res;
 	}
 
-	return ut_new_exception(s, op ? op->off : 0,
+	return uc_new_exception(s, op ? op->off : 0,
 	                        "No module named '%s' could be found", name);
 }
 
 static struct json_object *
-ut_iptoarr(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_iptoarr(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *ip = json_object_array_get_idx(args, 0);
 	struct json_object *res;
@@ -1821,7 +1821,7 @@ check_byte(struct json_object *v)
 }
 
 static struct json_object *
-ut_arrtoip(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_arrtoip(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *arr = json_object_array_get_idx(args, 0);
 	union {
@@ -1869,17 +1869,17 @@ ut_arrtoip(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_match(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_match(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *subject = json_object_array_get_idx(args, 0);
 	struct json_object *pattern = json_object_array_get_idx(args, 1);
-	struct ut_op *tag = json_object_get_userdata(pattern);
+	struct uc_op *tag = json_object_get_userdata(pattern);
 	struct json_object *rv = NULL, *m;
 	int eflags = 0, res, i;
 	regmatch_t pmatch[10];
 	const char *p;
 
-	if (!ut_is_type(pattern, T_REGEXP) || !subject)
+	if (!uc_is_type(pattern, T_REGEXP) || !subject)
 		return NULL;
 
 	p = json_object_get_string(subject);
@@ -1917,7 +1917,7 @@ ut_match(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_replace_cb(struct ut_state *s, uint32_t off, struct json_object *func,
+uc_replace_cb(struct uc_state *s, uint32_t off, struct json_object *func,
               const char *subject, regmatch_t *pmatch, size_t plen,
               char **sp, size_t *sl)
 {
@@ -1931,9 +1931,9 @@ ut_replace_cb(struct ut_state *s, uint32_t off, struct json_object *func,
 			                   pmatch[i].rm_eo - pmatch[i].rm_so));
 	}
 
-	rv = ut_invoke(s, off, NULL, func, cbargs);
+	rv = uc_invoke(s, off, NULL, func, cbargs);
 
-	if (ut_is_type(rv, T_EXCEPTION)) {
+	if (uc_is_type(rv, T_EXCEPTION)) {
 		json_object_put(cbargs);
 
 		return rv;
@@ -1948,7 +1948,7 @@ ut_replace_cb(struct ut_state *s, uint32_t off, struct json_object *func,
 }
 
 static void
-ut_replace_str(struct ut_state *s, uint32_t off, struct json_object *str,
+uc_replace_str(struct uc_state *s, uint32_t off, struct json_object *str,
                const char *subject, regmatch_t *pmatch, size_t plen,
                char **sp, size_t *sl)
 {
@@ -2013,12 +2013,12 @@ ut_replace_str(struct ut_state *s, uint32_t off, struct json_object *str,
 }
 
 static struct json_object *
-ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_replace(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *subject = json_object_array_get_idx(args, 0);
 	struct json_object *pattern = json_object_array_get_idx(args, 1);
 	struct json_object *replace = json_object_array_get_idx(args, 2);
-	struct ut_op *tag = json_object_get_userdata(pattern);
+	struct uc_op *tag = json_object_get_userdata(pattern);
 	struct json_object *rv = NULL;
 	const char *sb, *p, *l;
 	regmatch_t pmatch[10];
@@ -2029,7 +2029,7 @@ ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
 	if (!pattern || !subject || !replace)
 		return NULL;
 
-	if (ut_is_type(pattern, T_REGEXP)) {
+	if (uc_is_type(pattern, T_REGEXP)) {
 		p = json_object_get_string(subject);
 
 		while (true) {
@@ -2040,8 +2040,8 @@ ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
 
 			snprintf_append(&sp, &sl, "%s", pmatch[0].rm_so, p);
 
-			if (ut_is_type(replace, T_FUNC) || ut_is_type(replace, T_CFUNC)) {
-				rv = ut_replace_cb(s, off, replace, p, pmatch, ARRAY_SIZE(pmatch), &sp, &sl);
+			if (uc_is_type(replace, T_FUNC) || uc_is_type(replace, T_CFUNC)) {
+				rv = uc_replace_cb(s, off, replace, p, pmatch, ARRAY_SIZE(pmatch), &sp, &sl);
 
 				if (rv) {
 					free(sp);
@@ -2050,7 +2050,7 @@ ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
 				}
 			}
 			else {
-				ut_replace_str(s, off, replace, p, pmatch, ARRAY_SIZE(pmatch), &sp, &sl);
+				uc_replace_str(s, off, replace, p, pmatch, ARRAY_SIZE(pmatch), &sp, &sl);
 			}
 
 			p += pmatch[0].rm_eo;
@@ -2075,8 +2075,8 @@ ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
 				pmatch[0].rm_so = sb - l;
 				pmatch[0].rm_eo = pmatch[0].rm_so + pl;
 
-				if (ut_is_type(replace, T_FUNC) || ut_is_type(replace, T_CFUNC)) {
-					rv = ut_replace_cb(s, off, replace, l, pmatch, 1, &sp, &sl);
+				if (uc_is_type(replace, T_FUNC) || uc_is_type(replace, T_CFUNC)) {
+					rv = uc_replace_cb(s, off, replace, l, pmatch, 1, &sp, &sl);
 
 					if (rv) {
 						free(sp);
@@ -2085,7 +2085,7 @@ ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
 					}
 				}
 				else {
-					ut_replace_str(s, off, replace, l, pmatch, 1, &sp, &sl);
+					uc_replace_str(s, off, replace, l, pmatch, 1, &sp, &sl);
 				}
 
 				l = sb + pl;
@@ -2103,17 +2103,17 @@ ut_replace(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_json(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_json(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *rv, *src = json_object_array_get_idx(args, 0);
-	struct ut_op *op = ut_get_op(s, off);
+	struct uc_op *op = uc_get_op(s, off);
 	struct json_tokener *tok = NULL;
 	enum json_tokener_error err;
 	const char *str;
 	size_t len;
 
 	if (!json_object_is_type(src, json_type_string))
-		return ut_new_exception(s, op->off, "Passed value is not a string");
+		return uc_new_exception(s, op->off, "Passed value is not a string");
 
 	tok = xjs_new_tokener();
 	str = json_object_get_string(src);
@@ -2124,16 +2124,16 @@ ut_json(struct ut_state *s, uint32_t off, struct json_object *args)
 
 	if (err == json_tokener_continue) {
 		json_object_put(rv);
-		rv = ut_new_exception(s, op->off, "Unexpected end of string in JSON data");
+		rv = uc_new_exception(s, op->off, "Unexpected end of string in JSON data");
 	}
 	else if (err != json_tokener_success) {
 		json_object_put(rv);
-		rv = ut_new_exception(s, op->off, "Failed to parse JSON string: %s",
+		rv = uc_new_exception(s, op->off, "Failed to parse JSON string: %s",
 		                  json_tokener_error_desc(err));
 	}
 	else if (json_tokener_get_parse_end(tok) < len) {
 		json_object_put(rv);
-		rv = ut_new_exception(s, op->off, "Trailing garbage after JSON data");
+		rv = uc_new_exception(s, op->off, "Trailing garbage after JSON data");
 	}
 
 	json_tokener_free(tok);
@@ -2175,27 +2175,27 @@ include_path(const char *curpath, const char *incpath)
 }
 
 static struct json_object *
-ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_include(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *rv, *path = json_object_array_get_idx(args, 0);
 	struct json_object *scope = json_object_array_get_idx(args, 1);
-	struct ut_op *op = ut_get_op(s, off);
-	struct ut_scope *sc;
+	struct uc_op *op = uc_get_op(s, off);
+	struct uc_scope *sc;
 	char *p;
 
 	if (!json_object_is_type(path, json_type_string))
-		return ut_new_exception(s, op->off, "Passed filename is not a string");
+		return uc_new_exception(s, op->off, "Passed filename is not a string");
 
 	if (scope && !json_object_is_type(scope, json_type_object))
-		return ut_new_exception(s, op->off, "Passed scope value is not an object");
+		return uc_new_exception(s, op->off, "Passed scope value is not an object");
 
 	p = include_path(s->callstack->function->source->filename, json_object_get_string(path));
 
 	if (!p)
-		return ut_new_exception(s, op->off, "Include file not found");
+		return uc_new_exception(s, op->off, "Include file not found");
 
 	if (scope) {
-		sc = ut_new_scope(s, NULL);
+		sc = uc_new_scope(s, NULL);
 
 		json_object_object_foreach(scope, key, val)
 			json_object_object_add(sc->scope, key, json_object_get(val));
@@ -2204,14 +2204,14 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 		sc = s->scope;
 	}
 
-	rv = ut_require_utpl(s, off, p, sc);
+	rv = uc_require_utpl(s, off, p, sc);
 
 	free(p);
 
 	if (scope)
 		json_object_put(sc->scope);
 
-	if (ut_is_type(rv, T_EXCEPTION))
+	if (uc_is_type(rv, T_EXCEPTION))
 		return rv;
 
 	json_object_put(rv);
@@ -2220,17 +2220,17 @@ ut_include(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_warn(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_warn(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_print_common(s, off, args, stderr);
+	return uc_print_common(s, off, args, stderr);
 }
 
 static struct json_object *
-ut_system(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_system(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *cmdline = json_object_array_get_idx(args, 0);
 	struct json_object *timeout = json_object_array_get_idx(args, 1);
-	struct ut_op *op = ut_get_op(s, off);
+	struct uc_op *op = uc_get_op(s, off);
 	sigset_t sigmask, sigomask;
 	const char **arglist, *fn;
 	struct timespec ts;
@@ -2259,11 +2259,11 @@ ut_system(struct ut_state *s, uint32_t off, struct json_object *args)
 		break;
 
 	default:
-		return ut_new_exception(s, op->off, "Passed command is neither string nor array");
+		return uc_new_exception(s, op->off, "Passed command is neither string nor array");
 	}
 
 	if (timeout && (!json_object_is_type(timeout, json_type_int) || json_object_get_int64(timeout) < 0))
-		return ut_new_exception(s, op->off, "Invalid timeout specified");
+		return uc_new_exception(s, op->off, "Invalid timeout specified");
 
 	tms = timeout ? json_object_get_int64(timeout) : 0;
 
@@ -2334,75 +2334,75 @@ fail:
 	sigprocmask(SIG_SETMASK, &sigomask, NULL);
 	free(arglist);
 
-	return ut_new_exception(s, op->off, "%s(): %s", fn, strerror(errno));
+	return uc_new_exception(s, op->off, "%s(): %s", fn, strerror(errno));
 }
 
-const struct ut_ops ut = {
-	.register_function = ut_register_function,
-	.register_type = ut_register_extended_type,
-	.set_type = ut_set_extended_type,
-	.get_type = ut_get_extended_type,
-	.new_object = ut_new_object,
-	.new_double = ut_new_double,
-	.invoke = ut_invoke,
-	.cast_number = ut_cast_number,
+const struct uc_ops ut = {
+	.register_function = uc_register_function,
+	.register_type = uc_register_extended_type,
+	.set_type = uc_set_extended_type,
+	.get_type = uc_get_extended_type,
+	.new_object = uc_new_object,
+	.new_double = uc_new_double,
+	.invoke = uc_invoke,
+	.cast_number = uc_cast_number,
 };
 
-static const struct { const char *name; ut_c_fn *func; } functions[] = {
-	{ "chr",		ut_chr },
-	{ "delete",		ut_delete },
-	{ "die",		ut_die },
-	{ "exists",		ut_exists },
-	{ "exit",		ut_exit },
-	{ "filter",		ut_filter },
-	{ "getenv",		ut_getenv },
-	{ "hex",		ut_hex },
-	{ "index",		ut_lindex },
-	{ "int",		ut_int },
-	{ "join",		ut_join },
-	{ "keys",		ut_keys },
-	{ "lc",			ut_lc },
-	{ "length",		ut_length },
-	{ "ltrim",		ut_ltrim },
-	{ "map",		ut_map },
-	{ "ord",		ut_ord },
-	{ "pop",		ut_pop },
-	{ "print",		ut_print },
-	{ "push",		ut_push },
-	{ "reverse",	ut_reverse },
-	{ "rindex",		ut_rindex },
-	{ "rtrim",		ut_rtrim },
-	{ "shift",		ut_shift },
-	{ "sort",		ut_sort },
-	{ "splice",		ut_splice },
-	{ "split",		ut_split },
-	{ "substr",		ut_substr },
-	{ "time",		ut_time },
-	{ "trim",		ut_trim },
-	{ "type",		ut_type },
-	{ "uchr",		ut_uchr },
-	{ "uc",			ut_uc },
-	{ "unshift",	ut_unshift },
-	{ "values",		ut_values },
-	{ "sprintf",	ut_sprintf },
-	{ "printf",		ut_printf },
-	{ "require",	ut_require },
-	{ "iptoarr",	ut_iptoarr },
-	{ "arrtoip",	ut_arrtoip },
-	{ "match",		ut_match },
-	{ "replace",	ut_replace },
-	{ "json",		ut_json },
-	{ "include",	ut_include },
-	{ "warn",		ut_warn },
-	{ "system",		ut_system },
+static const struct { const char *name; uc_c_fn *func; } functions[] = {
+	{ "chr",		uc_chr },
+	{ "delete",		uc_delete },
+	{ "die",		uc_die },
+	{ "exists",		uc_exists },
+	{ "exit",		uc_exit },
+	{ "filter",		uc_filter },
+	{ "getenv",		uc_getenv },
+	{ "hex",		uc_hex },
+	{ "index",		uc_lindex },
+	{ "int",		uc_int },
+	{ "join",		uc_join },
+	{ "keys",		uc_keys },
+	{ "lc",			uc_lc },
+	{ "length",		uc_length },
+	{ "ltrim",		uc_ltrim },
+	{ "map",		uc_map },
+	{ "ord",		uc_ord },
+	{ "pop",		uc_pop },
+	{ "print",		uc_print },
+	{ "push",		uc_push },
+	{ "reverse",	uc_reverse },
+	{ "rindex",		uc_rindex },
+	{ "rtrim",		uc_rtrim },
+	{ "shift",		uc_shift },
+	{ "sort",		uc_sort },
+	{ "splice",		uc_splice },
+	{ "split",		uc_split },
+	{ "substr",		uc_substr },
+	{ "time",		uc_time },
+	{ "trim",		uc_trim },
+	{ "type",		uc_type },
+	{ "uchr",		uc_uchr },
+	{ "uc",			uc_uc },
+	{ "unshift",	uc_unshift },
+	{ "values",		uc_values },
+	{ "sprintf",	uc_sprintf },
+	{ "printf",		uc_printf },
+	{ "require",	uc_require },
+	{ "iptoarr",	uc_iptoarr },
+	{ "arrtoip",	uc_arrtoip },
+	{ "match",		uc_match },
+	{ "replace",	uc_replace },
+	{ "json",		uc_json },
+	{ "include",	uc_include },
+	{ "warn",		uc_warn },
+	{ "system",		uc_system },
 };
 
 
 void
-ut_lib_init(struct ut_state *state, struct json_object *scope)
+uc_lib_init(struct uc_state *state, struct json_object *scope)
 {
 	int i;
 
 	for (i = 0; i < sizeof(functions) / sizeof(functions[0]); i++)
-		ut_register_function(state, scope, functions[i].name, functions[i].func);
+		uc_register_function(state, scope, functions[i].name, functions[i].func);
 }

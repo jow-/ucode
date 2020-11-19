@@ -21,7 +21,7 @@
 
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
-static const struct ut_ops *ops;
+static const struct uc_ops *ops;
 
 static int last_error = 0;
 
@@ -32,7 +32,7 @@ enum pkg_cmd {
 };
 
 static struct json_object *
-ut_uci_error(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_error(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	char buf[sizeof("Unknown error: -9223372036854775808")];
 	struct json_object *errmsg;
@@ -65,7 +65,7 @@ ut_uci_error(struct ut_state *s, uint32_t off, struct json_object *args)
 
 
 static struct json_object *
-ut_uci_cursor(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_cursor(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *cdir = json_object_array_get_idx(args, 0);
 	struct json_object *sdir = json_object_array_get_idx(args, 1);
@@ -108,7 +108,7 @@ ut_uci_cursor(struct ut_state *s, uint32_t off, struct json_object *args)
 
 
 static struct json_object *
-ut_uci_load(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_load(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -134,7 +134,7 @@ ut_uci_load(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_uci_unload(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_unload(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -255,7 +255,7 @@ package_to_json(struct uci_package *p)
 }
 
 static struct json_object *
-ut_uci_get_any(struct ut_state *s, uint32_t off, struct json_object *args, bool all)
+uc_uci_get_any(struct uc_state *s, uint32_t off, struct json_object *args, bool all)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -315,19 +315,19 @@ ut_uci_get_any(struct ut_state *s, uint32_t off, struct json_object *args, bool 
 }
 
 static struct json_object *
-ut_uci_get(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_get(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_uci_get_any(s, off, args, false);
+	return uc_uci_get_any(s, off, args, false);
 }
 
 static struct json_object *
-ut_uci_get_all(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_get_all(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_uci_get_any(s, off, args, true);
+	return uc_uci_get_any(s, off, args, true);
 }
 
 static struct json_object *
-ut_uci_get_first(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_get_first(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -385,7 +385,7 @@ ut_uci_get_first(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_uci_add(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_add(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -464,7 +464,7 @@ json_to_value(struct json_object *val, const char **p, bool *is_list)
 }
 
 static struct json_object *
-ut_uci_set(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_set(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -564,7 +564,7 @@ ut_uci_set(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_uci_delete(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_delete(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -599,7 +599,7 @@ ut_uci_delete(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_uci_rename(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_rename(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -659,7 +659,7 @@ ut_uci_rename(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_uci_reorder(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_reorder(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -699,7 +699,7 @@ ut_uci_reorder(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_uci_pkg_command(struct ut_state *s, uint32_t off, struct json_object *args, enum pkg_cmd cmd)
+uc_uci_pkg_command(struct uc_state *s, uint32_t off, struct json_object *args, enum pkg_cmd cmd)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -746,21 +746,21 @@ ut_uci_pkg_command(struct ut_state *s, uint32_t off, struct json_object *args, e
 }
 
 static struct json_object *
-ut_uci_save(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_save(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_uci_pkg_command(s, off, args, CMD_SAVE);
+	return uc_uci_pkg_command(s, off, args, CMD_SAVE);
 }
 
 static struct json_object *
-ut_uci_commit(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_commit(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_uci_pkg_command(s, off, args, CMD_COMMIT);
+	return uc_uci_pkg_command(s, off, args, CMD_COMMIT);
 }
 
 static struct json_object *
-ut_uci_revert(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_revert(struct uc_state *s, uint32_t off, struct json_object *args)
 {
-	return ut_uci_pkg_command(s, off, args, CMD_REVERT);
+	return uc_uci_pkg_command(s, off, args, CMD_REVERT);
 }
 
 static struct json_object *
@@ -853,7 +853,7 @@ changes_to_json(struct uci_context *ctx, const char *package)
 }
 
 static struct json_object *
-ut_uci_changes(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_changes(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -892,7 +892,7 @@ ut_uci_changes(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_uci_foreach(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_foreach(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *conf = json_object_array_get_idx(args, 0);
@@ -938,7 +938,7 @@ ut_uci_foreach(struct ut_state *s, uint32_t off, struct json_object *args)
 		rv = ops->invoke(s, off, NULL, func, fnargs);
 
 		/* forward exceptions from callback function */
-		if (ut_is_type(rv, T_EXCEPTION)) {
+		if (uc_is_type(rv, T_EXCEPTION)) {
 			json_object_put(fnargs);
 
 			return rv;
@@ -959,7 +959,7 @@ ut_uci_foreach(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_uci_configs(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_uci_configs(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
 	struct json_object *a;
@@ -987,28 +987,28 @@ ut_uci_configs(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 
-static const struct { const char *name; ut_c_fn *func; } cursor_fns[] = {
-	{ "load",		ut_uci_load },
-	{ "unload",		ut_uci_unload },
-	{ "get",		ut_uci_get },
-	{ "get_all",	ut_uci_get_all },
-	{ "get_first",	ut_uci_get_first },
-	{ "add",		ut_uci_add },
-	{ "set",		ut_uci_set },
-	{ "rename",		ut_uci_rename },
-	{ "save",		ut_uci_save },
-	{ "delete",		ut_uci_delete },
-	{ "commit",		ut_uci_commit },
-	{ "revert",		ut_uci_revert },
-	{ "reorder",	ut_uci_reorder },
-	{ "changes",	ut_uci_changes },
-	{ "foreach",	ut_uci_foreach },
-	{ "configs",	ut_uci_configs },
+static const struct { const char *name; uc_c_fn *func; } cursor_fns[] = {
+	{ "load",		uc_uci_load },
+	{ "unload",		uc_uci_unload },
+	{ "get",		uc_uci_get },
+	{ "get_all",	uc_uci_get_all },
+	{ "get_first",	uc_uci_get_first },
+	{ "add",		uc_uci_add },
+	{ "set",		uc_uci_set },
+	{ "rename",		uc_uci_rename },
+	{ "save",		uc_uci_save },
+	{ "delete",		uc_uci_delete },
+	{ "commit",		uc_uci_commit },
+	{ "revert",		uc_uci_revert },
+	{ "reorder",	uc_uci_reorder },
+	{ "changes",	uc_uci_changes },
+	{ "foreach",	uc_uci_foreach },
+	{ "configs",	uc_uci_configs },
 };
 
-static const struct { const char *name; ut_c_fn *func; } global_fns[] = {
-	{ "error",		ut_uci_error },
-	{ "cursor",		ut_uci_cursor },
+static const struct { const char *name; uc_c_fn *func; } global_fns[] = {
+	{ "error",		uc_uci_error },
+	{ "cursor",		uc_uci_cursor },
 };
 
 
@@ -1016,7 +1016,7 @@ static void close_uci(void *ud) {
 	uci_free_context((struct uci_context *)ud);
 }
 
-void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_object *scope)
+void uc_module_init(const struct uc_ops *ut, struct uc_state *s, struct json_object *scope)
 {
 	struct json_object *uci_proto;
 

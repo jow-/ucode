@@ -48,7 +48,7 @@ struct token {
 		char pat[4];
 	};
 	int plen;
-	uint32_t (*parse)(struct ut_state *s);
+	uint32_t (*parse)(struct uc_state *s);
 };
 
 #define dec(o) \
@@ -58,11 +58,11 @@ struct token {
 	(((x) >= 'a') ? (10 + (x) - 'a') : \
 		(((x) >= 'A') ? (10 + (x) - 'A') : dec(x)))
 
-static uint32_t parse_comment(struct ut_state *);
-static uint32_t parse_string(struct ut_state *);
-static uint32_t parse_regexp(struct ut_state *);
-static uint32_t parse_number(struct ut_state *);
-static uint32_t parse_label(struct ut_state *);
+static uint32_t parse_comment(struct uc_state *);
+static uint32_t parse_string(struct uc_state *);
+static uint32_t parse_regexp(struct uc_state *);
+static uint32_t parse_number(struct uc_state *);
+static uint32_t parse_label(struct uc_state *);
 
 static const struct token tokens[] = {
 	{ T_ASLEFT,		{ .pat = "<<=" },   3 },
@@ -221,10 +221,10 @@ utf8enc(char **out, int *rem, int code)
 /* length of the longest token in our lookup table */
 #define UT_LEX_MAX_TOKEN_LEN 3
 
-static uint32_t emit_op(struct ut_state *s, uint32_t pos, int type, struct json_object *val)
+static uint32_t emit_op(struct uc_state *s, uint32_t pos, int type, struct json_object *val)
 {
-	uint32_t off = ut_new_op(s, type, val, UINT32_MAX);
-	struct ut_op *op = ut_get_op(s, off);
+	uint32_t off = uc_new_op(s, type, val, UINT32_MAX);
+	struct uc_op *op = uc_get_op(s, off);
 
 	op->off = pos;
 
@@ -282,7 +282,7 @@ static uint32_t emit_op(struct ut_state *s, uint32_t pos, int type, struct json_
 	return off;
 }
 
-static void lookbehind_append(struct ut_state *s, const char *data, size_t len)
+static void lookbehind_append(struct uc_state *s, const char *data, size_t len)
 {
 	if (len) {
 		s->lex.lookbehind = xrealloc(s->lex.lookbehind, s->lex.lookbehindlen + len);
@@ -291,13 +291,13 @@ static void lookbehind_append(struct ut_state *s, const char *data, size_t len)
 	}
 }
 
-static void lookbehind_reset(struct ut_state *s) {
+static void lookbehind_reset(struct uc_state *s) {
 	free(s->lex.lookbehind);
 	s->lex.lookbehind = NULL;
 	s->lex.lookbehindlen = 0;
 }
 
-static uint32_t lookbehind_to_text(struct ut_state *s, uint32_t pos, int type, const char *strip_trailing_chars) {
+static uint32_t lookbehind_to_text(struct uc_state *s, uint32_t pos, int type, const char *strip_trailing_chars) {
 	uint32_t rv = 0;
 
 	if (s->lex.lookbehind) {
@@ -314,30 +314,30 @@ static uint32_t lookbehind_to_text(struct ut_state *s, uint32_t pos, int type, c
 	return rv;
 }
 
-static inline size_t buf_remaining(struct ut_state *s) {
+static inline size_t buf_remaining(struct uc_state *s) {
 	return (s->lex.bufend - s->lex.bufstart);
 }
 
-static inline bool _buf_startswith(struct ut_state *s, const char *str, size_t len) {
+static inline bool _buf_startswith(struct uc_state *s, const char *str, size_t len) {
 	return (buf_remaining(s) >= len && !strncmp(s->lex.bufstart, str, len));
 }
 
 #define buf_startswith(s, str) _buf_startswith(s, str, sizeof(str) - 1)
 
-static void buf_consume(struct ut_state *s, ssize_t len) {
+static void buf_consume(struct uc_state *s, ssize_t len) {
 	s->lex.bufstart += len;
 	s->source->off += len;
 }
 
 static uint32_t
-parse_comment(struct ut_state *s)
+parse_comment(struct uc_state *s)
 {
 	const struct token *tok = s->lex.tok;
 	const char *ptr, *end;
 	size_t elen;
 
 	if (!buf_remaining(s)) {
-		ut_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated comment");
+		uc_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated comment");
 
 		return 0;
 	}
@@ -364,7 +364,7 @@ parse_comment(struct ut_state *s)
 	return 0;
 }
 
-static void append_utf8(struct ut_state *s, int code) {
+static void append_utf8(struct uc_state *s, int code) {
 	char ustr[8], *up;
 	int rem;
 
@@ -376,7 +376,7 @@ static void append_utf8(struct ut_state *s, int code) {
 }
 
 static uint32_t
-parse_string(struct ut_state *s)
+parse_string(struct uc_state *s)
 {
 	const struct token *tok = s->lex.tok;
 	char q = tok->pat[0];
@@ -385,7 +385,7 @@ parse_string(struct ut_state *s)
 	int code;
 
 	if (!buf_remaining(s)) {
-		ut_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated string");
+		uc_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated string");
 
 		return 0;
 	}
@@ -452,7 +452,7 @@ parse_string(struct ut_state *s)
 				case 'u':
 					if (s->lex.esclen < 5) {
 						if (!isxdigit(*ptr)) {
-							ut_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
+							uc_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
 
 							return 0;
 						}
@@ -507,7 +507,7 @@ parse_string(struct ut_state *s)
 				case 'x':
 					if (s->lex.esclen < 3) {
 						if (!isxdigit(*ptr)) {
-							ut_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
+							uc_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
 
 							return 0;
 						}
@@ -561,7 +561,7 @@ parse_string(struct ut_state *s)
 						       dec(s->lex.esc[3]);
 
 						if (code > 255) {
-							ut_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
+							uc_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
 
 							return 0;
 						}
@@ -625,10 +625,10 @@ enum {
 };
 
 static uint32_t
-parse_regexp(struct ut_state *s)
+parse_regexp(struct uc_state *s)
 {
 	struct json_object *pattern;
-	struct ut_op *op;
+	struct uc_op *op;
 	uint32_t rv;
 	char *err;
 
@@ -653,14 +653,14 @@ parse_regexp(struct ut_state *s)
 		rv = parse_string(s);
 
 		if (rv != 0 && rv != UINT32_MAX) {
-			s->lex.lookbehind = (char *)ut_get_op(s, rv);
+			s->lex.lookbehind = (char *)uc_get_op(s, rv);
 			s->lex.esc[0] = UT_LEX_PARSE_REGEX_FLAGS;
 		}
 
 		break;
 
 	case UT_LEX_PARSE_REGEX_FLAGS:
-		op = (struct ut_op *)s->lex.lookbehind;
+		op = (struct uc_op *)s->lex.lookbehind;
 
 		while (s->lex.bufstart < s->lex.bufend) {
 			switch (s->lex.bufstart[0]) {
@@ -682,7 +682,7 @@ parse_regexp(struct ut_state *s)
 			default:
 				s->lex.lookbehind = NULL;
 
-				pattern = ut_new_regexp(json_object_get_string(op->val),
+				pattern = uc_new_regexp(json_object_get_string(op->val),
 				                        op->is_reg_icase,
 				                        op->is_reg_newline,
 				                        op->is_reg_global,
@@ -694,13 +694,13 @@ parse_regexp(struct ut_state *s)
 				op->val = pattern;
 
 				if (!pattern) {
-					ut_new_exception(s, op->off, "Syntax error: %s", err);
+					uc_new_exception(s, op->off, "Syntax error: %s", err);
 					free(err);
 
 					return 0;
 				}
 
-				return ut_get_off(s, op);
+				return uc_get_off(s, op);
 			}
 		}
 
@@ -722,7 +722,7 @@ parse_regexp(struct ut_state *s)
  */
 
 static uint32_t
-parse_label(struct ut_state *s)
+parse_label(struct uc_state *s)
 {
 	const struct token *tok = s->lex.tok;
 	const struct keyword *word;
@@ -740,7 +740,7 @@ parse_label(struct ut_state *s)
 
 				switch (word->type) {
 				case T_DOUBLE:
-					rv = emit_op(s, s->source->off - word->plen, word->type, ut_new_double(word->d));
+					rv = emit_op(s, s->source->off - word->plen, word->type, uc_new_double(word->d));
 					break;
 
 				case T_BOOL:
@@ -779,7 +779,7 @@ parse_label(struct ut_state *s)
  */
 
 static inline bool
-is_numeric_char(struct ut_state *s, char c)
+is_numeric_char(struct uc_state *s, char c)
 {
 	char prev = s->lex.lookbehindlen ? s->lex.lookbehind[s->lex.lookbehindlen-1] : 0;
 
@@ -790,7 +790,7 @@ is_numeric_char(struct ut_state *s, char c)
 }
 
 static uint32_t
-parse_number(struct ut_state *s)
+parse_number(struct uc_state *s)
 {
 	uint32_t rv = 0;
 	long long int n;
@@ -806,17 +806,17 @@ parse_number(struct ut_state *s)
 			d = strtod(s->lex.lookbehind, &e);
 
 			if (e > s->lex.lookbehind && *e == 0)
-				rv = emit_op(s, s->source->off - (e - s->lex.lookbehind), T_DOUBLE, ut_new_double(d));
+				rv = emit_op(s, s->source->off - (e - s->lex.lookbehind), T_DOUBLE, uc_new_double(d));
 			else
-				ut_new_exception(s, s->source->off - (s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1),
+				uc_new_exception(s, s->source->off - (s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1),
 				                 "Syntax error: Invalid number literal");
 		}
 		else if (*e == 0) {
 			rv = emit_op(s, s->source->off - (e - s->lex.lookbehind), T_NUMBER, xjs_new_int64(n));
-			ut_get_op(s, rv)->is_overflow = (errno == ERANGE);
+			uc_get_op(s, rv)->is_overflow = (errno == ERANGE);
 		}
 		else {
-			ut_new_exception(s, s->source->off - (s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1),
+			uc_new_exception(s, s->source->off - (s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1),
 			                 "Syntax error: Invalid number literal");
 		}
 
@@ -835,7 +835,7 @@ parse_number(struct ut_state *s)
 }
 
 static uint32_t
-lex_step(struct ut_state *s, FILE *fp)
+lex_step(struct uc_state *s, FILE *fp)
 {
 	uint32_t masks[] = { 0, le32toh(0x000000ff), le32toh(0x0000ffff), le32toh(0x00ffffff), le32toh(0xffffffff) };
 	union { uint32_t n; char str[4]; } search;
@@ -1003,7 +1003,7 @@ lex_step(struct ut_state *s, FILE *fp)
 
 		/* we're at eof */
 		if (s->lex.eof)
-			ut_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated template block");
+			uc_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated template block");
 
 		break;
 
@@ -1054,7 +1054,7 @@ lex_step(struct ut_state *s, FILE *fp)
 				     (tok->type == T_LSTM || tok->type == T_RSTM || tok->type == T_LEXP)) ||
 				    (s->lex.within_statement_block &&
 				     (tok->type == T_LEXP || tok->type == T_REXP || tok->type == T_LSTM))) {
-					ut_new_exception(s, s->source->off - tok->plen, "Syntax error: Template blocks may not be nested");
+					uc_new_exception(s, s->source->off - tok->plen, "Syntax error: Template blocks may not be nested");
 
 					return 0;
 				}
@@ -1099,7 +1099,7 @@ lex_step(struct ut_state *s, FILE *fp)
 
 		/* no token matched and we do have remaining data, junk */
 		if (buf_remaining(s)) {
-			ut_new_exception(s, s->source->off, "Syntax error: Unexpected character");
+			uc_new_exception(s, s->source->off, "Syntax error: Unexpected character");
 
 			return 0;
 		}
@@ -1112,7 +1112,7 @@ lex_step(struct ut_state *s, FILE *fp)
 		}
 
 		/* premature EOF */
-		ut_new_exception(s, s->source->off, "Syntax error: Unterminated template block");
+		uc_new_exception(s, s->source->off, "Syntax error: Unterminated template block");
 
 		break;
 
@@ -1143,7 +1143,7 @@ lex_step(struct ut_state *s, FILE *fp)
 }
 
 uint32_t
-ut_get_token(struct ut_state *s, FILE *fp)
+uc_get_token(struct uc_state *s, FILE *fp)
 {
 	uint32_t rv;
 
@@ -1161,7 +1161,7 @@ ut_get_token(struct ut_state *s, FILE *fp)
 }
 
 const char *
-ut_get_tokenname(int type)
+uc_get_tokenname(int type)
 {
 	static char buf[sizeof("'endfunction'")];
 	size_t i;

@@ -23,7 +23,7 @@
 
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
-static const struct ut_ops *ops;
+static const struct uc_ops *ops;
 
 static enum ubus_msg_status last_error = 0;
 
@@ -34,7 +34,7 @@ struct ubus_connection {
 };
 
 static struct json_object *
-ut_ubus_error(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_ubus_error(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *errmsg;
 
@@ -48,10 +48,10 @@ ut_ubus_error(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_blob_to_json(struct blob_attr *attr, bool table, const char **name);
+uc_blob_to_json(struct blob_attr *attr, bool table, const char **name);
 
 static struct json_object *
-ut_blob_array_to_json(struct blob_attr *attr, size_t len, bool table)
+uc_blob_array_to_json(struct blob_attr *attr, size_t len, bool table)
 {
 	struct json_object *o = table ? json_object_new_object() : json_object_new_array();
 	struct json_object *v;
@@ -64,7 +64,7 @@ ut_blob_array_to_json(struct blob_attr *attr, size_t len, bool table)
 
 	__blob_for_each_attr(pos, attr, rem) {
 		name = NULL;
-		v = ut_blob_to_json(pos, table, &name);
+		v = uc_blob_to_json(pos, table, &name);
 
 		if (table && name)
 			json_object_object_add(o, name, v);
@@ -78,7 +78,7 @@ ut_blob_array_to_json(struct blob_attr *attr, size_t len, bool table)
 }
 
 static struct json_object *
-ut_blob_to_json(struct blob_attr *attr, bool table, const char **name)
+uc_blob_to_json(struct blob_attr *attr, bool table, const char **name)
 {
 	void *data;
 	int len;
@@ -120,10 +120,10 @@ ut_blob_to_json(struct blob_attr *attr, bool table, const char **name)
 		return json_object_new_string(data);
 
 	case BLOBMSG_TYPE_ARRAY:
-		return ut_blob_array_to_json(data, len, false);
+		return uc_blob_array_to_json(data, len, false);
 
 	case BLOBMSG_TYPE_TABLE:
-		return ut_blob_array_to_json(data, len, true);
+		return uc_blob_array_to_json(data, len, true);
 
 	default:
 		return NULL;
@@ -132,7 +132,7 @@ ut_blob_to_json(struct blob_attr *attr, bool table, const char **name)
 
 
 static struct json_object *
-ut_ubus_connect(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_ubus_connect(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *socket = json_object_array_get_idx(args, 0);
 	struct json_object *timeout = json_object_array_get_idx(args, 1);
@@ -173,7 +173,7 @@ ut_ubus_connect(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static void
-ut_ubus_signatures_cb(struct ubus_context *c, struct ubus_object_data *o, void *p)
+uc_ubus_signatures_cb(struct ubus_context *c, struct ubus_object_data *o, void *p)
 {
 	struct json_object *arr = p;
 	struct json_object *sig;
@@ -181,14 +181,14 @@ ut_ubus_signatures_cb(struct ubus_context *c, struct ubus_object_data *o, void *
 	if (!o->signature)
 		return;
 
-	sig = ut_blob_array_to_json(blob_data(o->signature), blob_len(o->signature), true);
+	sig = uc_blob_array_to_json(blob_data(o->signature), blob_len(o->signature), true);
 
 	if (sig)
 		json_object_array_add(arr, sig);
 }
 
 static void
-ut_ubus_objects_cb(struct ubus_context *c, struct ubus_object_data *o, void *p)
+uc_ubus_objects_cb(struct ubus_context *c, struct ubus_object_data *o, void *p)
 {
 	struct json_object *arr = p;
 	struct json_object *obj;
@@ -200,7 +200,7 @@ ut_ubus_objects_cb(struct ubus_context *c, struct ubus_object_data *o, void *p)
 }
 
 static struct json_object *
-ut_ubus_list(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_ubus_list(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct ubus_connection **c = (struct ubus_connection **)ops->get_type(s->ctx, "ubus.connection");
 	struct json_object *objname = json_object_array_get_idx(args, 0);
@@ -220,7 +220,7 @@ ut_ubus_list(struct ut_state *s, uint32_t off, struct json_object *args)
 
 	rv = ubus_lookup((*c)->ctx,
 	                 objname ? json_object_get_string(objname) : NULL,
-	                 objname ? ut_ubus_signatures_cb : ut_ubus_objects_cb,
+	                 objname ? uc_ubus_signatures_cb : uc_ubus_objects_cb,
 	                 res);
 
 	if (rv != UBUS_STATUS_OK)
@@ -230,15 +230,15 @@ ut_ubus_list(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static void
-ut_ubus_call_cb(struct ubus_request *req, int type, struct blob_attr *msg)
+uc_ubus_call_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 {
 	struct json_object **res = (struct json_object **)req->priv;
 
-	*res = msg ? ut_blob_array_to_json(blob_data(msg), blob_len(msg), true) : NULL;
+	*res = msg ? uc_blob_array_to_json(blob_data(msg), blob_len(msg), true) : NULL;
 }
 
 static struct json_object *
-ut_ubus_call(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_ubus_call(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct ubus_connection **c = (struct ubus_connection **)ops->get_type(s->ctx, "ubus.connection");
 	struct json_object *objname = json_object_array_get_idx(args, 0);
@@ -267,7 +267,7 @@ ut_ubus_call(struct ut_state *s, uint32_t off, struct json_object *args)
 		err_return(rv);
 
 	rv = ubus_invoke((*c)->ctx, id, json_object_get_string(funname), (*c)->buf.head,
-	                 ut_ubus_call_cb, &res, (*c)->timeout * 1000);
+	                 uc_ubus_call_cb, &res, (*c)->timeout * 1000);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv);
@@ -276,7 +276,7 @@ ut_ubus_call(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_ubus_disconnect(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_ubus_disconnect(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct ubus_connection **c = (struct ubus_connection **)ops->get_type(s->ctx, "ubus.connection");
 
@@ -290,15 +290,15 @@ ut_ubus_disconnect(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 
-static const struct { const char *name; ut_c_fn *func; } global_fns[] = {
-	{ "error",		ut_ubus_error },
-	{ "connect",	ut_ubus_connect },
+static const struct { const char *name; uc_c_fn *func; } global_fns[] = {
+	{ "error",		uc_ubus_error },
+	{ "connect",	uc_ubus_connect },
 };
 
-static const struct { const char *name; ut_c_fn *func; } conn_fns[] = {
-	{ "list",		ut_ubus_list },
-	{ "call",		ut_ubus_call },
-	{ "disconnect",	ut_ubus_disconnect },
+static const struct { const char *name; uc_c_fn *func; } conn_fns[] = {
+	{ "list",		uc_ubus_list },
+	{ "call",		uc_ubus_call },
+	{ "disconnect",	uc_ubus_disconnect },
 };
 
 
@@ -313,7 +313,7 @@ static void close_connection(void *ud) {
 	free(conn);
 }
 
-void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_object *scope)
+void uc_module_init(const struct uc_ops *ut, struct uc_state *s, struct json_object *scope)
 {
 	struct json_object *conn_proto;
 

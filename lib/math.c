@@ -19,7 +19,7 @@
 #include <math.h>
 #include <sys/time.h>
 
-static const struct ut_ops *ops;
+static const struct uc_ops *ops;
 
 static double
 to_double(struct json_object *v)
@@ -40,7 +40,7 @@ to_int64(struct json_object *v)
 }
 
 static struct json_object *
-ut_abs(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_abs(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct json_object *v = json_object_array_get_idx(args, 0);
 	enum json_type t;
@@ -59,7 +59,7 @@ ut_abs(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_atan2(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_atan2(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	double d1 = to_double(json_object_array_get_idx(args, 0));
 	double d2 = to_double(json_object_array_get_idx(args, 1));
@@ -71,7 +71,7 @@ ut_atan2(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_cos(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_cos(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	double d = to_double(json_object_array_get_idx(args, 0));
 
@@ -82,7 +82,7 @@ ut_cos(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_exp(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_exp(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	double d = to_double(json_object_array_get_idx(args, 0));
 
@@ -93,7 +93,7 @@ ut_exp(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_log(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_log(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	double d = to_double(json_object_array_get_idx(args, 0));
 
@@ -104,7 +104,7 @@ ut_log(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_sin(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_sin(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	double d = to_double(json_object_array_get_idx(args, 0));
 
@@ -115,7 +115,7 @@ ut_sin(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_sqrt(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_sqrt(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	double d = to_double(json_object_array_get_idx(args, 0));
 
@@ -126,7 +126,7 @@ ut_sqrt(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_pow(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_pow(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	double x = to_double(json_object_array_get_idx(args, 0));
 	double y = to_double(json_object_array_get_idx(args, 1));
@@ -138,7 +138,7 @@ ut_pow(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_rand(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_rand(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct timeval tv;
 
@@ -153,7 +153,7 @@ ut_rand(struct ut_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-ut_srand(struct ut_state *s, uint32_t off, struct json_object *args)
+uc_srand(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 
 	int64_t n = to_int64(json_object_array_get_idx(args, 0));
@@ -164,20 +164,20 @@ ut_srand(struct ut_state *s, uint32_t off, struct json_object *args)
 	return NULL;
 }
 
-static const struct { const char *name; ut_c_fn *func; } global_fns[] = {
-	{ "abs",		ut_abs },
-	{ "atan2",		ut_atan2 },
-	{ "cos",		ut_cos },
-	{ "exp",		ut_exp },
-	{ "log",		ut_log },
-	{ "sin",		ut_sin },
-	{ "sqrt",		ut_sqrt },
-	{ "pow",		ut_pow },
-	{ "rand",		ut_rand },
-	{ "srand",		ut_srand },
+static const struct { const char *name; uc_c_fn *func; } global_fns[] = {
+	{ "abs",		uc_abs },
+	{ "atan2",		uc_atan2 },
+	{ "cos",		uc_cos },
+	{ "exp",		uc_exp },
+	{ "log",		uc_log },
+	{ "sin",		uc_sin },
+	{ "sqrt",		uc_sqrt },
+	{ "pow",		uc_pow },
+	{ "rand",		uc_rand },
+	{ "srand",		uc_srand },
 };
 
-void ut_module_init(const struct ut_ops *ut, struct ut_state *s, struct json_object *scope)
+void uc_module_init(const struct uc_ops *ut, struct uc_state *s, struct json_object *scope)
 {
 	ops = ut;
 

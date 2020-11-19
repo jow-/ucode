@@ -20,14 +20,14 @@
 #include "ast.h"
 #include "lexer.h"
 
-typedef struct json_object *(ut_c_fn)(struct ut_state *, uint32_t, struct json_object *);
+typedef struct json_object *(uc_c_fn)(struct uc_state *, uint32_t, struct json_object *);
 
-void ut_lib_init(struct ut_state *state, struct json_object *scope);
+void uc_lib_init(struct uc_state *state, struct json_object *scope);
 
-struct json_object *ut_execute_source(struct ut_state *s, struct ut_source *src, struct ut_scope *scope);
+struct json_object *uc_execute_source(struct uc_state *s, struct uc_source *src, struct uc_scope *scope);
 
-struct json_object *ut_parse_error(struct ut_state *s, uint32_t off, uint64_t *tokens, int max_token);
+struct json_object *uc_parse_error(struct uc_state *s, uint32_t off, uint64_t *tokens, int max_token);
 
-char *ut_format_error(struct ut_state *state, FILE *fp);
+char *uc_format_error(struct uc_state *state, FILE *fp);
 
 #endif /* __LIB_H_ */

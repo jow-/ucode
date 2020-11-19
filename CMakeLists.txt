@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.6)
 include(CheckFunctionExists)
 include(CheckSymbolExists)
 
-PROJECT(utpl C)
+PROJECT(ucode C)
 ADD_DEFINITIONS(-Os -Wall -Werror --std=gnu99 -Wmissing-declarations -Wno-error=unused-variable -ffunction-sections -D_GNU_SOURCE)
 
 OPTION(FS_SUPPORT "Filesystem plugin support" ON)
@@ -10,7 +10,7 @@ OPTION(MATH_SUPPORT "Math plugin support" ON)
 OPTION(UBUS_SUPPORT "Ubus plugin support" ON)
 OPTION(UCI_SUPPORT "UCI plugin support" ON)
 
-SET(LIB_SEARCH_PATH "/usr/lib/utpl/*.so:/usr/share/utpl/*.utpl:./*.so:./*.utpl" CACHE STRING "Default library search path")
+SET(LIB_SEARCH_PATH "/usr/lib/ucode/*.so:/usr/share/ucode/*.uc:./*.so:./*.uc" CACHE STRING "Default library search path")
 ADD_DEFINITIONS(-DLIB_SEARCH_PATH="${LIB_SEARCH_PATH}")
 
 IF(NOT APPLE)
@@ -48,12 +48,12 @@ ADD_CUSTOM_COMMAND(
 
 SET_PROPERTY(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "lemon;parser.h;parser.out")
 SET_SOURCE_FILES_PROPERTIES("parser.c" PROPERTIES GENERATED TRUE COMPILE_FLAGS -Wno-error=unused-but-set-variable)
-ADD_EXECUTABLE(utpl main.c ast.c lexer.c parser.c eval.c lib.c)
-TARGET_LINK_LIBRARIES(utpl ${json})
+ADD_EXECUTABLE(ucode main.c ast.c lexer.c parser.c eval.c lib.c)
+TARGET_LINK_LIBRARIES(ucode ${json})
 
 CHECK_FUNCTION_EXISTS(dlopen DLOPEN_FUNCTION_EXISTS)
 IF (NOT DLOPEN_FUNCTION_EXISTS)
-  TARGET_LINK_LIBRARIES(utpl dl)
+  TARGET_LINK_LIBRARIES(ucode dl)
 ENDIF()
 
 SET(CMAKE_REQUIRED_LIBRARIES json-c)
@@ -100,5 +100,5 @@ IF(UCI_SUPPORT)
   TARGET_LINK_LIBRARIES(uci_lib uci)
 ENDIF()
 
-INSTALL(TARGETS utpl RUNTIME DESTINATION bin)
-INSTALL(TARGETS ${LIBRARIES} LIBRARY DESTINATION lib/utpl)
+INSTALL(TARGETS ucode RUNTIME DESTINATION bin)
+INSTALL(TARGETS ${LIBRARIES} LIBRARY DESTINATION lib/ucode)

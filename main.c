@@ -38,10 +38,10 @@ print_usage(char *app)
 {
 	printf(
 	"== Usage ==\n\n"
-	"  # %s [-d] [-l] [-r] [-S] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"utpl script...\"}\n"
+	"  # %s [-d] [-l] [-r] [-S] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
 	"  -h, --help	Print this help\n"
-	"  -i file	Specify an utpl script to parse\n"
-	"  -s \"utpl script...\"	Specify an utpl code fragment to parse\n"
+	"  -i file	Specify an ucode script to parse\n"
+	"  -s \"ucode script...\"	Specify an ucode fragment to parse\n"
 	"  -d Instead of executing the script, dump the resulting AST as dot\n"
 	"  -l Do not strip leading block whitespace\n"
 	"  -r Do not trim trailing block newlines\n"
@@ -53,9 +53,9 @@ print_usage(char *app)
 }
 
 #ifndef NDEBUG
-static void dump(struct ut_state *s, uint32_t off, int level);
+static void dump(struct uc_state *s, uint32_t off, int level);
 
-static void dump_node(struct ut_op *op) {
+static void dump_node(struct uc_op *op) {
 	const char *p;
 
 	switch (op->type) {
@@ -74,7 +74,7 @@ static void dump_node(struct ut_op *op) {
 	case T_STRING:
 	case T_LABEL:
 	case T_TEXT:
-		printf("n%p [label=\"%s<", op, ut_get_tokenname(op->type));
+		printf("n%p [label=\"%s<", op, uc_get_tokenname(op->type));
 
 		for (p = json_object_get_string(op->val); *p; p++)
 			switch (*p) {
@@ -98,7 +98,7 @@ static void dump_node(struct ut_op *op) {
 		break;
 
 	default:
-		printf("n%p [label=\"%s", op, ut_get_tokenname(op->type));
+		printf("n%p [label=\"%s", op, uc_get_tokenname(op->type));
 
 		if (op->is_postfix)
 			printf(", postfix");
@@ -107,20 +107,20 @@ static void dump_node(struct ut_op *op) {
 	}
 }
 
-static void dump(struct ut_state *s, uint32_t off, int level) {
-	struct ut_op *prev, *cur, *child;
+static void dump(struct uc_state *s, uint32_t off, int level) {
+	struct uc_op *prev, *cur, *child;
 	int i;
 
 	if (level == 0) {
 		printf("digraph G {\nmain [shape=box];\n");
 	}
 
-	for (prev = NULL, cur = ut_get_op(s, off); cur; prev = cur, cur = ut_get_op(s, cur->tree.next)) {
+	for (prev = NULL, cur = uc_get_op(s, off); cur; prev = cur, cur = uc_get_op(s, cur->tree.next)) {
 		dump_node(cur);
 
 		if (cur->type < __T_MAX) {
 			for (i = 0; i < ARRAY_SIZE(cur->tree.operand); i++) {
-				child = ut_get_op(s, cur->tree.operand[i]);
+				child = uc_get_op(s, cur->tree.operand[i]);
 
 				if (cur->tree.operand[i]) {
 					dump(s, cur->tree.operand[i], level + 1);
@@ -134,7 +134,7 @@ static void dump(struct ut_state *s, uint32_t off, int level) {
 	}
 
 	if (level == 0) {
-		printf("main -> n%p [style=dotted];\n", ut_get_op(s, off));
+		printf("main -> n%p [style=dotted];\n", uc_get_op(s, off));
 
 		printf("}\n");
 	}
@@ -142,7 +142,7 @@ static void dump(struct ut_state *s, uint32_t off, int level) {
 #endif /* NDEBUG */
 
 static int
-parse(struct ut_state *state, struct ut_source *src, bool dumponly,
+parse(struct uc_state *state, struct uc_source *src, bool dumponly,
       bool skip_shebang, struct json_object *env, struct json_object *modules)
 {
 	struct json_object *rv;
@@ -169,20 +169,20 @@ parse(struct ut_state *state, struct ut_source *src, bool dumponly,
 
 	if (dumponly) {
 #ifdef NDEBUG
-		rv = ut_new_exception(state, 0, "Debug support not compiled in");
+		rv = uc_new_exception(state, 0, "Debug support not compiled in");
 #else /* NDEBUG */
-		rv = ut_parse(state, src->fp);
+		rv = uc_parse(state, src->fp);
 
-		if (!ut_is_type(rv, T_EXCEPTION))
+		if (!uc_is_type(rv, T_EXCEPTION))
 			dump(state, state->main, 0);
 #endif /* NDEBUG */
 	}
 	else {
-		rv = ut_run(state, env, modules);
+		rv = uc_run(state, env, modules);
 	}
 
-	if (ut_is_type(rv, T_EXCEPTION)) {
-		msg = ut_format_error(state, src->fp);
+	if (uc_is_type(rv, T_EXCEPTION)) {
+		msg = uc_format_error(state, src->fp);
 		fprintf(stderr, "%s\n\n", msg);
 		free(msg);
 		rc = 1;
@@ -258,8 +258,8 @@ int
 main(int argc, char **argv)
 {
 	struct json_object *env = NULL, *modules = NULL, *o, *p;
-	struct ut_state *state = NULL;
-	struct ut_source source = {};
+	struct uc_state *state = NULL;
+	struct uc_source source = {};
 	char *stdin = NULL, *c;
 	bool dumponly = false;
 	bool shebang = false;
@@ -427,7 +427,7 @@ out:
 	json_object_put(modules);
 	json_object_put(env);
 
-	ut_free(state);
+	uc_free(state);
 	free(stdin);
 
 	return rv;

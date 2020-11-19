@@ -20,24 +20,24 @@
 #include "ast.h"
 #include "lib.h"
 
-struct ut_ops {
-	bool (*register_function)(struct ut_state *, struct json_object *, const char *, ut_c_fn *);
+struct uc_ops {
+	bool (*register_function)(struct uc_state *, struct json_object *, const char *, uc_c_fn *);
 	bool (*register_type)(const char *, struct json_object *, void (*)(void *));
 	struct json_object *(*set_type)(struct json_object *, const char *, void *);
 	void **(*get_type)(struct json_object *, const char *);
 	struct json_object *(*new_object)(struct json_object *);
 	struct json_object *(*new_double)(double);
-	struct json_object *(*invoke)(struct ut_state *, uint32_t, struct json_object *, struct json_object *, struct json_object *);
+	struct json_object *(*invoke)(struct uc_state *, uint32_t, struct json_object *, struct json_object *, struct json_object *);
 	enum json_type (*cast_number)(struct json_object *, int64_t *, double *);
 };
 
-extern const struct ut_ops ut;
+extern const struct uc_ops ut;
 
 #define register_functions(state, ops, functions, scope) \
 	if (scope) \
 		for (int i = 0; i < ARRAY_SIZE(functions); i++) \
 			ops->register_function(state, scope, functions[i].name, functions[i].func)
 
-void ut_module_init(const struct ut_ops *, struct ut_state *, struct json_object *);
+void uc_module_init(const struct uc_ops *, struct uc_state *, struct json_object *);
 
 #endif /* __MODULE_H_ */

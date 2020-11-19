@@ -26,13 +26,13 @@
 #include <math.h>
 #include <regex.h>
 
-static size_t ut_ext_types_count = 0;
-static struct ut_extended_type *ut_ext_types = NULL;
+static size_t uc_ext_types_count = 0;
+static struct uc_extended_type *uc_ext_types = NULL;
 
 uint32_t
-ut_new_op(struct ut_state *s, int type, struct json_object *val, ...)
+uc_new_op(struct uc_state *s, int type, struct json_object *val, ...)
 {
-	struct ut_op *newop;
+	struct uc_op *newop;
 	uint32_t child;
 	int n_op = 0;
 	va_list ap;
@@ -65,9 +65,9 @@ ut_new_op(struct ut_state *s, int type, struct json_object *val, ...)
 }
 
 uint32_t
-ut_wrap_op(struct ut_state *s, uint32_t parent, ...)
+uc_wrap_op(struct uc_state *s, uint32_t parent, ...)
 {
-	struct ut_op *op = ut_get_op(s, parent);
+	struct uc_op *op = uc_get_op(s, parent);
 	uint32_t child;
 	int n_op = 0;
 	va_list ap;
@@ -83,12 +83,12 @@ ut_wrap_op(struct ut_state *s, uint32_t parent, ...)
 }
 
 uint32_t
-ut_append_op(struct ut_state *s, uint32_t a, uint32_t b)
+uc_append_op(struct uc_state *s, uint32_t a, uint32_t b)
 {
-	struct ut_op *tail = ut_get_op(s, a);
+	struct uc_op *tail = uc_get_op(s, a);
 
 	while (tail && tail->tree.next)
-		tail = ut_get_op(s, tail->tree.next);
+		tail = uc_get_op(s, tail->tree.next);
 
 	tail->tree.next = b;
 
@@ -114,7 +114,7 @@ double_rounded_to_string(struct json_object *v, struct printbuf *pb, int level, 
 }
 
 struct json_object *
-ut_new_double(double v)
+uc_new_double(double v)
 {
 	struct json_object *d = json_object_new_double(v);
 
@@ -135,7 +135,7 @@ null_obj_to_string(struct json_object *v, struct printbuf *pb, int level, int fl
 }
 
 struct json_object *
-ut_new_null(void)
+uc_new_null(void)
 {
 	struct json_object *d = json_object_new_boolean(false);
 
@@ -152,16 +152,16 @@ ut_new_null(void)
 static void
 obj_free(struct json_object *v, void *ud)
 {
-	struct ut_op *op = json_object_get_userdata(v);
+	struct uc_op *op = json_object_get_userdata(v);
 
 	json_object_put(op->tag.proto);
 	free(ud);
 }
 
 struct json_object *
-ut_new_object(struct json_object *proto) {
+uc_new_object(struct json_object *proto) {
 	struct json_object *val = xjs_new_object();
-	struct ut_op *op = xalloc(sizeof(*op));
+	struct uc_op *op = xalloc(sizeof(*op));
 
 	op->val = val;
 	op->type = T_LBRACE;
@@ -175,7 +175,7 @@ ut_new_object(struct json_object *proto) {
 static void
 re_free(struct json_object *v, void *ud)
 {
-	struct ut_op *op = ud;
+	struct uc_op *op = ud;
 
 	regfree((regex_t *)op->tag.data);
 	free(op);
@@ -185,7 +185,7 @@ static int
 re_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
 	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT);
-	struct ut_op *op = json_object_get_userdata(v);
+	struct uc_op *op = json_object_get_userdata(v);
 	struct json_object *s;
 	const char *p;
 	size_t len;
@@ -210,9 +210,9 @@ re_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 }
 
 struct json_object *
-ut_new_regexp(const char *source, bool icase, bool newline, bool global, char **err) {
+uc_new_regexp(const char *source, bool icase, bool newline, bool global, char **err) {
 	int cflags = REG_EXTENDED, res;
-	struct ut_op *op;
+	struct uc_op *op;
 	regex_t *re;
 	size_t len;
 
@@ -260,11 +260,11 @@ ut_new_regexp(const char *source, bool icase, bool newline, bool global, char **
 static void
 func_free(struct json_object *v, void *ud)
 {
-	struct ut_op *op = ud;
-	struct ut_function *fn = op->tag.data;
+	struct uc_op *op = ud;
+	struct uc_function *fn = op->tag.data;
 
 	json_object_put(fn->args);
-	ut_release_scope(fn->parent_scope);
+	uc_release_scope(fn->parent_scope);
 
 	free(op);
 }
@@ -273,8 +273,8 @@ static int
 func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
 	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT), rest;
-	struct ut_op *op = json_object_get_userdata(v);
-	struct ut_function *fn = op->tag.data;
+	struct uc_op *op = json_object_get_userdata(v);
+	struct uc_function *fn = op->tag.data;
 	size_t i, len;
 
 	if (op->is_arrow)
@@ -303,17 +303,17 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 }
 
 struct json_object *
-ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
+uc_new_func(struct uc_state *s, struct uc_op *decl, struct uc_scope *scope)
 {
 	struct json_object *val = xjs_new_object();
-	struct ut_op *op, *name, *args, *arg;
-	struct ut_function *fn;
+	struct uc_op *op, *name, *args, *arg;
+	struct uc_function *fn;
 	size_t sz;
 
 	sz = ALIGN(sizeof(*op)) + ALIGN(sizeof(*fn));
 
-	name = ut_get_op(s, decl->tree.operand[0]);
-	args = ut_get_op(s, decl->tree.operand[1]);
+	name = uc_get_op(s, decl->tree.operand[0]);
+	args = uc_get_op(s, decl->tree.operand[1]);
 
 	if (name)
 		sz += ALIGN(json_object_get_string_len(name->val) + 1);
@@ -329,7 +329,7 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 	if (args) {
 		fn->args = xjs_new_array();
 
-		for (arg = args; arg; arg = ut_get_op(s, arg->tree.next)) {
+		for (arg = args; arg; arg = uc_get_op(s, arg->tree.next)) {
 			json_object_array_add(fn->args, json_object_get(arg->val));
 
 			/* if the last argument is a rest one (...arg), add extra null entry */
@@ -341,7 +341,7 @@ ut_new_func(struct ut_state *s, struct ut_op *decl, struct ut_scope *scope)
 	}
 
 	fn->source = s->function ? s->function->source : NULL;
-	fn->parent_scope = ut_acquire_scope(scope);
+	fn->parent_scope = uc_acquire_scope(scope);
 
 	op->val = val;
 	op->type = T_FUNC;
@@ -366,7 +366,7 @@ exception_to_string(struct json_object *v, struct printbuf *pb, int level, int f
 }
 
 static void
-add_stacktrace(struct json_object *a, struct ut_function *function, size_t off) {
+add_stacktrace(struct json_object *a, struct uc_function *function, size_t off) {
 	struct json_object *o = xjs_new_object();
 	size_t line = 1, rlen = 0, len;
 	bool truncated = false;
@@ -400,11 +400,11 @@ add_stacktrace(struct json_object *a, struct ut_function *function, size_t off) 
 }
 
 __attribute__((format(printf, 3, 4))) struct json_object *
-ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
+uc_new_exception(struct uc_state *s, uint32_t off, const char *fmt, ...)
 {
-	struct ut_callstack *callstack, *prevcall, here = {};
+	struct uc_callstack *callstack, *prevcall, here = {};
 	struct json_object *a;
-	struct ut_op *op;
+	struct uc_op *op;
 	va_list ap;
 	char *p;
 	int len;
@@ -449,10 +449,10 @@ ut_new_exception(struct ut_state *s, uint32_t off, const char *fmt, ...)
 static void
 scope_free(struct json_object *v, void *ud)
 {
-	struct ut_scope *sc = ud;
+	struct uc_scope *sc = ud;
 
 	if (sc->parent) {
-		ut_release_scope(json_object_get_userdata(sc->parent));
+		uc_release_scope(json_object_get_userdata(sc->parent));
 		sc->parent = NULL;
 	}
 
@@ -460,7 +460,7 @@ scope_free(struct json_object *v, void *ud)
 }
 
 void
-ut_release_scope(struct ut_scope *sc)
+uc_release_scope(struct uc_scope *sc)
 {
 	if (sc->refs == 0)
 		abort();
@@ -471,41 +471,41 @@ ut_release_scope(struct ut_scope *sc)
 		json_object_put(sc->scope);
 }
 
-struct ut_scope *
-ut_acquire_scope(struct ut_scope *sc)
+struct uc_scope *
+uc_acquire_scope(struct uc_scope *sc)
 {
 	sc->refs++;
 
 	return sc;
 }
 
-struct ut_scope *
-ut_new_scope(struct ut_state *s, struct ut_scope *parent)
+struct uc_scope *
+uc_new_scope(struct uc_state *s, struct uc_scope *parent)
 {
-	struct ut_scope *sc;
+	struct uc_scope *sc;
 
 	sc = xalloc(sizeof(*sc));
 	sc->scope = xjs_new_object();
 
 	if (parent)
-		sc->parent = ut_acquire_scope(parent)->scope;
+		sc->parent = uc_acquire_scope(parent)->scope;
 
 	json_object_set_userdata(sc->scope, sc, scope_free);
 
 	sc->next = s->scopelist;
 	s->scopelist = sc;
 
-	return ut_acquire_scope(sc);
+	return uc_acquire_scope(sc);
 }
 
-struct ut_scope *
-ut_parent_scope(struct ut_scope *scope)
+struct uc_scope *
+uc_parent_scope(struct uc_scope *scope)
 {
 	return json_object_get_userdata(scope->parent);
 }
 
 static void
-ut_reset(struct ut_state *s)
+uc_reset(struct uc_state *s)
 {
 	json_object_put(s->exception);
 	s->exception = NULL;
@@ -516,10 +516,10 @@ ut_reset(struct ut_state *s)
 }
 
 void
-ut_free(struct ut_state *s)
+uc_free(struct uc_state *s)
 {
-	struct ut_source *src, *src_next;
-	struct ut_scope *sc, *sc_next;
+	struct uc_source *src, *src_next;
+	struct uc_scope *sc, *sc_next;
 	struct json_object *scj;
 	size_t n;
 
@@ -534,7 +534,7 @@ ut_free(struct ut_state *s)
 		s->pool = NULL;
 		s->poolsize = 0;
 
-		ut_reset(s);
+		uc_reset(s);
 
 		json_object_put(s->rval);
 
@@ -560,27 +560,27 @@ ut_free(struct ut_state *s)
 		}
 	}
 
-	while (ut_ext_types_count > 0)
-		json_object_put(ut_ext_types[--ut_ext_types_count].proto);
+	while (uc_ext_types_count > 0)
+		json_object_put(uc_ext_types[--uc_ext_types_count].proto);
 
-	free(ut_ext_types);
+	free(uc_ext_types);
 	free(s);
 }
 
 struct json_object *
-ut_parse(struct ut_state *s, FILE *fp)
+uc_parse(struct uc_state *s, FILE *fp)
 {
-	struct ut_op *op;
+	struct uc_op *op;
 	void *pParser;
 	uint32_t off;
 
-	ut_reset(s);
+	uc_reset(s);
 
 	pParser = ParseAlloc(xalloc);
 
 	while (s->lex.state != UT_LEX_EOF) {
-		off = ut_get_token(s, fp);
-		op = ut_get_op(s, off);
+		off = uc_get_token(s, fp);
+		op = uc_get_op(s, off);
 
 		if (s->exception)
 			goto out;
@@ -601,28 +601,28 @@ out:
 }
 
 bool
-ut_register_extended_type(const char *name, struct json_object *proto, void (*freefn)(void *))
+uc_register_extended_type(const char *name, struct json_object *proto, void (*freefn)(void *))
 {
-	ut_ext_types = xrealloc(ut_ext_types, (ut_ext_types_count + 1) * sizeof(*ut_ext_types));
-	ut_ext_types[ut_ext_types_count].name = name;
-	ut_ext_types[ut_ext_types_count].free = freefn;
-	ut_ext_types[ut_ext_types_count].proto = proto;
-	ut_ext_types_count++;
+	uc_ext_types = xrealloc(uc_ext_types, (uc_ext_types_count + 1) * sizeof(*uc_ext_types));
+	uc_ext_types[uc_ext_types_count].name = name;
+	uc_ext_types[uc_ext_types_count].free = freefn;
+	uc_ext_types[uc_ext_types_count].proto = proto;
+	uc_ext_types_count++;
 
 	return true;
 }
 
 static int
-ut_extended_type_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
+uc_extended_type_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 {
 	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT);
-	struct ut_op *op = json_object_get_userdata(v);
-	struct ut_extended_type *et;
+	struct uc_op *op = json_object_get_userdata(v);
+	struct uc_extended_type *et;
 
 	if (!op)
 		return 0;
 
-	et = &ut_ext_types[op->tag.type - 1];
+	et = &uc_ext_types[op->tag.type - 1];
 
 	return sprintbuf(pb, "%s<%s %p>%s",
 	                 strict ? "\"" : "",
@@ -631,15 +631,15 @@ ut_extended_type_to_string(struct json_object *v, struct printbuf *pb, int level
 }
 
 static void
-ut_extended_type_free(struct json_object *v, void *ud)
+uc_extended_type_free(struct json_object *v, void *ud)
 {
-	struct ut_op *op = json_object_get_userdata(v);
-	struct ut_extended_type *et;
+	struct uc_op *op = json_object_get_userdata(v);
+	struct uc_extended_type *et;
 
 	if (!op)
 		return;
 
-	et = &ut_ext_types[op->tag.type - 1];
+	et = &uc_ext_types[op->tag.type - 1];
 
 	if (et->free && op->tag.data)
 		et->free(op->tag.data);
@@ -649,15 +649,15 @@ ut_extended_type_free(struct json_object *v, void *ud)
 }
 
 struct json_object *
-ut_set_extended_type(struct json_object *v, const char *name, void *data)
+uc_set_extended_type(struct json_object *v, const char *name, void *data)
 {
-	struct ut_extended_type *et = NULL;
-	struct ut_op *op;
+	struct uc_extended_type *et = NULL;
+	struct uc_op *op;
 	size_t n;
 
-	for (n = 0; n < ut_ext_types_count; n++) {
-		if (!strcmp(name, ut_ext_types[n].name)) {
-			et = &ut_ext_types[n];
+	for (n = 0; n < uc_ext_types_count; n++) {
+		if (!strcmp(name, uc_ext_types[n].name)) {
+			et = &uc_ext_types[n];
 			break;
 		}
 	}
@@ -672,22 +672,22 @@ ut_set_extended_type(struct json_object *v, const char *name, void *data)
 	op->tag.type = n + 1;
 	op->tag.data = data;
 
-	json_object_set_serializer(op->val, ut_extended_type_to_string, op, ut_extended_type_free);
+	json_object_set_serializer(op->val, uc_extended_type_to_string, op, uc_extended_type_free);
 
 	return op->val;
 }
 
 void **
-ut_get_extended_type(struct json_object *v, const char *name)
+uc_get_extended_type(struct json_object *v, const char *name)
 {
-	struct ut_op *op = json_object_get_userdata(v);
+	struct uc_op *op = json_object_get_userdata(v);
 	size_t n = op ? op->tag.type : 0;
-	struct ut_extended_type *et;
+	struct uc_extended_type *et;
 
-	if (!op || op->type != T_RESSOURCE || n == 0 || n > ut_ext_types_count)
+	if (!op || op->type != T_RESSOURCE || n == 0 || n > uc_ext_types_count)
 		return NULL;
 
-	et = &ut_ext_types[n - 1];
+	et = &uc_ext_types[n - 1];
 
 	if (name && strcmp(et->name, name))
 		return NULL;
