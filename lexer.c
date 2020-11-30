@@ -394,6 +394,16 @@ parse_string(struct uc_state *s)
 		/* continuation of escape sequence */
 		if (s->lex.is_escape) {
 			if (s->lex.esclen == 0) {
+				/* regex mode => do not interprete escapes */
+				if (q == '/') {
+					s->lex.is_escape = false;
+					lookbehind_append(s, "\\", 1);
+					lookbehind_append(s, ptr, 1);
+					buf_consume(s, (ptr + 1) - s->lex.bufstart);
+
+					continue;
+				}
+
 				/* non-unicode escape following a lead surrogate, emit replacement... */
 				if (s->lex.lead_surrogate && *ptr != 'u') {
 					append_utf8(s, 0xFFFD);
@@ -416,16 +426,8 @@ parse_string(struct uc_state *s)
 				case '7':
 				case '8':
 				case '9':
-					/* regex mode => backref, retain literally */
-					if (q == '/') {
-						s->lex.is_escape = false;
-						lookbehind_append(s, "\\", 1);
-						lookbehind_append(s, ptr, 1);
-						buf_consume(s, (ptr + 1) - s->lex.bufstart);
-					}
-
-					/* string mode => likely octal */
-					else if (*ptr < '8') {
+					/* likely octal */
+					if (*ptr < '8') {
 						s->lex.esc[s->lex.esclen++] = 'o';
 						s->lex.esc[s->lex.esclen++] = *ptr;
 					}
@@ -442,7 +444,7 @@ parse_string(struct uc_state *s)
 				default:
 					s->lex.is_escape = false;
 					c = strchr("a\ab\be\ef\fn\nr\rt\tv\v", *ptr);
-					lookbehind_append(s, c ? c + 1 : ptr, 1);
+					lookbehind_append(s, (c && *c >= 'a') ? c + 1 : ptr, 1);
 					buf_consume(s, (ptr + 1) - s->lex.bufstart);
 					break;
 				}

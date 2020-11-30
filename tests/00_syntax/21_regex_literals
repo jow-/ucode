@@ -1,0 +1,89 @@
+Regex literals are enclosed in forward slashes and may contain zero
+or more trailing flag characters. Interpretation of escape sequences
+within regular expression literals is subject of the underlying
+regular expression engine.
+
+-- Expect stdout --
+[ "/Hello world/", "/test/gis", "/test/g", "/test1 \\\/ test2/", "/\\x31\\n\\.\\a\\b\\c\\u2600\\\\/" ]
+-- End --
+
+-- Testcase --
+{%
+	print([
+		/Hello world/,				// A very simple expression
+		/test/gsi,					// Regular expression flags
+		/test/gg,					// Repeated flags
+		/test1 \/ test2/,			// Escaped forward slash
+		/\x31\n\.\a\b\c\u2600\\/	// Ensure that escape sequences are passed as-is
+	], "\n");
+%}
+-- End --
+
+
+Testing regular expression type.
+
+-- Expect stdout --
+object
+-- End --
+
+-- Testcase --
+{{ type(/foo/) }}
+-- End --
+
+
+Testing invalid flag characters.
+
+-- Expect stderr --
+Syntax error: Unexpected token
+Expecting ',' or ';'
+In line 2, byte 8:
+
+ `    /test/x`
+            ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{%
+	/test/x
+%}
+-- End --
+
+
+Testing unclosed regular expression.
+
+-- Expect stderr --
+Syntax error: Unterminated string
+In line 2, byte 2:
+
+ `    /foo \/`
+      ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{%
+	/foo \/
+%}
+-- End --
+
+
+Testing regex compilation errors.
+
+-- Expect stderr --
+Syntax error: Unmatched \{
+In line 2, byte 3:
+
+ `     /foo {/`
+       ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{%
+	 /foo {/
+%}
+-- End --

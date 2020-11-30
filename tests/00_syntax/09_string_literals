@@ -23,3 +23,21 @@ Octal escape: ABC xyz
 {{ "Octal escape: \101\102\103 \170\171\172" }}
 {{ { "Single char escape": "\a\b\e\f\r\t\v\\\n" } }}
 -- End --
+
+
+Testing various parsing corner cases.
+
+-- Expect stdout --
+[ "\t", "\n", "y" ]
+-- End --
+
+-- Testcase --
+{%
+	print([
+		"\	",  // properly handle escaped tab
+		"\
+",  			// properly handle escaped newline
+		"\y"	// substitute unrecognized escape with escaped char
+	], "\n");
+%}
+-- End --
