@@ -219,10 +219,10 @@ rejected.
 
 -- Expect stderr --
 Syntax error: Invalid for-in expression
-In line 2, byte 16:
+In line 2, byte 14:
 
  `    for (let x, y, z in {})`
-  Near here --------^
+  Near here ------^
 
 
 -- End --
@@ -239,10 +239,10 @@ Ensure that assignments in for-in loop expressions are rejected.
 
 -- Expect stderr --
 Syntax error: Invalid for-in expression
-In line 2, byte 15:
+In line 2, byte 13:
 
  `    for (let x = 1, y in {})`
-  Near here -------^
+  Near here -----^
 
 
 -- End --
@@ -260,10 +260,10 @@ Ensure that too short for-in loop expressions are rejected (1/2).
 -- Expect stderr --
 Syntax error: Unexpected token
 Expecting ',' or 'in'
-In line 2, byte 14:
+In line 2, byte 12:
 
  `    for (let x)`
-  Near here ------^
+  Near here ----^
 
 
 -- End --
@@ -280,10 +280,10 @@ Ensure that too short for-in loop expressions are rejected (2/2).
 
 -- Expect stderr --
 Syntax error: Invalid for-in expression
-In line 2, byte 16:
+In line 2, byte 14:
 
  `    for (let x, y)`
-  Near here --------^
+  Near here ------^
 
 
 -- End --

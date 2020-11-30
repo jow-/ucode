@@ -46,15 +46,15 @@ outer f_e=3
 -- Testcase --
 {%
 	a_global = true;
-	let a_let = true;
+	let a_local = true;
 
 	function test() {
 		b_global = true;
-		let b_let = true;
+		let b_local = true;
 
 		function test2() {
 			c_global = true;
-			let c_let = true;
+			let c_local = true;
 		}
 
 		test2();
@@ -64,13 +64,13 @@ outer f_e=3
 -%}
 
 a_global={{ !!a_global }}
-a_local={{ !!a_let }}
+a_local={{ !!a_local }}
 
 b_global={{ !!b_global }}
-b_local={{ !!b_let }}
+b_local={{ !!b_local }}
 
 c_global={{ !!c_global }}
-c_local={{ !!c_let }}
+c_local={{ !!c_local }}
 
 
 When seting a nonlet variable, it is set in the nearest parent
