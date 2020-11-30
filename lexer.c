@@ -394,23 +394,13 @@ parse_string(struct uc_state *s)
 		/* continuation of escape sequence */
 		if (s->lex.is_escape) {
 			if (s->lex.esclen == 0) {
-				/* regex mode => do not interprete escapes */
-				if (q == '/') {
-					s->lex.is_escape = false;
-					lookbehind_append(s, "\\", 1);
-					lookbehind_append(s, ptr, 1);
-					buf_consume(s, (ptr + 1) - s->lex.bufstart);
-
-					continue;
-				}
-
 				/* non-unicode escape following a lead surrogate, emit replacement... */
 				if (s->lex.lead_surrogate && *ptr != 'u') {
 					append_utf8(s, 0xFFFD);
 					s->lex.lead_surrogate = 0;
 				}
 
-				switch (*ptr) {
+				switch ((q == '/') ? 0 : *ptr) {
 				case 'u':
 				case 'x':
 					s->lex.esc[s->lex.esclen++] = *ptr;
@@ -444,8 +434,20 @@ parse_string(struct uc_state *s)
 				default:
 					s->lex.is_escape = false;
 					c = strchr("a\ab\be\ef\fn\nr\rt\tv\v", *ptr);
-					lookbehind_append(s, (c && *c >= 'a') ? c + 1 : ptr, 1);
+
+					if (c && *c >= 'a') {
+						lookbehind_append(s, c + 1, 1);
+					}
+					else {
+						/* regex mode => retain backslash */
+						if (q == '/')
+							lookbehind_append(s, "\\", 1);
+
+						lookbehind_append(s, ptr, 1);
+					}
+
 					buf_consume(s, (ptr + 1) - s->lex.bufstart);
+
 					break;
 				}
 			}

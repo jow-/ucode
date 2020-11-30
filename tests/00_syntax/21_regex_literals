@@ -4,7 +4,7 @@ within regular expression literals is subject of the underlying
 regular expression engine.
 
 -- Expect stdout --
-[ "/Hello world/", "/test/gis", "/test/g", "/test1 \\\/ test2/", "/\\x31\\n\\.\\a\\b\\c\\u2600\\\\/" ]
+[ "/Hello world/", "/test/gis", "/test/g", "/test1 \\\/ test2/", "/\\x31\n\\.\u0007\b\\c\\u2600\\\\/" ]
 -- End --
 
 -- Testcase --
