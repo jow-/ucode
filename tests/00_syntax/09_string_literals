@@ -28,16 +28,23 @@ Octal escape: ABC xyz
 Testing various parsing corner cases.
 
 -- Expect stdout --
-[ "\t", "\n", "y" ]
+[ "\t", "\n", "y", "\u0001", "\n", "\u0001\u0002", "\u0001\u0002", "\u0001\u0002", "\u0001a", "\na" ]
 -- End --
 
 -- Testcase --
 {%
 	print([
-		"\	",  // properly handle escaped tab
+		"\	",  	// properly handle escaped tab
 		"\
-",  			// properly handle escaped newline
-		"\y"	// substitute unrecognized escape with escaped char
+",  				// properly handle escaped newline
+		"\y",		// substitute unrecognized escape with escaped char
+		"\1",		// handle short octal sequence at end of string
+		"\12",		// handle short octal sequence at end of string
+		"\1\2",		// handle subsequent short octal sequences
+		"\001\2",	// handle short sequence after long one
+		"\1\002",	// handle long sequence after short one
+		"\1a",		// handle short octal sequence terminated by non-octal char
+		"\12a"		// handle short octal sequence terminated by non-octal char
 	], "\n");
 %}
 -- End --

@@ -414,21 +414,8 @@ parse_string(struct uc_state *s)
 				case '5':
 				case '6':
 				case '7':
-				case '8':
-				case '9':
-					/* likely octal */
-					if (*ptr < '8') {
-						s->lex.esc[s->lex.esclen++] = 'o';
-						s->lex.esc[s->lex.esclen++] = *ptr;
-					}
-
-					/* non-octal char, add verbatim */
-					else {
-						s->lex.is_escape = false;
-						lookbehind_append(s, ptr, 1);
-						buf_consume(s, (ptr + 1) - s->lex.bufstart);
-					}
-
+					s->lex.esc[s->lex.esclen++] = 'o';
+					s->lex.esc[s->lex.esclen++] = *ptr;
 					break;
 
 				default:
@@ -549,7 +536,7 @@ parse_string(struct uc_state *s)
 							}
 
 							s->lex.esclen = 4;
-							buf_consume(s, ptr - s->lex.bufstart);
+							buf_consume(s, ptr-- - s->lex.bufstart);
 						}
 
 						/* append */
