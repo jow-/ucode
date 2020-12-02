@@ -54,28 +54,25 @@ uc_new_op(struct uc_state *s, int type, struct json_object *val, ...)
 
 	va_start(ap, val);
 
-	while (n_op < ARRAY_SIZE(newop->tree.operand) && (child = va_arg(ap, uint32_t)) != UINT32_MAX)
+	while (n_op < OPn_NUM && (child = va_arg(ap, uint32_t)) != UINT32_MAX)
 		newop->tree.operand[n_op++] = child;
 
 	va_end(ap);
 
-	s->poolsize++;
-
-	return s->poolsize;
+	return s->poolsize++;
 }
 
 uint32_t
-uc_wrap_op(struct uc_state *s, uint32_t parent, ...)
+uc_wrap_op(struct uc_state *state, uint32_t parent, ...)
 {
-	struct uc_op *op = uc_get_op(s, parent);
 	uint32_t child;
 	int n_op = 0;
 	va_list ap;
 
 	va_start(ap, parent);
 
-	while (n_op < ARRAY_SIZE(op->tree.operand) && (child = va_arg(ap, uint32_t)) != UINT32_MAX)
-		op->tree.operand[n_op++] = child;
+	while (n_op < OPn_NUM && (child = va_arg(ap, uint32_t)) != UINT32_MAX)
+		OPn(parent, n_op++) = child;
 
 	va_end(ap);
 
@@ -83,14 +80,16 @@ uc_wrap_op(struct uc_state *s, uint32_t parent, ...)
 }
 
 uint32_t
-uc_append_op(struct uc_state *s, uint32_t a, uint32_t b)
+uc_append_op(struct uc_state *state, uint32_t a, uint32_t b)
 {
-	struct uc_op *tail = uc_get_op(s, a);
+	uint32_t tail_off, next_off;
 
-	while (tail && tail->tree.next)
-		tail = uc_get_op(s, tail->tree.next);
+	for (tail_off = a, next_off = OP_NEXT(tail_off);
+	     next_off != 0;
+	     tail_off = next_off, next_off = OP_NEXT(next_off))
+		;
 
-	tail->tree.next = b;
+	OP_NEXT(tail_off) = b;
 
 	return a;
 }
@@ -303,49 +302,50 @@ func_to_string(struct json_object *v, struct printbuf *pb, int level, int flags)
 }
 
 struct json_object *
-uc_new_func(struct uc_state *s, struct uc_op *decl, struct uc_scope *scope)
+uc_new_func(struct uc_state *state, uint32_t decl, struct uc_scope *scope)
 {
 	struct json_object *val = xjs_new_object();
-	struct uc_op *op, *name, *args, *arg;
+	uint32_t name_off, args_off, arg_off;
 	struct uc_function *fn;
+	struct uc_op *op;
 	size_t sz;
 
 	sz = ALIGN(sizeof(*op)) + ALIGN(sizeof(*fn));
 
-	name = uc_get_op(s, decl->tree.operand[0]);
-	args = uc_get_op(s, decl->tree.operand[1]);
+	name_off = OPn(decl, 0);
+	args_off = OPn(decl, 1);
 
-	if (name)
-		sz += ALIGN(json_object_get_string_len(name->val) + 1);
+	if (name_off)
+		sz += ALIGN(json_object_get_string_len(OP_VAL(name_off)) + 1);
 
 	op = xalloc(sz);
 
 	fn = (void *)op + ALIGN(sizeof(*op));
-	fn->entry = decl->tree.operand[2];
+	fn->entry = OPn(decl, 2);
 
-	if (name)
-		fn->name = strcpy((char *)fn + ALIGN(sizeof(*fn)), json_object_get_string(name->val));
+	if (name_off)
+		fn->name = strcpy((char *)fn + ALIGN(sizeof(*fn)), json_object_get_string(OP_VAL(name_off)));
 
-	if (args) {
+	if (args_off) {
 		fn->args = xjs_new_array();
 
-		for (arg = args; arg; arg = uc_get_op(s, arg->tree.next)) {
-			json_object_array_add(fn->args, json_object_get(arg->val));
+		for (arg_off = args_off; arg_off != 0; arg_off = OP_NEXT(arg_off)) {
+			json_object_array_add(fn->args, json_object_get(OP_VAL(arg_off)));
 
 			/* if the last argument is a rest one (...arg), add extra null entry */
-			if (arg->is_ellip) {
+			if (OP_IS_ELLIP(arg_off)) {
 				json_object_array_add(fn->args, NULL);
 				break;
 			}
 		}
 	}
 
-	fn->source = s->function ? s->function->source : NULL;
+	fn->source = state->function ? state->function->source : NULL;
 	fn->parent_scope = uc_acquire_scope(scope);
 
 	op->val = val;
 	op->type = T_FUNC;
-	op->is_arrow = (decl->type == T_ARROW);
+	op->is_arrow = (OP_TYPE(decl) == T_ARROW);
 	op->tag.data = fn;
 
 	json_object_set_serializer(val, func_to_string, op, func_free);
@@ -568,36 +568,34 @@ uc_free(struct uc_state *s)
 }
 
 struct json_object *
-uc_parse(struct uc_state *s, FILE *fp)
+uc_parse(struct uc_state *state, FILE *fp)
 {
-	struct uc_op *op;
 	void *pParser;
 	uint32_t off;
 
-	uc_reset(s);
+	uc_reset(state);
 
 	pParser = ParseAlloc(xalloc);
 
-	while (s->lex.state != UT_LEX_EOF) {
-		off = uc_get_token(s, fp);
-		op = uc_get_op(s, off);
+	while (state->lex.state != UT_LEX_EOF) {
+		off = uc_get_token(state, fp);
 
-		if (s->exception)
+		if (state->exception)
 			goto out;
 
-		if (op)
-			Parse(pParser, op->type, off, s);
+		if (off)
+			Parse(pParser, OP_TYPE(off), off, state);
 
-		if (s->exception)
+		if (state->exception)
 			goto out;
 	}
 
-	Parse(pParser, 0, 0, s);
+	Parse(pParser, 0, 0, state);
 
 out:
 	ParseFree(pParser, free);
 
-	return s->exception;
+	return state->exception;
 }
 
 bool

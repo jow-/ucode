@@ -145,15 +145,15 @@ uc_execute_list(struct uc_state *state, uint32_t off);
 static char *
 uc_ref_to_str(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
-	struct uc_op *op2 = uc_get_child(state, off, 1);
+	int child_type = OPn_TYPE(off, 1);
+	int op_type = OP_TYPE(off);
 	const char *l;
 	char *s, *p;
 
-	switch (op ? op->type : 0) {
+	switch (op_type) {
 	case T_DOT:
-		s = uc_ref_to_str(state, op->tree.operand[0]);
-		l = ((op2 ? op2->type : 0) == T_LABEL) ? json_object_get_string(op2->val) : "???";
+		s = uc_ref_to_str(state, OPn(off, 0));
+		l = (child_type == T_LABEL) ? json_object_get_string(OPn_VAL(off, 1)) : "???";
 
 		if (asprintf(&p, "%s.%s", s ? s : "(...)", l) == -1)
 			p = NULL;
@@ -163,23 +163,23 @@ uc_ref_to_str(struct uc_state *state, uint32_t off)
 		return p;
 
 	case T_LBRACK:
-		if (!op->is_postfix)
+		if (!OP_IS_POSTFIX(off))
 			return NULL;
 
 		/* fall through */
 
 	case T_LPAREN:
-		s = uc_ref_to_str(state, op->tree.operand[0]);
+		s = uc_ref_to_str(state, OPn(off, 0));
 
-		switch (op2 ? op2->type : 0) {
+		switch (child_type) {
 		case T_STRING:
-			l = json_object_to_json_string_ext(op2->val, JSON_C_TO_STRING_NOSLASHESCAPE);
+			l = json_object_to_json_string_ext(OPn_VAL(off, 1), JSON_C_TO_STRING_NOSLASHESCAPE);
 			break;
 
 		case T_NUMBER:
 		case T_LABEL:
 		case T_BOOL:
-			l = json_object_get_string(op2->val);
+			l = json_object_get_string(OPn_VAL(off, 1));
 			break;
 
 		default:
@@ -187,8 +187,8 @@ uc_ref_to_str(struct uc_state *state, uint32_t off)
 		}
 
 		if (asprintf(&p, "%s%c%s%c", s ? s : "(...)",
-		             (op->type == T_LPAREN) ? '(' : '[', l,
-		             (op->type == T_LPAREN) ? ')' : ']') == -1)
+		             (op_type == T_LPAREN) ? '(' : '[', l,
+		             (op_type == T_LPAREN) ? ')' : ']') == -1)
 			p = NULL;
 
 		free(s);
@@ -196,7 +196,7 @@ uc_ref_to_str(struct uc_state *state, uint32_t off)
 		return p;
 
 	case T_LABEL:
-		return strdup(json_object_get_string(op->val));
+		return strdup(json_object_get_string(OP_VAL(off)));
 
 	default:
 		return NULL;
@@ -206,22 +206,22 @@ uc_ref_to_str(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_getref(struct uc_state *state, uint32_t off, struct json_object **key)
 {
-	struct uc_op *op = uc_get_op(state, off);
-	uint32_t off1 = op ? op->tree.operand[0] : 0;
-	uint32_t off2 = op ? op->tree.operand[1] : 0;
+	uint32_t off1 = OPn(off, 0);
+	uint32_t off2 = OPn(off, 1);
+	int type = OP_TYPE(off);
 	struct uc_scope *sc, *next;
 	struct json_object *val;
 
 	if (key)
 		*key = NULL;
 
-	if (op && op->type == T_DOT) {
+	if (type == T_DOT) {
 		if (key)
-			*key = off2 ? json_object_get(uc_get_op(state, off2)->val) : NULL;
+			*key = off2 ? json_object_get(OP_VAL(off2)) : NULL;
 
 		return uc_execute_op_sequence(state, off1);
 	}
-	else if (op && op->type == T_LBRACK && op->is_postfix) {
+	else if (type == T_LBRACK && OP_IS_POSTFIX(off)) {
 		if (key) {
 			val = off2 ? uc_execute_op_sequence(state, off2) : NULL;
 
@@ -233,20 +233,20 @@ uc_getref(struct uc_state *state, uint32_t off, struct json_object **key)
 
 		return uc_execute_op_sequence(state, off1);
 	}
-	else if (op && op->type == T_LABEL) {
+	else if (type == T_LABEL) {
 		sc = state->scope;
 
 		while (true) {
-			if (json_object_object_get_ex(sc->scope, json_object_get_string(op->val), NULL))
+			if (json_object_object_get_ex(sc->scope, json_object_get_string(OP_VAL(off)), NULL))
 				break;
 
 			next = uc_parent_scope(sc);
 
 			if (!next) {
 				if (state->strict_declarations) {
-					return uc_new_exception(state, op->off,
+					return uc_new_exception(state, OP_POS(off),
 					                        "Reference error: access to undeclared variable %s",
-					                        json_object_get_string(op->val));
+					                        json_object_get_string(OP_VAL(off)));
 				}
 
 				break;
@@ -256,7 +256,7 @@ uc_getref(struct uc_state *state, uint32_t off, struct json_object **key)
 		}
 
 		if (key)
-			*key = json_object_get(op->val);
+			*key = json_object_get(OP_VAL(off));
 
 		return json_object_get(sc->scope);
 	}
@@ -271,7 +271,7 @@ uc_getref(struct uc_state *state, uint32_t off, struct json_object **key)
 static struct json_object *
 uc_getref_required(struct uc_state *state, uint32_t off, struct json_object **key)
 {
-	struct uc_op *op1 = uc_get_child(state, off, 0);
+	uint32_t child_off = OPn(off, 0);
 	struct json_object *scope, *skey, *rv;
 	char *lhs;
 
@@ -280,15 +280,17 @@ uc_getref_required(struct uc_state *state, uint32_t off, struct json_object **ke
 	if (!json_object_is_type(scope, json_type_array) &&
 		!json_object_is_type(scope, json_type_object)) {
 		if (!uc_is_type(scope, T_EXCEPTION)) {
-			lhs = op1 ? uc_ref_to_str(state, uc_get_off(state, op1)) : NULL;
+			lhs = child_off ? uc_ref_to_str(state, child_off) : NULL;
 
 			if (lhs) {
-				rv = uc_new_exception(state, op1->off, "Type error: `%s` is %s",
+				rv = uc_new_exception(state, OPn_POS(off, 0),
+				                      "Type error: `%s` is %s",
 				                      lhs, scope ? "not an array or object" : "null");
 				free(lhs);
 			}
 			else {
-				rv = uc_new_exception(state, op1->off, "Type error: left-hand side is not an array or object");
+				rv = uc_new_exception(state, OPn_POS(off, 0),
+				                      "Type error: left-hand side is not an array or object");
 			}
 
 			json_object_put(scope);
@@ -310,12 +312,12 @@ uc_getref_required(struct uc_state *state, uint32_t off, struct json_object **ke
 static struct json_object *
 uc_getproto(struct json_object *obj)
 {
-	struct uc_op *op = json_object_get_userdata(obj);
+	struct uc_op *tag = json_object_get_userdata(obj);
 
-	if (!op || (op->type != T_LBRACE && op->type <= __T_MAX) || !op->val)
+	if (!tag || (tag->type != T_LBRACE && tag->type <= __T_MAX) || !tag->val)
 		return NULL;
 
-	return op->tag.proto;
+	return tag->tag.proto;
 }
 
 static struct json_object *
@@ -390,17 +392,16 @@ uc_setval(struct json_object *scope, struct json_object *key, struct json_object
 static struct json_object *
 uc_execute_assign(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
-	uint32_t label = op ? op->tree.operand[0] : 0;
-	uint32_t value = op ? op->tree.operand[1] : 0;
+	uint32_t label_off = OPn(off, 0);
+	uint32_t value_off = OPn(off, 1);
 	struct json_object *scope, *key, *val;
 
-	scope = uc_getref_required(state, label, &key);
+	scope = uc_getref_required(state, label_off, &key);
 
 	if (!key)
 		return scope;
 
-	val = uc_execute_op_sequence(state, value);
+	val = uc_execute_op_sequence(state, value_off);
 
 	if (!uc_is_type(val, T_EXCEPTION))
 		uc_setval(scope, key, val);
@@ -414,18 +415,14 @@ uc_execute_assign(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_local(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off), *asop, *alop;
-	uint32_t as = op ? op->tree.operand[0] : 0;
 	struct json_object *val, *rv = NULL;
+	uint32_t assign_off, label_off;
 
-	while (as) {
-		asop = uc_get_op(state, as);
-		as = asop ? asop->tree.next : 0;
-
-		switch (asop ? asop->type : 0) {
+	for (assign_off = OPn(off, 0); assign_off != 0; assign_off = OP_NEXT(assign_off)) {
+		switch (OP_TYPE(assign_off)) {
 		case T_ASSIGN:
-			alop = uc_get_op(state, asop->tree.operand[0]);
-			val = uc_execute_op_sequence(state, asop->tree.operand[1]);
+			label_off = OPn(assign_off, 0);
+			val = uc_execute_op_sequence(state, OPn(assign_off, 1));
 
 			if (uc_is_type(val, T_EXCEPTION))
 				return val;
@@ -433,7 +430,7 @@ uc_execute_local(struct uc_state *state, uint32_t off)
 			break;
 
 		case T_LABEL:
-			alop = asop;
+			label_off = assign_off;
 			val = NULL;
 			break;
 
@@ -441,9 +438,9 @@ uc_execute_local(struct uc_state *state, uint32_t off)
 			continue;
 		}
 
-		if (alop) {
+		if (label_off) {
 			json_object_put(rv);
-			rv = uc_setval(state->scope->scope, alop->val, val);
+			rv = uc_setval(state->scope->scope, OP_VAL(label_off), val);
 		}
 	}
 
@@ -467,18 +464,17 @@ uc_test_condition(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_if(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
-	uint32_t cond = op ? op->tree.operand[0] : 0;
-	uint32_t Then = op ? op->tree.operand[1] : 0;
-	uint32_t Else = op ? op->tree.operand[2] : 0;
-	bool res = uc_test_condition(state, cond);
+	uint32_t cond_off = OPn(off, 0);
+	uint32_t then_off = OPn(off, 1);
+	uint32_t else_off = OPn(off, 2);
+	bool res = uc_test_condition(state, cond_off);
 
 	if (state->exception)
 		return json_object_get(state->exception);
 	else if (res)
-		return uc_execute_op_sequence(state, Then);
-	else if (Else)
-		return uc_execute_op_sequence(state, Else);
+		return uc_execute_op_sequence(state, then_off);
+	else if (else_off)
+		return uc_execute_op_sequence(state, else_off);
 
 	return NULL;
 }
@@ -487,39 +483,40 @@ static struct json_object *
 uc_execute_for(struct uc_state *state, uint32_t off)
 {
 	struct json_object *kscope, *vscope, *val, *item, *ik, *iv = NULL, *rv = NULL;
-	struct uc_op *loop = uc_get_op(state, off);
-	struct uc_op *init = uc_get_child(state, off, 0);
-	uint32_t test = loop ? loop->tree.operand[1] : 0;
-	uint32_t incr = loop ? loop->tree.operand[2] : 0;
-	uint32_t body = loop ? loop->tree.operand[3] : 0;
-	struct uc_op *ikvar, *ivvar, *tag;
+	uint32_t init_off = OPn(off, 0);
+	uint32_t cond_off = OPn(off, 1);
+	uint32_t step_off = OPn(off, 2);
+	uint32_t body_off = OPn(off, 3);
+	uint32_t ik_off, iv_off;
 	size_t arridx, arrlen;
 	bool local = false;
+	struct uc_op *tag;
 
 	/* for (x in ...) loop variant */
-	if (loop->is_for_in) {
-		if (init->type == T_LOCAL) {
+	if (OP_IS_FOR_IN(off)) {
+		if (OP_TYPE(init_off) == T_LOCAL) {
 			local = true;
-			init = uc_get_op(state, init->tree.operand[0]);
+			init_off = OPn(init_off, 0);
 		}
 
-		ikvar = uc_get_op(state, init->tree.operand[0]);
-		ik = ikvar->val;
-		kscope = local ? state->scope->scope : uc_getref(state, uc_get_off(state, ikvar), NULL);
+		ik_off = OPn(init_off, 0);
+		ik = OP_VAL(ik_off);
+		kscope = local ? state->scope->scope : uc_getref(state, ik_off, NULL);
 
 		if (uc_is_type(kscope, T_EXCEPTION))
 			return kscope;
 
-		if (ikvar->tree.next) {
-			ivvar = uc_get_op(state, ikvar->tree.next);
-			iv = ivvar->val;
-			vscope = local ? kscope : uc_getref(state, uc_get_off(state, ivvar), NULL);
+		iv_off = OP_NEXT(ik_off);
+
+		if (iv_off) {
+			iv = OP_VAL(iv_off);
+			vscope = local ? kscope : uc_getref(state, iv_off, NULL);
 
 			if (uc_is_type(vscope, T_EXCEPTION))
 				return vscope;
 		}
 
-		val = uc_execute_op_sequence(state, init->tree.operand[1]);
+		val = uc_execute_op_sequence(state, OPn(init_off, 1));
 
 		if (uc_is_type(val, T_EXCEPTION))
 			return val;
@@ -539,7 +536,7 @@ uc_execute_for(struct uc_state *state, uint32_t off)
 
 				json_object_put(rv);
 
-				rv = uc_execute_op_sequence(state, body);
+				rv = uc_execute_op_sequence(state, body_off);
 				tag = json_object_get_userdata(rv);
 
 				switch (tag ? tag->type : 0) {
@@ -566,7 +563,7 @@ uc_execute_for(struct uc_state *state, uint32_t off)
 
 				json_object_put(rv);
 
-				rv = uc_execute_op_sequence(state, body);
+				rv = uc_execute_op_sequence(state, body_off);
 				tag = json_object_get_userdata(rv);
 
 				switch (tag ? tag->type : 0) {
@@ -591,8 +588,8 @@ uc_execute_for(struct uc_state *state, uint32_t off)
 		return NULL;
 	}
 
-	if (init) {
-		val = uc_execute_op_sequence(state, uc_get_off(state, init));
+	if (init_off) {
+		val = uc_execute_op_sequence(state, init_off);
 
 		if (uc_is_type(val, T_EXCEPTION))
 			return val;
@@ -600,10 +597,10 @@ uc_execute_for(struct uc_state *state, uint32_t off)
 		json_object_put(val);
 	}
 
-	while (test ? uc_test_condition(state, test) : true) {
+	while (cond_off ? uc_test_condition(state, cond_off) : true) {
 		json_object_put(rv);
 
-		rv = uc_execute_op_sequence(state, body);
+		rv = uc_execute_op_sequence(state, body_off);
 		tag = json_object_get_userdata(rv);
 
 		switch (tag ? tag->type : 0) {
@@ -617,8 +614,8 @@ uc_execute_for(struct uc_state *state, uint32_t off)
 			return NULL;
 		}
 
-		if (incr) {
-			val = uc_execute_op_sequence(state, incr);
+		if (step_off) {
+			val = uc_execute_op_sequence(state, step_off);
 
 			if (uc_is_type(val, T_EXCEPTION)) {
 				json_object_put(rv);
@@ -638,9 +635,8 @@ uc_execute_for(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_while(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
-	uint32_t test = op ? op->tree.operand[0] : 0;
-	uint32_t body = op ? op->tree.operand[1] : 0;
+	uint32_t test = OPn(off, 0);
+	uint32_t body = OPn(off, 1);
 	struct json_object *v, *rv = NULL;
 	struct uc_op *tag = NULL;
 	bool cond;
@@ -682,19 +678,20 @@ uc_execute_while(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_and_or(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
+	bool is_or = (OP_TYPE(off) == T_OR);
 	struct json_object *val = NULL;
-	int i;
+	uint32_t op_off;
+	int i = 0;
 
-	for (i = 0; i < ARRAY_SIZE(op->tree.operand) && op->tree.operand[i]; i++) {
+	for (op_off = OPn(off, 0); op_off != 0 && i < OPn_NUM; op_off = OPn(off, ++i)) {
 		json_object_put(val);
 
-		val = uc_execute_op_sequence(state, op->tree.operand[i]);
+		val = uc_execute_op_sequence(state, op_off);
 
 		if (uc_is_type(val, T_EXCEPTION))
 			break;
 
-		if (uc_val_is_truish(val) == (op->type == T_OR))
+		if (uc_val_is_truish(val) == is_or)
 			break;
 	}
 
@@ -763,19 +760,19 @@ uc_cmp(int how, struct json_object *v1, struct json_object *v2)
 }
 
 static struct json_object *
-_uc_get_operands(struct uc_state *state, struct uc_op *op, size_t n, struct json_object **v)
+_uc_get_operands(struct uc_state *state, uint32_t op_off, size_t n, struct json_object **v)
 {
 	struct json_object *ctx = NULL;
-	struct uc_op *child;
+	uint32_t child_off;
 	size_t i, j;
 
 	for (i = 0; i < n; i++) {
-		child = op ? uc_get_op(state, op->tree.operand[i]) : NULL;
+		child_off = OPn(op_off, i);
 
-		if (child && child->is_list)
-			v[i] = uc_execute_list(state, uc_get_off(state, child));
-		else if (child)
-			v[i] = uc_execute_op_sequence(state, uc_get_off(state, child));
+		if (child_off && OP_IS_LIST(child_off))
+			v[i] = uc_execute_list(state, child_off);
+		else if (child_off)
+			v[i] = uc_execute_op_sequence(state, child_off);
 		else
 			v[i] = NULL;
 
@@ -798,21 +795,20 @@ _uc_get_operands(struct uc_state *state, struct uc_op *op, size_t n, struct json
 	return NULL;
 }
 
-#define uc_get_operands(state, op, vals) \
+#define uc_get_operands(state, off, vals) \
 	do { \
-		struct json_object *ex = _uc_get_operands(state, op, ARRAY_SIZE(vals), vals); \
+		struct json_object *ex = _uc_get_operands(state, off, ARRAY_SIZE(vals), vals); \
 		if (ex) return ex; \
 	} while(0)
 
 static struct json_object *
 uc_execute_rel(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
 	struct json_object *v[2], *rv;
 
-	uc_get_operands(state, op, v);
+	uc_get_operands(state, off, v);
 
-	rv = xjs_new_boolean(uc_cmp(op->type, v[0], v[1]));
+	rv = xjs_new_boolean(uc_cmp(OP_TYPE(off), v[0], v[1]));
 
 	json_object_put(v[0]);
 	json_object_put(v[1]);
@@ -864,14 +860,13 @@ uc_eq(struct json_object *v1, struct json_object *v2)
 static struct json_object *
 uc_execute_equality(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
 	struct json_object *v[2], *rv;
 	bool equal = false;
 
-	uc_get_operands(state, op, v);
+	uc_get_operands(state, off, v);
 
 	equal = uc_eq(v[0], v[1]);
-	rv = xjs_new_boolean((op->type == T_EQS) ? equal : !equal);
+	rv = xjs_new_boolean((OP_TYPE(off) == T_EQS) ? equal : !equal);
 
 	json_object_put(v[0]);
 	json_object_put(v[1]);
@@ -882,13 +877,12 @@ uc_execute_equality(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_in(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
 	struct json_object *v[2], *item;
 	size_t arrlen, arridx;
 	bool found = false;
 	const char *key;
 
-	uc_get_operands(state, op, v);
+	uc_get_operands(state, off, v);
 
 	if (json_object_is_type(v[1], json_type_array)) {
 		for (arridx = 0, arrlen = json_object_array_length(v[1]);
@@ -915,13 +909,12 @@ uc_execute_in(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_inc_dec(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
+	bool is_inc = (OP_TYPE(off) == T_INC);
 	struct json_object *val, *nval, *scope, *key;
-	uint32_t label = op ? op->tree.operand[0] : 0;
 	int64_t n;
 	double d;
 
-	scope = uc_getref_required(state, label, &key);
+	scope = uc_getref_required(state, OPn(off, 0), &key);
 
 	if (!key)
 		return scope;
@@ -932,14 +925,14 @@ uc_execute_inc_dec(struct uc_state *state, uint32_t off)
 	json_object_put(key);
 
 	if (uc_cast_number(val, &n, &d) == json_type_double)
-		nval = uc_new_double(d + (op->type == T_INC ? 1.0 : -1.0));
+		nval = uc_new_double(d + (is_inc ? 1.0 : -1.0));
 	else
-		nval = xjs_new_int64(n + (op->type == T_INC ? 1 : -1));
+		nval = xjs_new_int64(n + (is_inc ? 1 : -1));
 
 	json_object_put(uc_setval(scope, key, nval));
 
 	/* postfix inc/dec, return old val */
-	if (op->is_postfix)
+	if (OP_IS_POSTFIX(off))
 		return val;
 
 	json_object_put(val);
@@ -950,12 +943,11 @@ uc_execute_inc_dec(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_list(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
 	struct json_object *ex, *val, *arr = xjs_new_array();
 	size_t i;
 
-	while (op) {
-		val = uc_execute_op(state, uc_get_off(state, op));
+	while (off) {
+		val = uc_execute_op(state, off);
 
 		if (uc_is_type(val, T_EXCEPTION)) {
 			json_object_put(arr);
@@ -963,9 +955,10 @@ uc_execute_list(struct uc_state *state, uint32_t off)
 			return val;
 		}
 
-		if (op->is_ellip) {
+		if (OP_IS_ELLIP(off)) {
 			if (!json_object_is_type(val, json_type_array)) {
-				ex = uc_new_exception(state, op->off, "Type error: (%s) is not iterable",
+				ex = uc_new_exception(state, OP_POS(off),
+				                      "Type error: (%s) is not iterable",
 				                      json_object_get_string(val));
 
 				json_object_put(arr);
@@ -983,7 +976,7 @@ uc_execute_list(struct uc_state *state, uint32_t off)
 			json_object_array_add(arr, val);
 		}
 
-		op = uc_get_op(state, op->tree.next);
+		off = OP_NEXT(off);
 	}
 
 	return arr;
@@ -993,12 +986,12 @@ static struct json_object *
 uc_execute_object(struct uc_state *state, uint32_t off)
 {
 	struct json_object *ex, *v, *obj = uc_new_object(NULL);
-	struct uc_op *key;
+	uint32_t key_off;
 	char *istr;
 	size_t i;
 
-	for (key = uc_get_child(state, off, 0); key; key = uc_get_op(state, key->tree.next)) {
-		v = uc_execute_op_sequence(state, key->tree.operand[0]);
+	for (key_off = OPn(off, 0); key_off != 0; key_off = OP_NEXT(key_off)) {
+		v = uc_execute_op_sequence(state, OPn(key_off, 0));
 
 		if (uc_is_type(v, T_EXCEPTION)) {
 			json_object_put(obj);
@@ -1006,7 +999,7 @@ uc_execute_object(struct uc_state *state, uint32_t off)
 			return v;
 		}
 
-		if (key->type == T_ELLIP) {
+		if (OP_TYPE(key_off) == T_ELLIP) {
 			switch (json_object_get_type(v)) {
 			case json_type_object:
 				; /* a label can only be part of a statement and a declaration is not a statement */
@@ -1029,7 +1022,8 @@ uc_execute_object(struct uc_state *state, uint32_t off)
 				break;
 
 			default:
-				ex = uc_new_exception(state, key->off, "Type error: (%s) is not iterable",
+				ex = uc_new_exception(state, OP_POS(key_off),
+				                      "Type error: (%s) is not iterable",
 				                      json_object_get_string(v));
 
 				json_object_put(obj);
@@ -1039,7 +1033,7 @@ uc_execute_object(struct uc_state *state, uint32_t off)
 			}
 		}
 		else {
-			json_object_object_add(obj, json_object_get_string(key->val), v);
+			json_object_object_add(obj, json_object_get_string(OP_VAL(key_off)), v);
 		}
 	}
 
@@ -1050,7 +1044,7 @@ struct json_object *
 uc_invoke(struct uc_state *state, uint32_t off, struct json_object *this,
           struct json_object *func, struct json_object *argvals)
 {
-	struct uc_op *op, *tag = json_object_get_userdata(func);
+	struct uc_op *tag = json_object_get_userdata(func);
 	struct json_object *arr, *rv = NULL;
 	struct uc_callstack callstack = {};
 	struct uc_function *fn, *prev_fn;
@@ -1062,14 +1056,12 @@ uc_invoke(struct uc_state *state, uint32_t off, struct json_object *this,
 	if (!tag)
 		return NULL;
 
-	op = uc_get_op(state, off);
-
 	if (state->calldepth >= 1000)
-		return uc_new_exception(state, op->off, "Runtime error: Too much recursion");
+		return uc_new_exception(state, OP_POS(off), "Runtime error: Too much recursion");
 
 	callstack.next = state->callstack;
 	callstack.function = state->function;
-	callstack.off = op ? op->off : 0;
+	callstack.off = OP_POS(off);
 
 	if (tag->is_arrow)
 		callstack.ctx = state->callstack ? json_object_get(state->callstack->ctx) : NULL;
@@ -1128,7 +1120,7 @@ uc_invoke(struct uc_state *state, uint32_t off, struct json_object *this,
 		case T_BREAK:
 		case T_CONTINUE:
 			json_object_put(rv);
-			rv = uc_new_exception(state, uc_get_off(state, tag),
+			rv = uc_new_exception(state, tag->off,
 			                      "Syntax error: %s statement must be inside loop",
 			                      uc_get_tokenname(tag->type));
 			break;
@@ -1160,19 +1152,19 @@ uc_invoke(struct uc_state *state, uint32_t off, struct json_object *this,
 static struct json_object *
 uc_execute_call(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *decl, *op = uc_get_op(state, off);
-	struct uc_op *op1 = uc_get_child(state, off, 0);
 	struct json_object *v[2], *rv;
+	struct uc_op *decl;
 	char *lhs;
 
-	uc_get_operands(state, op, v);
+	uc_get_operands(state, off, v);
 
 	decl = json_object_get_userdata(v[0]);
 
 	if (!decl || (decl->type != T_FUNC && decl->type != T_CFUNC)) {
-		lhs = uc_ref_to_str(state, uc_get_off(state, op1));
+		lhs = uc_ref_to_str(state, OPn(off, 0));
 
-		rv = uc_new_exception(state, op1->off, "Type error: %s is not a function",
+		rv = uc_new_exception(state, OPn_POS(off, 0),
+		                      "Type error: %s is not a function",
 		                      lhs ? lhs : "left-hand side expression");
 
 		free(lhs);
@@ -1224,8 +1216,7 @@ uc_write_str(struct json_object *v)
 static struct json_object *
 uc_execute_exp(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
-	struct json_object *val = uc_execute_op_sequence(state, op ? op->tree.operand[0] : 0);
+	struct json_object *val = uc_execute_op_sequence(state, OPn(off, 0));
 	struct uc_op *tag = val ? json_object_get_userdata(val) : NULL;
 
 	switch (tag ? tag->type : 0) {
@@ -1246,14 +1237,13 @@ uc_execute_exp(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_unary_plus_minus(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
-	struct uc_op *op1 = uc_get_child(state, off, 0);
+	bool is_sub = (OP_TYPE(off) == T_SUB);
 	struct json_object *v[1];
 	enum json_type t;
 	int64_t n;
 	double d;
 
-	uc_get_operands(state, op, v);
+	uc_get_operands(state, off, v);
 
 	t = uc_cast_number(v[0], &n, &d);
 
@@ -1261,20 +1251,20 @@ uc_execute_unary_plus_minus(struct uc_state *state, uint32_t off)
 
 	switch (t) {
 	case json_type_int:
-		if (op1->is_overflow)
-			return xjs_new_int64(((n >= 0) == (op->type == T_SUB)) ? INT64_MIN : INT64_MAX);
+		if (OPn_IS_OVERFLOW(off, 0))
+			return xjs_new_int64(((n >= 0) == is_sub) ? INT64_MIN : INT64_MAX);
 
-		return xjs_new_int64((op->type == T_SUB) ? -n : n);
+		return xjs_new_int64(is_sub ? -n : n);
 
 	default:
-		return uc_new_double((op->type == T_SUB) ? -d : d);
+		return uc_new_double(is_sub ? -d : d);
 	}
 }
 
 static struct json_object *
 uc_execute_arith(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
+	int type = OP_TYPE(off);
 	struct json_object *v[2], *rv;
 	enum json_type t1, t2;
 	const char *s1, *s2;
@@ -1283,12 +1273,12 @@ uc_execute_arith(struct uc_state *state, uint32_t off)
 	double d1, d2;
 	char *s;
 
-	if (!op->tree.operand[1])
+	if (!OPn(off, 1))
 		return uc_execute_unary_plus_minus(state, off);
 
-	uc_get_operands(state, op, v);
+	uc_get_operands(state, off, v);
 
-	if (op->type == T_ADD &&
+	if (type == T_ADD &&
 	    (json_object_is_type(v[0], json_type_string) ||
 	     json_object_is_type(v[1], json_type_string))) {
 		s1 = v[0] ? json_object_get_string(v[0]) : "null";
@@ -1318,7 +1308,7 @@ uc_execute_arith(struct uc_state *state, uint32_t off)
 		d1 = (t1 == json_type_double) ? d1 : (double)n1;
 		d2 = (t2 == json_type_double) ? d2 : (double)n2;
 
-		switch (op->type) {
+		switch (type) {
 		case T_ADD:
 			return uc_new_double(d1 + d2);
 
@@ -1343,7 +1333,7 @@ uc_execute_arith(struct uc_state *state, uint32_t off)
 		}
 	}
 
-	switch (op->type) {
+	switch (type) {
 	case T_ADD:
 		return xjs_new_int64(n1 + n2);
 
@@ -1369,12 +1359,11 @@ uc_execute_arith(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_bitop(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
 	struct json_object *v[2];
 	int64_t n1, n2;
 	double d;
 
-	uc_get_operands(state, op, v);
+	uc_get_operands(state, off, v);
 
 	if (uc_cast_number(v[0], &n1, &d) == json_type_double)
 		n1 = isnan(d) ? 0 : (int64_t)d;
@@ -1385,7 +1374,7 @@ uc_execute_bitop(struct uc_state *state, uint32_t off)
 	json_object_put(v[0]);
 	json_object_put(v[1]);
 
-	switch (op->type) {
+	switch (OP_TYPE(off)) {
 	case T_LSHIFT:
 		return xjs_new_int64(n1 << n2);
 
@@ -1409,20 +1398,17 @@ uc_execute_bitop(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_not(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
-
-	return xjs_new_boolean(!uc_test_condition(state, op ? op->tree.operand[0] : 0));
+	return xjs_new_boolean(!uc_test_condition(state, OPn(off, 0)));
 }
 
 static struct json_object *
 uc_execute_compl(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
 	struct json_object *v[1];
 	int64_t n;
 	double d;
 
-	uc_get_operands(state, op, v);
+	uc_get_operands(state, off, v);
 
 	if (uc_cast_number(v[0], &n, &d) == json_type_double)
 		n = isnan(d) ? 0 : (int64_t)d;
@@ -1432,20 +1418,29 @@ uc_execute_compl(struct uc_state *state, uint32_t off)
 	return xjs_new_int64(~n);
 }
 
+static void
+uc_free_tag(struct json_object *v, void *ud)
+{
+	free(ud);
+}
+
 static struct json_object *
 uc_execute_return(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
+	struct uc_op *cpy = xalloc(sizeof(*cpy));
 	struct json_object *v[1], *rv;
 
-	uc_get_operands(state, op, v);
+	memcpy(cpy, OP(off), sizeof(*cpy));
+	cpy->off = off;
+
+	uc_get_operands(state, off, v);
 
 	json_object_put(state->rval);
 	state->rval = v[0];
 
 	rv = xjs_new_boolean(false);
 
-	json_object_set_userdata(rv, op, NULL);
+	json_object_set_userdata(rv, cpy, uc_free_tag);
 
 	return rv;
 }
@@ -1453,10 +1448,13 @@ uc_execute_return(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_break_cont(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
+	struct uc_op *cpy = xalloc(sizeof(*cpy));
 	struct json_object *rv = xjs_new_int64(0);
 
-	json_object_set_userdata(rv, op, NULL);
+	memcpy(cpy, OP(off), sizeof(*cpy));
+	cpy->off = off;
+
+	json_object_set_userdata(rv, cpy, uc_free_tag);
 
 	return rv;
 }
@@ -1464,12 +1462,11 @@ uc_execute_break_cont(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_function(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
-	struct uc_op *op1 = uc_get_child(state, off, 0);
-	struct json_object *obj = uc_new_func(state, op, state->scope);
+	struct json_object *obj = uc_new_func(state, off, state->scope);
+	struct json_object *val = OPn_VAL(off, 0);
 
-	if (op1)
-		uc_setval(state->scope->scope, op1->val, obj);
+	if (val)
+		uc_setval(state->scope->scope, val, obj);
 
 	return obj;
 }
@@ -1483,19 +1480,21 @@ uc_execute_this(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_try_catch(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *tag, *op = uc_get_op(state, off);
-	struct json_object *rv;
+	struct json_object *evar, *rv;
+	struct uc_op *tag;
 
-	rv = uc_execute_op_sequence(state, op->tree.operand[0]);
+	rv = uc_execute_op_sequence(state, OPn(off, 0));
 
 	if (uc_is_type(rv, T_EXCEPTION)) {
-		if (op->tree.operand[1]) {
+		evar = OPn_VAL(off, 1);
+
+		if (evar) {
 			/* remove the T_EXCEPTION type from the object to avoid handling
 			 * it as a new exception in the catch block */
 			tag = json_object_get_userdata(rv);
 			tag->type = T_LBRACE;
 
-			json_object_put(uc_setval(state->scope->scope, uc_get_child(state, off, 1)->val,
+			json_object_put(uc_setval(state->scope->scope, evar,
 			                json_object_get(rv)));
 		}
 
@@ -1503,16 +1502,16 @@ uc_execute_try_catch(struct uc_state *state, uint32_t off)
 		state->exception = NULL;
 
 		json_object_put(rv);
-		rv = uc_execute_op_sequence(state, op->tree.operand[2]);
+		rv = uc_execute_op_sequence(state, OPn(off, 2));
 	}
 
 	return rv;
 }
 
 static bool
-uc_match_case(struct uc_state *state, struct json_object *v, struct uc_op *Case)
+uc_match_case(struct uc_state *state, struct json_object *v, uint32_t case_off)
 {
-	struct json_object *caseval = uc_execute_op_sequence(state, Case->tree.operand[0]);
+	struct json_object *caseval = uc_execute_op_sequence(state, OPn(case_off, 0));
 	bool rv = uc_eq(v, caseval);
 
 	json_object_put(caseval);
@@ -1522,48 +1521,41 @@ uc_match_case(struct uc_state *state, struct json_object *v, struct uc_op *Case)
 static struct json_object *
 uc_execute_switch_case(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *Default = NULL, *Case = NULL, *jmp = NULL;
-	struct uc_op *op = uc_get_op(state, off);
+	uint32_t case_off, default_off = 0, jmp_off = 0;
 	struct json_object *v[1], *rv = NULL;
 
-	uc_get_operands(state, op, v);
+	uc_get_operands(state, off, v);
 
 	/* First try to find matching case... */
-	for (Case = uc_get_child(state, off, 1);
-	     Case != NULL;
-	     Case = uc_get_op(state, Case->tree.next))
-	{
+	for (case_off = OPn(off, 1); case_off != 0; case_off = OP_NEXT(case_off)) {
 		/* remember default case and throw on dupes */
-		if (Case->type == T_DEFAULT) {
-			if (Default) {
+		if (OP_TYPE(case_off) == T_DEFAULT) {
+			if (default_off) {
 				json_object_put(v[0]);
 
-				return uc_new_exception(state, Case->off,
+				return uc_new_exception(state, OP_POS(case_off),
 				                        "Syntax error: more than one switch default case");
 			}
 
-			Default = Case;
+			default_off = case_off;
 			continue;
 		}
 
 		/* Found a matching case, remember jump offset */
-		if (uc_match_case(state, v[0], Case)) {
-			jmp = Case;
+		if (uc_match_case(state, v[0], case_off)) {
+			jmp_off = case_off;
 			break;
 		}
 	}
 
 	/* jump to matching case (or default) and continue until break */
-	for (Case = jmp ? jmp : Default;
-	     Case != NULL;
-	     Case = uc_get_op(state, Case->tree.next))
-	{
+	for (case_off = jmp_off ? jmp_off : default_off; case_off != 0; case_off = OP_NEXT(case_off)) {
 		json_object_put(rv);
 
-		if (Case == Default)
-			rv = uc_execute_op_sequence(state, Default->tree.operand[0]);
+		if (OP_TYPE(case_off) == T_DEFAULT)
+			rv = uc_execute_op_sequence(state, OPn(case_off, 0));
 		else
-			rv = uc_execute_op_sequence(state, Case->tree.operand[1]);
+			rv = uc_execute_op_sequence(state, OPn(case_off, 1));
 
 		if (uc_is_type(rv, T_BREAK)) {
 			json_object_put(rv);
@@ -1583,13 +1575,13 @@ uc_execute_switch_case(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_atom(struct uc_state *state, uint32_t off)
 {
-	return json_object_get(uc_get_op(state, off)->val);
+	return json_object_get(OP_VAL(off));
 }
 
 static struct json_object *
 uc_execute_text(struct uc_state *state, uint32_t off)
 {
-	printf("%s", json_object_get_string(uc_get_op(state, off)->val));
+	printf("%s", json_object_get_string(OP_VAL(off)));
 
 	return NULL;
 }
@@ -1597,7 +1589,6 @@ uc_execute_text(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_label(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
 	struct json_object *scope, *key, *val;
 
 	scope = uc_getref(state, off, &key);
@@ -1606,9 +1597,9 @@ uc_execute_label(struct uc_state *state, uint32_t off)
 	state->ctx = NULL;
 
 	if (state->strict_declarations && scope == NULL) {
-		return uc_new_exception(state, op->off,
+		return uc_new_exception(state, OP_POS(off),
 		                        "Reference error: %s is not defined",
-		                        json_object_get_string(op->val));
+		                        json_object_get_string(OP_VAL(off)));
 	}
 
 	val = uc_getval(scope, key);
@@ -1641,21 +1632,17 @@ uc_execute_dot(struct uc_state *state, uint32_t off)
 static struct json_object *
 uc_execute_lbrack(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
-
 	/* postfix access */
-	if (op->is_postfix)
+	if (OP_IS_POSTFIX(off))
 		return uc_execute_dot(state, off);
 
-	return uc_execute_list(state, op->tree.operand[0]);
+	return uc_execute_list(state, OPn(off, 0));
 }
 
 static struct json_object *
 uc_execute_exp_list(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
-
-	return uc_execute_op_sequence(state, op->tree.operand[0]);
+	return uc_execute_op_sequence(state, OPn(off, 0));
 }
 
 static struct json_object *(*fns[__T_MAX])(struct uc_state *, uint32_t) = {
@@ -1718,12 +1705,13 @@ static struct json_object *(*fns[__T_MAX])(struct uc_state *, uint32_t) = {
 static struct json_object *
 uc_execute_op(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(state, off);
+	int type = OP_TYPE(off);
 
-	if (!fns[op->type])
-		return uc_new_exception(state, op->off, "Runtime error: Unrecognized opcode %d", op->type);
+	if (!fns[type])
+		return uc_new_exception(state, OP_POS(off),
+		                        "Runtime error: Unrecognized opcode %d", type);
 
-	return fns[op->type](state, off);
+	return fns[type](state, off);
 }
 
 static struct json_object *
@@ -1731,7 +1719,6 @@ uc_execute_op_sequence(struct uc_state *state, uint32_t off)
 {
 	struct json_object *v = NULL;
 	struct uc_op *tag = NULL;
-	struct uc_op *op = NULL;
 
 	while (off) {
 		json_object_put(v);
@@ -1747,8 +1734,7 @@ uc_execute_op_sequence(struct uc_state *state, uint32_t off)
 			return v;
 		}
 
-		op = uc_get_op(state, off);
-		off = op ? op->tree.next : 0;
+		off = OP_NEXT(off);
 	}
 
 	return v;

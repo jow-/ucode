@@ -154,33 +154,30 @@ struct uc_extended_type {
 	void (*free)(void *);
 };
 
-static inline struct uc_op *uc_get_op(struct uc_state *s, uint32_t off)
-{
-	if (off == 0 || off > s->poolsize)
-		return NULL;
-
-	return &s->pool[off - 1];
-}
-
-static inline struct uc_op *uc_get_child(struct uc_state *s, uint32_t off, int n)
-{
-	struct uc_op *op = uc_get_op(s, off);
-
-	if (!op || n >= ARRAY_SIZE(op->tree.operand) || !op->tree.operand[n])
-		return NULL;
-
-	return uc_get_op(s, op->tree.operand[n]);
-}
-
-static inline uint32_t uc_get_off(struct uc_state *s, struct uc_op *op) {
-	return op ? (op - s->pool + 1) : 0;
-};
-
 static inline bool uc_is_type(struct json_object *val, int type) {
 	struct uc_op *tag = json_object_get_userdata(val);
 
 	return (tag && tag->type == type);
 };
+
+#define OP(idx) (&state->pool[idx])
+#define OP_POS(idx) OP(idx)->off
+#define OP_VAL(idx) OP(idx)->val
+#define OP_TYPE(idx) OP(idx)->type
+#define OP_NEXT(idx) OP(idx)->tree.next
+#define OP_IS_LIST(idx) OP(idx)->is_list
+#define OP_IS_ELLIP(idx) OP(idx)->is_ellip
+#define OP_IS_FOR_IN(idx) OP(idx)->is_for_in
+#define OP_IS_POSTFIX(idx) OP(idx)->is_postfix
+
+#define OPn_NUM ARRAY_SIZE(((struct uc_op *)NULL)->tree.operand)
+#define OPn(idx, n) OP(idx)->tree.operand[n]
+#define OPn_POS(idx, n) OP(OPn(idx, n))->off
+#define OPn_VAL(idx, n) OP(OPn(idx, n))->val
+#define OPn_TYPE(idx, n) OP(OPn(idx, n))->type
+#define OPn_IS_LIST(idx, n) OP(OPn(idx, n))->is_list
+#define OPn_IS_OVERFLOW(idx, n) OP(OPn(idx, n))->is_overflow
+
 
 
 uint32_t uc_new_op(struct uc_state *s, int type, struct json_object *val, ...);
@@ -189,7 +186,7 @@ uint32_t uc_append_op(struct uc_state *s, uint32_t a, uint32_t b);
 struct json_object *uc_parse(struct uc_state *s, FILE *fp);
 void uc_free(struct uc_state *s);
 
-struct json_object *uc_new_func(struct uc_state *s, struct uc_op *decl, struct uc_scope *scope);
+struct json_object *uc_new_func(struct uc_state *s, uint32_t decl, struct uc_scope *scope);
 struct json_object *uc_new_object(struct json_object *proto);
 struct json_object *uc_new_double(double v);
 struct json_object *uc_new_null(void);

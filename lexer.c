@@ -221,12 +221,11 @@ utf8enc(char **out, int *rem, int code)
 /* length of the longest token in our lookup table */
 #define UT_LEX_MAX_TOKEN_LEN 3
 
-static uint32_t emit_op(struct uc_state *s, uint32_t pos, int type, struct json_object *val)
+static uint32_t emit_op(struct uc_state *state, uint32_t pos, int type, struct json_object *val)
 {
-	uint32_t off = uc_new_op(s, type, val, UINT32_MAX);
-	struct uc_op *op = uc_get_op(s, off);
+	uint32_t off = uc_new_op(state, type, val, UINT32_MAX);
 
-	op->off = pos;
+	OP(off)->off = pos;
 
 	/* Follow JSLint logic and treat a slash after any of the
 	 * `(,=:[!&|?{};` characters as the beginning of a regex
@@ -272,11 +271,11 @@ static uint32_t emit_op(struct uc_state *s, uint32_t pos, int type, struct json_
 	case T_LEXP:
 
 	case T_SCOL:
-		s->lex.expect_div = false;
+		state->lex.expect_div = false;
 		break;
 
 	default:
-		s->lex.expect_div = true;
+		state->lex.expect_div = true;
 	}
 
 	return off;
@@ -616,62 +615,62 @@ enum {
 };
 
 static uint32_t
-parse_regexp(struct uc_state *s)
+parse_regexp(struct uc_state *state)
 {
 	struct json_object *pattern;
 	struct uc_op *op;
 	uint32_t rv;
 	char *err;
 
-	switch (s->lex.esc[0]) {
+	switch (state->lex.esc[0]) {
 	case UT_LEX_PARSE_REGEX_INIT:
-		if (s->lex.expect_div) {
-			s->lex.expect_div = false;
+		if (state->lex.expect_div) {
+			state->lex.expect_div = false;
 
-			if (buf_startswith(s, "=")) {
-				buf_consume(s, 1);
+			if (buf_startswith(state, "=")) {
+				buf_consume(state, 1);
 
-				return emit_op(s, s->source->off, T_ASDIV, NULL);
+				return emit_op(state, state->source->off, T_ASDIV, NULL);
 			}
 
-			return emit_op(s, s->source->off, T_DIV, NULL);
+			return emit_op(state, state->source->off, T_DIV, NULL);
 		}
 
-		s->lex.esc[0] = UT_LEX_PARSE_REGEX_PATTERN;
+		state->lex.esc[0] = UT_LEX_PARSE_REGEX_PATTERN;
 		break;
 
 	case UT_LEX_PARSE_REGEX_PATTERN:
-		rv = parse_string(s);
+		rv = parse_string(state);
 
 		if (rv != 0 && rv != UINT32_MAX) {
-			s->lex.lookbehind = (char *)uc_get_op(s, rv);
-			s->lex.esc[0] = UT_LEX_PARSE_REGEX_FLAGS;
+			state->lex.lookbehind = (char *)OP(rv);
+			state->lex.esc[0] = UT_LEX_PARSE_REGEX_FLAGS;
 		}
 
 		break;
 
 	case UT_LEX_PARSE_REGEX_FLAGS:
-		op = (struct uc_op *)s->lex.lookbehind;
+		op = (struct uc_op *)state->lex.lookbehind;
 
-		while (s->lex.bufstart < s->lex.bufend) {
-			switch (s->lex.bufstart[0]) {
+		while (state->lex.bufstart < state->lex.bufend) {
+			switch (state->lex.bufstart[0]) {
 			case 'g':
-				buf_consume(s, 1);
+				buf_consume(state, 1);
 				op->is_reg_global = true;
 				break;
 
 			case 'i':
-				buf_consume(s, 1);
+				buf_consume(state, 1);
 				op->is_reg_icase = true;
 				break;
 
 			case 's':
-				buf_consume(s, 1);
+				buf_consume(state, 1);
 				op->is_reg_newline = true;
 				break;
 
 			default:
-				s->lex.lookbehind = NULL;
+				state->lex.lookbehind = NULL;
 
 				pattern = uc_new_regexp(json_object_get_string(op->val),
 				                        op->is_reg_icase,
@@ -685,13 +684,13 @@ parse_regexp(struct uc_state *s)
 				op->val = pattern;
 
 				if (!pattern) {
-					uc_new_exception(s, op->off, "Syntax error: %s", err);
+					uc_new_exception(state, op->off, "Syntax error: %s", err);
 					free(err);
 
 					return 0;
 				}
 
-				return uc_get_off(s, op);
+				return op - state->pool;
 			}
 		}
 
@@ -781,46 +780,46 @@ is_numeric_char(struct uc_state *s, char c)
 }
 
 static uint32_t
-parse_number(struct uc_state *s)
+parse_number(struct uc_state *state)
 {
 	uint32_t rv = 0;
 	long long int n;
 	char *ptr, *e;
 	double d;
 
-	if (!buf_remaining(s) || !is_numeric_char(s, s->lex.bufstart[0])) {
-		lookbehind_append(s, "\0", 1);
+	if (!buf_remaining(state) || !is_numeric_char(state, state->lex.bufstart[0])) {
+		lookbehind_append(state, "\0", 1);
 
-		n = strtoll(s->lex.lookbehind, &e, 0);
+		n = strtoll(state->lex.lookbehind, &e, 0);
 
 		if (*e == '.' || *e == 'e' || *e == 'E') {
-			d = strtod(s->lex.lookbehind, &e);
+			d = strtod(state->lex.lookbehind, &e);
 
-			if (e > s->lex.lookbehind && *e == 0)
-				rv = emit_op(s, s->source->off - (e - s->lex.lookbehind), T_DOUBLE, uc_new_double(d));
+			if (e > state->lex.lookbehind && *e == 0)
+				rv = emit_op(state, state->source->off - (e - state->lex.lookbehind), T_DOUBLE, uc_new_double(d));
 			else
-				uc_new_exception(s, s->source->off - (s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1),
+				uc_new_exception(state, state->source->off - (state->lex.lookbehindlen - (e - state->lex.lookbehind) - 1),
 				                 "Syntax error: Invalid number literal");
 		}
 		else if (*e == 0) {
-			rv = emit_op(s, s->source->off - (e - s->lex.lookbehind), T_NUMBER, xjs_new_int64(n));
-			uc_get_op(s, rv)->is_overflow = (errno == ERANGE);
+			rv = emit_op(state, state->source->off - (e - state->lex.lookbehind), T_NUMBER, xjs_new_int64(n));
+			OP(rv)->is_overflow = (errno == ERANGE);
 		}
 		else {
-			uc_new_exception(s, s->source->off - (s->lex.lookbehindlen - (e - s->lex.lookbehind) - 1),
+			uc_new_exception(state, state->source->off - (state->lex.lookbehindlen - (e - state->lex.lookbehind) - 1),
 			                 "Syntax error: Invalid number literal");
 		}
 
-		lookbehind_reset(s);
+		lookbehind_reset(state);
 
 		return rv;
 	}
 
-	for (ptr = s->lex.bufstart; ptr < s->lex.bufend && is_numeric_char(s, *ptr); ptr++)
+	for (ptr = state->lex.bufstart; ptr < state->lex.bufend && is_numeric_char(state, *ptr); ptr++)
 		;
 
-	lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
-	buf_consume(s, ptr - s->lex.bufstart);
+	lookbehind_append(state, state->lex.bufstart, ptr - state->lex.bufstart);
+	buf_consume(state, ptr - state->lex.bufstart);
 
 	return 0;
 }

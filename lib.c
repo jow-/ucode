@@ -186,9 +186,8 @@ format_error_context(char **msg, size_t *msglen, struct uc_source *src, struct j
 }
 
 struct json_object *
-uc_parse_error(struct uc_state *s, uint32_t off, uint64_t *tokens, int max_token)
+uc_parse_error(struct uc_state *state, uint32_t off, uint64_t *tokens, int max_token)
 {
-	struct uc_op *op = uc_get_op(s, off);
 	struct json_object *rv;
 	size_t msglen = 0;
 	bool first = true;
@@ -210,8 +209,8 @@ uc_parse_error(struct uc_state *s, uint32_t off, uint64_t *tokens, int max_token
 		}
 	}
 
-	rv = uc_new_exception(s,
-	                      op ? op->off : s->lex.lastoff,
+	rv = uc_new_exception(state,
+	                      off ? OP_POS(off) : state->lex.lastoff,
 	                      "Syntax error: Unexpected token\n%s", msg);
 	free(msg);
 
@@ -1574,10 +1573,9 @@ uc_printf(struct uc_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-uc_require_so(struct uc_state *s, uint32_t off, const char *path)
+uc_require_so(struct uc_state *state, uint32_t off, const char *path)
 {
 	void (*init)(const struct uc_ops *, struct uc_state *, struct json_object *);
-	struct uc_op *op = uc_get_op(s, off);
 	struct uc_function fn = {}, *prev_fn;
 	struct uc_source *src, *prev_src;
 	struct json_object *scope;
@@ -1591,32 +1589,34 @@ uc_require_so(struct uc_state *s, uint32_t off, const char *path)
 	dlh = dlopen(path, RTLD_LAZY|RTLD_LOCAL);
 
 	if (!dlh)
-		return uc_new_exception(s, op->off, "Unable to dlopen file %s: %s", path, dlerror());
+		return uc_new_exception(state, OP_POS(off),
+		                        "Unable to dlopen file %s: %s", path, dlerror());
 
 	init = dlsym(dlh, "uc_module_init");
 
 	if (!init)
-		return uc_new_exception(s, op->off, "Module %s provides no 'uc_module_init' function", path);
+		return uc_new_exception(state, OP_POS(off),
+		                        "Module %s provides no 'uc_module_init' function", path);
 
 	src = xalloc(sizeof(*src));
 	src->filename = xstrdup(path);
-	src->next = s->sources;
+	src->next = state->sources;
 
 	fn.name = "require";
 	fn.source = src;
 
-	prev_fn = s->function;
-	s->function = &fn;
+	prev_fn = state->function;
+	state->function = &fn;
 
-	prev_src = s->source;
-	s->source = s->sources = src;
+	prev_src = state->source;
+	state->source = state->sources = src;
 
 	scope = xjs_new_object();
 
-	init(&ut, s, scope);
+	init(&ut, state, scope);
 
-	s->source = prev_src;
-	s->function = prev_fn;
+	state->source = prev_src;
+	state->function = prev_fn;
 
 	return scope;
 }
@@ -1629,7 +1629,7 @@ uc_execute_source(struct uc_state *s, struct uc_source *src, struct uc_scope *sc
 	rv = uc_parse(s, src->fp);
 
 	if (!uc_is_type(rv, T_EXCEPTION)) {
-		entry = uc_new_func(s, uc_get_op(s, s->main), scope ? scope : s->scope);
+		entry = uc_new_func(s, s->main, scope ? scope : s->scope);
 
 		json_object_put(rv);
 		rv = uc_invoke(s, s->main, NULL, entry, NULL);
@@ -1641,9 +1641,8 @@ uc_execute_source(struct uc_state *s, struct uc_source *src, struct uc_scope *sc
 }
 
 static struct json_object *
-uc_require_utpl(struct uc_state *s, uint32_t off, const char *path, struct uc_scope *scope)
+uc_require_utpl(struct uc_state *state, uint32_t off, const char *path, struct uc_scope *scope)
 {
-	struct uc_op *op = uc_get_op(s, off);
 	struct uc_function fn = {}, *prev_fn;
 	struct uc_source *src, *prev_src;
 	struct json_object *rv;
@@ -1656,26 +1655,27 @@ uc_require_utpl(struct uc_state *s, uint32_t off, const char *path, struct uc_sc
 	fp = fopen(path, "rb");
 
 	if (!fp)
-		return uc_new_exception(s, op->off, "Unable to open file %s: %s", path, strerror(errno));
+		return uc_new_exception(state, OP_POS(off),
+		                        "Unable to open file %s: %s", path, strerror(errno));
 
 	src = xalloc(sizeof(*src));
 	src->fp = fp;
 	src->filename = path ? xstrdup(path) : NULL;
-	src->next = s->sources;
+	src->next = state->sources;
 
-	prev_src = s->source;
-	s->source = s->sources = src;
+	prev_src = state->source;
+	state->source = state->sources = src;
 
 	fn.name = "require";
 	fn.source = src;
 
-	prev_fn = s->function;
-	s->function = &fn;
+	prev_fn = state->function;
+	state->function = &fn;
 
-	rv = uc_execute_source(s, src, scope);
+	rv = uc_execute_source(state, src, scope);
 
-	s->function = prev_fn;
-	s->source = prev_src;
+	state->function = prev_fn;
+	state->source = prev_src;
 
 	return rv;
 }
@@ -1722,11 +1722,10 @@ invalid:
 }
 
 static struct json_object *
-uc_require(struct uc_state *s, uint32_t off, struct json_object *args)
+uc_require(struct uc_state *state, uint32_t off, struct json_object *args)
 {
 	struct json_object *val = json_object_array_get_idx(args, 0);
 	struct json_object *search, *se, *res;
-	struct uc_op *op = uc_get_op(s, off);
 	struct uc_scope *sc, *scparent;
 	size_t arridx, arrlen;
 	const char *name;
@@ -1735,7 +1734,7 @@ uc_require(struct uc_state *s, uint32_t off, struct json_object *args)
 		return NULL;
 
 	/* find root scope */
-	for (sc = s->scope; sc; ) {
+	for (sc = state->scope; sc; ) {
 		scparent = uc_parent_scope(sc);
 
 		if (!scparent)
@@ -1748,7 +1747,7 @@ uc_require(struct uc_state *s, uint32_t off, struct json_object *args)
 	search = sc ? json_object_object_get(sc->scope, "REQUIRE_SEARCH_PATH") : NULL;
 
 	if (!json_object_is_type(search, json_type_array))
-		return uc_new_exception(s, op ? op->off : 0,
+		return uc_new_exception(state, off ? OP_POS(off) : 0,
 		                        "Global require search path not set");
 
 	for (arridx = 0, arrlen = json_object_array_length(search); arridx < arrlen; arridx++) {
@@ -1757,13 +1756,13 @@ uc_require(struct uc_state *s, uint32_t off, struct json_object *args)
 		if (!json_object_is_type(se, json_type_string))
 			continue;
 
-		res = uc_require_path(s, off, json_object_get_string(se), name);
+		res = uc_require_path(state, off, json_object_get_string(se), name);
 
 		if (res)
 			return res;
 	}
 
-	return uc_new_exception(s, op ? op->off : 0,
+	return uc_new_exception(state, off ? OP_POS(off) : 0,
 	                        "No module named '%s' could be found", name);
 }
 
@@ -2103,17 +2102,17 @@ uc_replace(struct uc_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-uc_json(struct uc_state *s, uint32_t off, struct json_object *args)
+uc_json(struct uc_state *state, uint32_t off, struct json_object *args)
 {
 	struct json_object *rv, *src = json_object_array_get_idx(args, 0);
-	struct uc_op *op = uc_get_op(s, off);
 	struct json_tokener *tok = NULL;
 	enum json_tokener_error err;
 	const char *str;
 	size_t len;
 
 	if (!json_object_is_type(src, json_type_string))
-		return uc_new_exception(s, op->off, "Passed value is not a string");
+		return uc_new_exception(state, OP_POS(off),
+		                        "Passed value is not a string");
 
 	tok = xjs_new_tokener();
 	str = json_object_get_string(src);
@@ -2124,16 +2123,19 @@ uc_json(struct uc_state *s, uint32_t off, struct json_object *args)
 
 	if (err == json_tokener_continue) {
 		json_object_put(rv);
-		rv = uc_new_exception(s, op->off, "Unexpected end of string in JSON data");
+		rv = uc_new_exception(state, OP_POS(off),
+		                      "Unexpected end of string in JSON data");
 	}
 	else if (err != json_tokener_success) {
 		json_object_put(rv);
-		rv = uc_new_exception(s, op->off, "Failed to parse JSON string: %s",
-		                  json_tokener_error_desc(err));
+		rv = uc_new_exception(state, OP_POS(off),
+		                      "Failed to parse JSON string: %s",
+		                      json_tokener_error_desc(err));
 	}
 	else if (json_tokener_get_parse_end(tok) < len) {
 		json_object_put(rv);
-		rv = uc_new_exception(s, op->off, "Trailing garbage after JSON data");
+		rv = uc_new_exception(state, OP_POS(off),
+		                      "Trailing garbage after JSON data");
 	}
 
 	json_tokener_free(tok);
@@ -2175,36 +2177,38 @@ include_path(const char *curpath, const char *incpath)
 }
 
 static struct json_object *
-uc_include(struct uc_state *s, uint32_t off, struct json_object *args)
+uc_include(struct uc_state *state, uint32_t off, struct json_object *args)
 {
 	struct json_object *rv, *path = json_object_array_get_idx(args, 0);
 	struct json_object *scope = json_object_array_get_idx(args, 1);
-	struct uc_op *op = uc_get_op(s, off);
 	struct uc_scope *sc;
 	char *p;
 
 	if (!json_object_is_type(path, json_type_string))
-		return uc_new_exception(s, op->off, "Passed filename is not a string");
+		return uc_new_exception(state, OP_POS(off),
+		                        "Passed filename is not a string");
 
 	if (scope && !json_object_is_type(scope, json_type_object))
-		return uc_new_exception(s, op->off, "Passed scope value is not an object");
+		return uc_new_exception(state, OP_POS(off),
+		                        "Passed scope value is not an object");
 
-	p = include_path(s->callstack->function->source->filename, json_object_get_string(path));
+	p = include_path(state->callstack->function->source->filename, json_object_get_string(path));
 
 	if (!p)
-		return uc_new_exception(s, op->off, "Include file not found");
+		return uc_new_exception(state, OP_POS(off),
+		                        "Include file not found");
 
 	if (scope) {
-		sc = uc_new_scope(s, NULL);
+		sc = uc_new_scope(state, NULL);
 
 		json_object_object_foreach(scope, key, val)
 			json_object_object_add(sc->scope, key, json_object_get(val));
 	}
 	else {
-		sc = s->scope;
+		sc = state->scope;
 	}
 
-	rv = uc_require_utpl(s, off, p, sc);
+	rv = uc_require_utpl(state, off, p, sc);
 
 	free(p);
 
@@ -2226,11 +2230,10 @@ uc_warn(struct uc_state *s, uint32_t off, struct json_object *args)
 }
 
 static struct json_object *
-uc_system(struct uc_state *s, uint32_t off, struct json_object *args)
+uc_system(struct uc_state *state, uint32_t off, struct json_object *args)
 {
 	struct json_object *cmdline = json_object_array_get_idx(args, 0);
 	struct json_object *timeout = json_object_array_get_idx(args, 1);
-	struct uc_op *op = uc_get_op(s, off);
 	sigset_t sigmask, sigomask;
 	const char **arglist, *fn;
 	struct timespec ts;
@@ -2259,11 +2262,13 @@ uc_system(struct uc_state *s, uint32_t off, struct json_object *args)
 		break;
 
 	default:
-		return uc_new_exception(s, op->off, "Passed command is neither string nor array");
+		return uc_new_exception(state, OP_POS(off),
+		                        "Passed command is neither string nor array");
 	}
 
 	if (timeout && (!json_object_is_type(timeout, json_type_int) || json_object_get_int64(timeout) < 0))
-		return uc_new_exception(s, op->off, "Invalid timeout specified");
+		return uc_new_exception(state, OP_POS(off),
+		                        "Invalid timeout specified");
 
 	tms = timeout ? json_object_get_int64(timeout) : 0;
 
@@ -2334,7 +2339,8 @@ fail:
 	sigprocmask(SIG_SETMASK, &sigomask, NULL);
 	free(arglist);
 
-	return uc_new_exception(s, op->off, "%s(): %s", fn, strerror(errno));
+	return uc_new_exception(state, OP_POS(off),
+	                        "%s(): %s", fn, strerror(errno));
 }
 
 const struct uc_ops ut = {

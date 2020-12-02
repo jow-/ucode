@@ -15,7 +15,7 @@
  */
 
 %token_type {uint32_t}
-%extra_argument {struct uc_state *s}
+%extra_argument {struct uc_state *state}
 
 %nonassoc T_LEXP T_REXP T_LSTM T_RSTM.
 
@@ -59,55 +59,53 @@
 #define YYNOERRORRECOVERY
 
 #define new_op(type, val, ...) \
-	uc_new_op(s, type, val, ##__VA_ARGS__, UINT32_MAX)
+	uc_new_op(state, type, val, ##__VA_ARGS__, UINT32_MAX)
 
 #define wrap_op(op, ...) \
-	uc_wrap_op(s, op, ##__VA_ARGS__, UINT32_MAX)
+	uc_wrap_op(state, op, ##__VA_ARGS__, UINT32_MAX)
 
 #define append_op(op1, op2) \
-	uc_append_op(s, op1, op2)
+	uc_append_op(state, op1, op2)
 
 #define no_empty_obj(op) \
-	uc_no_empty_obj(s, op)
+	uc_no_empty_obj(state, op)
 
 static inline uint32_t
-uc_no_empty_obj(struct uc_state *s, uint32_t off)
+uc_no_empty_obj(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(s, off);
-
-	return (!op || op->type != T_LBRACE || op->tree.operand[0]) ? off : 0;
+	return (OP_TYPE(off) != T_LBRACE || OPn(off, 0)) ? off : 0;
 }
 
 static inline uint32_t
-uc_add_else(struct uc_state *s, uint32_t off, uint32_t add)
+uc_add_else(struct uc_state *state, uint32_t off, uint32_t add)
 {
-	struct uc_op *tail = uc_get_op(s, off);
+	uint32_t tail_off = off;
 
-	while (tail && tail->tree.operand[2])
-		tail = uc_get_op(s, tail->tree.operand[2]);
+	while (OPn(tail_off, 2))
+		tail_off = OPn(tail_off, 2);
 
-	tail->tree.operand[2] = add;
+	OPn(tail_off, 2) = add;
 
 	return off;
 }
 
 static inline uint32_t
-uc_expect_token(struct uc_state *s, uint32_t off, int token)
+uc_expect_token(struct uc_state *state, uint32_t off, int token)
 {
 	uint64_t tokens[(__T_MAX + 63) & -64] = {};
 
 	tokens[token / 64] |= ((uint64_t)1 << (token % 64));
-	uc_parse_error(s, off, tokens, token);
+	uc_parse_error(state, off, tokens, token);
 
 	return 0;
 }
 
 static inline uint32_t
-_uc_check_op_seq_types(struct uc_state *s, uint32_t off, ...)
+_uc_check_op_seq_types(struct uc_state *state, uint32_t off, ...)
 {
 	uint64_t tokens[(__T_MAX + 63) & -64] = {};
-	struct uc_op *arg = uc_get_op(s, off);
-	int token, max_token = 0;
+	int type, token, max_token = 0;
+	uint32_t arg_off;
 	va_list ap;
 
 	va_start(ap, off);
@@ -119,28 +117,27 @@ _uc_check_op_seq_types(struct uc_state *s, uint32_t off, ...)
 
 	va_end(ap);
 
-	while (arg) {
-		if (!(tokens[arg->type / 64] & ((uint64_t)1 << (arg->type % 64)))) {
-			uc_parse_error(s, off, tokens, max_token);
+	for (arg_off = off; arg_off != 0; arg_off = OP_NEXT(arg_off)) {
+		type = OP_TYPE(arg_off);
+
+		if (!(tokens[type / 64] & ((uint64_t)1 << (type % 64)))) {
+			uc_parse_error(state, off, tokens, max_token);
 
 			return 0;
 		}
-
-		arg = uc_get_op(s, arg->tree.next);
 	}
 
 	return off;
 }
 
-#define uc_check_op_seq_types(s, off, ...) _uc_check_op_seq_types(s, off, __VA_ARGS__, 0)
+#define uc_check_op_seq_types(state, off, ...) _uc_check_op_seq_types(state, off, __VA_ARGS__, 0)
 
 static inline uint32_t
-uc_reject_local(struct uc_state *s, uint32_t off)
+uc_reject_local(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(s, off);
-
-	if (op->type == T_LOCAL) {
-		uc_new_exception(s, op->off, "Syntax error: Unexpected token\nDeclaration not allowed in this context");
+	if (OP_TYPE(off) == T_LOCAL) {
+		uc_new_exception(state, OP_POS(off),
+		                 "Syntax error: Unexpected token\nDeclaration not allowed in this context");
 
 		return 0;
 	}
@@ -149,45 +146,43 @@ uc_reject_local(struct uc_state *s, uint32_t off)
 }
 
 static inline uint32_t
-uc_check_for_in(struct uc_state *s, uint32_t off)
+uc_check_for_in(struct uc_state *state, uint32_t off)
 {
-	struct uc_op *op = uc_get_op(s, off);
-	struct uc_op *arg;
-	uint32_t idx = 0;
+	uint32_t arg_off, idx = 0;
 
-	arg = (op->type == T_LOCAL) ? uc_get_op(s, op->tree.operand[0]) : op;
+	arg_off = (OP_TYPE(off) == T_LOCAL) ? OPn(off, 0) : off;
 
-	if (arg->type == T_LABEL) {
-		idx = uc_get_off(s, arg);
+	if (OP_TYPE(arg_off) == T_LABEL) {
+		idx = arg_off;
 
-		if (!arg->tree.next) {
-			uc_new_exception(s, arg->off + json_object_get_string_len(arg->val),
+		if (!OP_NEXT(arg_off)) {
+			uc_new_exception(state, OP_POS(arg_off) + json_object_get_string_len(OP_VAL(arg_off)),
 			                 "Syntax error: Unexpected token\nExpecting ',' or 'in'");
 
 			return 0;
 		}
 
-		arg = uc_get_op(s, arg->tree.next);
+		arg_off = OP_NEXT(arg_off);
 	}
 
-	if (arg->type != T_IN || arg->tree.next || uc_get_op(s, arg->tree.operand[0])->type != T_LABEL) {
-		if (arg->type == T_IN && arg->tree.next)
-			arg = uc_get_op(s, arg->tree.next);
+	if (OP_TYPE(arg_off) != T_IN || OP_NEXT(arg_off) || OPn_TYPE(arg_off, 0) != T_LABEL) {
+		if (OP_TYPE(arg_off) == T_IN && OP_NEXT(arg_off))
+			arg_off = OP_NEXT(arg_off);
 
-		uc_new_exception(s, arg->off, "Syntax error: Invalid for-in expression");
+		uc_new_exception(state, OP_POS(arg_off), "Syntax error: Invalid for-in expression");
 
 		return 0;
 	}
 
 	/* transform T_LABEL->T_IN(T_LABEL, ...) into T_IN(T_LABEL->T_LABEL, ...) */
 	if (idx) {
-		uc_get_op(s, idx)->tree.next = 0;
-		arg->tree.operand[0] = append_op(idx, arg->tree.operand[0]);
+		OP_NEXT(idx) = 0;
+		OPn(arg_off, 0) = append_op(idx, OPn(arg_off, 0));
 
-		if (op->type == T_LOCAL)
-			op->tree.operand[0] = uc_get_off(s, arg);
+		if (OP_TYPE(off) == T_LOCAL)
+			OPn(off, 0) = arg_off;
 		else
-			off = uc_get_off(s, arg);
+			off = arg_off;
 	}
 
 	return off;
@@ -206,12 +201,12 @@ uc_check_for_in(struct uc_state *s, uint32_t off)
 		}
 	}
 
-	uc_parse_error(s, TOKEN, tokens, max_token);
+	uc_parse_error(state, TOKEN, tokens, max_token);
 }
 
 
-input ::= chunks(A).									{ s->main = new_op(T_FUNC, NULL, 0, 0, A); }
-input ::= .												{ s->main = new_op(T_TEXT, xjs_new_string("")); s->main = new_op(T_FUNC, NULL, 0, 0, s->main); }
+input ::= chunks(A).									{ state->main = new_op(T_FUNC, NULL, 0, 0, A); }
+input ::= .												{ state->main = new_op(T_TEXT, xjs_new_string("")); state->main = new_op(T_FUNC, NULL, 0, 0, state->main); }
 
 chunks(A) ::= chunks(B) T_TEXT(C).						{ A = B ? append_op(B, C) : C; }
 chunks(A) ::= chunks(B) tplexp(C).						{ A = B ? append_op(B, C) : C; }
@@ -249,13 +244,13 @@ sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN stmt(D) T_ELSE stmt(E).
 sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN stmt(D). [T_IF]
 														{ A = wrap_op(B, C, no_empty_obj(D)); }
 sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D) sel_elifs(E) T_ELSE chunks(F) T_ENDIF.
-														{ A = uc_add_else(s, wrap_op(B, C, D, E), F); }
+														{ A = uc_add_else(state, wrap_op(B, C, D, E), F); }
 sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D) T_ELSE chunks(E) T_ENDIF.
 														{ A = wrap_op(B, C, D, E); }
 sel_stmt(A) ::= T_IF(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D) T_ENDIF. [T_IF]
 														{ A = wrap_op(B, C, D); }
 
-sel_elifs(A) ::= sel_elifs(B) sel_elif(C).				{ A = uc_add_else(s, B, C); }
+sel_elifs(A) ::= sel_elifs(B) sel_elif(C).				{ A = uc_add_else(state, B, C); }
 sel_elifs(A) ::= sel_elif(B).							{ A = B; }
 
 sel_elif(A) ::= T_ELIF(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D).
@@ -266,9 +261,9 @@ iter_stmt(A) ::= T_WHILE(B) T_LPAREN exp(C) T_RPAREN stmt(D).
 iter_stmt(A) ::= T_WHILE(B) T_LPAREN exp(C) T_RPAREN T_COLON chunks(D) T_ENDWHILE.
 														{ A = wrap_op(B, C, D); }
 iter_stmt(A) ::= T_FOR(B) paren_exp(C) stmt(D).
-														{ A = wrap_op(B, uc_check_for_in(s, C), NULL, NULL, no_empty_obj(D)); uc_get_op(s, A)->is_for_in = 1; }
+														{ A = wrap_op(B, uc_check_for_in(state, C), NULL, NULL, no_empty_obj(D)); OP(A)->is_for_in = 1; }
 iter_stmt(A) ::= T_FOR(B) paren_exp(C) T_COLON chunks(D) T_ENDFOR.
-														{ A = wrap_op(B, uc_check_for_in(s, C), NULL, NULL, no_empty_obj(D)); uc_get_op(s, A)->is_for_in = 1; }
+														{ A = wrap_op(B, uc_check_for_in(state, C), NULL, NULL, no_empty_obj(D)); OP(A)->is_for_in = 1; }
 iter_stmt(A) ::= T_FOR(B) T_LPAREN decl_or_exp(C) exp_stmt(D) T_RPAREN stmt(E).
 														{ A = wrap_op(B, C, D, NULL, no_empty_obj(E)); }
 iter_stmt(A) ::= T_FOR(B) T_LPAREN decl_or_exp(C) exp_stmt(D) exp(E) T_RPAREN stmt(F).
@@ -311,8 +306,8 @@ switch_case(A) ::= T_CASE(B) exp(C) T_COLON stmts(D).	{ A = wrap_op(B, C, D); }
 switch_case(A) ::= T_CASE(B) exp(C) T_COLON.			{ A = wrap_op(B, C); }
 switch_case(A) ::= T_DEFAULT(B) T_COLON stmts(C).		{ A = wrap_op(B, C); }
 
-args(A) ::= sargs(B) T_COMMA T_ELLIP T_LABEL(C).		{ A = append_op(B, C); uc_get_op(s, C)->is_ellip = 1; }
-args(A) ::= T_ELLIP T_LABEL(B).							{ A = B; uc_get_op(s, B)->is_ellip = 1; }
+args(A) ::= sargs(B) T_COMMA T_ELLIP T_LABEL(C).		{ A = append_op(B, C); OP(C)->is_ellip = 1; }
+args(A) ::= T_ELLIP T_LABEL(B).							{ A = B; OP(B)->is_ellip = 1; }
 args(A) ::= sargs(B).									{ A = B; }
 
 sargs(A) ::= sargs(B) T_COMMA T_LABEL(C).				{ A = append_op(B, C); }
@@ -327,7 +322,7 @@ ret_stmt(A) ::= T_RETURN(B) T_SCOL.						{ A = B; }
 break_stmt(A) ::= T_BREAK(B) T_SCOL.					{ A = B; }
 break_stmt(A) ::= T_CONTINUE(B) T_SCOL.					{ A = B; }
 
-decl_stmt(A) ::= T_LOCAL(B) decls(C) T_SCOL.			{ A = wrap_op(B, uc_check_op_seq_types(s, C, T_ASSIGN, T_LABEL)); }
+decl_stmt(A) ::= T_LOCAL(B) decls(C) T_SCOL.			{ A = wrap_op(B, uc_check_op_seq_types(state, C, T_ASSIGN, T_LABEL)); }
 
 decls(A) ::= decls(B) T_COMMA decl(C).					{ A = append_op(B, C); }
 decls(A) ::= decl(B).									{ A = B; }
@@ -358,13 +353,13 @@ assign_exp(A) ::= unary_exp(B) T_ASBOR arrow_exp(C).	{ A = new_op(T_BOR, NULL, B
 assign_exp(A) ::= arrow_exp(B).							{ A = B; }
 
 arrow_exp(A) ::= unary_exp(B) T_ARROW(C) arrowfn_body(D).
-														{ A = wrap_op(C, 0, uc_check_op_seq_types(s, B, T_LABEL), D); }
+														{ A = wrap_op(C, 0, uc_check_op_seq_types(state, B, T_LABEL), D); }
 arrow_exp(A) ::= T_LPAREN T_RPAREN T_ARROW(C) arrowfn_body(D).
 														{ A = wrap_op(C, 0, 0, D); }
 arrow_exp(A) ::= T_LPAREN T_ELLIP T_LABEL(B) T_RPAREN T_ARROW(C) arrowfn_body(D).
-														{ A = wrap_op(C, 0, B, D); uc_get_op(s, B)->is_ellip = 1; }
+														{ A = wrap_op(C, 0, B, D); OP(B)->is_ellip = 1; }
 arrow_exp(A) ::= T_LPAREN exp(B) T_COMMA T_ELLIP T_LABEL(C) T_RPAREN T_ARROW(D) arrowfn_body(E).
-														{ A = append_op(B, C); A = wrap_op(D, 0, uc_check_op_seq_types(s, A, T_LABEL), E); uc_get_op(s, C)->is_ellip = 1; }
+														{ A = append_op(B, C); A = wrap_op(D, 0, uc_check_op_seq_types(state, A, T_LABEL), E); OP(C)->is_ellip = 1; }
 arrow_exp(A) ::= ternary_exp(B).						{ A = B; }
 
 ternary_exp(A) ::= or_exp(B) T_QMARK(C) assign_exp(D) T_COLON ternary_exp(E).
@@ -420,14 +415,14 @@ unary_exp(A) ::= T_COMPL(B) unary_exp(C).				{ A = wrap_op(B, C); }
 unary_exp(A) ::= T_NOT(B) unary_exp(C).					{ A = wrap_op(B, C); }
 unary_exp(A) ::= postfix_exp(B).						{ A = B; }
 
-postfix_exp(A) ::= unary_exp(B) T_INC(C).				{ A = wrap_op(C, B); uc_get_op(s, A)->is_postfix = 1; }
-postfix_exp(A) ::= unary_exp(B) T_DEC(C).				{ A = wrap_op(C, B); uc_get_op(s, A)->is_postfix = 1; }
+postfix_exp(A) ::= unary_exp(B) T_INC(C).				{ A = wrap_op(C, B); OP(A)->is_postfix = 1; }
+postfix_exp(A) ::= unary_exp(B) T_DEC(C).				{ A = wrap_op(C, B); OP(A)->is_postfix = 1; }
 postfix_exp(A) ::= unary_exp(B) T_LPAREN(C) T_RPAREN.	{ A = wrap_op(C, B); }
 postfix_exp(A) ::= unary_exp(B) T_LPAREN(C) arg_exps(D) T_RPAREN.
 														{ A = wrap_op(C, B, D); }
 postfix_exp(A) ::= postfix_exp(B) T_DOT(C) T_LABEL(D).	{ A = wrap_op(C, B, D); }
 postfix_exp(A) ::= postfix_exp(B) T_LBRACK(C) exp(D) T_RBRACK.
-														{ A = wrap_op(C, B, D); uc_get_op(s, A)->is_postfix = 1; }
+														{ A = wrap_op(C, B, D); OP(A)->is_postfix = 1; }
 postfix_exp(A) ::= primary_exp(B).						{ A = B; }
 
 primary_exp(A) ::= T_BOOL(B).							{ A = B; }
@@ -440,7 +435,7 @@ primary_exp(A) ::= T_NULL(B).							{ A = B; }
 primary_exp(A) ::= T_THIS(B).							{ A = B; }
 primary_exp(A) ::= array(B).							{ A = B; }
 primary_exp(A) ::= object(B).							{ A = B; }
-primary_exp(A) ::= paren_exp(B).						{ A = uc_reject_local(s, B); }
+primary_exp(A) ::= paren_exp(B).						{ A = uc_reject_local(state, B); }
 primary_exp(A) ::= T_FUNC(B) T_LPAREN T_RPAREN empty_object.
 														{ A = B; }
 primary_exp(A) ::= T_FUNC(B) T_LPAREN args(C) T_RPAREN empty_object.
@@ -459,8 +454,8 @@ array(A) ::= T_LBRACK(B) items(C) T_RBRACK.				{ A = wrap_op(B, C); }
 items(A) ::= items(B) T_COMMA item(C).					{ A = append_op(B, C); }
 items(A) ::= item(B).									{ A = B; }
 
-item(A) ::= T_ELLIP assign_exp(B).						{ A = uc_get_op(s, B)->tree.next ? new_op(T_COMMA, NULL, B) : B; uc_get_op(s, A)->is_ellip = 1; }
-item(A) ::= assign_exp(B).								{ A = uc_get_op(s, B)->tree.next ? new_op(T_COMMA, NULL, B) : B; }
+item(A) ::= T_ELLIP assign_exp(B).						{ A = OP_NEXT(B) ? new_op(T_COMMA, NULL, B) : B; OP(A)->is_ellip = 1; }
+item(A) ::= assign_exp(B).								{ A = OP_NEXT(B) ? new_op(T_COMMA, NULL, B) : B; }
 
 object(A) ::= empty_object(B).							{ A = B; }
 object(A) ::= T_LBRACE(B) tuples(C) T_RBRACE.			{ A = wrap_op(B, C); }
@@ -474,8 +469,8 @@ tuple(A) ::= T_LABEL(B) T_COLON exp(C).					{ A = wrap_op(B, C); }
 tuple(A) ::= T_STRING(B) T_COLON exp(C).				{ A = wrap_op(B, C); }
 tuple(A) ::= T_ELLIP(B) assign_exp(C).					{ A = wrap_op(B, C); }
 
-arg_exps(A) ::= arg_exps(B) T_COMMA arg_exp(C).			{ A = append_op(B, C); uc_get_op(s, A)->is_list = 1; }
-arg_exps(A) ::= arg_exp(B).								{ A = B; uc_get_op(s, A)->is_list = 1; }
+arg_exps(A) ::= arg_exps(B) T_COMMA arg_exp(C).			{ A = append_op(B, C); OP(A)->is_list = 1; }
+arg_exps(A) ::= arg_exp(B).								{ A = B; OP(A)->is_list = 1; }
 
-arg_exp(A) ::= T_ELLIP assign_exp(B).					{ A = uc_get_op(s, B)->tree.next ? new_op(T_COMMA, NULL, B) : B; uc_get_op(s, A)->is_ellip = 1; }
-arg_exp(A) ::= assign_exp(B).							{ A = uc_get_op(s, B)->tree.next ? new_op(T_COMMA, NULL, B) : B; }
+arg_exp(A) ::= T_ELLIP assign_exp(B).					{ A = OP_NEXT(B) ? new_op(T_COMMA, NULL, B) : B; OP(A)->is_ellip = 1; }
+arg_exp(A) ::= assign_exp(B).							{ A = OP_NEXT(B) ? new_op(T_COMMA, NULL, B) : B; }

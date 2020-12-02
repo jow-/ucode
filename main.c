@@ -53,30 +53,30 @@ print_usage(char *app)
 }
 
 #ifndef NDEBUG
-static void dump(struct uc_state *s, uint32_t off, int level);
+static void dump(struct uc_state *state, uint32_t off, int level);
 
-static void dump_node(struct uc_op *op) {
+static void dump_node(struct uc_state *state, uint32_t off) {
 	const char *p;
 
-	switch (op->type) {
+	switch (OP_TYPE(off)) {
 	case T_NUMBER:
-		printf("n%p [label=\"%"PRId64"\"];\n", op, json_object_get_int64(op->val));
+		printf("n%u [label=\"%"PRId64"\"];\n", off, json_object_get_int64(OP_VAL(off)));
 		break;
 
 	case T_DOUBLE:
-		printf("n%p [label=\"%f\"];\n", op, json_object_get_double(op->val));
+		printf("n%u [label=\"%f\"];\n", off, json_object_get_double(OP_VAL(off)));
 		break;
 
 	case T_BOOL:
-		printf("n%p [label=\"%s\"];\n", op, json_object_get_boolean(op->val) ? "true" : "false");
+		printf("n%u [label=\"%s\"];\n", off, json_object_get_boolean(OP_VAL(off)) ? "true" : "false");
 		break;
 
 	case T_STRING:
 	case T_LABEL:
 	case T_TEXT:
-		printf("n%p [label=\"%s<", op, uc_get_tokenname(op->type));
+		printf("n%u [label=\"%s<", off, uc_get_tokenname(OP_TYPE(off)));
 
-		for (p = json_object_get_string(op->val); *p; p++)
+		for (p = json_object_get_string(OP_VAL(off)); *p; p++)
 			switch (*p) {
 			case '\n':
 				printf("\\\n");
@@ -98,43 +98,43 @@ static void dump_node(struct uc_op *op) {
 		break;
 
 	default:
-		printf("n%p [label=\"%s", op, uc_get_tokenname(op->type));
+		printf("n%u [label=\"%s", off, uc_get_tokenname(OP_TYPE(off)));
 
-		if (op->is_postfix)
+		if (OP_IS_POSTFIX(off))
 			printf(", postfix");
 
 		printf("\"];\n");
 	}
 }
 
-static void dump(struct uc_state *s, uint32_t off, int level) {
-	struct uc_op *prev, *cur, *child;
+static void dump(struct uc_state *state, uint32_t off, int level) {
+	uint32_t prev_off, cur_off, child_off;
 	int i;
 
 	if (level == 0) {
 		printf("digraph G {\nmain [shape=box];\n");
 	}
 
-	for (prev = NULL, cur = uc_get_op(s, off); cur; prev = cur, cur = uc_get_op(s, cur->tree.next)) {
-		dump_node(cur);
+	for (prev_off = 0, cur_off = off; cur_off != 0; prev_off = cur_off, cur_off = OP_NEXT(cur_off)) {
+		dump_node(state, cur_off);
 
-		if (cur->type < __T_MAX) {
-			for (i = 0; i < ARRAY_SIZE(cur->tree.operand); i++) {
-				child = uc_get_op(s, cur->tree.operand[i]);
+		if (OP_TYPE(cur_off) < __T_MAX) {
+			for (i = 0; i < OPn_NUM; i++) {
+				child_off = OPn(cur_off, i);
 
-				if (cur->tree.operand[i]) {
-					dump(s, cur->tree.operand[i], level + 1);
-					printf("n%p -> n%p [label=\"op%d\"];\n", cur, child, i + 1);
+				if (child_off) {
+					dump(state, child_off, level + 1);
+					printf("n%u -> n%u [label=\"op%d\"];\n", cur_off, child_off, i + 1);
 				}
 			}
 		}
 
-		if (prev)
-			printf("n%p -> n%p [style=dotted];\n", prev, cur);
+		if (prev_off)
+			printf("n%u -> n%u [style=dotted];\n", prev_off, cur_off);
 	}
 
 	if (level == 0) {
-		printf("main -> n%p [style=dotted];\n", uc_get_op(s, off));
+		printf("main -> n%u [style=dotted];\n", off);
 
 		printf("}\n");
 	}
@@ -275,6 +275,9 @@ main(int argc, char **argv)
 	state = xalloc(sizeof(*state));
 	state->lstrip_blocks = 1;
 	state->trim_blocks = 1;
+
+	/* reserve opcode slot 0 */
+	uc_new_op(state, 0, NULL, UINT32_MAX);
 
 	while ((opt = getopt(argc, argv, "dhlrSe:E:i:s:m:")) != -1)
 	{
