@@ -204,7 +204,7 @@ uc_ubus_list(struct uc_state *s, uint32_t off, struct json_object *args)
 {
 	struct ubus_connection **c = (struct ubus_connection **)ops->get_type(s->ctx, "ubus.connection");
 	struct json_object *objname = json_object_array_get_idx(args, 0);
-	struct json_object *res;
+	struct json_object *res = NULL;
 	enum ubus_msg_status rv;
 
 	if (!c || !*c || !(*c)->ctx)
@@ -244,7 +244,7 @@ uc_ubus_call(struct uc_state *s, uint32_t off, struct json_object *args)
 	struct json_object *objname = json_object_array_get_idx(args, 0);
 	struct json_object *funname = json_object_array_get_idx(args, 1);
 	struct json_object *funargs = json_object_array_get_idx(args, 2);
-	struct json_object *res;
+	struct json_object *res = NULL;
 	enum ubus_msg_status rv;
 	uint32_t id;
 
