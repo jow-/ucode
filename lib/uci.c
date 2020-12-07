@@ -733,6 +733,9 @@ uc_uci_pkg_command(struct uc_state *s, uint32_t off, struct json_object *args, e
 			ptr.p = p;
 			rv = uci_revert(*c, &ptr);
 			break;
+
+		default:
+			rv = UCI_ERR_INVAL;
 		}
 
 		if (rv != UCI_OK)
