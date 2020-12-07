@@ -1050,7 +1050,9 @@ uc_invoke(struct uc_state *state, uint32_t off, struct json_object *this,
 	struct uc_function *fn, *prev_fn;
 	size_t arridx, arglen;
 	struct uc_scope *sc;
+	uint32_t tag_off;
 	uc_c_fn *fptr;
+	int tag_type;
 	bool rest;
 
 	if (!tag)
@@ -1115,14 +1117,16 @@ uc_invoke(struct uc_state *state, uint32_t off, struct json_object *this,
 
 		rv = uc_execute_op_sequence(state, fn->entry);
 		tag = json_object_get_userdata(rv);
+		tag_off = tag ? tag->off : 0;
+		tag_type = tag ? tag->type : 0;
 
-		switch (tag ? tag->type : 0) {
+		switch (tag_type) {
 		case T_BREAK:
 		case T_CONTINUE:
 			json_object_put(rv);
-			rv = uc_new_exception(state, tag->off,
+			rv = uc_new_exception(state, OP_POS(tag_off),
 			                      "Syntax error: %s statement must be inside loop",
-			                      uc_get_tokenname(tag->type));
+			                      uc_get_tokenname(tag_type));
 			break;
 
 		case T_RETURN:
