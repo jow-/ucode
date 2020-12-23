@@ -29,3 +29,110 @@ After exceptions.
 	print("After exceptions.\n");
 %}
 -- End --
+
+
+Ensure that exceptions are propagated through C function calls.
+
+-- Expect stderr --
+exception
+In [anonymous function](), line 3, byte 18:
+  called from function replace ([C])
+  called from anonymous function ([stdin]:4:3)
+
+ `        die("exception");`
+  Near here -------------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	replace("test", "t", function(m) {
+		die("exception");
+	});
+%}
+-- End --
+
+
+Ensure that exception can be catched through C function calls.
+
+-- Expect stdout --
+Caught exception: exception
+-- End --
+
+-- Testcase --
+{%
+	try {
+		replace("test", "t", function(m) {
+			die("exception");
+		});
+	}
+	catch (e) {
+		print("Caught exception: ", e, "\n");
+	}
+%}
+-- End --
+
+
+Ensure that exceptions are propagated through user function calls.
+
+-- Expect stderr --
+exception
+In a(), line 3, byte 18:
+  called from function b ([stdin]:7:5)
+  called from function c ([stdin]:11:5)
+  called from anonymous function ([stdin]:14:4)
+
+ `        die("exception");`
+  Near here -------------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	function a() {
+		die("exception");
+	}
+
+	function b() {
+		a();
+	}
+
+	function c() {
+		b();
+	}
+
+	c();
+%}
+-- End --
+
+
+Ensure that exceptions can be caught in parent functions.
+
+-- Expect stdout --
+Caught exception: exception
+-- End --
+
+-- Testcase --
+{%
+	function a() {
+		die("exception");
+	}
+
+	function b() {
+		a();
+	}
+
+	function c() {
+		try {
+			b();
+		}
+		catch (e) {
+			print("Caught exception: ", e, "\n");
+		}
+	}
+
+	c();
+%}
+-- End --

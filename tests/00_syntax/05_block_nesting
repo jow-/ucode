@@ -8,6 +8,13 @@ In line 2, byte 61:
   Near here --------------------------------------------------^
 
 
+Syntax error: Template blocks may not be nested
+In line 3, byte 61:
+
+ `We may not nest expression blocks into statement blocks: {% {{ 1 + 2 }} %}.`
+  Near here --------------------------------------------------^
+
+
 -- End --
 
 -- Testcase --

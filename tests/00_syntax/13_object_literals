@@ -48,6 +48,7 @@ either JSON or JavaScript notation.
 	print(another_obj, "\n");
 	print(third_obj, "\n");
 	print(nested_obj, "\n");
+%}
 -- End --
 
 

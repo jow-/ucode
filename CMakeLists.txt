@@ -32,23 +32,7 @@ IF(JSONC_FOUND)
   INCLUDE_DIRECTORIES(${JSONC_INCLUDE_DIRS})
 ENDIF()
 
-ADD_CUSTOM_COMMAND(
-  OUTPUT contrib/lemon
-  DEPENDS contrib/lemon.c contrib/lempar.c
-  COMMAND gcc -o contrib/lemon contrib/lemon.c
-  COMMENT "Generating lemon parser generator"
-)
-
-ADD_CUSTOM_COMMAND(
-  OUTPUT parser.c
-  DEPENDS parser.y contrib/lemon
-  COMMAND ./contrib/lemon parser.y
-  COMMENT "Generating parser.c"
-)
-
-SET_PROPERTY(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "lemon;parser.h;parser.out")
-SET_SOURCE_FILES_PROPERTIES("parser.c" PROPERTIES GENERATED TRUE COMPILE_FLAGS -Wno-error=unused-but-set-variable)
-ADD_EXECUTABLE(ucode main.c ast.c lexer.c parser.c eval.c lib.c)
+ADD_EXECUTABLE(ucode main.c lexer.c lib.c vm.c chunk.c value.c object.c compiler.c source.c)
 TARGET_LINK_LIBRARIES(ucode ${json})
 
 CHECK_FUNCTION_EXISTS(dlopen DLOPEN_FUNCTION_EXISTS)

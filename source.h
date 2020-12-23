@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Jo-Philipp Wich <jo@mein.io>
+ * Copyright (C) 2021 Jo-Philipp Wich <jo@mein.io>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,29 +14,31 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __MATCHER_H_
-#define __MATCHER_H_
+#ifndef __SOURCE_H_
+#define __SOURCE_H_
 
-#include <string.h>
-#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
 #include <stdio.h>
-#include <regex.h>
 
-#include "ast.h"
+#include "util.h"
 
-bool
-uc_cmp(int how, struct json_object *v1, struct json_object *v2);
 
-bool
-uc_val_is_truish(struct json_object *val);
+uc_declare_vector(uc_lineinfo, uint8_t);
 
-enum json_type
-uc_cast_number(struct json_object *v, int64_t *n, double *d);
+typedef struct {
+	char *filename, *buffer;
+	FILE *fp;
+	size_t usecount, off;
+	uc_lineinfo lineinfo;
+} uc_source;
 
-struct json_object *
-uc_invoke(struct uc_state *, uint32_t, struct json_object *, struct json_object *, struct json_object *);
+uc_source *uc_source_new_file(const char *path);
+uc_source *uc_source_new_buffer(const char *name, char *buf, size_t len);
 
-struct json_object *
-uc_run(struct uc_state *state, struct json_object *env, struct json_object *modules);
+size_t uc_source_get_line(uc_source *source, size_t *offset);
 
-#endif
+uc_source *uc_source_get(uc_source *source);
+void uc_source_put(uc_source *source);
+
+#endif /* __SOURCE_H_ */

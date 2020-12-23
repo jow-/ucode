@@ -218,11 +218,12 @@ Ensure that for-in loop expressions with more than two variables are
 rejected.
 
 -- Expect stderr --
-Syntax error: Invalid for-in expression
-In line 2, byte 14:
+Syntax error: Unexpected token
+Expecting ';'
+In line 2, byte 24:
 
  `    for (let x, y, z in {})`
-  Near here ------^
+  Near here ----------------^
 
 
 -- End --
@@ -238,11 +239,12 @@ In line 2, byte 14:
 Ensure that assignments in for-in loop expressions are rejected.
 
 -- Expect stderr --
-Syntax error: Invalid for-in expression
-In line 2, byte 13:
+Syntax error: Unexpected token
+Expecting ';'
+In line 2, byte 25:
 
  `    for (let x = 1, y in {})`
-  Near here -----^
+  Near here -----------------^
 
 
 -- End --
@@ -259,7 +261,7 @@ Ensure that too short for-in loop expressions are rejected (1/2).
 
 -- Expect stderr --
 Syntax error: Unexpected token
-Expecting ',' or 'in'
+Expecting ';'
 In line 2, byte 12:
 
  `    for (let x)`
@@ -279,11 +281,12 @@ In line 2, byte 12:
 Ensure that too short for-in loop expressions are rejected (2/2).
 
 -- Expect stderr --
-Syntax error: Invalid for-in expression
-In line 2, byte 14:
+Syntax error: Unexpected token
+Expecting ';'
+In line 2, byte 15:
 
  `    for (let x, y)`
-  Near here ------^
+  Near here -------^
 
 
 -- End --
