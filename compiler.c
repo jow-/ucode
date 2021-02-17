@@ -1620,10 +1620,12 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 
 	/* parse initializer values */
 	do {
-		if (uc_compiler_parse_check(compiler, TK_RBRACE)) {
+		/* End of object literal */
+		if (uc_compiler_parse_check(compiler, TK_RBRACE))
 			break;
-		}
-		else if (uc_compiler_parse_match(compiler, TK_ELLIP)) {
+
+		/* Spread operator */
+		if (uc_compiler_parse_match(compiler, TK_ELLIP)) {
 			/* set items on stack so far... */
 			if (len > 0) {
 				uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_SOBJ);
@@ -1636,7 +1638,24 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 
 			/* emit merge operation */
 			uc_compiler_emit_insn(compiler, 0, I_MOBJ);
+
+			continue;
 		}
+
+		/* Computed property name */
+		if (uc_compiler_parse_match(compiler, TK_LBRACK)) {
+			/* parse property name expression */
+			uc_compiler_parse_precedence(compiler, P_ASSIGN);
+
+			/* cosume closing bracket and colon */
+			uc_compiler_parse_consume(compiler, TK_RBRACK);
+			uc_compiler_parse_consume(compiler, TK_COLON);
+
+			/* parse value expression */
+			uc_compiler_parse_precedence(compiler, P_ASSIGN);
+		}
+
+		/* Property/value tuple or property shorthand */
 		else {
 			/* parse key expression */
 			if (!uc_compiler_parse_match(compiler, TK_LABEL) &&
@@ -1665,17 +1684,17 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 				/* parse value expression */
 				uc_compiler_parse_precedence(compiler, P_ASSIGN);
 			}
-
-			/* set items on stack so far... */
-			if (len >= 0xfffffffe) {
-				uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_SOBJ);
-				uc_compiler_emit_u32(compiler, 0, len);
-				len = 0;
-			}
-
-			hint_count += 2;
-			len += 2;
 		}
+
+		/* set items on stack so far... */
+		if (len >= 0xfffffffe) {
+			uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_SOBJ);
+			uc_compiler_emit_u32(compiler, 0, len);
+			len = 0;
+		}
+
+		hint_count += 2;
+		len += 2;
 	}
 	while (uc_compiler_parse_match(compiler, TK_COMMA));
 

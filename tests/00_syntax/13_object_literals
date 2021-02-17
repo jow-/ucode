@@ -127,3 +127,48 @@ In line 2, byte 14:
 	o = { "foo" };
 %}
 -- End --
+
+
+ES2015 computed property names are supported.
+
+-- Expect stdout --
+{ "test": true, "hello": false, "ABC": 123 }
+-- End --
+
+-- Testcase --
+{%
+	s = "test";
+	o = {
+		[s]: true,
+		["he" + "llo"]: false,
+		[uc("abc")]: 123
+	};
+
+	print(o, "\n");
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: Expecting expression
+In line 2, byte 10:
+
+ `    o1 = { []: true };`
+  Near here --^
+
+
+Syntax error: Unexpected token
+Expecting ']'
+In line 3, byte 14:
+
+ `    o2 = { [true, false]: 123 };`
+  Near here ------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	o1 = { []: true };
+	o2 = { [true, false]: 123 };
+%}
+-- End --
