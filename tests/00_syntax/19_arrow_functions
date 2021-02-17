@@ -108,11 +108,11 @@ subsequent testcase asserts that case.
 
 -- Expect stderr --
 Syntax error: Unexpected token
-Expecting Label
-In line 2, byte 5:
+Expecting ';'
+In line 2, byte 10:
 
  `    (a + 1) => { print("test\n") }`
-         ^-- Near here
+  Near here --^
 
 
 -- End --

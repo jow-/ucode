@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Jo-Philipp Wich <jo@mein.io>
+ * Copyright (C) 2020-2021 Jo-Philipp Wich <jo@mein.io>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,8 +14,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "../module.h"
-
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
@@ -25,16 +23,19 @@
 #include <sys/types.h>
 #include <sys/sysmacros.h>
 
+#include "../module.h"
+
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
-static const struct uc_ops *ops;
+//static const uc_ops *ops;
+static uc_ressource_type *file_type, *proc_type, *dir_type;
 
 static int last_error = 0;
 
-static struct json_object *
-uc_fs_error(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_error(uc_vm *vm, size_t nargs)
 {
-	struct json_object *errmsg;
+	json_object *errmsg;
 
 	if (last_error == 0)
 		return NULL;
@@ -45,17 +46,17 @@ uc_fs_error(struct uc_state *s, uint32_t off, struct json_object *args)
 	return errmsg;
 }
 
-static struct json_object *
-uc_fs_read_common(struct uc_state *s, uint32_t off, struct json_object *args, const char *type)
+static json_object *
+uc_fs_read_common(uc_vm *vm, size_t nargs, const char *type)
 {
-	struct json_object *limit = json_object_array_get_idx(args, 0);
-	struct json_object *rv = NULL;
+	json_object *limit = uc_get_arg(0);
+	json_object *rv = NULL;
 	char buf[128], *p = NULL, *tmp;
 	size_t rlen, len = 0;
 	const char *lstr;
 	int64_t lsize;
 
-	FILE **fp = (FILE **)ops->get_type(s->ctx, type);
+	FILE **fp = uc_get_self(type);
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -137,14 +138,14 @@ uc_fs_read_common(struct uc_state *s, uint32_t off, struct json_object *args, co
 	return rv;
 }
 
-static struct json_object *
-uc_fs_write_common(struct uc_state *s, uint32_t off, struct json_object *args, const char *type)
+static json_object *
+uc_fs_write_common(uc_vm *vm, size_t nargs, const char *type)
 {
-	struct json_object *data = json_object_array_get_idx(args, 0);
+	json_object *data = uc_get_arg(0);
 	size_t len, wsize;
 	const char *str;
 
-	FILE **fp = (FILE **)ops->get_type(s->ctx, type);
+	FILE **fp = uc_get_self(type);
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -167,10 +168,10 @@ uc_fs_write_common(struct uc_state *s, uint32_t off, struct json_object *args, c
 }
 
 
-static struct json_object *
-uc_fs_pclose(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_pclose(uc_vm *vm, size_t nargs)
 {
-	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.proc");
+	FILE **fp = uc_get_self("fs.proc");
 	int rc;
 
 	if (!fp || !*fp)
@@ -191,24 +192,23 @@ uc_fs_pclose(struct uc_state *s, uint32_t off, struct json_object *args)
 	return xjs_new_int64(0);
 }
 
-static struct json_object *
-uc_fs_pread(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_pread(uc_vm *vm, size_t nargs)
 {
-	return uc_fs_read_common(s, off, args, "fs.proc");
+	return uc_fs_read_common(vm, nargs, "fs.proc");
 }
 
-static struct json_object *
-uc_fs_pwrite(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_pwrite(uc_vm *vm, size_t nargs)
 {
-	return uc_fs_write_common(s, off, args, "fs.proc");
+	return uc_fs_write_common(vm, nargs, "fs.proc");
 }
 
-static struct json_object *
-uc_fs_popen(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_popen(uc_vm *vm, size_t nargs)
 {
-	struct json_object *comm = json_object_array_get_idx(args, 0);
-	struct json_object *mode = json_object_array_get_idx(args, 1);
-	struct json_object *fo;
+	json_object *comm = uc_get_arg(0);
+	json_object *mode = uc_get_arg(1);
 	FILE *fp;
 
 	if (!json_object_is_type(comm, json_type_string))
@@ -220,21 +220,14 @@ uc_fs_popen(struct uc_state *s, uint32_t off, struct json_object *args)
 	if (!fp)
 		err_return(errno);
 
-	fo = json_object_new_object();
-
-	if (!fo) {
-		pclose(fp);
-		err_return(ENOMEM);
-	}
-
-	return ops->set_type(fo, "fs.proc", fp);
+	return uc_alloc_ressource(proc_type, fp);
 }
 
 
-static struct json_object *
-uc_fs_close(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_close(uc_vm *vm, size_t nargs)
 {
-	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.file");
+	FILE **fp = uc_get_self("fs.file");
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -245,27 +238,27 @@ uc_fs_close(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_fs_read(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_read(uc_vm *vm, size_t nargs)
 {
-	return uc_fs_read_common(s, off, args, "fs.file");
+	return uc_fs_read_common(vm, nargs, "fs.file");
 }
 
-static struct json_object *
-uc_fs_write(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_write(uc_vm *vm, size_t nargs)
 {
-	return uc_fs_write_common(s, off, args, "fs.file");
+	return uc_fs_write_common(vm, nargs, "fs.file");
 }
 
-static struct json_object *
-uc_fs_seek(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_seek(uc_vm *vm, size_t nargs)
 {
-	struct json_object *ofs  = json_object_array_get_idx(args, 0);
-	struct json_object *how  = json_object_array_get_idx(args, 1);
+	json_object *ofs  = uc_get_arg(0);
+	json_object *how  = uc_get_arg(1);
 	int whence, res;
 	long offset;
 
-	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.file");
+	FILE **fp = uc_get_self("fs.file");
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -292,12 +285,12 @@ uc_fs_seek(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_fs_tell(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_tell(uc_vm *vm, size_t nargs)
 {
 	long offset;
 
-	FILE **fp = (FILE **)ops->get_type(s->ctx, "fs.file");
+	FILE **fp = uc_get_self("fs.file");
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -310,12 +303,11 @@ uc_fs_tell(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_int64(offset);
 }
 
-static struct json_object *
-uc_fs_open(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_open(uc_vm *vm, size_t nargs)
 {
-	struct json_object *path = json_object_array_get_idx(args, 0);
-	struct json_object *mode = json_object_array_get_idx(args, 1);
-	struct json_object *fo;
+	json_object *path = uc_get_arg(0);
+	json_object *mode = uc_get_arg(1);
 	FILE *fp;
 
 	if (!json_object_is_type(path, json_type_string))
@@ -327,21 +319,14 @@ uc_fs_open(struct uc_state *s, uint32_t off, struct json_object *args)
 	if (!fp)
 		err_return(errno);
 
-	fo = json_object_new_object();
-
-	if (!fo) {
-		fclose(fp);
-		err_return(ENOMEM);
-	}
-
-	return ops->set_type(fo, "fs.file", fp);
+	return uc_alloc_ressource(file_type, fp);
 }
 
 
-static struct json_object *
-uc_fs_readdir(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_readdir(uc_vm *vm, size_t nargs)
 {
-	DIR **dp = (DIR **)ops->get_type(s->ctx, "fs.dir");
+	DIR **dp = uc_get_self("fs.dir");
 	struct dirent *e;
 
 	if (!dp || !*dp)
@@ -356,10 +341,10 @@ uc_fs_readdir(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_string(e->d_name);
 }
 
-static struct json_object *
-uc_fs_telldir(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_telldir(uc_vm *vm, size_t nargs)
 {
-	DIR **dp = (DIR **)ops->get_type(s->ctx, "fs.dir");
+	DIR **dp = uc_get_self("fs.dir");
 	long position;
 
 	if (!dp || !*dp)
@@ -373,11 +358,11 @@ uc_fs_telldir(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_int64((int64_t)position);
 }
 
-static struct json_object *
-uc_fs_seekdir(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_seekdir(uc_vm *vm, size_t nargs)
 {
-	struct json_object *ofs = json_object_array_get_idx(args, 0);
-	DIR **dp = (DIR **)ops->get_type(s->ctx, "fs.dir");
+	json_object *ofs = uc_get_arg(0);
+	DIR **dp = uc_get_self("fs.dir");
 	long position;
 
 	if (!json_object_is_type(ofs, json_type_int))
@@ -393,10 +378,10 @@ uc_fs_seekdir(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_fs_closedir(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_closedir(uc_vm *vm, size_t nargs)
 {
-	DIR **dp = (DIR **)ops->get_type(s->ctx, "fs.dir");
+	DIR **dp = uc_get_self("fs.dir");
 
 	if (!dp || !*dp)
 		err_return(EBADF);
@@ -407,11 +392,10 @@ uc_fs_closedir(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_fs_opendir(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_opendir(uc_vm *vm, size_t nargs)
 {
-	struct json_object *path = json_object_array_get_idx(args, 0);
-	struct json_object *diro;
+	json_object *path = uc_get_arg(0);
 	DIR *dp;
 
 	if (!json_object_is_type(path, json_type_string))
@@ -422,21 +406,14 @@ uc_fs_opendir(struct uc_state *s, uint32_t off, struct json_object *args)
 	if (!dp)
 		err_return(errno);
 
-	diro = json_object_new_object();
-
-	if (!diro) {
-		closedir(dp);
-		err_return(ENOMEM);
-	}
-
-	return ops->set_type(diro, "fs.dir", dp);
+	return uc_alloc_ressource(dir_type, dp);
 }
 
-static struct json_object *
-uc_fs_readlink(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_readlink(uc_vm *vm, size_t nargs)
 {
-	struct json_object *path = json_object_array_get_idx(args, 0);
-	struct json_object *res;
+	json_object *path = uc_get_arg(0);
+	json_object *res;
 	ssize_t buflen = 0, rv;
 	char *buf = NULL, *tmp;
 
@@ -472,11 +449,11 @@ uc_fs_readlink(struct uc_state *s, uint32_t off, struct json_object *args)
 	return res;
 }
 
-static struct json_object *
-uc_fs_stat_common(struct uc_state *s, uint32_t off, struct json_object *args, bool use_lstat)
+static json_object *
+uc_fs_stat_common(uc_vm *vm, size_t nargs, bool use_lstat)
 {
-	struct json_object *path = json_object_array_get_idx(args, 0);
-	struct json_object *res, *o;
+	json_object *path = uc_get_arg(0);
+	json_object *res, *o;
 	struct stat st;
 	int rv;
 
@@ -556,23 +533,23 @@ uc_fs_stat_common(struct uc_state *s, uint32_t off, struct json_object *args, bo
 	return res;
 }
 
-static struct json_object *
-uc_fs_stat(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_stat(uc_vm *vm, size_t nargs)
 {
-	return uc_fs_stat_common(s, off, args, false);
+	return uc_fs_stat_common(vm, nargs, false);
 }
 
-static struct json_object *
-uc_fs_lstat(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_lstat(uc_vm *vm, size_t nargs)
 {
-	return uc_fs_stat_common(s, off, args, true);
+	return uc_fs_stat_common(vm, nargs, true);
 }
 
-static struct json_object *
-uc_fs_mkdir(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_mkdir(uc_vm *vm, size_t nargs)
 {
-	struct json_object *path = json_object_array_get_idx(args, 0);
-	struct json_object *mode = json_object_array_get_idx(args, 1);
+	json_object *path = uc_get_arg(0);
+	json_object *mode = uc_get_arg(1);
 
 	if (!json_object_is_type(path, json_type_string) ||
 	    (mode && !json_object_is_type(mode, json_type_int)))
@@ -584,10 +561,10 @@ uc_fs_mkdir(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_fs_rmdir(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_rmdir(uc_vm *vm, size_t nargs)
 {
-	struct json_object *path = json_object_array_get_idx(args, 0);
+	json_object *path = uc_get_arg(0);
 
 	if (!json_object_is_type(path, json_type_string))
 		err_return(EINVAL);
@@ -598,11 +575,11 @@ uc_fs_rmdir(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_fs_symlink(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_symlink(uc_vm *vm, size_t nargs)
 {
-	struct json_object *dest = json_object_array_get_idx(args, 0);
-	struct json_object *path = json_object_array_get_idx(args, 1);
+	json_object *dest = uc_get_arg(0);
+	json_object *path = uc_get_arg(1);
 
 	if (!json_object_is_type(dest, json_type_string) ||
 	    !json_object_is_type(path, json_type_string))
@@ -614,10 +591,10 @@ uc_fs_symlink(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_fs_unlink(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_unlink(uc_vm *vm, size_t nargs)
 {
-	struct json_object *path = json_object_array_get_idx(args, 0);
+	json_object *path = uc_get_arg(0);
 
 	if (!json_object_is_type(path, json_type_string))
 		err_return(EINVAL);
@@ -628,10 +605,10 @@ uc_fs_unlink(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_fs_getcwd(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_getcwd(uc_vm *vm, size_t nargs)
 {
-	struct json_object *res;
+	json_object *res;
 	char *buf = NULL, *tmp;
 	size_t buflen = 0;
 
@@ -663,10 +640,10 @@ uc_fs_getcwd(struct uc_state *s, uint32_t off, struct json_object *args)
 	return res;
 }
 
-static struct json_object *
-uc_fs_chdir(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_fs_chdir(uc_vm *vm, size_t nargs)
 {
-	struct json_object *path = json_object_array_get_idx(args, 0);
+	json_object *path = uc_get_arg(0);
 
 	if (!json_object_is_type(path, json_type_string))
 		err_return(EINVAL);
@@ -677,13 +654,13 @@ uc_fs_chdir(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static const struct { const char *name; uc_c_fn *func; } proc_fns[] = {
+static const uc_cfunction_list proc_fns[] = {
 	{ "read",		uc_fs_pread },
 	{ "write",		uc_fs_pwrite },
 	{ "close",		uc_fs_pclose },
 };
 
-static const struct { const char *name; uc_c_fn *func; } file_fns[] = {
+static const uc_cfunction_list file_fns[] = {
 	{ "read",		uc_fs_read },
 	{ "write",		uc_fs_write },
 	{ "seek",		uc_fs_seek },
@@ -691,14 +668,14 @@ static const struct { const char *name; uc_c_fn *func; } file_fns[] = {
 	{ "close",		uc_fs_close },
 };
 
-static const struct { const char *name; uc_c_fn *func; } dir_fns[] = {
+static const uc_cfunction_list dir_fns[] = {
 	{ "read",		uc_fs_readdir },
 	{ "seek",		uc_fs_seekdir },
 	{ "tell",		uc_fs_telldir },
 	{ "close",		uc_fs_closedir },
 };
 
-static const struct { const char *name; uc_c_fn *func; } global_fns[] = {
+static const uc_cfunction_list global_fns[] = {
 	{ "error",		uc_fs_error },
 	{ "open",		uc_fs_open },
 	{ "opendir",	uc_fs_opendir },
@@ -715,40 +692,39 @@ static const struct { const char *name; uc_c_fn *func; } global_fns[] = {
 };
 
 
-static void close_proc(void *ud) {
-	pclose((FILE *)ud);
-}
-
-static void close_file(void *ud) {
+static void close_proc(void *ud)
+{
 	FILE *fp = ud;
 
-	if (fp != stdin && fp != stdout && fp != stderr)
+	if (fp)
+		pclose(fp);
+}
+
+static void close_file(void *ud)
+{
+	FILE *fp = ud;
+
+	if (fp && fp != stdin && fp != stdout && fp != stderr)
 		fclose(fp);
 }
 
-static void close_dir(void *ud) {
-	closedir((DIR *)ud);
+static void close_dir(void *ud)
+{
+	DIR *dp = ud;
+
+	if (dp)
+		closedir(dp);
 }
 
-void uc_module_init(const struct uc_ops *ut, struct uc_state *s, struct json_object *scope)
+void uc_module_init(uc_prototype *scope)
 {
-	struct json_object *proc_proto, *file_proto, *dir_proto;
+	uc_add_proto_functions(scope, global_fns);
 
-	ops = ut;
-	proc_proto = ops->new_object(NULL);
-	file_proto = ops->new_object(NULL);
-	dir_proto = ops->new_object(NULL);
+	proc_type = uc_declare_type("fs.proc", proc_fns, close_proc);
+	file_type = uc_declare_type("fs.file", file_fns, close_file);
+	dir_type = uc_declare_type("fs.dir", dir_fns, close_dir);
 
-	register_functions(s, ops, global_fns, scope);
-	register_functions(s, ops, proc_fns, proc_proto);
-	register_functions(s, ops, file_fns, file_proto);
-	register_functions(s, ops, dir_fns, dir_proto);
-
-	ops->register_type("fs.proc", proc_proto, close_proc);
-	ops->register_type("fs.file", file_proto, close_file);
-	ops->register_type("fs.dir", dir_proto, close_dir);
-
-	json_object_object_add(scope, "stdin",  ops->set_type(xjs_new_object(), "fs.file", stdin));
-	json_object_object_add(scope, "stdout", ops->set_type(xjs_new_object(), "fs.file", stdout));
-	json_object_object_add(scope, "stderr", ops->set_type(xjs_new_object(), "fs.file", stderr));
+	uc_add_proto_val(scope, "stdin", uc_alloc_ressource(file_type, stdin));
+	uc_add_proto_val(scope, "stdout", uc_alloc_ressource(file_type, stdout));
+	uc_add_proto_val(scope, "stderr", uc_alloc_ressource(file_type, stderr));
 }

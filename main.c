@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Jo-Philipp Wich <jo@mein.io>
+ * Copyright (C) 2020-2021 Jo-Philipp Wich <jo@mein.io>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <errno.h>
+#include <ctype.h>
 #include <sys/stat.h>
 
 #ifdef JSONC
@@ -27,10 +28,11 @@
 	#include <json-c/json.h>
 #endif
 
+#include "compiler.h"
 #include "lexer.h"
-#include "parser.h"
-#include "eval.h"
 #include "lib.h"
+#include "vm.h"
+#include "source.h"
 
 
 static void
@@ -52,102 +54,55 @@ print_usage(char *app)
 		app);
 }
 
-#ifndef NDEBUG
-static void dump(struct uc_state *state, uint32_t off, int level);
+static void
+globals_init(uc_prototype *scope)
+{
+	json_object *arr = xjs_new_array();
+	const char *p, *last;
 
-static void dump_node(struct uc_state *state, uint32_t off) {
-	const char *p;
+	for (p = last = LIB_SEARCH_PATH;; p++) {
+		if (*p == ':' || *p == '\0') {
+			json_object_array_add(arr, xjs_new_string_len(last, p - last));
 
-	switch (OP_TYPE(off)) {
-	case T_NUMBER:
-		printf("n%u [label=\"%"PRId64"\"];\n", off, json_object_get_int64(OP_VAL(off)));
-		break;
-
-	case T_DOUBLE:
-		printf("n%u [label=\"%f\"];\n", off, json_object_get_double(OP_VAL(off)));
-		break;
-
-	case T_BOOL:
-		printf("n%u [label=\"%s\"];\n", off, json_object_get_boolean(OP_VAL(off)) ? "true" : "false");
-		break;
-
-	case T_STRING:
-	case T_LABEL:
-	case T_TEXT:
-		printf("n%u [label=\"%s<", off, uc_get_tokenname(OP_TYPE(off)));
-
-		for (p = json_object_get_string(OP_VAL(off)); *p; p++)
-			switch (*p) {
-			case '\n':
-				printf("\\\n");
+			if (!*p)
 				break;
 
-			case '\t':
-				printf("\\\t");
-				break;
-
-			case '"':
-				printf("\\\"");
-				break;
-
-			default:
-				printf("%c", *p);
-			}
-
-		printf(">\"];\n");
-		break;
-
-	default:
-		printf("n%u [label=\"%s", off, uc_get_tokenname(OP_TYPE(off)));
-
-		if (OP_IS_POSTFIX(off))
-			printf(", postfix");
-
-		printf("\"];\n");
-	}
-}
-
-static void dump(struct uc_state *state, uint32_t off, int level) {
-	uint32_t prev_off, cur_off, child_off;
-	int i;
-
-	if (level == 0) {
-		printf("digraph G {\nmain [shape=box];\n");
-	}
-
-	for (prev_off = 0, cur_off = off; cur_off != 0; prev_off = cur_off, cur_off = OP_NEXT(cur_off)) {
-		dump_node(state, cur_off);
-
-		if (OP_TYPE(cur_off) < __T_MAX) {
-			for (i = 0; i < OPn_NUM; i++) {
-				child_off = OPn(cur_off, i);
-
-				if (child_off) {
-					dump(state, child_off, level + 1);
-					printf("n%u -> n%u [label=\"op%d\"];\n", cur_off, child_off, i + 1);
-				}
-			}
+			last = p + 1;
 		}
-
-		if (prev_off)
-			printf("n%u -> n%u [style=dotted];\n", prev_off, cur_off);
 	}
 
-	if (level == 0) {
-		printf("main -> n%u [style=dotted];\n", off);
-
-		printf("}\n");
-	}
+	json_object_object_add(scope->header.jso, "REQUIRE_SEARCH_PATH", arr);
 }
-#endif /* NDEBUG */
+
+static void
+register_variable(uc_prototype *scope, const char *key, json_object *val)
+{
+	char *name = strdup(key);
+	char *p;
+
+	if (!name)
+		return;
+
+	for (p = name; *p; p++)
+		if (!isalnum(*p) && *p != '_')
+			*p = '_';
+
+	json_object_object_add(scope->header.jso, name, val);
+	free(name);
+}
+
 
 static int
-parse(struct uc_state *state, struct uc_source *src, bool dumponly,
-      bool skip_shebang, struct json_object *env, struct json_object *modules)
+parse(uc_parse_config *config, uc_source *src,
+      bool skip_shebang, json_object *env, json_object *modules)
 {
-	struct json_object *rv;
-	char c, c2, *msg;
+	uc_prototype *globals = uc_prototype_new(NULL);
+	uc_function *entry;
+	uc_vm vm = {};
+	char c, c2, *err;
 	int rc = 0;
+
+	uc_vm_init(&vm, config);
 
 	if (skip_shebang) {
 		c = fgetc(src->fp);
@@ -167,33 +122,42 @@ parse(struct uc_state *state, struct uc_source *src, bool dumponly,
 		}
 	}
 
-	if (dumponly) {
-#ifdef NDEBUG
-		rv = uc_new_exception(state, 0, "Debug support not compiled in");
-#else /* NDEBUG */
-		rv = uc_parse(state, src->fp);
+	entry = uc_compile(config, src, &err);
 
-		if (!uc_is_type(rv, T_EXCEPTION))
-			dump(state, state->main, 0);
-#endif /* NDEBUG */
-	}
-	else {
-		rv = uc_run(state, env, modules);
+	if (!entry) {
+		fprintf(stderr, "%s", err);
+		free(err);
+		rc = 2;
+		goto out;
 	}
 
-	if (uc_is_type(rv, T_EXCEPTION)) {
-		msg = uc_format_error(state, src->fp);
-		fprintf(stderr, "%s\n\n", msg);
-		free(msg);
+	/* load global variables */
+	globals_init(globals);
+
+	/* load env variables */
+	if (env) {
+		json_object_object_foreach(env, key, val)
+			register_variable(globals, key, uc_value_get(val));
+	}
+
+	/* load std functions into global scope */
+	uc_lib_init(globals);
+
+	rc = uc_vm_execute(&vm, entry, globals, modules);
+
+	if (rc) {
 		rc = 1;
+		goto out;
 	}
 
-	json_object_put(rv);
+out:
+	uc_vm_free(&vm);
+	uc_value_put(globals->header.jso);
 
 	return rc;
 }
 
-static FILE *
+static uc_source *
 read_stdin(char **ptr)
 {
 	size_t rlen = 0, tlen = 0;
@@ -217,13 +181,13 @@ read_stdin(char **ptr)
 		tlen += rlen;
 	}
 
-	return fmemopen(*ptr, tlen, "rb");
+	return uc_source_new_buffer("[stdin]", *ptr, tlen);
 }
 
-static struct json_object *
+static json_object *
 parse_envfile(FILE *fp)
 {
-	struct json_object *rv = NULL;
+	json_object *rv = NULL;
 	enum json_tokener_error err;
 	struct json_tokener *tok;
 	char buf[128];
@@ -257,14 +221,17 @@ parse_envfile(FILE *fp)
 int
 main(int argc, char **argv)
 {
-	struct json_object *env = NULL, *modules = NULL, *o, *p;
-	struct uc_state *state = NULL;
-	struct uc_source source = {};
+	json_object *env = NULL, *modules = NULL, *o, *p;
+	uc_source *source = NULL, *envfile = NULL;
 	char *stdin = NULL, *c;
-	bool dumponly = false;
 	bool shebang = false;
-	FILE *envfile = NULL;
 	int opt, rv = 0;
+
+	uc_parse_config config = {
+		.strict_declarations = false,
+		.lstrip_blocks = true,
+		.trim_blocks = true
+	};
 
 	if (argc == 1)
 	{
@@ -272,14 +239,7 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	state = xalloc(sizeof(*state));
-	state->lstrip_blocks = 1;
-	state->trim_blocks = 1;
-
-	/* reserve opcode slot 0 */
-	uc_new_op(state, 0, NULL, UINT32_MAX);
-
-	while ((opt = getopt(argc, argv, "dhlrSe:E:i:s:m:")) != -1)
+	while ((opt = getopt(argc, argv, "hlrSe:E:i:s:m:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -287,19 +247,15 @@ main(int argc, char **argv)
 			goto out;
 
 		case 'i':
-			if (source.fp)
+			if (source)
 				fprintf(stderr, "Options -i and -s are exclusive\n");
 
-			if (!strcmp(optarg, "-")) {
-				source.fp = read_stdin(&stdin);
-				source.filename = xstrdup("[stdin]");
-			}
-			else {
-				source.fp = fopen(optarg, "rb");
-				source.filename = xstrdup(optarg);
-			}
+			if (!strcmp(optarg, "-"))
+				source = read_stdin(&stdin);
+			else
+				source = uc_source_new_file(optarg);
 
-			if (!source.fp) {
+			if (!source) {
 				fprintf(stderr, "Failed to open %s: %s\n", optarg, strerror(errno));
 				rv = 1;
 				goto out;
@@ -307,28 +263,23 @@ main(int argc, char **argv)
 
 			break;
 
-		case 'd':
-			dumponly = true;
-			break;
-
 		case 'l':
-			state->lstrip_blocks = 0;
+			config.lstrip_blocks = false;
 			break;
 
 		case 'r':
-			state->trim_blocks = 0;
+			config.trim_blocks = false;
 			break;
 
 		case 's':
-			if (source.fp)
+			if (source)
 				fprintf(stderr, "Options -i and -s are exclusive\n");
 
-			source.fp = fmemopen(optarg, strlen(optarg), "rb");
-			source.filename = xstrdup("[-s argument]");
+			source = uc_source_new_buffer("[-s argument]", xstrdup(optarg), strlen(optarg));
 			break;
 
 		case 'S':
-			state->strict_declarations = 1;
+			config.strict_declarations = true;
 			break;
 
 		case 'e':
@@ -339,7 +290,7 @@ main(int argc, char **argv)
 			else
 				c = optarg;
 
-			envfile = fmemopen(c, strlen(c), "rb");
+			envfile = uc_source_new_buffer("[-e argument]", xstrdup(c), strlen(c));
 			/* fallthrough */
 
 		case 'E':
@@ -354,7 +305,7 @@ main(int argc, char **argv)
 				if (!strcmp(c, "-"))
 					envfile = read_stdin(&stdin);
 				else
-					envfile = fopen(c, "rb");
+					envfile = uc_source_new_file(c);
 
 				if (!envfile) {
 					fprintf(stderr, "Failed to open %s: %s\n", c, strerror(errno));
@@ -363,9 +314,9 @@ main(int argc, char **argv)
 				}
 			}
 
-			o = parse_envfile(envfile);
+			o = parse_envfile(envfile->fp);
 
-			fclose(envfile);
+			uc_source_put(envfile);
 
 			envfile = NULL;
 
@@ -401,11 +352,10 @@ main(int argc, char **argv)
 		}
 	}
 
-	if (!source.fp && argv[optind] != NULL) {
-		source.fp = fopen(argv[optind], "rb");
-		source.filename = xstrdup(argv[optind]);
+	if (!source && argv[optind] != NULL) {
+		source = uc_source_new_file(argv[optind]);
 
-		if (!source.fp) {
+		if (!source) {
 			fprintf(stderr, "Failed to open %s: %s\n", argv[optind], strerror(errno));
 			rv = 1;
 			goto out;
@@ -414,24 +364,19 @@ main(int argc, char **argv)
 		shebang = true;
 	}
 
-	if (!source.fp) {
+	if (!source) {
 		fprintf(stderr, "One of -i or -s is required\n");
 		rv = 1;
 		goto out;
 	}
 
-	state->source = xalloc(sizeof(source));
-	state->sources = state->source;
-	*state->source = source;
-
-	rv = parse(state, state->source, dumponly, shebang, env, modules);
+	rv = parse(&config, source, shebang, env, modules);
 
 out:
 	json_object_put(modules);
 	json_object_put(env);
 
-	uc_free(state);
-	free(stdin);
+	uc_source_put(source);
 
 	return rv;
 }

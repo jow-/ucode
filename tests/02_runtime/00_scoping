@@ -12,7 +12,7 @@ c_global=true
 c_local=false
 
 
-When seting a nonlet variable, it is set in the nearest parent
+When seting a nonlocal variable, it is set in the nearest parent
 scope containing the variable or in the root scope if the variable
 was not found.
 
@@ -25,13 +25,13 @@ Variables implicitly declared by for-in or counting for loops follow the same
 scoping rules.
 
 inner2 f_a=3
-inner2 f_b=3
+inner2 f_b=
 inner2 f_c=3
-inner2 f_d=3
+inner2 f_d=
 inner2 f_e=3
 
 inner f_a=3
-inner f_b=3
+inner f_b=
 inner f_c=3
 inner f_d=
 inner f_e=3
@@ -73,7 +73,7 @@ c_global={{ !!c_global }}
 c_local={{ !!c_local }}
 
 
-When seting a nonlet variable, it is set in the nearest parent
+When seting a nonlocal variable, it is set in the nearest parent
 scope containing the variable or in the root scope if the variable
 was not found.
 
@@ -110,7 +110,7 @@ scoping rules.
 
 {%
 	function scope3() {
-		// f_a is not declared let and be set i nthe root scope
+		// f_a is not declared local and be set in the root scope
 		for (f_a = 1; f_a < 3; f_a++)
 			;
 
@@ -120,7 +120,7 @@ scoping rules.
 		let f_c;
 
 		function scope4() {
-			// f_c is not declared let but declared in the parent scope, it
+			// f_c is not declared local but declared in the parent scope, it
 			// will be set there
 			for (f_c in [1, 2, 3])
 				;

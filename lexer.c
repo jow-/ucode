@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Jo-Philipp Wich <jo@mein.io>
+ * Copyright (C) 2020-2021 Jo-Philipp Wich <jo@mein.io>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -25,11 +25,11 @@
 #include <errno.h>
 #include <endian.h>
 
-#include "ast.h"
+#include "vm.h"
 #include "lib.h"
 #include "lexer.h"
-#include "parser.h"
 
+#define UC_LEX_CONTINUE_PARSING (void *)1
 
 struct keyword {
 	int type;
@@ -48,7 +48,7 @@ struct token {
 		char pat[4];
 	};
 	int plen;
-	uint32_t (*parse)(struct uc_state *s);
+	uc_token *(*parse)(uc_lexer *);
 };
 
 #define dec(o) \
@@ -58,109 +58,110 @@ struct token {
 	(((x) >= 'a') ? (10 + (x) - 'a') : \
 		(((x) >= 'A') ? (10 + (x) - 'A') : dec(x)))
 
-static uint32_t parse_comment(struct uc_state *);
-static uint32_t parse_string(struct uc_state *);
-static uint32_t parse_regexp(struct uc_state *);
-static uint32_t parse_number(struct uc_state *);
-static uint32_t parse_label(struct uc_state *);
+static uc_token *parse_comment(uc_lexer *);
+static uc_token *parse_string(uc_lexer *);
+static uc_token *parse_regexp(uc_lexer *);
+static uc_token *parse_number(uc_lexer *);
+static uc_token *parse_label(uc_lexer *);
 
 static const struct token tokens[] = {
-	{ T_ASLEFT,		{ .pat = "<<=" },   3 },
-	{ T_ASRIGHT,	{ .pat = ">>=" },   3 },
-	{ T_LEXP,		{ .pat = "{{-" },   3 },
-	{ T_REXP,		{ .pat = "-}}" },   3 },
-	{ T_LSTM,		{ .pat = "{%+" },   3 },
-	{ T_LSTM,		{ .pat = "{%-" },   3 },
-	{ T_RSTM,		{ .pat = "-%}" },   3 },
-	{ T_EQS,		{ .pat = "===" },   3 },
-	{ T_NES,		{ .pat = "!==" },   3 },
-	{ T_ELLIP,		{ .pat = "..." },   3 },
-	{ T_AND,		{ .pat = "&&" },    2 },
-	{ T_ASADD,		{ .pat = "+=" },    2 },
-	{ T_ASBAND,		{ .pat = "&=" },    2 },
-	{ T_ASBOR,		{ .pat = "|=" },    2 },
-	{ T_ASBXOR,		{ .pat = "^=" },    2 },
-	//{ T_ASDIV,		{ .pat = "/=" },    2 },
-	{ T_ASMOD,		{ .pat = "%=" },    2 },
-	{ T_ASMUL,		{ .pat = "*=" },    2 },
-	{ T_ASSUB,		{ .pat = "-=" },    2 },
-	{ T_DEC,		{ .pat = "--" },    2 },
-	{ T_INC,		{ .pat = "++" },    2 },
-	{ T_EQ,			{ .pat = "==" },    2 },
-	{ T_NE,			{ .pat = "!=" },    2 },
-	{ T_LE,			{ .pat = "<=" },    2 },
-	{ T_GE,			{ .pat = ">=" },    2 },
-	{ T_LSHIFT,		{ .pat = "<<" },    2 },
-	{ T_RSHIFT,		{ .pat = ">>" },    2 },
+	{ TK_ASLEFT,	{ .pat = "<<=" },   3 },
+	{ TK_ASRIGHT,	{ .pat = ">>=" },   3 },
+	{ TK_LEXP,		{ .pat = "{{-" },   3 },
+	{ TK_REXP,		{ .pat = "-}}" },   3 },
+	{ TK_LSTM,		{ .pat = "{%+" },   3 },
+	{ TK_LSTM,		{ .pat = "{%-" },   3 },
+	{ TK_RSTM,		{ .pat = "-%}" },   3 },
+	{ TK_EQS,		{ .pat = "===" },   3 },
+	{ TK_NES,		{ .pat = "!==" },   3 },
+	{ TK_ELLIP,		{ .pat = "..." },   3 },
+	{ TK_AND,		{ .pat = "&&" },    2 },
+	{ TK_ASADD,		{ .pat = "+=" },    2 },
+	{ TK_ASBAND,	{ .pat = "&=" },    2 },
+	{ TK_ASBOR,		{ .pat = "|=" },    2 },
+	{ TK_ASBXOR,	{ .pat = "^=" },    2 },
+	//{ TK_ASDIV,	{ .pat = "/=" },    2 },
+	{ TK_ASMOD,		{ .pat = "%=" },    2 },
+	{ TK_ASMUL,		{ .pat = "*=" },    2 },
+	{ TK_ASSUB,		{ .pat = "-=" },    2 },
+	{ TK_DEC,		{ .pat = "--" },    2 },
+	{ TK_INC,		{ .pat = "++" },    2 },
+	{ TK_EQ,		{ .pat = "==" },    2 },
+	{ TK_NE,		{ .pat = "!=" },    2 },
+	{ TK_LE,		{ .pat = "<=" },    2 },
+	{ TK_GE,		{ .pat = ">=" },    2 },
+	{ TK_LSHIFT,	{ .pat = "<<" },    2 },
+	{ TK_RSHIFT,	{ .pat = ">>" },    2 },
 	{ 0,			{ .pat = "//" },    2, parse_comment },
 	{ 0,			{ .pat = "/*" },    2, parse_comment },
-	{ T_OR,			{ .pat = "||" },    2 },
-	{ T_LEXP,		{ .pat = "{{" },    2 },
-	{ T_REXP,		{ .pat = "}}" },    2 },
-	{ T_LSTM,		{ .pat = "{%" },    2 },
-	{ T_RSTM,		{ .pat = "%}" },    2 },
-	{ T_ARROW,		{ .pat = "=>" },    2 },
-	{ T_ADD,		{ .pat = "+" },     1 },
-	{ T_ASSIGN,		{ .pat = "=" },     1 },
-	{ T_BAND,		{ .pat = "&" },     1 },
-	{ T_BOR,		{ .pat = "|" },     1 },
-	{ T_LBRACK,		{ .pat = "[" },     1 },
-	{ T_RBRACK,		{ .pat = "]" },     1 },
-	{ T_BXOR,		{ .pat = "^" },     1 },
-	{ T_LBRACE,		{ .pat = "{" },     1 },
-	{ T_RBRACE,		{ .pat = "}" },     1 },
-	{ T_COLON,		{ .pat = ":" },     1 },
-	{ T_COMMA,		{ .pat = "," },     1 },
-	{ T_COMPL,		{ .pat = "~" },     1 },
-	//{ T_DIV,		{ .pat = "/" },     1 },
-	{ T_GT,			{ .pat = ">" },     1 },
-	{ T_NOT,		{ .pat = "!" },     1 },
-	{ T_LT,			{ .pat = "<" },     1 },
-	{ T_MOD,		{ .pat = "%" },     1 },
-	{ T_MUL,		{ .pat = "*" },     1 },
-	{ T_LPAREN,		{ .pat = "(" },     1 },
-	{ T_RPAREN,		{ .pat = ")" },     1 },
-	{ T_QMARK,		{ .pat = "?" },     1 },
-	{ T_SCOL,		{ .pat = ";" },     1 },
-	{ T_SUB,		{ .pat = "-" },     1 },
-	{ T_DOT,		{ .pat = "." },     1 },
-	{ T_STRING,		{ .pat = "'" },     1, parse_string },
-	{ T_STRING,		{ .pat = "\"" },    1, parse_string },
-	{ T_REGEXP,		{ .pat = "/" },     1, parse_regexp },
-	{ T_LABEL,		{ .pat = "_" },     1, parse_label  },
-	{ T_LABEL,		{ .pat = "az" },    0, parse_label  },
-	{ T_LABEL,		{ .pat = "AZ" },    0, parse_label  },
-	{ T_NUMBER,		{ .pat = "09" },    0, parse_number },
+	{ TK_OR,		{ .pat = "||" },    2 },
+	{ TK_LEXP,		{ .pat = "{{" },    2 },
+	{ TK_REXP,		{ .pat = "}}" },    2 },
+	{ TK_LSTM,		{ .pat = "{%" },    2 },
+	{ TK_RSTM,		{ .pat = "%}" },    2 },
+	{ TK_ARROW,		{ .pat = "=>" },    2 },
+	{ TK_ADD,		{ .pat = "+" },     1 },
+	{ TK_ASSIGN,	{ .pat = "=" },     1 },
+	{ TK_BAND,		{ .pat = "&" },     1 },
+	{ TK_BOR,		{ .pat = "|" },     1 },
+	{ TK_LBRACK,	{ .pat = "[" },     1 },
+	{ TK_RBRACK,	{ .pat = "]" },     1 },
+	{ TK_BXOR,		{ .pat = "^" },     1 },
+	{ TK_LBRACE,	{ .pat = "{" },     1 },
+	{ TK_RBRACE,	{ .pat = "}" },     1 },
+	{ TK_COLON,		{ .pat = ":" },     1 },
+	{ TK_COMMA,		{ .pat = "," },     1 },
+	{ TK_COMPL,		{ .pat = "~" },     1 },
+	//{ TK_DIV,		{ .pat = "/" },     1 },
+	{ TK_GT,		{ .pat = ">" },     1 },
+	{ TK_NOT,		{ .pat = "!" },     1 },
+	{ TK_LT,		{ .pat = "<" },     1 },
+	{ TK_MOD,		{ .pat = "%" },     1 },
+	{ TK_MUL,		{ .pat = "*" },     1 },
+	{ TK_LPAREN,	{ .pat = "(" },     1 },
+	{ TK_RPAREN,	{ .pat = ")" },     1 },
+	{ TK_QMARK,		{ .pat = "?" },     1 },
+	{ TK_SCOL,		{ .pat = ";" },     1 },
+	//{ TK_SUB,		{ .pat = "-" },     1 },
+	{ TK_DOT,		{ .pat = "." },     1 },
+	{ TK_STRING,	{ .pat = "'" },     1, parse_string },
+	{ TK_STRING,	{ .pat = "\"" },    1, parse_string },
+	{ TK_REGEXP,	{ .pat = "/" },     1, parse_regexp },
+	{ TK_LABEL,		{ .pat = "_" },     1, parse_label  },
+	{ TK_LABEL,		{ .pat = "az" },    0, parse_label  },
+	{ TK_LABEL,		{ .pat = "AZ" },    0, parse_label  },
+	{ TK_NUMBER,	{ .pat = "-" },     1, parse_number },
+	{ TK_NUMBER,	{ .pat = "09" },    0, parse_number },
 };
 
 static const struct keyword reserved_words[] = {
-	{ T_ENDFUNC,	"endfunction", 11 },
-	{ T_DOUBLE,		"Infinity", 8, { .d = INFINITY } },
-	{ T_CONTINUE,	"continue", 8 },
-	{ T_ENDWHILE,	"endwhile", 8 },
-	{ T_FUNC,		"function", 8 },
-	{ T_DEFAULT,	"default", 7 },
-	{ T_RETURN,		"return", 6 },
-	{ T_ENDFOR,		"endfor", 6 },
-	{ T_SWITCH,		"switch", 6 },
-	{ T_LOCAL,		"local", 5 },
-	{ T_ENDIF,		"endif", 5 },
-	{ T_WHILE,		"while", 5 },
-	{ T_BREAK,		"break", 5 },
-	{ T_CATCH,		"catch", 5 },
-	{ T_BOOL,		"false", 5, { .b = false } },
-	{ T_BOOL,		"true",  4, { .b = true } },
-	{ T_ELIF,		"elif",  4 },
-	{ T_ELSE,		"else",  4 },
-	{ T_THIS,		"this",  4 },
-	{ T_NULL,		"null",  4 },
-	{ T_CASE,		"case",  4 },
-	{ T_DOUBLE,		"NaN",   3, { .d = NAN } },
-	{ T_TRY,		"try",   3 },
-	{ T_FOR,		"for",   3 },
-	{ T_LOCAL,		"let",   3 },
-	{ T_IF,			"if",    2 },
-	{ T_IN,			"in",    2 },
+	{ TK_ENDFUNC,	"endfunction", 11 },
+	{ TK_DOUBLE,	"Infinity", 8, { .d = INFINITY } },
+	{ TK_CONTINUE,	"continue", 8 },
+	{ TK_ENDWHILE,	"endwhile", 8 },
+	{ TK_FUNC,		"function", 8 },
+	{ TK_DEFAULT,	"default", 7 },
+	{ TK_RETURN,	"return", 6 },
+	{ TK_ENDFOR,	"endfor", 6 },
+	{ TK_SWITCH,	"switch", 6 },
+	{ TK_LOCAL,		"local", 5 },
+	{ TK_ENDIF,		"endif", 5 },
+	{ TK_WHILE,		"while", 5 },
+	{ TK_BREAK,		"break", 5 },
+	{ TK_CATCH,		"catch", 5 },
+	{ TK_BOOL,		"false", 5, { .b = false } },
+	{ TK_BOOL,		"true",  4, { .b = true } },
+	{ TK_ELIF,		"elif",  4 },
+	{ TK_ELSE,		"else",  4 },
+	{ TK_THIS,		"this",  4 },
+	{ TK_NULL,		"null",  4 },
+	{ TK_CASE,		"case",  4 },
+	{ TK_DOUBLE,	"NaN",   3, { .d = NAN } },
+	{ TK_TRY,		"try",   3 },
+	{ TK_FOR,		"for",   3 },
+	{ TK_LOCAL,		"let",   3 },
+	{ TK_IF,		"if",    2 },
+	{ TK_IN,		"in",    2 },
 };
 
 
@@ -221,125 +222,216 @@ utf8enc(char **out, int *rem, int code)
 /* length of the longest token in our lookup table */
 #define UT_LEX_MAX_TOKEN_LEN 3
 
-static uint32_t emit_op(struct uc_state *state, uint32_t pos, int type, struct json_object *val)
+static uc_token *
+emit_op(uc_lexer *lex, uint32_t pos, int type, struct json_object *val)
 {
-	uint32_t off = uc_new_op(state, type, val, UINT32_MAX);
-
-	OP(off)->off = pos;
+	lex->curr.type = type;
+	lex->curr.val = val;
+	lex->curr.pos = pos;
 
 	/* Follow JSLint logic and treat a slash after any of the
 	 * `(,=:[!&|?{};` characters as the beginning of a regex
 	 * literal... */
 	switch (type) {
-	case T_LPAREN:
-	case T_COMMA:
+	case TK_LPAREN:
+	case TK_COMMA:
 
-	case T_ASADD:
-	case T_ASBAND:
-	case T_ASBOR:
-	case T_ASBXOR:
-	case T_ASDIV:
-	case T_ASLEFT:
-	case T_ASMOD:
-	case T_ASMUL:
-	case T_ASRIGHT:
-	case T_ASSIGN:
-	case T_ASSUB:
-	case T_EQ:
-	case T_EQS:
-	case T_GE:
-	case T_LE:
-	case T_NE:
-	case T_NES:
+	case TK_ASADD:
+	case TK_ASBAND:
+	case TK_ASBOR:
+	case TK_ASBXOR:
+	case TK_ASDIV:
+	case TK_ASLEFT:
+	case TK_ASMOD:
+	case TK_ASMUL:
+	case TK_ASRIGHT:
+	case TK_ASSIGN:
+	case TK_ASSUB:
+	case TK_EQ:
+	case TK_EQS:
+	case TK_GE:
+	case TK_LE:
+	case TK_NE:
+	case TK_NES:
 
-	case T_COLON:
-	case T_LBRACK:
-	case T_NOT:
+	case TK_COLON:
+	case TK_LBRACK:
+	case TK_NOT:
 
-	case T_AND:
-	case T_BAND:
+	case TK_AND:
+	case TK_BAND:
 
-	case T_OR:
-	case T_BOR:
+	case TK_OR:
+	case TK_BOR:
 
-	case T_QMARK:
+	case TK_QMARK:
 
-	case T_LBRACE:
-	case T_RBRACE:
+	case TK_LBRACE:
+	case TK_RBRACE:
 
-	case T_LSTM:
-	case T_LEXP:
+	case TK_LSTM:
+	case TK_LEXP:
 
-	case T_SCOL:
-		state->lex.expect_div = false;
+	case TK_SCOL:
+		lex->expect_div = false;
 		break;
 
 	default:
-		state->lex.expect_div = true;
+		lex->expect_div = true;
 	}
 
-	return off;
+	return &lex->curr;
 }
 
-static void lookbehind_append(struct uc_state *s, const char *data, size_t len)
+static void lookbehind_append(uc_lexer *lex, const char *data, size_t len)
 {
 	if (len) {
-		s->lex.lookbehind = xrealloc(s->lex.lookbehind, s->lex.lookbehindlen + len);
-		memcpy(s->lex.lookbehind + s->lex.lookbehindlen, data, len);
-		s->lex.lookbehindlen += len;
+		lex->lookbehind = xrealloc(lex->lookbehind, lex->lookbehindlen + len);
+		memcpy(lex->lookbehind + lex->lookbehindlen, data, len);
+		lex->lookbehindlen += len;
 	}
 }
 
-static void lookbehind_reset(struct uc_state *s) {
-	free(s->lex.lookbehind);
-	s->lex.lookbehind = NULL;
-	s->lex.lookbehindlen = 0;
+static void lookbehind_reset(uc_lexer *lex) {
+	free(lex->lookbehind);
+	lex->lookbehind = NULL;
+	lex->lookbehindlen = 0;
 }
 
-static uint32_t lookbehind_to_text(struct uc_state *s, uint32_t pos, int type, const char *strip_trailing_chars) {
-	uint32_t rv = 0;
+static uc_token *
+lookbehind_to_text(uc_lexer *lex, uint32_t pos, int type, const char *strip_trailing_chars) {
+	uc_token *rv = NULL;
 
-	if (s->lex.lookbehind) {
+	if (lex->lookbehind) {
 		if (strip_trailing_chars) {
-			while (s->lex.lookbehindlen > 0 && strchr(strip_trailing_chars, s->lex.lookbehind[s->lex.lookbehindlen-1]))
-				s->lex.lookbehindlen--;
+			while (lex->lookbehindlen > 0 && strchr(strip_trailing_chars, lex->lookbehind[lex->lookbehindlen-1]))
+				lex->lookbehindlen--;
 		}
 
-		rv = emit_op(s, pos, type, xjs_new_string_len(s->lex.lookbehind, s->lex.lookbehindlen));
+		rv = emit_op(lex, pos, type, xjs_new_string_len(lex->lookbehind, lex->lookbehindlen));
 
-		lookbehind_reset(s);
+		lookbehind_reset(lex);
 	}
 
 	return rv;
 }
 
-static inline size_t buf_remaining(struct uc_state *s) {
-	return (s->lex.bufend - s->lex.bufstart);
+static inline size_t
+buf_remaining(uc_lexer *lex) {
+	return (lex->bufend - lex->bufstart);
 }
 
-static inline bool _buf_startswith(struct uc_state *s, const char *str, size_t len) {
-	return (buf_remaining(s) >= len && !strncmp(s->lex.bufstart, str, len));
+static inline bool
+_buf_startswith(uc_lexer *lex, const char *str, size_t len) {
+	return (buf_remaining(lex) >= len && !strncmp(lex->bufstart, str, len));
 }
 
 #define buf_startswith(s, str) _buf_startswith(s, str, sizeof(str) - 1)
 
-static void buf_consume(struct uc_state *s, ssize_t len) {
-	s->lex.bufstart += len;
-	s->source->off += len;
+#if 0
+static void add_lineinfo(struct uc_state *s, size_t off)
+{
+	uc_lineinfo *lines = &s->source->lineinfo;
+	size_t linelen;
+
+	linelen = off - s->lex.lastlineoff;
+
+	/* lineinfo is encoded in bytes: the most significant bit specifies whether
+	 * to advance the line count by one or not, while the remaining 7 bits encode
+	 * the amounts of bytes on the current line.
+	 *
+	 * If a line has more than 127 characters, the first byte will be set to
+	 * 0xff (1 1111111) and subsequent bytes will encode the remaining characters
+	 * in bits 1..7 while setting bit 8 to 0. A line with 400 characters will thus
+	 * be encoded as 0xff 0x7f 0x7f 0x13 (1:1111111 + 0:1111111 + 0:1111111 + 0:1111111).
+	 *
+	 * The newline character itself is not counted, so an empty line is encoded as
+	 * 0x80 (1:0000000).
+	 */
+	uc_vector_grow(lines);
+	lines->entries[lines->count++] = 0x80 + (linelen & 0x7f);
+	linelen -= (linelen & 0x7f);
+
+	while (linelen > 0) {
+		uc_vector_grow(lines);
+		lines->entries[lines->count++] = (linelen & 0x7f);
+		linelen -= (linelen & 0x7f);
+	}
+
+	s->lex.lastlineoff = off + 1;
+	s->lex.line++;
+}
+#endif
+
+static void
+next_lineinfo(uc_lexer *lex)
+{
+	uc_lineinfo *lines = &lex->source->lineinfo;
+
+	uc_vector_grow(lines);
+	lines->entries[lines->count++] = 0x80;
 }
 
-static uint32_t
-parse_comment(struct uc_state *s)
+static void
+update_lineinfo(uc_lexer *lex, size_t off)
 {
-	const struct token *tok = s->lex.tok;
+	uc_lineinfo *lines = &lex->source->lineinfo;
+	uint8_t *entry;
+
+	entry = uc_vector_last(lines);
+
+	if ((entry[0] & 0x7f) + off <= 0x7f) {
+		entry[0] += off;
+	}
+	else {
+		off -= (0x7f - (entry[0] & 0x7f));
+		entry[0] |= 0x7f;
+
+		while (off > 0) {
+			uc_vector_grow(lines);
+			entry = uc_vector_last(lines);
+			entry[1] = (off & 0x7f);
+			off -= (off & 0x7f);
+			lines->count++;
+		}
+	}
+}
+
+static void
+buf_consume(uc_lexer *lex, size_t len) {
+	size_t i, linelen;
+
+	if (!lex->source->lineinfo.count)
+		next_lineinfo(lex);
+
+	for (i = 0, linelen = 0; i < len; i++) {
+		if (lex->bufstart[i] == '\n') {
+			update_lineinfo(lex, linelen);
+			next_lineinfo(lex);
+
+			linelen = 0;
+		}
+		else {
+			linelen++;
+		}
+	}
+
+	if (linelen)
+		update_lineinfo(lex, linelen);
+
+	lex->bufstart += len;
+	lex->source->off += len;
+}
+
+static uc_token *
+parse_comment(uc_lexer *lex)
+{
+	const struct token *tok = lex->tok;
 	const char *ptr, *end;
 	size_t elen;
 
-	if (!buf_remaining(s)) {
-		uc_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated comment");
-
-		return 0;
-	}
+	if (!buf_remaining(lex))
+		return emit_op(lex, lex->lastoff, TK_ERROR, xjs_new_string("Unterminated comment"));
 
 	if (!strcmp(tok->pat, "//")) {
 		end = "\n";
@@ -350,20 +442,21 @@ parse_comment(struct uc_state *s)
 		elen = 2;
 	}
 
-	for (ptr = s->lex.bufstart; ptr < s->lex.bufend - elen; ptr++) {
+	for (ptr = lex->bufstart; ptr < lex->bufend - elen; ptr++) {
 		if (!strncmp(ptr, end, elen)) {
-			buf_consume(s, (ptr - s->lex.bufstart) + elen);
+			buf_consume(lex, (ptr - lex->bufstart) + elen);
 
-			return UINT32_MAX;
+			return UC_LEX_CONTINUE_PARSING;
 		}
 	}
 
-	buf_consume(s, ptr - s->lex.bufstart);
+	buf_consume(lex, ptr - lex->bufstart);
 
-	return 0;
+	return NULL;
 }
 
-static void append_utf8(struct uc_state *s, int code) {
+static void
+append_utf8(uc_lexer *lex, int code) {
 	char ustr[8], *up;
 	int rem;
 
@@ -371,38 +464,35 @@ static void append_utf8(struct uc_state *s, int code) {
 	rem = sizeof(ustr);
 
 	if (utf8enc(&up, &rem, code))
-		lookbehind_append(s, ustr, up - ustr);
+		lookbehind_append(lex, ustr, up - ustr);
 }
 
-static uint32_t
-parse_string(struct uc_state *s)
+static uc_token *
+parse_string(uc_lexer *lex)
 {
-	const struct token *tok = s->lex.tok;
+	const struct token *tok = lex->tok;
 	char q = tok->pat[0];
 	char *ptr, *c;
-	uint32_t rv;
+	uc_token *rv;
 	int code;
 
-	if (!buf_remaining(s)) {
-		uc_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated string");
+	if (!buf_remaining(lex))
+		return emit_op(lex, lex->lastoff, TK_ERROR, xjs_new_string("Unterminated string"));
 
-		return 0;
-	}
-
-	for (ptr = s->lex.bufstart; ptr < s->lex.bufend; ptr++) {
+	for (ptr = lex->bufstart; ptr < lex->bufend; ptr++) {
 		/* continuation of escape sequence */
-		if (s->lex.is_escape) {
-			if (s->lex.esclen == 0) {
+		if (lex->is_escape) {
+			if (lex->esclen == 0) {
 				/* non-unicode escape following a lead surrogate, emit replacement... */
-				if (s->lex.lead_surrogate && *ptr != 'u') {
-					append_utf8(s, 0xFFFD);
-					s->lex.lead_surrogate = 0;
+				if (lex->lead_surrogate && *ptr != 'u') {
+					append_utf8(lex, 0xFFFD);
+					lex->lead_surrogate = 0;
 				}
 
 				switch ((q == '/') ? 0 : *ptr) {
 				case 'u':
 				case 'x':
-					s->lex.esc[s->lex.esclen++] = *ptr;
+					lex->esc[lex->esclen++] = *ptr;
 					break;
 
 				case '0':
@@ -413,65 +503,62 @@ parse_string(struct uc_state *s)
 				case '5':
 				case '6':
 				case '7':
-					s->lex.esc[s->lex.esclen++] = 'o';
-					s->lex.esc[s->lex.esclen++] = *ptr;
+					lex->esc[lex->esclen++] = 'o';
+					lex->esc[lex->esclen++] = *ptr;
 					break;
 
 				default:
-					s->lex.is_escape = false;
+					lex->is_escape = false;
 					c = strchr("a\ab\be\ef\fn\nr\rt\tv\v", *ptr);
 
 					if (c && *c >= 'a') {
-						lookbehind_append(s, c + 1, 1);
+						lookbehind_append(lex, c + 1, 1);
 					}
 					else {
 						/* regex mode => retain backslash */
 						if (q == '/')
-							lookbehind_append(s, "\\", 1);
+							lookbehind_append(lex, "\\", 1);
 
-						lookbehind_append(s, ptr, 1);
+						lookbehind_append(lex, ptr, 1);
 					}
 
-					buf_consume(s, (ptr + 1) - s->lex.bufstart);
+					buf_consume(lex, (ptr + 1) - lex->bufstart);
 
 					break;
 				}
 			}
 			else {
-				switch (s->lex.esc[0]) {
+				switch (lex->esc[0]) {
 				case 'u':
-					if (s->lex.esclen < 5) {
-						if (!isxdigit(*ptr)) {
-							uc_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
+					if (lex->esclen < 5) {
+						if (!isxdigit(*ptr))
+							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, xjs_new_string("Invalid escape sequence"));
 
-							return 0;
-						}
-
-						s->lex.esc[s->lex.esclen++] = *ptr;
+						lex->esc[lex->esclen++] = *ptr;
 					}
 
-					if (s->lex.esclen == 5) {
-						code = hex(s->lex.esc[1]) * 16 * 16 * 16 +
-						       hex(s->lex.esc[2]) * 16 * 16 +
-						       hex(s->lex.esc[3]) * 16 +
-						       hex(s->lex.esc[4]);
+					if (lex->esclen == 5) {
+						code = hex(lex->esc[1]) * 16 * 16 * 16 +
+						       hex(lex->esc[2]) * 16 * 16 +
+						       hex(lex->esc[3]) * 16 +
+						       hex(lex->esc[4]);
 
 						/* is a leading surrogate value */
 						if ((code & 0xFC00) == 0xD800) {
 							/* found a subsequent leading surrogate, ignore and emit replacement char for previous one */
-							if (s->lex.lead_surrogate)
-								append_utf8(s, 0xFFFD);
+							if (lex->lead_surrogate)
+								append_utf8(lex, 0xFFFD);
 
 							/* store surrogate value and advance to next escape sequence */
-							s->lex.lead_surrogate = code;
+							lex->lead_surrogate = code;
 						}
 
 						/* is a trailing surrogate value */
 						else if ((code & 0xFC00) == 0xDC00) {
 							/* found a trailing surrogate following a leading one, combine and encode */
-							if (s->lex.lead_surrogate) {
-								code = 0x10000 + ((s->lex.lead_surrogate & 0x3FF) << 10) + (code & 0x3FF);
-								s->lex.lead_surrogate = 0;
+							if (lex->lead_surrogate) {
+								code = 0x10000 + ((lex->lead_surrogate & 0x3FF) << 10) + (code & 0x3FF);
+								lex->lead_surrogate = 0;
 							}
 
 							/* trailing surrogate not following a leading one, ignore and use replacement char */
@@ -479,87 +566,81 @@ parse_string(struct uc_state *s)
 								code = 0xFFFD;
 							}
 
-							append_utf8(s, code);
+							append_utf8(lex, code);
 						}
 
 						/* is a normal codepoint */
 						else {
-							append_utf8(s, code);
+							append_utf8(lex, code);
 						}
 
-						s->lex.esclen = 0;
-						s->lex.is_escape = false;
-						buf_consume(s, (ptr + 1) - s->lex.bufstart);
+						lex->esclen = 0;
+						lex->is_escape = false;
+						buf_consume(lex, (ptr + 1) - lex->bufstart);
 					}
 
 					break;
 
 				case 'x':
-					if (s->lex.esclen < 3) {
-						if (!isxdigit(*ptr)) {
-							uc_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
+					if (lex->esclen < 3) {
+						if (!isxdigit(*ptr))
+							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, xjs_new_string("Invalid escape sequence"));
 
-							return 0;
-						}
-
-						s->lex.esc[s->lex.esclen++] = *ptr;
+						lex->esc[lex->esclen++] = *ptr;
 					}
 
-					if (s->lex.esclen == 3) {
-						append_utf8(s, hex(s->lex.esc[1]) * 16 + hex(s->lex.esc[2]));
+					if (lex->esclen == 3) {
+						append_utf8(lex, hex(lex->esc[1]) * 16 + hex(lex->esc[2]));
 
-						s->lex.esclen = 0;
-						s->lex.is_escape = false;
-						buf_consume(s, (ptr + 1) - s->lex.bufstart);
+						lex->esclen = 0;
+						lex->is_escape = false;
+						buf_consume(lex, (ptr + 1) - lex->bufstart);
 					}
 
 					break;
 
 				case 'o':
-					if (s->lex.esclen < 4) {
+					if (lex->esclen < 4) {
 						/* found a non-octal char */
 						if (*ptr < '0' || *ptr > '7') {
 							/* pad sequence to three chars */
-							switch (s->lex.esclen) {
+							switch (lex->esclen) {
 							case 3:
-								s->lex.esc[3] = s->lex.esc[2];
-								s->lex.esc[2] = s->lex.esc[1];
-								s->lex.esc[1] = '0';
+								lex->esc[3] = lex->esc[2];
+								lex->esc[2] = lex->esc[1];
+								lex->esc[1] = '0';
 								break;
 
 							case 2:
-								s->lex.esc[3] = s->lex.esc[1];
-								s->lex.esc[2] = '0';
-								s->lex.esc[1] = '0';
+								lex->esc[3] = lex->esc[1];
+								lex->esc[2] = '0';
+								lex->esc[1] = '0';
 								break;
 							}
 
-							s->lex.esclen = 4;
-							buf_consume(s, ptr-- - s->lex.bufstart);
+							lex->esclen = 4;
+							buf_consume(lex, ptr-- - lex->bufstart);
 						}
 
 						/* append */
 						else {
-							s->lex.esc[s->lex.esclen++] = *ptr;
-							buf_consume(s, (ptr + 1) - s->lex.bufstart);
+							lex->esc[lex->esclen++] = *ptr;
+							buf_consume(lex, (ptr + 1) - lex->bufstart);
 						}
 					}
 
-					if (s->lex.esclen == 4) {
-						code = dec(s->lex.esc[1]) * 8 * 8 +
-						       dec(s->lex.esc[2]) * 8 +
-						       dec(s->lex.esc[3]);
+					if (lex->esclen == 4) {
+						code = dec(lex->esc[1]) * 8 * 8 +
+						       dec(lex->esc[2]) * 8 +
+						       dec(lex->esc[3]);
 
-						if (code > 255) {
-							uc_new_exception(s, s->source->off + s->lex.esclen + 1, "Syntax error: Invalid escape sequence");
+						if (code > 255)
+							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, xjs_new_string("Invalid escape sequence"));
 
-							return 0;
-						}
+						append_utf8(lex, code);
 
-						append_utf8(s, code);
-
-						s->lex.esclen = 0;
-						s->lex.is_escape = false;
+						lex->esclen = 0;
+						lex->is_escape = false;
 					}
 
 					break;
@@ -569,29 +650,29 @@ parse_string(struct uc_state *s)
 
 		/* terminating char */
 		else if (*ptr == q) {
-			lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
-			buf_consume(s, (ptr + 1) - s->lex.bufstart);
+			lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
+			buf_consume(lex, (ptr + 1) - lex->bufstart);
 
-			rv = lookbehind_to_text(s, s->lex.lastoff, T_STRING, NULL);
+			rv = lookbehind_to_text(lex, lex->lastoff, TK_STRING, NULL);
 
 			if (!rv)
-				rv = emit_op(s, s->lex.lastoff, T_STRING, xjs_new_string_len("", 0));
+				rv = emit_op(lex, lex->lastoff, TK_STRING, xjs_new_string_len("", 0));
 
 			return rv;
 		}
 
 		/* escape sequence start */
 		else if (*ptr == '\\') {
-			s->lex.is_escape = true;
-			lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
-			buf_consume(s, ptr - s->lex.bufstart);
+			lex->is_escape = true;
+			lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
+			buf_consume(lex, ptr - lex->bufstart);
 		}
 	}
 
-	lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
-	buf_consume(s, ptr - s->lex.bufstart);
+	lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
+	buf_consume(lex, ptr - lex->bufstart);
 
-	return 0;
+	return NULL;
 }
 
 
@@ -614,90 +695,85 @@ enum {
 	UT_LEX_PARSE_REGEX_FLAGS
 };
 
-static uint32_t
-parse_regexp(struct uc_state *state)
+static uc_token *
+parse_regexp(uc_lexer *lex)
 {
-	struct json_object *pattern;
-	struct uc_op *op;
-	uint32_t rv;
-	char *err;
+	bool is_reg_global = false, is_reg_icase = false, is_reg_newline = false;
+	uc_token *rv;
+	size_t len;
+	char *s;
 
-	switch (state->lex.esc[0]) {
+	switch (lex->esc[0]) {
 	case UT_LEX_PARSE_REGEX_INIT:
-		if (state->lex.expect_div) {
-			state->lex.expect_div = false;
+		if (lex->expect_div) {
+			lex->expect_div = false;
 
-			if (buf_startswith(state, "=")) {
-				buf_consume(state, 1);
+			if (buf_startswith(lex, "=")) {
+				buf_consume(lex, 1);
 
-				return emit_op(state, state->source->off, T_ASDIV, NULL);
+				return emit_op(lex, lex->source->off, TK_ASDIV, NULL);
 			}
 
-			return emit_op(state, state->source->off, T_DIV, NULL);
+			return emit_op(lex, lex->source->off, TK_DIV, NULL);
 		}
 
-		state->lex.esc[0] = UT_LEX_PARSE_REGEX_PATTERN;
+		lex->esc[0] = UT_LEX_PARSE_REGEX_PATTERN;
 		break;
 
 	case UT_LEX_PARSE_REGEX_PATTERN:
-		rv = parse_string(state);
+		rv = parse_string(lex);
 
-		if (rv != 0 && rv != UINT32_MAX) {
-			state->lex.lookbehind = (char *)OP(rv);
-			state->lex.esc[0] = UT_LEX_PARSE_REGEX_FLAGS;
+		if (rv && rv->type == TK_ERROR)
+			return rv;
+
+		if (rv != NULL && rv != UC_LEX_CONTINUE_PARSING) {
+			lex->lookbehind = (char *)rv;
+			lex->esc[0] = UT_LEX_PARSE_REGEX_FLAGS;
 		}
 
 		break;
 
 	case UT_LEX_PARSE_REGEX_FLAGS:
-		op = (struct uc_op *)state->lex.lookbehind;
+		rv = (uc_token *)lex->lookbehind;
 
-		while (state->lex.bufstart < state->lex.bufend) {
-			switch (state->lex.bufstart[0]) {
+		while (lex->bufstart < lex->bufend) {
+			switch (lex->bufstart[0]) {
 			case 'g':
-				buf_consume(state, 1);
-				op->is_reg_global = true;
+				buf_consume(lex, 1);
+				is_reg_global = true;
 				break;
 
 			case 'i':
-				buf_consume(state, 1);
-				op->is_reg_icase = true;
+				buf_consume(lex, 1);
+				is_reg_icase = true;
 				break;
 
 			case 's':
-				buf_consume(state, 1);
-				op->is_reg_newline = true;
+				buf_consume(lex, 1);
+				is_reg_newline = true;
 				break;
 
 			default:
-				state->lex.lookbehind = NULL;
+				lex->lookbehind = NULL;
 
-				pattern = uc_new_regexp(json_object_get_string(op->val),
-				                        op->is_reg_icase,
-				                        op->is_reg_newline,
-				                        op->is_reg_global,
-				                        &err);
+				len = xasprintf(&s, "%c%*s",
+					(is_reg_global << 0) | (is_reg_icase << 1) | (is_reg_newline << 2),
+					json_object_get_string_len(rv->val),
+					json_object_get_string(rv->val));
 
-				json_object_put(op->val);
+				json_object_set_string_len(rv->val, s, len);
+				free(s);
 
-				op->type = T_REGEXP;
-				op->val = pattern;
+				rv->type = TK_REGEXP;
 
-				if (!pattern) {
-					uc_new_exception(state, op->off, "Syntax error: %s", err);
-					free(err);
-
-					return 0;
-				}
-
-				return op - state->pool;
+				return rv;
 			}
 		}
 
 		break;
 	}
 
-	return 0;
+	return NULL;
 }
 
 
@@ -711,50 +787,50 @@ parse_regexp(struct uc_state *state)
  *  -UT_ERROR_OVERLONG_STRING	Label too long
  */
 
-static uint32_t
-parse_label(struct uc_state *s)
+static uc_token *
+parse_label(uc_lexer *lex)
 {
-	const struct token *tok = s->lex.tok;
+	const struct token *tok = lex->tok;
 	const struct keyword *word;
-	uint32_t rv;
+	uc_token *rv;
 	char *ptr;
 	size_t i;
 
-	if (!s->lex.lookbehind && tok->plen)
-		lookbehind_append(s, tok->pat, tok->plen);
+	if (!lex->lookbehind && tok->plen)
+		lookbehind_append(lex, tok->pat, tok->plen);
 
-	if (!buf_remaining(s) || (s->lex.bufstart[0] != '_' && !isalnum(s->lex.bufstart[0]))) {
+	if (!buf_remaining(lex) || (lex->bufstart[0] != '_' && !isalnum(lex->bufstart[0]))) {
 		for (i = 0, word = &reserved_words[0]; i < ARRAY_SIZE(reserved_words); i++, word = &reserved_words[i]) {
-			if (s->lex.lookbehindlen == word->plen && !strncmp(s->lex.lookbehind, word->pat, word->plen)) {
-				lookbehind_reset(s);
+			if (lex->lookbehindlen == word->plen && !strncmp(lex->lookbehind, word->pat, word->plen)) {
+				lookbehind_reset(lex);
 
 				switch (word->type) {
-				case T_DOUBLE:
-					rv = emit_op(s, s->source->off - word->plen, word->type, uc_new_double(word->d));
+				case TK_DOUBLE:
+					rv = emit_op(lex, lex->source->off - word->plen, word->type, uc_double_new(word->d));
 					break;
 
-				case T_BOOL:
-					rv = emit_op(s, s->source->off - word->plen, word->type, xjs_new_boolean(word->b));
+				case TK_BOOL:
+					rv = emit_op(lex, lex->source->off - word->plen, word->type, xjs_new_boolean(word->b));
 					break;
 
 				default:
-					rv = emit_op(s, s->source->off - word->plen, word->type, NULL);
+					rv = emit_op(lex, lex->source->off - word->plen, word->type, NULL);
 				}
 
 				return rv;
 			}
 		}
 
-		return lookbehind_to_text(s, s->source->off - s->lex.lookbehindlen, T_LABEL, NULL);
+		return lookbehind_to_text(lex, lex->source->off - lex->lookbehindlen, TK_LABEL, NULL);
 	}
 
-	for (ptr = s->lex.bufstart; ptr < s->lex.bufend && (*ptr == '_' || isalnum(*ptr)); ptr++)
+	for (ptr = lex->bufstart; ptr < lex->bufend && (*ptr == '_' || isalnum(*ptr)); ptr++)
 		;
 
-	lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
-	buf_consume(s, ptr - s->lex.bufstart);
+	lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
+	buf_consume(lex, ptr - lex->bufstart);
 
-	return 0;
+	return NULL;
 }
 
 
@@ -769,198 +845,206 @@ parse_label(struct uc_state *s)
  */
 
 static inline bool
-is_numeric_char(struct uc_state *s, char c)
+is_numeric_char(uc_lexer *lex, char c)
 {
-	char prev = s->lex.lookbehindlen ? s->lex.lookbehind[s->lex.lookbehindlen-1] : 0;
+	char prev = lex->lookbehindlen ? lex->lookbehind[lex->lookbehindlen-1] : 0;
 
 	if ((prev == 'e' || prev == 'E') && (c == '-' || c == '+'))
 		return true;
 
-	return (isxdigit(c) || c == 'x' || c == 'X' || c == '.');
+	return prev ? (isxdigit(c) || c == 'x' || c == 'X' || c == '.') : (isdigit(c) || c == '.');
 }
 
-static uint32_t
-parse_number(struct uc_state *state)
+static uc_token *
+parse_number(uc_lexer *lex)
 {
-	uint32_t rv = 0;
+	const struct token *tok = lex->tok;
+	uc_token *rv = NULL;
 	long long int n;
 	char *ptr, *e;
 	double d;
 
-	if (!buf_remaining(state) || !is_numeric_char(state, state->lex.bufstart[0])) {
-		lookbehind_append(state, "\0", 1);
+	if (!buf_remaining(lex) || !is_numeric_char(lex, lex->bufstart[0])) {
+		if (lex->lookbehindlen == 0 && !is_numeric_char(lex, lex->bufstart[0]))
+			return emit_op(lex, lex->source->off, TK_SUB, NULL);
 
-		n = strtoll(state->lex.lookbehind, &e, 0);
+		lookbehind_append(lex, "\0", 1);
+
+		n = strtoll(lex->lookbehind, &e, 0);
 
 		if (*e == '.' || *e == 'e' || *e == 'E') {
-			d = strtod(state->lex.lookbehind, &e);
+			d = strtod(lex->lookbehind, &e);
 
-			if (e > state->lex.lookbehind && *e == 0)
-				rv = emit_op(state, state->source->off - (e - state->lex.lookbehind), T_DOUBLE, uc_new_double(d));
+			if (tok->pat[0] == '-')
+				d = -d;
+
+			if (e > lex->lookbehind && *e == 0)
+				rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_DOUBLE, uc_double_new(d));
 			else
-				uc_new_exception(state, state->source->off - (state->lex.lookbehindlen - (e - state->lex.lookbehind) - 1),
-				                 "Syntax error: Invalid number literal");
+				rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, xjs_new_string("Invalid number literal"));
 		}
 		else if (*e == 0) {
-			rv = emit_op(state, state->source->off - (e - state->lex.lookbehind), T_NUMBER, xjs_new_int64(n));
-			OP(rv)->is_overflow = (errno == ERANGE);
+			if (tok->pat[0] == '-')
+				n = (errno == ERANGE) ? INT64_MIN : -n;
+
+			rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_NUMBER, xjs_new_int64(n));
+			//OP(rv)->is_overflow = (errno == ERANGE);
 		}
 		else {
-			uc_new_exception(state, state->source->off - (state->lex.lookbehindlen - (e - state->lex.lookbehind) - 1),
-			                 "Syntax error: Invalid number literal");
+			rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, xjs_new_string("Invalid number literal"));
 		}
 
-		lookbehind_reset(state);
+		lookbehind_reset(lex);
 
 		return rv;
 	}
 
-	for (ptr = state->lex.bufstart; ptr < state->lex.bufend && is_numeric_char(state, *ptr); ptr++)
+	for (ptr = lex->bufstart; ptr < lex->bufend && is_numeric_char(lex, *ptr); ptr++)
 		;
 
-	lookbehind_append(state, state->lex.bufstart, ptr - state->lex.bufstart);
-	buf_consume(state, ptr - state->lex.bufstart);
+	lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
+	buf_consume(lex, ptr - lex->bufstart);
 
-	return 0;
+	return NULL;
 }
 
-static uint32_t
-lex_step(struct uc_state *s, FILE *fp)
+static uc_token *
+lex_step(uc_lexer *lex, FILE *fp)
 {
 	uint32_t masks[] = { 0, le32toh(0x000000ff), le32toh(0x0000ffff), le32toh(0x00ffffff), le32toh(0xffffffff) };
 	union { uint32_t n; char str[4]; } search;
 	const struct token *tok;
 	size_t rlen, rem;
 	char *ptr, c;
-	uint32_t rv;
+	uc_token *rv;
 	size_t i;
 
 	/* only less than UT_LEX_MAX_TOKEN_LEN unreach buffer chars remaining,
 	 * move the remaining bytes to the beginning and read more data */
-	if (buf_remaining(s) < UT_LEX_MAX_TOKEN_LEN) {
-		if (!s->lex.buf) {
-			s->lex.buflen = 128;
-			s->lex.buf = xalloc(s->lex.buflen);
+	if (buf_remaining(lex) < UT_LEX_MAX_TOKEN_LEN) {
+		if (!lex->buf) {
+			lex->buflen = 128;
+			lex->buf = xalloc(lex->buflen);
 		}
 
-		rem = s->lex.bufend - s->lex.bufstart;
+		rem = lex->bufend - lex->bufstart;
 
-		memcpy(s->lex.buf, s->lex.bufstart, rem);
+		memcpy(lex->buf, lex->bufstart, rem);
 
-		rlen = fread(s->lex.buf + rem, 1, s->lex.buflen - rem, fp);
+		rlen = fread(lex->buf + rem, 1, lex->buflen - rem, fp);
 
-		s->lex.bufstart = s->lex.buf;
-		s->lex.bufend   = s->lex.buf + rlen + rem;
+		lex->bufstart = lex->buf;
+		lex->bufend   = lex->buf + rlen + rem;
 
 		if (rlen == 0 && (ferror(fp) || feof(fp)))
-			s->lex.eof = 1;
+			lex->eof = 1;
 	}
 
-	switch (s->lex.state) {
+	switch (lex->state) {
 	case UT_LEX_IDENTIFY_BLOCK:
 		/* previous block had strip trailing whitespace flag, skip leading whitespace */
-		if (s->lex.skip_leading_whitespace) {
-			while (buf_remaining(s) && isspace(s->lex.bufstart[0]))
-				buf_consume(s, 1);
+		if (lex->skip_leading_whitespace) {
+			while (buf_remaining(lex) && isspace(lex->bufstart[0]))
+				buf_consume(lex, 1);
 
-			s->lex.skip_leading_whitespace = false;
+			lex->skip_leading_whitespace = false;
 		}
 
 		/* previous block was a statement block and trim_blocks is enabld, skip leading newline */
-		else if (s->lex.skip_leading_newline) {
-			if (buf_startswith(s, "\n"))
-				buf_consume(s, 1);
+		else if (lex->skip_leading_newline) {
+			if (buf_startswith(lex, "\n"))
+				buf_consume(lex, 1);
 
-			s->lex.skip_leading_newline = false;
+			lex->skip_leading_newline = false;
 		}
 
 		/* scan forward through buffer to identify start token */
-		for (ptr = s->lex.bufstart; ptr < s->lex.bufend - strlen("{#"); ptr++) {
+		for (ptr = lex->bufstart; ptr < lex->bufend - strlen("{#"); ptr++) {
 			/* found start of comment block */
 			if (!strncmp(ptr, "{#", 2)) {
-				lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
-				buf_consume(s, (ptr + 2) - s->lex.bufstart);
-				s->lex.lastoff = s->source->off - 2;
-				s->lex.state = UT_LEX_BLOCK_COMMENT_START;
+				lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
+				buf_consume(lex, (ptr + 2) - lex->bufstart);
+				lex->lastoff = lex->source->off - 2;
+				lex->state = UT_LEX_BLOCK_COMMENT_START;
 
-				return 0;
+				return NULL;
 			}
 
 			/* found start of expression block */
 			else if (!strncmp(ptr, "{{", 2)) {
-				lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
-				buf_consume(s, (ptr + 2) - s->lex.bufstart);
-				s->lex.lastoff = s->source->off - 2;
-				s->lex.state = UT_LEX_BLOCK_EXPRESSION_START;
+				lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
+				buf_consume(lex, (ptr + 2) - lex->bufstart);
+				lex->lastoff = lex->source->off - 2;
+				lex->state = UT_LEX_BLOCK_EXPRESSION_START;
 
-				return 0;
+				return NULL;
 			}
 
 			/* found start of statement block */
 			else if (!strncmp(ptr, "{%", 2)) {
-				lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
-				buf_consume(s, (ptr + 2) - s->lex.bufstart);
-				s->lex.lastoff = s->source->off - 2;
-				s->lex.state = UT_LEX_BLOCK_STATEMENT_START;
+				lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
+				buf_consume(lex, (ptr + 2) - lex->bufstart);
+				lex->lastoff = lex->source->off - 2;
+				lex->state = UT_LEX_BLOCK_STATEMENT_START;
 
-				return 0;
+				return NULL;
 			}
 		}
 
 		/* we're at eof */
-		if (s->lex.eof) {
-			lookbehind_append(s, ptr, s->lex.bufend - ptr);
-			s->lex.state = UT_LEX_EOF;
+		if (lex->eof) {
+			lookbehind_append(lex, ptr, lex->bufend - ptr);
+			lex->state = UT_LEX_EOF;
 
-			return lookbehind_to_text(s, s->lex.lastoff, T_TEXT, NULL);
+			return lookbehind_to_text(lex, lex->lastoff, TK_TEXT, NULL);
 		}
 
-		lookbehind_append(s, s->lex.bufstart, ptr - s->lex.bufstart);
-		buf_consume(s, ptr - s->lex.bufstart);
+		lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
+		buf_consume(lex, ptr - lex->bufstart);
 		break;
 
 
 	case UT_LEX_BLOCK_COMMENT_START:
 	case UT_LEX_BLOCK_EXPRESSION_START:
 	case UT_LEX_BLOCK_STATEMENT_START:
-		rv = 0;
-		s->lex.skip_leading_whitespace = 0;
+		rv = NULL;
+		lex->skip_leading_whitespace = 0;
 
 		/* strip whitespace before block */
-		if (buf_startswith(s, "-")) {
-			rv = lookbehind_to_text(s, s->source->off, T_TEXT, " \n\t\v\f\r");
-			buf_consume(s, 1);
+		if (buf_startswith(lex, "-")) {
+			rv = lookbehind_to_text(lex, lex->source->off, TK_TEXT, " \n\t\v\f\r");
+			buf_consume(lex, 1);
 		}
 
 		/* disable lstrip flag (only valid for statement blocks) */
-		else if (s->lex.state == UT_LEX_BLOCK_STATEMENT_START) {
+		else if (lex->state == UT_LEX_BLOCK_STATEMENT_START) {
 			/* disable lstrip flag */
-			if (buf_startswith(s, "+")) {
-				rv = lookbehind_to_text(s, s->source->off, T_TEXT, NULL);
-				buf_consume(s, 1);
+			if (buf_startswith(lex, "+")) {
+				rv = lookbehind_to_text(lex, lex->source->off, TK_TEXT, NULL);
+				buf_consume(lex, 1);
 			}
 
 			/* global block lstrip */
-			else if (s->lstrip_blocks) {
-				rv = lookbehind_to_text(s, s->source->off, T_TEXT, " \t\v\f\r");
+			else if (lex->config && lex->config->lstrip_blocks) {
+				rv = lookbehind_to_text(lex, lex->source->off, TK_TEXT, " \t\v\f\r");
 			}
 		}
 		else {
-			rv = lookbehind_to_text(s, s->source->off, T_TEXT, NULL);
+			rv = lookbehind_to_text(lex, lex->source->off, TK_TEXT, NULL);
 		}
 
-		switch (s->lex.state) {
+		switch (lex->state) {
 		case UT_LEX_BLOCK_COMMENT_START:
-			s->lex.state = UT_LEX_BLOCK_COMMENT;
+			lex->state = UT_LEX_BLOCK_COMMENT;
 			break;
 
 		case UT_LEX_BLOCK_STATEMENT_START:
-			s->lex.within_statement_block = 1;
-			s->lex.state = UT_LEX_IDENTIFY_TOKEN;
+			lex->within_statement_block = 1;
+			lex->state = UT_LEX_IDENTIFY_TOKEN;
 			break;
 
 		case UT_LEX_BLOCK_EXPRESSION_START:
-			s->lex.state = UT_LEX_BLOCK_EXPRESSION_EMIT_TAG;
+			lex->state = UT_LEX_BLOCK_EXPRESSION_EMIT_TAG;
 			break;
 
 		default:
@@ -972,152 +1056,151 @@ lex_step(struct uc_state *s, FILE *fp)
 
 	case UT_LEX_BLOCK_COMMENT:
 		/* scan forward through buffer to identify end token */
-		while (s->lex.bufstart < s->lex.bufend - 2) {
-			if (buf_startswith(s, "-#}")) {
-				s->lex.state = UT_LEX_IDENTIFY_BLOCK;
-				s->lex.skip_leading_whitespace = 1;
-				buf_consume(s, 3);
-				s->lex.lastoff = s->source->off;
+		while (lex->bufstart < lex->bufend - 2) {
+			if (buf_startswith(lex, "-#}")) {
+				lex->state = UT_LEX_IDENTIFY_BLOCK;
+				lex->skip_leading_whitespace = 1;
+				buf_consume(lex, 3);
+				lex->lastoff = lex->source->off;
 				break;
 			}
-			else if (buf_startswith(s, "#}")) {
-				s->lex.state = UT_LEX_IDENTIFY_BLOCK;
-				s->lex.skip_leading_whitespace = 0;
-				buf_consume(s, 2);
-				s->lex.lastoff = s->source->off;
+			else if (buf_startswith(lex, "#}")) {
+				lex->state = UT_LEX_IDENTIFY_BLOCK;
+				lex->skip_leading_whitespace = 0;
+				buf_consume(lex, 2);
+				lex->lastoff = lex->source->off;
 				break;
 			}
 
-			buf_consume(s, 1);
+			buf_consume(lex, 1);
 		}
 
 		/* we're at eof */
-		if (s->lex.eof)
-			uc_new_exception(s, s->lex.lastoff, "Syntax error: Unterminated template block");
+		if (lex->eof) {
+			lex->state = UT_LEX_EOF;
+
+			buf_consume(lex, lex->bufend - lex->bufstart);
+
+			return emit_op(lex, lex->lastoff, TK_ERROR, xjs_new_string("Unterminated template block"));
+		}
 
 		break;
 
 
 	case UT_LEX_BLOCK_EXPRESSION_EMIT_TAG:
-		s->lex.within_expression_block = 1;
-		s->lex.state = UT_LEX_IDENTIFY_TOKEN;
+		lex->within_expression_block = 1;
+		lex->state = UT_LEX_IDENTIFY_TOKEN;
 
-		return emit_op(s, s->source->off, T_LEXP, NULL);
+		return emit_op(lex, lex->source->off, TK_LEXP, NULL);
 
 
 	case UT_LEX_IDENTIFY_TOKEN:
 		/* skip leading whitespace */
-		for (i = 0; i < buf_remaining(s) && isspace(s->lex.bufstart[i]); i++)
+		for (i = 0; i < buf_remaining(lex) && isspace(lex->bufstart[i]); i++)
 			;
 
-		buf_consume(s, i);
+		buf_consume(lex, i);
 
-		if (i > 0 && buf_remaining(s) < UT_LEX_MAX_TOKEN_LEN)
-			return 0;
+		if (i > 0 && buf_remaining(lex) < UT_LEX_MAX_TOKEN_LEN)
+			return NULL;
 
 		for (i = 0; i < sizeof(search.str); i++)
-			search.str[i] = (i < buf_remaining(s)) ? s->lex.bufstart[i] : 0;
+			search.str[i] = (i < buf_remaining(lex)) ? lex->bufstart[i] : 0;
 
 		for (i = 0, tok = tokens; i < ARRAY_SIZE(tokens); tok = &tokens[++i]) {
 			/* remaining buffer data is shorter than token, skip */
-			if (tok->plen > buf_remaining(s))
+			if (tok->plen > buf_remaining(lex))
 				continue;
 
-			c = s->lex.bufstart[0];
+			c = buf_remaining(lex) ? lex->bufstart[0] : 0;
 
 			if (tok->plen ? ((search.n & masks[tok->plen]) == tok->patn)
 			              : (c >= tok->pat[0] && c <= tok->pat[1])) {
-				buf_consume(s, tok->plen);
-
-				s->lex.lastoff = s->source->off - tok->plen;
+				lex->lastoff = lex->source->off;
 
 				/* token has a parse method, switch state */
 				if (tok->parse) {
-					s->lex.tok = tok;
-					s->lex.state = UT_LEX_PARSE_TOKEN;
+					lex->tok = tok;
+					lex->state = UT_LEX_PARSE_TOKEN;
 
-					return 0;
+					buf_consume(lex, tok->plen);
+
+					return NULL;
 				}
 
 				/* disallow nesting blocks */
-				if ((s->lex.within_expression_block &&
-				     (tok->type == T_LSTM || tok->type == T_RSTM || tok->type == T_LEXP)) ||
-				    (s->lex.within_statement_block &&
-				     (tok->type == T_LEXP || tok->type == T_REXP || tok->type == T_LSTM))) {
-					uc_new_exception(s, s->source->off - tok->plen, "Syntax error: Template blocks may not be nested");
+				if ((lex->within_expression_block &&
+				     (tok->type == TK_LSTM || tok->type == TK_RSTM || tok->type == TK_LEXP)) ||
+				    (lex->within_statement_block &&
+				     (tok->type == TK_LEXP || tok->type == TK_REXP || tok->type == TK_LSTM))) {
+					buf_consume(lex, tok->plen);
 
-					return 0;
+					return emit_op(lex, lex->source->off - tok->plen, TK_ERROR, xjs_new_string("Template blocks may not be nested"));
 				}
 
 				/* found end of block */
-				else if ((s->lex.within_statement_block && tok->type == T_RSTM) ||
-				         (s->lex.within_expression_block && tok->type == T_REXP)) {
+				else if ((lex->within_statement_block && tok->type == TK_RSTM) ||
+				         (lex->within_expression_block && tok->type == TK_REXP)) {
 					/* emit additional empty statement (semicolon) at end of template block */
-					if (!s->lex.semicolon_emitted) {
-						s->lex.semicolon_emitted = true;
+					if (!lex->semicolon_emitted) {
+						lex->semicolon_emitted = true;
 
-						/* rewind */
-						buf_consume(s, -tok->plen);
-
-						return emit_op(s, s->source->off, T_SCOL, NULL);
+						return emit_op(lex, lex->source->off, TK_SCOL, NULL);
 					}
 
 					/* strip whitespace after block */
 					if (tok->pat[0] == '-')
-						s->lex.skip_leading_whitespace = true;
+						lex->skip_leading_whitespace = true;
 
 					/* strip newline after statement block */
-					else if (s->lex.within_statement_block && s->trim_blocks)
-						s->lex.skip_leading_newline = true;
+					else if (lex->within_statement_block &&
+					         lex->config && lex->config->trim_blocks)
+						lex->skip_leading_newline = true;
 
-					s->lex.semicolon_emitted = false;
-					s->lex.within_statement_block = false;
-					s->lex.within_expression_block = false;
-					s->lex.state = UT_LEX_IDENTIFY_BLOCK;
-					s->lex.lastoff = s->source->off;
+					lex->semicolon_emitted = false;
+					lex->within_statement_block = false;
+					lex->within_expression_block = false;
+					lex->state = UT_LEX_IDENTIFY_BLOCK;
 				}
 
 				/* do not report statement tags to the parser */
-				if (tok->type != 0 && tok->type != T_LSTM && tok->type != T_RSTM)
-					rv = emit_op(s, s->source->off - tok->plen, tok->type, NULL);
+				if (tok->type != 0 && tok->type != TK_LSTM && tok->type != TK_RSTM)
+					rv = emit_op(lex, lex->source->off, tok->type, NULL);
 				else
-					rv = 0;
+					rv = NULL;
+
+				buf_consume(lex, tok->plen);
 
 				return rv;
 			}
 		}
 
 		/* no token matched and we do have remaining data, junk */
-		if (buf_remaining(s)) {
-			uc_new_exception(s, s->source->off, "Syntax error: Unexpected character");
-
-			return 0;
-		}
+		if (buf_remaining(lex))
+			return emit_op(lex, lex->source->off, TK_ERROR, xjs_new_string("Unexpected character"));
 
 		/* we're at eof, allow unclosed statement blocks */
-		if (s->lex.within_statement_block) {
-			s->lex.state = UT_LEX_EOF;
+		if (lex->within_statement_block) {
+			lex->state = UT_LEX_EOF;
 
-			return 0;
+			return NULL;
 		}
 
 		/* premature EOF */
-		uc_new_exception(s, s->source->off, "Syntax error: Unterminated template block");
-
-		break;
+		return emit_op(lex, lex->source->off, TK_ERROR, xjs_new_string("Unterminated template block"));
 
 
 	case UT_LEX_PARSE_TOKEN:
-		tok = s->lex.tok;
-		rv = tok->parse(s);
+		tok = lex->tok;
+		rv = tok->parse(lex);
 
 		if (rv) {
-			memset(s->lex.esc, 0, sizeof(s->lex.esc));
-			s->lex.state = UT_LEX_IDENTIFY_TOKEN;
-			s->lex.tok = NULL;
+			memset(lex->esc, 0, sizeof(lex->esc));
+			lex->state = UT_LEX_IDENTIFY_TOKEN;
+			lex->tok = NULL;
 
-			if (rv == UINT32_MAX)
-				rv = 0;
+			if (rv == UC_LEX_CONTINUE_PARSING)
+				rv = NULL;
 
 			return rv;
 		}
@@ -1129,25 +1212,66 @@ lex_step(struct uc_state *s, FILE *fp)
 		break;
 	}
 
-	return 0;
+	return NULL;
 }
 
-uint32_t
-uc_get_token(struct uc_state *s, FILE *fp)
+void
+uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source)
 {
-	uint32_t rv;
+	lex->state = UT_LEX_IDENTIFY_BLOCK;
 
-	while (s->lex.state != UT_LEX_EOF) {
-		rv = lex_step(s, fp);
+	lex->config = config;
+	lex->source = uc_source_get(source);
 
-		if (rv == 0 && s->exception)
-			break;
+	lex->eof = 0;
+	lex->skip_leading_whitespace = 0;
+	lex->skip_leading_newline = 0;
+	lex->within_statement_block = 0;
+	lex->within_statement_block = 0;
+	lex->semicolon_emitted = 0;
+	lex->expect_div = 0;
+	lex->is_escape = 0;
 
-		if (rv > 0)
+	lex->buflen = 0;
+	lex->buf = NULL;
+	lex->bufstart = NULL;
+	lex->bufend = NULL;
+
+	lex->lookbehindlen = 0;
+	lex->lookbehind = NULL;
+
+	lex->tok = NULL;
+
+	lex->esclen = 0;
+	memset(lex->esc, 0, sizeof(lex->esc));
+
+	lex->lead_surrogate = 0;
+
+	lex->lastoff = 0;
+}
+
+void
+uc_lexer_free(uc_lexer *lex)
+{
+	uc_source_put(lex->source);
+
+	free(lex->lookbehind);
+	free(lex->buf);
+}
+
+uc_token *
+uc_lexer_next_token(uc_lexer *lex)
+{
+	uc_token *rv;
+
+	while (lex->state != UT_LEX_EOF) {
+		rv = lex_step(lex, lex->source->fp);
+
+		if (rv != NULL)
 			return rv;
 	}
 
-	return 0;
+	return emit_op(lex, lex->source->off, TK_EOF, NULL);
 }
 
 const char *
@@ -1158,11 +1282,11 @@ uc_get_tokenname(int type)
 
 	switch (type) {
 	case 0:        return "End of file";
-	case T_STRING: return "String";
-	case T_LABEL:  return "Label";
-	case T_NUMBER: return "Number";
-	case T_DOUBLE: return "Double";
-	case T_REGEXP: return "Regexp";
+	case TK_STRING: return "String";
+	case TK_LABEL:  return "Label";
+	case TK_NUMBER: return "Number";
+	case TK_DOUBLE: return "Double";
+	case TK_REGEXP: return "Regexp";
 	}
 
 	for (i = 0; i < ARRAY_SIZE(tokens); i++) {

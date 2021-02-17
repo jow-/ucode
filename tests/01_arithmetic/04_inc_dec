@@ -17,9 +17,9 @@ or decrement operation is NaN.
 -- Expect stdout --
 Incrementing a not existing variable assumes "0" as initial value:
 
- - Postfix increment result: null, value after: 1
+ - Postfix increment result: 0, value after: 1
  - Prefix increment result:  1, value after: 1
- - Postfix decrement result: null, value after: -1
+ - Postfix decrement result: 0, value after: -1
  - Prefix decrement result:  -1, value after: -1
 
 Incrementing a non-numeric value will convert it to a number:

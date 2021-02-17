@@ -13,7 +13,8 @@ true
 	}
 
 	// When invoked, "this" will point to the object containing the function
-	let o = {
+	let o;
+	o = {
 		test: function() {
 			return (this === o);
 		}
@@ -34,7 +35,8 @@ true
 
 -- Testcase --
 {%
-	let o = {
+	let o;
+	o = {
 		test: function() {
 			return (this === o);
 		}
@@ -45,3 +47,4 @@ true
 	print(o.test(dummy.foo, dummy.bar), "\n");
 	print(o.test(dummy.foo, o.test(dummy.foo, dummy.bar)), "\n");
 %}
+-- End --

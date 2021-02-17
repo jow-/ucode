@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Jo-Philipp Wich <jo@mein.io>
+ * Copyright (C) 2020-2021 Jo-Philipp Wich <jo@mein.io>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,16 +14,15 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "../module.h"
-
 #include <string.h>
 #include <uci.h>
 
+#include "../module.h"
+
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
-static const struct uc_ops *ops;
-
 static int last_error = 0;
+static uc_ressource_type *cursor_type;
 
 enum pkg_cmd {
 	CMD_SAVE,
@@ -31,11 +30,11 @@ enum pkg_cmd {
 	CMD_REVERT
 };
 
-static struct json_object *
-uc_uci_error(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_error(uc_vm *vm, size_t nargs)
 {
 	char buf[sizeof("Unknown error: -9223372036854775808")];
-	struct json_object *errmsg;
+	json_object *errmsg;
 
 	const char *errstr[] = {
 		[UCI_ERR_MEM] =       "Out of memory",
@@ -64,12 +63,11 @@ uc_uci_error(struct uc_state *s, uint32_t off, struct json_object *args)
 }
 
 
-static struct json_object *
-uc_uci_cursor(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_cursor(uc_vm *vm, size_t nargs)
 {
-	struct json_object *cdir = json_object_array_get_idx(args, 0);
-	struct json_object *sdir = json_object_array_get_idx(args, 1);
-	struct json_object *co;
+	json_object *cdir = uc_get_arg(0);
+	json_object *sdir = uc_get_arg(1);
 	struct uci_context *c;
 	int rv;
 
@@ -96,22 +94,15 @@ uc_uci_cursor(struct uc_state *s, uint32_t off, struct json_object *args)
 			err_return(rv);
 	}
 
-	co = json_object_new_object();
-
-	if (!co) {
-		uci_free_context(c);
-		err_return(UCI_ERR_MEM);
-	}
-
-	return ops->set_type(co, "uci.cursor", c);
+	return uc_alloc_ressource(cursor_type, c);
 }
 
 
-static struct json_object *
-uc_uci_load(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_load(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
 	struct uci_element *e;
 
 	if (!c || !*c)
@@ -133,11 +124,11 @@ uc_uci_load(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_uci_unload(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_unload(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
 	struct uci_element *e;
 
 	if (!c || !*c)
@@ -186,10 +177,10 @@ lookup_ptr(struct uci_context *ctx, struct uci_ptr *ptr, bool extended)
 	return uci_lookup_ptr(ctx, ptr, NULL, extended);
 }
 
-static struct json_object *
+static json_object *
 option_to_json(struct uci_option *o)
 {
-	struct json_object *arr;
+	json_object *arr;
 	struct uci_element *e;
 
 	switch (o->type) {
@@ -210,10 +201,10 @@ option_to_json(struct uci_option *o)
 	}
 }
 
-static struct json_object *
+static json_object *
 section_to_json(struct uci_section *s, int index)
 {
-	struct json_object *so = json_object_new_object();
+	json_object *so = json_object_new_object();
 	struct uci_element *e;
 	struct uci_option *o;
 
@@ -235,11 +226,11 @@ section_to_json(struct uci_section *s, int index)
 	return so;
 }
 
-static struct json_object *
+static json_object *
 package_to_json(struct uci_package *p)
 {
-	struct json_object *po = json_object_new_object();
-	struct json_object *so;
+	json_object *po = json_object_new_object();
+	json_object *so;
 	struct uci_element *e;
 	int i = 0;
 
@@ -254,13 +245,13 @@ package_to_json(struct uci_package *p)
 	return po;
 }
 
-static struct json_object *
-uc_uci_get_any(struct uc_state *s, uint32_t off, struct json_object *args, bool all)
+static json_object *
+uc_uci_get_any(uc_vm *vm, size_t nargs, bool all)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
-	struct json_object *sect = json_object_array_get_idx(args, 1);
-	struct json_object *opt = json_object_array_get_idx(args, 2);
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
+	json_object *sect = uc_get_arg(1);
+	json_object *opt = uc_get_arg(2);
 	struct uci_ptr ptr = {};
 	int rv;
 
@@ -314,25 +305,25 @@ uc_uci_get_any(struct uc_state *s, uint32_t off, struct json_object *args, bool 
 	return json_object_new_string(ptr.s->type);
 }
 
-static struct json_object *
-uc_uci_get(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_get(uc_vm *vm, size_t nargs)
 {
-	return uc_uci_get_any(s, off, args, false);
+	return uc_uci_get_any(vm, nargs, false);
 }
 
-static struct json_object *
-uc_uci_get_all(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_get_all(uc_vm *vm, size_t nargs)
 {
-	return uc_uci_get_any(s, off, args, true);
+	return uc_uci_get_any(vm, nargs, true);
 }
 
-static struct json_object *
-uc_uci_get_first(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_get_first(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
-	struct json_object *type = json_object_array_get_idx(args, 1);
-	struct json_object *opt = json_object_array_get_idx(args, 2);
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
+	json_object *type = uc_get_arg(1);
+	json_object *opt = uc_get_arg(2);
 	struct uci_package *p = NULL;
 	struct uci_section *sc;
 	struct uci_element *e;
@@ -384,12 +375,12 @@ uc_uci_get_first(struct uc_state *s, uint32_t off, struct json_object *args)
 	err_return(UCI_ERR_NOTFOUND);
 }
 
-static struct json_object *
-uc_uci_add(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_add(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
-	struct json_object *type = json_object_array_get_idx(args, 1);
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
+	json_object *type = uc_get_arg(1);
 	struct uci_element *e = NULL;
 	struct uci_package *p = NULL;
 	struct uci_section *sc = NULL;
@@ -420,9 +411,9 @@ uc_uci_add(struct uc_state *s, uint32_t off, struct json_object *args)
 }
 
 static bool
-json_to_value(struct json_object *val, const char **p, bool *is_list)
+json_to_value(json_object *val, const char **p, bool *is_list)
 {
-	struct json_object *item;
+	json_object *item;
 
 	*p = NULL;
 
@@ -463,13 +454,13 @@ json_to_value(struct json_object *val, const char **p, bool *is_list)
 	}
 }
 
-static struct json_object *
-uc_uci_set(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_set(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
-	struct json_object *sect = json_object_array_get_idx(args, 1);
-	struct json_object *opt = NULL, *val = NULL;
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
+	json_object *sect = uc_get_arg(1);
+	json_object *opt = NULL, *val = NULL;
 	struct uci_ptr ptr = {};
 	bool is_list = false;
 	int rv, i;
@@ -478,11 +469,11 @@ uc_uci_set(struct uc_state *s, uint32_t off, struct json_object *args)
 	    !json_object_is_type(sect, json_type_string))
 	    err_return(UCI_ERR_INVAL);
 
-	switch (json_object_array_length(args)) {
+	switch (nargs) {
 	/* conf, sect, opt, val */
 	case 4:
-		opt = json_object_array_get_idx(args, 2);
-		val = json_object_array_get_idx(args, 3);
+		opt = uc_get_arg(2);
+		val = uc_get_arg(3);
 
 		if (!json_object_is_type(opt, json_type_string))
 			err_return(UCI_ERR_INVAL);
@@ -491,7 +482,7 @@ uc_uci_set(struct uc_state *s, uint32_t off, struct json_object *args)
 
 	/* conf, sect, type */
 	case 3:
-		val = json_object_array_get_idx(args, 2);
+		val = uc_get_arg(2);
 
 		if (!json_object_is_type(val, json_type_string))
 			err_return(UCI_ERR_INVAL);
@@ -563,13 +554,13 @@ uc_uci_set(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_uci_delete(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_delete(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
-	struct json_object *sect = json_object_array_get_idx(args, 1);
-	struct json_object *opt = json_object_array_get_idx(args, 2);
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
+	json_object *sect = uc_get_arg(1);
+	json_object *opt = uc_get_arg(2);
 	struct uci_ptr ptr = {};
 	int rv;
 
@@ -598,13 +589,13 @@ uc_uci_delete(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_uci_rename(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_rename(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
-	struct json_object *sect = json_object_array_get_idx(args, 1);
-	struct json_object *opt = NULL, *val = NULL;
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
+	json_object *sect = uc_get_arg(1);
+	json_object *opt = NULL, *val = NULL;
 	struct uci_ptr ptr = {};
 	int rv;
 
@@ -612,11 +603,11 @@ uc_uci_rename(struct uc_state *s, uint32_t off, struct json_object *args)
 	    !json_object_is_type(sect, json_type_string))
 	    err_return(UCI_ERR_INVAL);
 
-	switch (json_object_array_length(args)) {
+	switch (nargs) {
 	/* conf, sect, opt, val */
 	case 4:
-		opt = json_object_array_get_idx(args, 2);
-		val = json_object_array_get_idx(args, 3);
+		opt = uc_get_arg(2);
+		val = uc_get_arg(3);
 
 		if (!json_object_is_type(opt, json_type_string) ||
 		    !json_object_is_type(val, json_type_string))
@@ -626,7 +617,7 @@ uc_uci_rename(struct uc_state *s, uint32_t off, struct json_object *args)
 
 	/* conf, sect, type */
 	case 3:
-		val = json_object_array_get_idx(args, 2);
+		val = uc_get_arg(2);
 
 		if (!json_object_is_type(val, json_type_string))
 			err_return(UCI_ERR_INVAL);
@@ -658,13 +649,13 @@ uc_uci_rename(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_uci_reorder(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_reorder(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
-	struct json_object *sect = json_object_array_get_idx(args, 1);
-	struct json_object *val = json_object_array_get_idx(args, 2);
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
+	json_object *sect = uc_get_arg(1);
+	json_object *val = uc_get_arg(2);
 	struct uci_ptr ptr = {};
 	int64_t n;
 	int rv;
@@ -698,11 +689,11 @@ uc_uci_reorder(struct uc_state *s, uint32_t off, struct json_object *args)
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_uci_pkg_command(struct uc_state *s, uint32_t off, struct json_object *args, enum pkg_cmd cmd)
+static json_object *
+uc_uci_pkg_command(uc_vm *vm, size_t nargs, enum pkg_cmd cmd)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
 	struct uci_element *e, *tmp;
 	struct uci_package *p;
 	struct uci_ptr ptr = {};
@@ -748,25 +739,25 @@ uc_uci_pkg_command(struct uc_state *s, uint32_t off, struct json_object *args, e
 	return json_object_new_boolean(true);
 }
 
-static struct json_object *
-uc_uci_save(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_save(uc_vm *vm, size_t nargs)
 {
-	return uc_uci_pkg_command(s, off, args, CMD_SAVE);
+	return uc_uci_pkg_command(vm, nargs, CMD_SAVE);
 }
 
-static struct json_object *
-uc_uci_commit(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_commit(uc_vm *vm, size_t nargs)
 {
-	return uc_uci_pkg_command(s, off, args, CMD_COMMIT);
+	return uc_uci_pkg_command(vm, nargs, CMD_COMMIT);
 }
 
-static struct json_object *
-uc_uci_revert(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_revert(uc_vm *vm, size_t nargs)
 {
-	return uc_uci_pkg_command(s, off, args, CMD_REVERT);
+	return uc_uci_pkg_command(vm, nargs, CMD_REVERT);
 }
 
-static struct json_object *
+static json_object *
 change_to_json(struct uci_delta *d)
 {
 	const char *types[] = {
@@ -779,7 +770,7 @@ change_to_json(struct uci_delta *d)
 		[UCI_CMD_CHANGE]   = "set",
 	};
 
-	struct json_object *a;
+	json_object *a;
 
 	if (!d->section)
 		return NULL;
@@ -805,10 +796,10 @@ change_to_json(struct uci_delta *d)
 	return a;
 }
 
-static struct json_object *
+static json_object *
 changes_to_json(struct uci_context *ctx, const char *package)
 {
-	struct json_object *a = NULL, *c;
+	json_object *a = NULL, *c;
 	struct uci_package *p = NULL;
 	struct uci_element *e;
 	bool unload = false;
@@ -855,12 +846,12 @@ changes_to_json(struct uci_context *ctx, const char *package)
 	return a;
 }
 
-static struct json_object *
-uc_uci_changes(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_changes(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
-	struct json_object *res, *chg;
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
+	json_object *res, *chg;
 	char **configs;
 	int rv, i;
 
@@ -894,17 +885,18 @@ uc_uci_changes(struct uc_state *s, uint32_t off, struct json_object *args)
 	return res;
 }
 
-static struct json_object *
-uc_uci_foreach(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_foreach(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *conf = json_object_array_get_idx(args, 0);
-	struct json_object *type = json_object_array_get_idx(args, 1);
-	struct json_object *func = json_object_array_get_idx(args, 2);
-	struct json_object *fnargs, *rv = NULL;
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *conf = uc_get_arg(0);
+	json_object *type = uc_get_arg(1);
+	json_object *func = uc_get_arg(2);
+	json_object *rv = NULL;
 	struct uci_package *p = NULL;
 	struct uci_element *e, *tmp;
 	struct uci_section *sc;
+	uc_exception_type_t ex;
 	bool stop = false;
 	bool ret = false;
 	int i = 0;
@@ -924,11 +916,6 @@ uc_uci_foreach(struct uc_state *s, uint32_t off, struct json_object *args)
 	if (!p)
 		err_return(UCI_ERR_NOTFOUND);
 
-	fnargs = json_object_new_array();
-
-	if (!fnargs)
-		err_return(UCI_ERR_MEM);
-
 	uci_foreach_element_safe(&p->sections, tmp, e) {
 		sc = uci_to_section(e);
 		i++;
@@ -936,18 +923,17 @@ uc_uci_foreach(struct uc_state *s, uint32_t off, struct json_object *args)
 		if (type && strcmp(sc->type, json_object_get_string(type)))
 			continue;
 
-		json_object_array_put_idx(fnargs, 0, section_to_json(sc, i - 1));
+		uc_push_val(uc_value_get(func));
+		uc_push_val(section_to_json(sc, i - 1));
 
-		rv = ops->invoke(s, off, NULL, func, fnargs);
+		ex = uc_call(1);
 
-		/* forward exceptions from callback function */
-		if (uc_is_type(rv, T_EXCEPTION)) {
-			json_object_put(fnargs);
-
-			return rv;
-		}
+		/* stop on exception in callback */
+		if (ex)
+			break;
 
 		ret = true;
+		rv = uc_pop_val();
 		stop = (json_object_is_type(rv, json_type_boolean) && !json_object_get_boolean(rv));
 
 		json_object_put(rv);
@@ -956,16 +942,16 @@ uc_uci_foreach(struct uc_state *s, uint32_t off, struct json_object *args)
 			break;
 	}
 
-	json_object_put(fnargs);
+	/* XXX: rethrow */
 
 	return json_object_new_boolean(ret);
 }
 
-static struct json_object *
-uc_uci_configs(struct uc_state *s, uint32_t off, struct json_object *args)
+static json_object *
+uc_uci_configs(uc_vm *vm, size_t nargs)
 {
-	struct uci_context **c = (struct uci_context **)ops->get_type(s->ctx, "uci.cursor");
-	struct json_object *a;
+	struct uci_context **c = uc_get_self("uci.cursor");
+	json_object *a;
 	char **configs;
 	int i, rv;
 
@@ -990,7 +976,7 @@ uc_uci_configs(struct uc_state *s, uint32_t off, struct json_object *args)
 }
 
 
-static const struct { const char *name; uc_c_fn *func; } cursor_fns[] = {
+static const uc_cfunction_list cursor_fns[] = {
 	{ "load",		uc_uci_load },
 	{ "unload",		uc_uci_unload },
 	{ "get",		uc_uci_get },
@@ -1009,7 +995,7 @@ static const struct { const char *name; uc_c_fn *func; } cursor_fns[] = {
 	{ "configs",	uc_uci_configs },
 };
 
-static const struct { const char *name; uc_c_fn *func; } global_fns[] = {
+static const uc_cfunction_list global_fns[] = {
 	{ "error",		uc_uci_error },
 	{ "cursor",		uc_uci_cursor },
 };
@@ -1019,15 +1005,9 @@ static void close_uci(void *ud) {
 	uci_free_context((struct uci_context *)ud);
 }
 
-void uc_module_init(const struct uc_ops *ut, struct uc_state *s, struct json_object *scope)
+void uc_module_init(uc_prototype *scope)
 {
-	struct json_object *uci_proto;
+	uc_add_proto_functions(scope, global_fns);
 
-	ops = ut;
-	uci_proto = ops->new_object(NULL);
-
-	register_functions(s, ops, global_fns, scope);
-	register_functions(s, ops, cursor_fns, uci_proto);
-
-	ops->register_type("uci.cursor", uci_proto, close_uci);
+	cursor_type = uc_declare_type("uci.cursor", cursor_fns, close_uci);
 }
