@@ -1648,10 +1648,23 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 			uc_compiler_emit_constant(compiler, compiler->parser->prev.pos,
 				compiler->parser->prev.val);
 
-			uc_compiler_parse_consume(compiler, TK_COLON);
+			/* If the property name is a plain label followed by a comma or
+			 * closing curly brace, treat it as ES2015 property shorthand
+			 * notation... */
+			if (compiler->parser->prev.type == TK_LABEL &&
+			    (uc_compiler_parse_check(compiler, TK_COMMA) ||
+			     uc_compiler_parse_check(compiler, TK_RBRACE))) {
+				uc_compiler_emit_variable_rw(compiler,
+					compiler->parser->prev.val, 0);
+			}
 
-			/* parse value expression */
-			uc_compiler_parse_precedence(compiler, P_ASSIGN);
+			/* ... otherwise treat it as ordinary `key: value` tuple */
+			else {
+				uc_compiler_parse_consume(compiler, TK_COLON);
+
+				/* parse value expression */
+				uc_compiler_parse_precedence(compiler, P_ASSIGN);
+			}
 
 			/* set items on stack so far... */
 			if (len >= 0xfffffffe) {
