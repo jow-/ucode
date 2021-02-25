@@ -268,7 +268,7 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 	uc_upvalref *ref;
 	size_t i;
 
-	fprintf(stderr, "  [*] CALLFRAME[%lx]\n",
+	fprintf(stderr, "  [*] CALLFRAME[%zx]\n",
 		frame - vm->callframes.entries);
 
 	fprintf(stderr, "   |- stackframe %zu/%zu\n",
@@ -553,7 +553,7 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 		last_srcpos = srcpos;
 	}
 
-	fprintf(stderr, "%08lx  %s", pos - chunk->entries, insn_names[insn]);
+	fprintf(stderr, "%08zx  %s", pos - chunk->entries, insn_names[insn]);
 
 	switch (insn_defs[insn].operand_bytes) {
 	case 0:
