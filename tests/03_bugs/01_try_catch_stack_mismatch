@@ -1,0 +1,28 @@
+When compiling a try/catch statement with an exception variable, the catch
+skip jump incorrectly pointed to the POP instruction popping the exception
+variable off the stack, leading to a stack position mismatch between
+compiler and vm, causing local variables to yield wrong values at runtime.
+
+-- Expect stdout --
+1
+-- End --
+
+-- Testcase --
+{%
+	function f() {
+		let x;
+
+		try {
+			x = 1;
+		}
+		catch(e) {
+
+		}
+
+		// Before the fix, `x` incorrectly yielded the print function value
+		print(x, "\n");
+	}
+
+	f()
+%}
+-- End --

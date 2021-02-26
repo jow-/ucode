@@ -2485,9 +2485,9 @@ uc_compiler_compile_try(uc_compiler *compiler)
 
 	uc_compiler_parse_consume(compiler, TK_RBRACE);
 
-	uc_compiler_set_jmpaddr(compiler, jmp_off, chunk->count);
-
 	uc_compiler_leave_scope(compiler);
+
+	uc_compiler_set_jmpaddr(compiler, jmp_off, chunk->count);
 }
 
 static void
