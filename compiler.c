@@ -199,11 +199,64 @@ uc_compiler_set_srcpos(uc_compiler *compiler, size_t srcpos)
 static void
 uc_compiler_parse_advance(uc_compiler *compiler)
 {
+	bool no_regexp;
+
 	uc_value_put(compiler->parser->prev.val);
 	compiler->parser->prev = compiler->parser->curr;
 
 	while (true) {
-		compiler->parser->curr = *uc_lexer_next_token(&compiler->parser->lex);
+		/* Follow JSLint logic and treat a slash after any of the
+		* `(,=:[!&|?{};` characters as the beginning of a regex
+		* literal... */
+		switch (compiler->parser->prev.type) {
+		case TK_LPAREN:
+		case TK_COMMA:
+
+		case TK_ASADD:
+		case TK_ASBAND:
+		case TK_ASBOR:
+		case TK_ASBXOR:
+		case TK_ASDIV:
+		case TK_ASLEFT:
+		case TK_ASMOD:
+		case TK_ASMUL:
+		case TK_ASRIGHT:
+		case TK_ASSIGN:
+		case TK_ASSUB:
+		case TK_EQ:
+		case TK_EQS:
+		case TK_GE:
+		case TK_LE:
+		case TK_NE:
+		case TK_NES:
+
+		case TK_COLON:
+		case TK_LBRACK:
+		case TK_NOT:
+
+		case TK_AND:
+		case TK_BAND:
+
+		case TK_OR:
+		case TK_BOR:
+
+		case TK_QMARK:
+
+		case TK_LBRACE:
+		case TK_RBRACE:
+
+		case TK_LSTM:
+		case TK_LEXP:
+
+		case TK_SCOL:
+			no_regexp = false;
+			break;
+
+		default:
+			no_regexp = (compiler->parser->prev.type != 0);
+		}
+
+		compiler->parser->curr = *uc_lexer_next_token(&compiler->parser->lex, no_regexp);
 
 		if (compiler->parser->curr.type != TK_ERROR)
 			break;

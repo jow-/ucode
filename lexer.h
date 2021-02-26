@@ -19,11 +19,6 @@
 
 #include "source.h"
 
-#define __T_MAX 82
-#define T_EXCEPTION	(__T_MAX + 0)
-#define T_CFUNC		(__T_MAX + 1)
-#define T_RESSOURCE	(__T_MAX + 2)
-
 
 typedef enum {
 	TK_LEXP = 1,
@@ -141,12 +136,6 @@ typedef struct {
 	uc_parse_config *config;
 	uc_source *source;
 	uint8_t eof:1;
-	uint8_t skip_leading_whitespace:1;
-	uint8_t skip_leading_newline:1;
-	uint8_t within_expression_block:1;
-	uint8_t within_statement_block:1;
-	uint8_t semicolon_emitted:1;
-	uint8_t expect_div:1;
 	uint8_t is_escape:1;
 	size_t buflen;
 	char *buf, *bufstart, *bufend;
@@ -158,13 +147,25 @@ typedef struct {
 	uint8_t esclen;
 	int lead_surrogate;
 	size_t lastoff;
+	enum {
+		UNSPEC,
+		PLUS,
+		MINUS,
+		NEWLINE
+	} modifier;
+	enum {
+		NONE,
+		EXPRESSION = '{',
+		STATEMENTS = '%',
+		COMMENT = '#'
+	} block;
 } uc_lexer;
 
 
 void uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source);
 void uc_lexer_free(uc_lexer *lex);
 
-uc_token *uc_lexer_next_token(uc_lexer *lex);
+uc_token *uc_lexer_next_token(uc_lexer *lex, bool no_regexp);
 
 bool utf8enc(char **out, int *rem, int code);
 

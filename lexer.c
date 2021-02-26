@@ -48,7 +48,7 @@ struct token {
 		char pat[4];
 	};
 	int plen;
-	uc_token *(*parse)(uc_lexer *);
+	uc_token *(*parse)(uc_lexer *, bool);
 };
 
 #define dec(o) \
@@ -58,11 +58,11 @@ struct token {
 	(((x) >= 'a') ? (10 + (x) - 'a') : \
 		(((x) >= 'A') ? (10 + (x) - 'A') : dec(x)))
 
-static uc_token *parse_comment(uc_lexer *);
-static uc_token *parse_string(uc_lexer *);
-static uc_token *parse_regexp(uc_lexer *);
-static uc_token *parse_number(uc_lexer *);
-static uc_token *parse_label(uc_lexer *);
+static uc_token *parse_comment(uc_lexer *, bool);
+static uc_token *parse_string(uc_lexer *, bool);
+static uc_token *parse_regexp(uc_lexer *, bool);
+static uc_token *parse_number(uc_lexer *, bool);
+static uc_token *parse_label(uc_lexer *, bool);
 
 static const struct token tokens[] = {
 	{ TK_ASLEFT,	{ .pat = "<<=" },   3 },
@@ -229,57 +229,6 @@ emit_op(uc_lexer *lex, uint32_t pos, int type, struct json_object *val)
 	lex->curr.val = val;
 	lex->curr.pos = pos;
 
-	/* Follow JSLint logic and treat a slash after any of the
-	 * `(,=:[!&|?{};` characters as the beginning of a regex
-	 * literal... */
-	switch (type) {
-	case TK_LPAREN:
-	case TK_COMMA:
-
-	case TK_ASADD:
-	case TK_ASBAND:
-	case TK_ASBOR:
-	case TK_ASBXOR:
-	case TK_ASDIV:
-	case TK_ASLEFT:
-	case TK_ASMOD:
-	case TK_ASMUL:
-	case TK_ASRIGHT:
-	case TK_ASSIGN:
-	case TK_ASSUB:
-	case TK_EQ:
-	case TK_EQS:
-	case TK_GE:
-	case TK_LE:
-	case TK_NE:
-	case TK_NES:
-
-	case TK_COLON:
-	case TK_LBRACK:
-	case TK_NOT:
-
-	case TK_AND:
-	case TK_BAND:
-
-	case TK_OR:
-	case TK_BOR:
-
-	case TK_QMARK:
-
-	case TK_LBRACE:
-	case TK_RBRACE:
-
-	case TK_LSTM:
-	case TK_LEXP:
-
-	case TK_SCOL:
-		lex->expect_div = false;
-		break;
-
-	default:
-		lex->expect_div = true;
-	}
-
 	return &lex->curr;
 }
 
@@ -424,7 +373,7 @@ buf_consume(uc_lexer *lex, size_t len) {
 }
 
 static uc_token *
-parse_comment(uc_lexer *lex)
+parse_comment(uc_lexer *lex, bool no_regexp)
 {
 	const struct token *tok = lex->tok;
 	const char *ptr, *end;
@@ -468,7 +417,7 @@ append_utf8(uc_lexer *lex, int code) {
 }
 
 static uc_token *
-parse_string(uc_lexer *lex)
+parse_string(uc_lexer *lex, bool no_regexp)
 {
 	const struct token *tok = lex->tok;
 	char q = tok->pat[0];
@@ -696,7 +645,7 @@ enum {
 };
 
 static uc_token *
-parse_regexp(uc_lexer *lex)
+parse_regexp(uc_lexer *lex, bool no_regexp)
 {
 	bool is_reg_global = false, is_reg_icase = false, is_reg_newline = false;
 	uc_token *rv;
@@ -705,9 +654,7 @@ parse_regexp(uc_lexer *lex)
 
 	switch (lex->esc[0]) {
 	case UT_LEX_PARSE_REGEX_INIT:
-		if (lex->expect_div) {
-			lex->expect_div = false;
-
+		if (no_regexp) {
 			if (buf_startswith(lex, "=")) {
 				buf_consume(lex, 1);
 
@@ -721,7 +668,7 @@ parse_regexp(uc_lexer *lex)
 		break;
 
 	case UT_LEX_PARSE_REGEX_PATTERN:
-		rv = parse_string(lex);
+		rv = parse_string(lex, no_regexp);
 
 		if (rv && rv->type == TK_ERROR)
 			return rv;
@@ -788,7 +735,7 @@ parse_regexp(uc_lexer *lex)
  */
 
 static uc_token *
-parse_label(uc_lexer *lex)
+parse_label(uc_lexer *lex, bool no_regexp)
 {
 	const struct token *tok = lex->tok;
 	const struct keyword *word;
@@ -856,7 +803,7 @@ is_numeric_char(uc_lexer *lex, char c)
 }
 
 static uc_token *
-parse_number(uc_lexer *lex)
+parse_number(uc_lexer *lex, bool no_regexp)
 {
 	const struct token *tok = lex->tok;
 	uc_token *rv = NULL;
@@ -909,7 +856,7 @@ parse_number(uc_lexer *lex)
 }
 
 static uc_token *
-lex_step(uc_lexer *lex, FILE *fp)
+lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 {
 	uint32_t masks[] = { 0, le32toh(0x000000ff), le32toh(0x0000ffff), le32toh(0x00ffffff), le32toh(0xffffffff) };
 	union { uint32_t n; char str[4]; } search;
@@ -919,7 +866,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 	uc_token *rv;
 	size_t i;
 
-	/* only less than UT_LEX_MAX_TOKEN_LEN unreach buffer chars remaining,
+	/* only less than UT_LEX_MAX_TOKEN_LEN unread buffer chars remaining,
 	 * move the remaining bytes to the beginning and read more data */
 	if (buf_remaining(lex) < UT_LEX_MAX_TOKEN_LEN) {
 		if (!lex->buf) {
@@ -943,19 +890,19 @@ lex_step(uc_lexer *lex, FILE *fp)
 	switch (lex->state) {
 	case UT_LEX_IDENTIFY_BLOCK:
 		/* previous block had strip trailing whitespace flag, skip leading whitespace */
-		if (lex->skip_leading_whitespace) {
+		if (lex->modifier == MINUS) {
 			while (buf_remaining(lex) && isspace(lex->bufstart[0]))
 				buf_consume(lex, 1);
 
-			lex->skip_leading_whitespace = false;
+			lex->modifier = UNSPEC;
 		}
 
 		/* previous block was a statement block and trim_blocks is enabld, skip leading newline */
-		else if (lex->skip_leading_newline) {
+		else if (lex->modifier == NEWLINE) {
 			if (buf_startswith(lex, "\n"))
 				buf_consume(lex, 1);
 
-			lex->skip_leading_newline = false;
+			lex->modifier = UNSPEC;
 		}
 
 		/* scan forward through buffer to identify start token */
@@ -1008,7 +955,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 	case UT_LEX_BLOCK_EXPRESSION_START:
 	case UT_LEX_BLOCK_STATEMENT_START:
 		rv = NULL;
-		lex->skip_leading_whitespace = 0;
+		lex->modifier = UNSPEC;
 
 		/* strip whitespace before block */
 		if (buf_startswith(lex, "-")) {
@@ -1036,11 +983,12 @@ lex_step(uc_lexer *lex, FILE *fp)
 		switch (lex->state) {
 		case UT_LEX_BLOCK_COMMENT_START:
 			lex->state = UT_LEX_BLOCK_COMMENT;
+			lex->block = COMMENT;
 			break;
 
 		case UT_LEX_BLOCK_STATEMENT_START:
-			lex->within_statement_block = 1;
 			lex->state = UT_LEX_IDENTIFY_TOKEN;
+			lex->block = STATEMENTS;
 			break;
 
 		case UT_LEX_BLOCK_EXPRESSION_START:
@@ -1059,14 +1007,13 @@ lex_step(uc_lexer *lex, FILE *fp)
 		while (lex->bufstart < lex->bufend - 2) {
 			if (buf_startswith(lex, "-#}")) {
 				lex->state = UT_LEX_IDENTIFY_BLOCK;
-				lex->skip_leading_whitespace = 1;
+				lex->modifier = MINUS;
 				buf_consume(lex, 3);
 				lex->lastoff = lex->source->off;
 				break;
 			}
 			else if (buf_startswith(lex, "#}")) {
 				lex->state = UT_LEX_IDENTIFY_BLOCK;
-				lex->skip_leading_whitespace = 0;
 				buf_consume(lex, 2);
 				lex->lastoff = lex->source->off;
 				break;
@@ -1088,8 +1035,8 @@ lex_step(uc_lexer *lex, FILE *fp)
 
 
 	case UT_LEX_BLOCK_EXPRESSION_EMIT_TAG:
-		lex->within_expression_block = 1;
 		lex->state = UT_LEX_IDENTIFY_TOKEN;
+		lex->block = EXPRESSION;
 
 		return emit_op(lex, lex->source->off, TK_LEXP, NULL);
 
@@ -1129,43 +1076,32 @@ lex_step(uc_lexer *lex, FILE *fp)
 				}
 
 				/* disallow nesting blocks */
-				if ((lex->within_expression_block &&
-				     (tok->type == TK_LSTM || tok->type == TK_RSTM || tok->type == TK_LEXP)) ||
-				    (lex->within_statement_block &&
-				     (tok->type == TK_LEXP || tok->type == TK_REXP || tok->type == TK_LSTM))) {
+				if (tok->type == TK_LSTM || tok->type == TK_LEXP) {
 					buf_consume(lex, tok->plen);
 
 					return emit_op(lex, lex->source->off - tok->plen, TK_ERROR, xjs_new_string("Template blocks may not be nested"));
 				}
 
 				/* found end of block */
-				else if ((lex->within_statement_block && tok->type == TK_RSTM) ||
-				         (lex->within_expression_block && tok->type == TK_REXP)) {
-					/* emit additional empty statement (semicolon) at end of template block */
-					if (!lex->semicolon_emitted) {
-						lex->semicolon_emitted = true;
-
-						return emit_op(lex, lex->source->off, TK_SCOL, NULL);
-					}
-
+				else if ((lex->block == STATEMENTS && tok->type == TK_RSTM) ||
+				         (lex->block == EXPRESSION && tok->type == TK_REXP)) {
 					/* strip whitespace after block */
 					if (tok->pat[0] == '-')
-						lex->skip_leading_whitespace = true;
+						lex->modifier = MINUS;
 
 					/* strip newline after statement block */
-					else if (lex->within_statement_block &&
+					else if (lex->block == STATEMENTS &&
 					         lex->config && lex->config->trim_blocks)
-						lex->skip_leading_newline = true;
+						lex->modifier = NEWLINE;
 
-					lex->semicolon_emitted = false;
-					lex->within_statement_block = false;
-					lex->within_expression_block = false;
 					lex->state = UT_LEX_IDENTIFY_BLOCK;
+					lex->block = NONE;
 				}
 
 				/* do not report statement tags to the parser */
-				if (tok->type != 0 && tok->type != TK_LSTM && tok->type != TK_RSTM)
-					rv = emit_op(lex, lex->source->off, tok->type, NULL);
+				if (tok->type != 0 && tok->type != TK_LSTM)
+					rv = emit_op(lex, lex->source->off,
+						(tok->type == TK_RSTM) ? TK_SCOL : tok->type, NULL);
 				else
 					rv = NULL;
 
@@ -1180,7 +1116,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 			return emit_op(lex, lex->source->off, TK_ERROR, xjs_new_string("Unexpected character"));
 
 		/* we're at eof, allow unclosed statement blocks */
-		if (lex->within_statement_block) {
+		if (lex->block == STATEMENTS) {
 			lex->state = UT_LEX_EOF;
 
 			return NULL;
@@ -1192,7 +1128,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 
 	case UT_LEX_PARSE_TOKEN:
 		tok = lex->tok;
-		rv = tok->parse(lex);
+		rv = tok->parse(lex, no_regexp);
 
 		if (rv) {
 			memset(lex->esc, 0, sizeof(lex->esc));
@@ -1224,13 +1160,10 @@ uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source)
 	lex->source = uc_source_get(source);
 
 	lex->eof = 0;
-	lex->skip_leading_whitespace = 0;
-	lex->skip_leading_newline = 0;
-	lex->within_statement_block = 0;
-	lex->within_statement_block = 0;
-	lex->semicolon_emitted = 0;
-	lex->expect_div = 0;
 	lex->is_escape = 0;
+
+	lex->block = NONE;
+	lex->modifier = UNSPEC;
 
 	lex->buflen = 0;
 	lex->buf = NULL;
@@ -1260,12 +1193,12 @@ uc_lexer_free(uc_lexer *lex)
 }
 
 uc_token *
-uc_lexer_next_token(uc_lexer *lex)
+uc_lexer_next_token(uc_lexer *lex, bool no_regexp)
 {
 	uc_token *rv;
 
 	while (lex->state != UT_LEX_EOF) {
-		rv = lex_step(lex, lex->source->fp);
+		rv = lex_step(lex, lex->source->fp, no_regexp);
 
 		if (rv != NULL)
 			return rv;
