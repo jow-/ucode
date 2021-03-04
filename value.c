@@ -290,6 +290,10 @@ uc_cmp(int how, json_object *v1, json_object *v2)
 				d1 = (t1 == json_type_double) ? d1 : (double)n1;
 				d2 = (t2 == json_type_double) ? d2 : (double)n2;
 
+				/* all comparison results except `!=` involving NaN are false */
+				if (isnan(d1) || isnan(d2))
+					return (how == TK_NE);
+
 				if (d1 == d2)
 					delta = 0;
 				else if (d1 < d2)
