@@ -2328,6 +2328,59 @@ uc_trace(uc_vm *vm, size_t nargs)
 	return xjs_new_int64(prev_level);
 }
 
+static json_object *
+uc_proto(uc_vm *vm, size_t nargs)
+{
+	json_object *val = uc_get_arg(0);
+	json_object *proto = NULL;
+	uc_prototype *p, *ref;
+
+	if (nargs < 2) {
+		switch (uc_object_type(val)) {
+		case UC_OBJ_PROTOTYPE:
+			p = uc_object_as_prototype(val)->parent;
+
+			return p ? uc_value_get(p->header.jso) : NULL;
+
+		case UC_OBJ_RESSOURCE:
+			p = uc_ressource_prototype(val);
+
+			return p ? uc_value_get(p->header.jso) : NULL;
+
+		default:
+			return NULL;
+		}
+	}
+
+	proto = uc_get_arg(1);
+
+	switch (uc_object_type(proto)) {
+	case UC_OBJ_PROTOTYPE:
+		p = uc_object_as_prototype(proto);
+		break;
+
+	case UC_OBJ_RESSOURCE:
+		p = uc_ressource_prototype(proto);
+		break;
+
+	default:
+		switch (json_object_get_type(proto)) {
+		case json_type_object:
+			p = uc_protoref_new(proto, NULL);
+			break;
+
+		default:
+			uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Passed value is neither a prototype, ressource or object");
+
+			return NULL;
+		}
+	}
+
+	ref = uc_protoref_new(val, p);
+
+	return ref ? uc_value_get(ref->header.jso) : NULL;
+}
+
 static const uc_cfunction_list functions[] = {
 	{ "chr",		uc_chr },
 	{ "delete",		uc_delete },
@@ -2376,6 +2429,7 @@ static const uc_cfunction_list functions[] = {
 	{ "warn",		uc_warn },
 	{ "system",		uc_system },
 	{ "trace",		uc_trace },
+	{ "proto",		uc_proto }
 };
 
 

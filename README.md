@@ -1060,3 +1060,16 @@ Right now, any positive non-zero value will enable tracing while future
 implementation might provide different different verbosity levels or treat
 the level argument as bit mask to enable or disable individual debug
 elements.
+
+#### 6.54. `proto(val[, proto])`
+
+Get or set the prototype of the array or object value `val`.
+
+When invoked without a second argument, the function returns the current
+prototype of the value in `val` or `null` if there is no prototype or if
+the given value is neither an object, nor an array.
+
+When invoked with a second prototype argument, the given `proto` value is
+set as prototype on the array or object in `val`.
+
+Throws an exception if the given prototype value is not an object.
