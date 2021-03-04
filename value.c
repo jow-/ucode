@@ -202,38 +202,37 @@ json_object *
 uc_getval(json_object *scope, json_object *key)
 {
 	json_object *o, *v;
+	const char *k;
 	int64_t idx;
 	double d;
-
-	if (!key)
-		return NULL;
 
 	if (json_object_is_type(scope, json_type_array)) {
 		/* only consider doubles with integer values as array keys */
 		if (json_object_is_type(key, json_type_double)) {
 			d = json_object_get_double(key);
 
-			if ((double)(int64_t)(d) != d)
-				return NULL;
-
-			idx = (int64_t)d;
+			if ((double)(int64_t)(d) == d)
+				idx = (int64_t)d;
+			else
+				idx = -1;
 		}
 		else {
 			errno = 0;
 			idx = json_object_get_int64(key);
 
 			if (errno != 0)
-				return NULL;
+				idx = -1;
 		}
 
-		return json_object_get(json_object_array_get_idx(scope, idx));
+		if (idx >= 0 && idx < json_object_array_length(scope))
+			return json_object_get(json_object_array_get_idx(scope, idx));
 	}
 
-	for (o = scope; o; o = uc_getproto(o)) {
+	for (o = scope, k = key ? json_object_get_string(key) : "null"; o; o = uc_getproto(o)) {
 		if (!json_object_is_type(o, json_type_object))
 			continue;
 
-		if (json_object_object_get_ex(o, key ? json_object_get_string(key) : "null", &v))
+		if (json_object_object_get_ex(o, k, &v))
 			return json_object_get(v);
 	}
 
