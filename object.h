@@ -118,6 +118,7 @@ uc_closure *uc_closure_new(uc_function *function, bool arrow_fn);
 uc_cfunction *uc_cfunction_new(const char *name, uc_cfn_ptr cfn);
 uc_regexp *uc_regexp_new(const char *pattern, bool icase, bool newline, bool global, char **err);
 uc_prototype *uc_prototype_new(uc_prototype *parent);
+uc_prototype *uc_protoref_new(json_object *value, uc_prototype *proto);
 
 uc_ressource_type *uc_ressource_type_add(const char *name, uc_prototype *proto, void (*freefn)(void *));
 uc_ressource_type *uc_ressource_type_lookup(const char *name);

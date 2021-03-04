@@ -316,6 +316,29 @@ uc_prototype_new(uc_prototype *parent)
 	return proto;
 }
 
+uc_prototype *
+uc_protoref_new(json_object *value, uc_prototype *proto)
+{
+	uc_prototype *ref;
+
+	if (!json_object_is_type(value, json_type_object) &&
+	    !json_object_is_type(value, json_type_array))
+		return NULL;
+
+	ref = xalloc(sizeof(*ref));
+	ref->header.type = UC_OBJ_PROTOTYPE;
+	ref->header.jso = value;
+
+	if (proto) {
+		ref->parent = proto;
+		uc_value_get(proto->header.jso);
+	}
+
+	json_object_set_serializer(ref->header.jso, NULL, ref, uc_prototype_gc);
+
+	return ref;
+}
+
 
 static uc_ressource_types res_types;
 
