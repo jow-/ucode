@@ -2182,6 +2182,7 @@ uc_vm_execute(uc_vm *vm, uc_function *fn, uc_prototype *globals, json_object *mo
 	uc_vm_status_t rv;
 
 	vm->globals = globals;
+	uc_value_get(globals ? globals->header.jso : NULL);
 
 	uc_vector_grow(&vm->callframes);
 
