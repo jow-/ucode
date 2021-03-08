@@ -2150,7 +2150,7 @@ uc_vm_preload(uc_vm *vm, json_object *modules)
 	if (!json_object_is_type(modules, json_type_array))
 		return STATUS_OK;
 
-	requirefn = json_object_object_get(vm->globals->header.jso, "require");
+	requirefn = uc_prototype_lookup(vm->globals, "require");
 
 	if (!uc_object_is_type(requirefn, UC_OBJ_CFUNCTION))
 		return STATUS_OK;
