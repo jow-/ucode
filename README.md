@@ -1047,3 +1047,16 @@ system(["/usr/bin/date", "+%s"]);          // prints the UNIX timestamp to stdou
 // Apply a timeout
 system("sleep 3 && echo 'Success'", 1000); // returns -9
 ```
+
+#### 6.53. `trace(level)`
+
+Enables or disables VM opcode tracing. When invoked with a positive non-zero
+level, opcode tracing is enabled and debug information is printed to stderr
+as the program is executed.
+
+Invoking `trace()` with zero as argument will turn off opcode tracing.
+
+Right now, any positive non-zero value will enable tracing while future
+implementation might provide different different verbosity levels or treat
+the level argument as bit mask to enable or disable individual debug
+elements.
