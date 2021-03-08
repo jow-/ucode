@@ -1673,7 +1673,7 @@ uc_require(uc_vm *vm, size_t nargs)
 		return NULL;
 
 	name = json_object_get_string(val);
-	search = vm->globals ? json_object_object_get(vm->globals->header.jso, "REQUIRE_SEARCH_PATH") : NULL;
+	search = uc_prototype_lookup(vm->globals, "REQUIRE_SEARCH_PATH");
 
 	if (!json_object_is_type(search, json_type_array)) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
