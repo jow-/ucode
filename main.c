@@ -96,7 +96,7 @@ static int
 parse(uc_parse_config *config, uc_source *src,
       bool skip_shebang, json_object *env, json_object *modules)
 {
-	uc_prototype *globals = uc_prototype_new(NULL);
+	uc_prototype *globals = uc_prototype_new(NULL), *rootscope = NULL;
 	uc_function *entry;
 	uc_vm vm = {};
 	char c, c2, *err;
@@ -143,7 +143,13 @@ parse(uc_parse_config *config, uc_source *src,
 	/* load std functions into global scope */
 	uc_lib_init(globals);
 
-	rc = uc_vm_execute(&vm, entry, globals, modules);
+	/* create instance of global scope, set "global" property on it */
+	rootscope = uc_protoref_new(xjs_new_object(), globals);
+
+	json_object_object_add(rootscope->header.jso, "global",
+		uc_value_get(globals->header.jso));
+
+	rc = uc_vm_execute(&vm, entry, rootscope, modules);
 
 	if (rc) {
 		rc = 1;
@@ -153,6 +159,9 @@ parse(uc_parse_config *config, uc_source *src,
 out:
 	uc_vm_free(&vm);
 	uc_value_put(globals->header.jso);
+
+	if (rootscope)
+		uc_value_put(rootscope->header.jso);
 
 	return rc;
 }
