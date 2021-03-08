@@ -297,6 +297,7 @@ static const uc_cfunction_list global_fns[] = {
 static const uc_cfunction_list conn_fns[] = {
 	{ "list",		uc_ubus_list },
 	{ "call",		uc_ubus_call },
+	{ "error",		uc_ubus_error },
 	{ "disconnect",	uc_ubus_disconnect },
 };
 
