@@ -316,6 +316,18 @@ uc_prototype_new(uc_prototype *parent)
 	return proto;
 }
 
+json_object *
+uc_prototype_lookup(uc_prototype *proto, const char *key)
+{
+	json_object *val;
+
+	for (; proto; proto = proto->parent)
+		if (json_object_object_get_ex(proto->header.jso, key, &val))
+			return val;
+
+	return NULL;
+}
+
 uc_prototype *
 uc_protoref_new(json_object *value, uc_prototype *proto)
 {
