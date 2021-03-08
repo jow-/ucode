@@ -442,7 +442,7 @@ uc_fs_readlink(uc_vm *vm, size_t nargs)
 	}
 	while (true);
 
-	res = json_object_new_string_len(buf, buflen);
+	res = json_object_new_string_len(buf, rv);
 
 	free(buf);
 
