@@ -49,7 +49,7 @@ uc_uci_error(uc_vm *vm, size_t nargs)
 	if (last_error == 0)
 		return NULL;
 
-	if (errstr[last_error]) {
+	if (last_error >= 0 && last_error < ARRAY_SIZE(errstr)) {
 		errmsg = json_object_new_string(errstr[last_error]);
 	}
 	else {
@@ -993,6 +993,7 @@ static const uc_cfunction_list cursor_fns[] = {
 	{ "changes",	uc_uci_changes },
 	{ "foreach",	uc_uci_foreach },
 	{ "configs",	uc_uci_configs },
+	{ "error",		uc_uci_error },
 };
 
 static const uc_cfunction_list global_fns[] = {
