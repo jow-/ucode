@@ -987,9 +987,12 @@ execution scope with the given scope object.
 
 By default, the file is executed within the same scope as the calling
 `include()` but by passing an object as second argument, it is possible to
-override the scope available to the included file. This is useful to sandbox the
-included code and only grant it access to explicitely passed values and
-functions.
+extend the scope available to the included file. This is useful to supply
+additional properties as global variables to the included code.
+
+To sandbox included code, that is giving it only access to explicitely
+provided properties, the `proto()` function can be used to create a scope
+object with an empty prototype. See the examples below for details.
 
 If the given path argument is not absolute, it is interpreted relative to the
 directory of the current template file, that is the file that is invoking the
@@ -1002,13 +1005,22 @@ interpreted relative to the current working directory of the process.
 // Load and execute "foo.uc" immediately
 include("./foo.uc")
 
+// Execute the "supplemental.ucode" in an extended scope and make the "foo" and
+// "bar" properties available as global variables
+include("./supplemental.uc", {
+  foo: true,
+  bar: 123
+})
+
 // Execute the "untrusted.ucode" in a sandboxed scope and make the "foo" and
-// "bar" variables as well as the "print" function available to it
-include("./untrusted.uc", {
+// "bar" variables as well as the "print" function available to it. By assigning
+// an empty prototype object to the scope, included code has no access to
+// other global values anymore
+include("./untrusted.uc", proto({
   foo: true,
   bar: 123,
   print: print
-})
+}, {}))
 ```
 
 #### 6.51. `warn(x, ...)`

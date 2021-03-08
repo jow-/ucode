@@ -2125,6 +2125,7 @@ uc_include(uc_vm *vm, size_t nargs)
 	json_object *rv = NULL;
 	uc_closure *closure = NULL;
 	uc_prototype *sc;
+	bool put = false;
 	size_t i;
 	char *p;
 
@@ -2162,8 +2163,12 @@ uc_include(uc_vm *vm, size_t nargs)
 		return NULL;
 	}
 
-	if (scope) {
-		sc = uc_prototype_new(NULL);
+	if (uc_object_is_type(scope, UC_OBJ_PROTOTYPE)) {
+		sc = uc_object_as_prototype(scope);
+	}
+	else if (scope) {
+		sc = uc_prototype_new(vm->globals);
+		put = true;
 
 		json_object_object_foreach(scope, key, val)
 			json_object_object_add(sc->header.jso, key, uc_value_get(val));
@@ -2177,7 +2182,7 @@ uc_include(uc_vm *vm, size_t nargs)
 
 	free(p);
 
-	if (scope)
+	if (put)
 		uc_value_put(sc->header.jso);
 
 	return NULL;
