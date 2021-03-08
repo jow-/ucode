@@ -658,6 +658,7 @@ static const uc_cfunction_list proc_fns[] = {
 	{ "read",		uc_fs_pread },
 	{ "write",		uc_fs_pwrite },
 	{ "close",		uc_fs_pclose },
+	{ "error",		uc_fs_error },
 };
 
 static const uc_cfunction_list file_fns[] = {
@@ -666,6 +667,7 @@ static const uc_cfunction_list file_fns[] = {
 	{ "seek",		uc_fs_seek },
 	{ "tell",		uc_fs_tell },
 	{ "close",		uc_fs_close },
+	{ "error",		uc_fs_error },
 };
 
 static const uc_cfunction_list dir_fns[] = {
@@ -673,6 +675,7 @@ static const uc_cfunction_list dir_fns[] = {
 	{ "seek",		uc_fs_seekdir },
 	{ "tell",		uc_fs_telldir },
 	{ "close",		uc_fs_closedir },
+	{ "error",		uc_fs_error },
 };
 
 static const uc_cfunction_list global_fns[] = {
