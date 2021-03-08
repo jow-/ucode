@@ -99,7 +99,6 @@ typedef struct uc_prototype uc_prototype;
 
 typedef struct {
 	uc_objhdr header;
-	uc_prototype *proto;
 	size_t type;
 	void *data;
 } uc_ressource;
