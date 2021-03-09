@@ -445,14 +445,14 @@ uc_pop(uc_vm *vm, size_t nargs)
 	arrlen = json_object_array_length(arr);
 
 	if (arrlen > 0) {
-		item = json_object_array_get_idx(arr, arrlen - 1);
+		item = uc_value_get(json_object_array_get_idx(arr, arrlen - 1));
 		json_object_array_del_idx(arr, arrlen - 1, 1);
 #ifdef HAVE_ARRAY_SHRINK
 		json_object_array_shrink(arr, 0);
 #endif
 	}
 
-	return uc_value_get(item);
+	return item;
 }
 
 static json_object *

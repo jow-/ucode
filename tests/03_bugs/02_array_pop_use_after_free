@@ -1,0 +1,14 @@
+When popping an element off an array, especially the last one, the popped
+value might have been freed before the refcount was increased later on
+function return.
+
+-- Expect stdout --
+1
+-- End --
+
+-- Testcase --
+{%
+	x = [1];
+	print(pop(x), "\n");	// This caused a SIGABRT before the bugfix
+%}
+-- End --
