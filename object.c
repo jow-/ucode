@@ -357,6 +357,13 @@ static uc_ressource_types res_types;
 uc_ressource_type *
 uc_ressource_type_add(const char *name, uc_prototype *proto, void (*freefn)(void *))
 {
+	uc_ressource_type *existing;
+
+	existing = uc_ressource_type_lookup(name);
+
+	if (existing)
+		return existing;
+
 	uc_vector_grow(&res_types);
 
 	res_types.entries[res_types.count].name = name;

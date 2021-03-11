@@ -1,0 +1,31 @@
+When requiring a C module that registers custom ressource types multiple
+times, ressource values instantiated after subsequent requires of the
+same extensions didn't properly function since the internal type prototype
+was resolved to the initial copy and subsequently discarded due to an index
+mismatch.
+
+-- Testcase --
+{%
+	fs = require("fs");
+	fd = fs.open("README.md");
+
+	printf("fd.read() #1: %s\n",
+		fd.read("line") ? "working" : "not working (" + fd.error() + ")");
+
+	fd.close();
+
+
+	fs = require("fs");
+	fd = fs.open("README.md");
+
+	printf("fd.read() #2: %s\n",
+		fd.read("line") ? "working" : "not working (" + fd.error() + ")");
+
+	fd.close();
+%}
+-- End --
+
+-- Expect stdout --
+fd.read() #1: working
+fd.read() #2: working
+-- End --
