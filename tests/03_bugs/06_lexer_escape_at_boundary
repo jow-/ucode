@@ -1,0 +1,12 @@
+When the lexer processed a backslash introducing a string escape directly
+at the buffer boundary, the backslash was incorrectly retained.
+
+-- Testcase --
+{%
+	print("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijkl\n");
+%}
+-- End --
+
+-- Expect stdout --
+abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijkl
+-- End --

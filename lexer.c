@@ -614,7 +614,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 		else if (*ptr == '\\') {
 			lex->is_escape = true;
 			lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
-			buf_consume(lex, ptr - lex->bufstart);
+			buf_consume(lex, (ptr - lex->bufstart) + 1);
 		}
 	}
 
