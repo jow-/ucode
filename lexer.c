@@ -277,40 +277,19 @@ _buf_startswith(uc_lexer *lex, const char *str, size_t len) {
 
 #define buf_startswith(s, str) _buf_startswith(s, str, sizeof(str) - 1)
 
-#if 0
-static void add_lineinfo(struct uc_state *s, size_t off)
-{
-	uc_lineinfo *lines = &s->source->lineinfo;
-	size_t linelen;
 
-	linelen = off - s->lex.lastlineoff;
-
-	/* lineinfo is encoded in bytes: the most significant bit specifies whether
-	 * to advance the line count by one or not, while the remaining 7 bits encode
-	 * the amounts of bytes on the current line.
-	 *
-	 * If a line has more than 127 characters, the first byte will be set to
-	 * 0xff (1 1111111) and subsequent bytes will encode the remaining characters
-	 * in bits 1..7 while setting bit 8 to 0. A line with 400 characters will thus
-	 * be encoded as 0xff 0x7f 0x7f 0x13 (1:1111111 + 0:1111111 + 0:1111111 + 0:1111111).
-	 *
-	 * The newline character itself is not counted, so an empty line is encoded as
-	 * 0x80 (1:0000000).
-	 */
-	uc_vector_grow(lines);
-	lines->entries[lines->count++] = 0x80 + (linelen & 0x7f);
-	linelen -= (linelen & 0x7f);
-
-	while (linelen > 0) {
-		uc_vector_grow(lines);
-		lines->entries[lines->count++] = (linelen & 0x7f);
-		linelen -= (linelen & 0x7f);
-	}
-
-	s->lex.lastlineoff = off + 1;
-	s->lex.line++;
-}
-#endif
+/* lineinfo is encoded in bytes: the most significant bit specifies whether
+ * to advance the line count by one or not, while the remaining 7 bits encode
+ * the amounts of bytes on the current line.
+ *
+ * If a line has more than 127 characters, the first byte will be set to
+ * 0xff (1 1111111) and subsequent bytes will encode the remaining characters
+ * in bits 1..7 while setting bit 8 to 0. A line with 400 characters will thus
+ * be encoded as 0xff 0x7f 0x7f 0x13 (1:1111111 + 0:1111111 + 0:1111111 + 0:1111111).
+ *
+ * The newline character itself is not counted, so an empty line is encoded as
+ * 0x80 (1:0000000).
+ */
 
 static void
 next_lineinfo(uc_lexer *lex)
@@ -325,7 +304,7 @@ static void
 update_lineinfo(uc_lexer *lex, size_t off)
 {
 	uc_lineinfo *lines = &lex->source->lineinfo;
-	uint8_t *entry;
+	uint8_t *entry, n;
 
 	entry = uc_vector_last(lines);
 
@@ -337,10 +316,11 @@ update_lineinfo(uc_lexer *lex, size_t off)
 		entry[0] |= 0x7f;
 
 		while (off > 0) {
+			n = (off > 0x7f) ? 0x7f : off;
 			uc_vector_grow(lines);
 			entry = uc_vector_last(lines);
-			entry[1] = (off & 0x7f);
-			off -= (off & 0x7f);
+			entry[1] = n;
+			off -= n;
 			lines->count++;
 		}
 	}
