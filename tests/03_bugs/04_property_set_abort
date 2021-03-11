@@ -1,0 +1,76 @@
+When attempting to set a property on a non-array, non-object value the
+VM aborted due to an assert triggered by libjson-c.
+
+-- Testcase --
+{% (null).x = 1 %}
+-- End --
+
+-- Expect stderr --
+Type error: attempt to set property on null value
+In line 1, byte 15:
+
+ `{% (null).x = 1 %}`
+  Near here ----^
+
+
+-- End --
+
+
+-- Testcase --
+{% (1).x = 1 %}
+-- End --
+
+-- Expect stderr --
+Type error: attempt to set property on integer value
+In line 1, byte 12:
+
+ `{% (1).x = 1 %}`
+  Near here -^
+
+
+-- End --
+
+
+-- Testcase --
+{% (1.2).x = 1 %}
+-- End --
+
+-- Expect stderr --
+Type error: attempt to set property on double value
+In line 1, byte 14:
+
+ `{% (1.2).x = 1 %}`
+  Near here ---^
+
+
+-- End --
+
+
+-- Testcase --
+{% (true).x = 1 %}
+-- End --
+
+-- Expect stderr --
+Type error: attempt to set property on boolean value
+In line 1, byte 15:
+
+ `{% (true).x = 1 %}`
+  Near here ----^
+
+
+-- End --
+
+
+-- Testcase --
+{% ("test").x = 1 %}
+-- End --
+
+-- Expect stderr --
+Type error: attempt to set property on string value
+In line 1, byte 17:
+
+ `{% ("test").x = 1 %}`
+  Near here ------^
+
+
+-- End --

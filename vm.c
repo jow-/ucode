@@ -1096,7 +1096,25 @@ uc_vm_insn_store_val(uc_vm *vm, enum insn_type insn)
 	json_object *k = uc_vm_stack_pop(vm);
 	json_object *o = uc_vm_stack_pop(vm);
 
-	uc_vm_stack_push(vm, uc_setval(o, k, v));
+	const char *typenames[] = {
+		[json_type_string] = "string",
+		[json_type_int] = "integer",
+		[json_type_double] = "double",
+		[json_type_boolean] = "boolean",
+		[json_type_null] = "null"
+	};
+
+	switch (json_object_get_type(o)) {
+	case json_type_object:
+	case json_type_array:
+		uc_vm_stack_push(vm, uc_setval(o, k, v));
+		break;
+
+	default:
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+		                      "attempt to set property on %s value",
+		                      typenames[json_object_get_type(o)]);
+	}
 
 	uc_value_put(o);
 	uc_value_put(k);
