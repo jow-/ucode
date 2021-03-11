@@ -47,22 +47,23 @@ run_testcase() {
 	local code=$6
 	local fail=0
 
-	./ucode -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
+	./ucode -e '{ "REQUIRE_SEARCH_PATH": [ "./lib/*.so" ] }' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
 
+	touch "$dir/empty"
 	printf "%d\n" $? > "$dir/res.code"
 
-	if [ -n "$err" ] && ! cmp -s "$dir/res.err" "$err"; then
+	if ! cmp -s "$dir/res.err" "${err:-$dir/empty}"; then
 		[ $fail = 0 ] && printf "!\n"
 		printf "Testcase #%d: Expected stderr did not match:\n" $num
-		diff -u --color=always --label="Expected stderr" --label="Resulting stderr" "$err" "$dir/res.err"
+		diff -u --color=always --label="Expected stderr" --label="Resulting stderr" "${err:-$dir/empty}" "$dir/res.err"
 		printf -- "---\n"
 		fail=1
 	fi
 
-	if [ -n "$out" ] && ! cmp -s "$dir/res.out" "$out"; then
+	if ! cmp -s "$dir/res.out" "${out:-$dir/empty}"; then
 		[ $fail = 0 ] && printf "!\n"
 		printf "Testcase #%d: Expected stdout did not match:\n" $num
-		diff -u --color=always --label="Expected stdout" --label="Resulting stdout" "$out" "$dir/res.out"
+		diff -u --color=always --label="Expected stdout" --label="Resulting stdout" "${out:-$dir/empty}" "$dir/res.out"
 		printf -- "---\n"
 		fail=1
 	fi
@@ -102,12 +103,12 @@ run_test() {
 					# Flush previous test
 					if [ -n "$ein" ]; then
 						run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" || failed=$((failed + 1))
-
-						ein=$res
 						eout=""
 						eerr=""
 						ecode=""
 					fi
+
+					ein=$res
 				else
 					run_testcase $count "/tmp/test.$$" "$res" "$eout" "$eerr" "$ecode" || failed=$((failed + 1))
 
