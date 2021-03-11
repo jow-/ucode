@@ -1,0 +1,16 @@
+When falling through from a matched switch case into the default case,
+the compiler incorrectly emitted bytecode that led to an endless loop.
+
+-- Expect stdout --
+1
+-- End --
+
+-- Testcase --
+{%
+	switch (1) {
+	case 1:
+	default:
+		print("1\n");
+	}
+%}
+-- End --

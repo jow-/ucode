@@ -2292,7 +2292,7 @@ static void
 uc_compiler_compile_switch(uc_compiler *compiler)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	size_t i, first_jmp, skip_jmp, next_jmp, default_jmp = 0;
+	size_t i, first_jmp, skip_jmp, next_jmp, default_off = 0;
 	bool in_case = false;
 	uc_jmplist jmps = {};
 	uc_patchlist p = {};
@@ -2317,7 +2317,7 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 	       !uc_compiler_parse_check(compiler, TK_EOF)) {
 		/* handle `default:` */
 		if (uc_compiler_parse_match(compiler, TK_DEFAULT)) {
-			if (default_jmp) {
+			if (default_off) {
 				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 					"more than one switch default case");
 
@@ -2326,9 +2326,8 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 
 			uc_compiler_parse_consume(compiler, TK_COLON);
 
-			/* jump over default case, can only be reached by fallthrough or
-			 * conditional jump after last failed case condition */
-			default_jmp = uc_compiler_emit_jmp(compiler, 0, 0);
+			/* remember address of default branch */
+			default_off = chunk->count;
 
 			in_case = true;
 		}
@@ -2385,29 +2384,19 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 		if (i + 2 < jmps.count)
 			uc_compiler_set_jmpaddr(compiler, next_jmp, jmps.entries[i + 2] + 5);
 		/* case was last in switch, jump to default */
-		else if (default_jmp)
-			uc_compiler_set_jmpaddr(compiler, next_jmp, default_jmp + 5);
+		else if (default_off)
+			uc_compiler_set_jmpaddr(compiler, next_jmp, default_off);
 		/* if no default, jump to end */
 		else
 			uc_compiler_set_jmpaddr(compiler, next_jmp, chunk->count);
-	}
-
-	/* if we have a default case, set target for the skip jump */
-	if (default_jmp) {
-		/* if we have cases, jump to the first one */
-		if (jmps.count)
-			uc_compiler_set_jmpaddr(compiler, default_jmp, jmps.entries[0] + 5);
-		/* ... otherwise turn jump into no-op */
-		else
-			uc_compiler_set_jmpaddr(compiler, default_jmp, default_jmp + 5);
 	}
 
 	/* if we have cases, patch initial jump after the first case condition */
 	if (jmps.count)
 		uc_compiler_set_jmpaddr(compiler, first_jmp, jmps.entries[0] + 5);
 	/* ... otherwise jump into default */
-	else if (default_jmp)
-		uc_compiler_set_jmpaddr(compiler, first_jmp, default_jmp + 5);
+	else if (default_off)
+		uc_compiler_set_jmpaddr(compiler, first_jmp, default_off);
 	/* ... otherwise if no defualt, turn into no-op */
 	else
 		uc_compiler_set_jmpaddr(compiler, first_jmp, first_jmp + 5);
@@ -2417,7 +2406,6 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 	uc_compiler_leave_scope(compiler);
 
 	uc_compiler_backpatch(compiler, chunk->count, 0);
-
 }
 
 static void
