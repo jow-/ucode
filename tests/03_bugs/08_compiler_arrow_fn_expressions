@@ -1,0 +1,15 @@
+Arrow functions with single expression bodies were parsed with a wrong
+precedence level, causing comma expressions to be greedily consumed.
+
+-- Testcase --
+{%
+	print({
+		a: () => 1,
+		b: () => 2
+	}, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+{ "a": "() => { ... }", "b": "() => { ... }" }
+-- End --

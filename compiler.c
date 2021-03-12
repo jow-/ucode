@@ -1118,7 +1118,7 @@ uc_compiler_compile_arrowfn(uc_compiler *compiler, json_object *args, bool resta
 		}
 	}
 	else {
-		uc_compiler_compile_expression(&fncompiler);
+		uc_compiler_parse_precedence(&fncompiler, P_ASSIGN);
 		uc_compiler_emit_insn(&fncompiler, 0, I_RETURN);
 	}
 
