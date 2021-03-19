@@ -3,7 +3,13 @@ include(CheckFunctionExists)
 include(CheckSymbolExists)
 
 PROJECT(ucode C)
-ADD_DEFINITIONS(-Os -Wall -Werror --std=gnu99 -Wmissing-declarations -Wno-error=unused-variable -ffunction-sections -D_GNU_SOURCE)
+ADD_DEFINITIONS(-Os -Wall -Werror --std=gnu99 -ffunction-sections -D_GNU_SOURCE)
+
+IF(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
+	ADD_DEFINITIONS(-Wextra -Werror=implicit-function-declaration)
+	ADD_DEFINITIONS(-Wformat -Werror=format-security -Werror=format-nonliteral)
+ENDIF()
+ADD_DEFINITIONS(-Wmissing-declarations -Wno-error=unused-variable -Wno-unused-parameter)
 
 OPTION(FS_SUPPORT "Filesystem plugin support" ON)
 OPTION(MATH_SUPPORT "Math plugin support" ON)
