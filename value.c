@@ -205,6 +205,7 @@ uc_getval(json_object *scope, json_object *key)
 	const char *k;
 	int64_t idx;
 	double d;
+	char *e;
 
 	if (json_object_is_type(scope, json_type_array)) {
 		/* only consider doubles with integer values as array keys */
@@ -216,12 +217,19 @@ uc_getval(json_object *scope, json_object *key)
 			else
 				idx = -1;
 		}
-		else {
-			errno = 0;
+		else if (json_object_is_type(key, json_type_int)) {
 			idx = json_object_get_int64(key);
+		}
+		else if (json_object_is_type(key, json_type_string)) {
+			errno = 0;
+			k = json_object_get_string(key);
+			idx = strtoll(k, &e, 0);
 
-			if (errno != 0)
+			if (errno != 0 || e == k || *e != 0)
 				idx = -1;
+		}
+		else {
+			idx = -1;
 		}
 
 		if (idx >= 0 && idx < json_object_array_length(scope))

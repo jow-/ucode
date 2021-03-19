@@ -1,0 +1,25 @@
+Since libjson-c's json_object_get_int64() returns 0 for any input value
+that has no integer representation, any kind of invalid array index
+incorrectly yielded the first array element.
+
+-- Testcase --
+{%
+	x = [1, 2, 3];
+
+	print([
+		x[1],
+		x["1"],
+		x[1.0],
+		x[1.1],
+		x.foo,
+		x["foo"],
+		x["0abc"],
+		x[x],
+		x[{ foo: true }]
+	], "\n");
+%}
+-- End --
+
+-- Expect stdout --
+[ 2, 2, 2, null, null, null, null, null, null ]
+-- End --
