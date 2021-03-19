@@ -36,7 +36,7 @@
 
 
 static void
-print_usage(char *app)
+print_usage(const char *app)
 {
 	printf(
 	"== Usage ==\n\n"
@@ -51,7 +51,7 @@ print_usage(char *app)
 	"  -e Set global variables from given JSON object\n"
 	"  -E Set global variables from given JSON file\n"
 	"  -m Preload given module\n",
-		app);
+		basename(app));
 }
 
 static void
