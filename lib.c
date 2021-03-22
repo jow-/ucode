@@ -2260,7 +2260,7 @@ uc_system(uc_vm *vm, size_t nargs)
 		goto fail;
 
 	case 0:
-		execv(arglist[0], (char * const *)arglist);
+		execvp(arglist[0], (char * const *)arglist);
 		exit(-1);
 
 		break;
