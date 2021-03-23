@@ -548,6 +548,7 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 			srcpos, true);
 
 		fprintf(stderr, "%s", msg);
+		free(msg);
 
 		last_source = frame->closure->function->source;
 		last_srcpos = srcpos;
