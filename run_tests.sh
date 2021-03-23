@@ -144,13 +144,31 @@ run_test() {
 n_tests=0
 n_fails=0
 
+select_tests="$@"
+
+use_test() {
+	local input="$(readlink -f "$1")"
+	local test
+
+	[ -f "$input" ] || return 1
+	[ -n "$select_tests" ] || return 0
+
+	for test in "$select_tests"; do
+		test="$(readlink -f "$test")"
+
+		[ "$test" != "$input" ] || return 0
+	done
+
+	return 1
+}
+
 for catdir in tests/[0-9][0-9]_*; do
 	[ -d "$catdir" ] || continue
 
 	printf "\n##\n## Running %s tests\n##\n\n" "${catdir##*/[0-9][0-9]_}"
 
 	for testfile in "$catdir/"[0-9][0-9]_*; do
-		[ -f "$testfile" ] || continue
+		use_test "$testfile" || continue
 
 		n_tests=$((n_tests + 1))
 		run_test "$testfile" || n_fails=$((n_fails + 1))
