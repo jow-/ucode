@@ -2292,7 +2292,9 @@ uc_system(uc_vm *vm, size_t nargs)
 			goto fail;
 		}
 
-		sigprocmask(SIG_SETMASK, &sigomask, NULL);
+		if (tms > 0)
+			sigprocmask(SIG_SETMASK, &sigomask, NULL);
+
 		free(arglist);
 
 		if (WIFEXITED(rc))
@@ -2306,7 +2308,9 @@ uc_system(uc_vm *vm, size_t nargs)
 	}
 
 fail:
-	sigprocmask(SIG_SETMASK, &sigomask, NULL);
+	if (tms > 0)
+		sigprocmask(SIG_SETMASK, &sigomask, NULL);
+
 	free(arglist);
 
 	uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
