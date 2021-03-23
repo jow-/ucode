@@ -2427,13 +2427,13 @@ uc_compiler_compile_try(uc_compiler *compiler)
 	       !uc_compiler_parse_check(compiler, TK_EOF))
 		uc_compiler_compile_declaration(compiler);
 
-	/* jump beyond catch branch */
-	try_to = chunk->count;
-	jmp_off = uc_compiler_emit_jmp(compiler, 0, 0);
-
 	uc_compiler_parse_consume(compiler, TK_RBRACE);
 
 	uc_compiler_leave_scope(compiler);
+
+	/* jump beyond catch branch */
+	try_to = chunk->count;
+	jmp_off = uc_compiler_emit_jmp(compiler, 0, 0);
 
 
 	/* Catch block ---------------------------------------------------------- */

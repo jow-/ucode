@@ -26,3 +26,27 @@ compiler and vm, causing local variables to yield wrong values at runtime.
 	f()
 %}
 -- End --
+
+
+When compiling a try/catch statement with local variable declearations
+within the try block, the catch skip jump incorrectly happened before the
+local try block variables were popped off the stack, leading to a stack
+position mismatch between compiler and vm, causing local variables to
+yield wrong values at runtime.
+
+-- Expect stdout --
+1
+-- End --
+
+-- Testcase --
+{%
+	try {
+		let a;
+	}
+	catch {}
+
+	let b = 1;
+
+	print(b, "\n");
+%}
+-- End --
