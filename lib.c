@@ -502,7 +502,7 @@ uc_unshift(uc_vm *vm, size_t nargs)
 		json_object_array_put_idx(arr, arridx, uc_value_get(item));
 	}
 
-	return item;
+	return uc_value_get(item);
 }
 
 static json_object *
