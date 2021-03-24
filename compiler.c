@@ -2128,9 +2128,6 @@ uc_compiler_compile_for_in(uc_compiler *compiler, bool local, uc_token *kvar, uc
 	/* back patch conditional jump */
 	uc_compiler_set_jmpaddr(compiler, test_jmp, chunk->count);
 
-	/* patch up break/continue */
-	uc_compiler_backpatch(compiler, chunk->count, skip_jmp + 5);
-
 	/* pop loop variables */
 	uc_compiler_emit_insn(compiler, 0, I_POP);
 
@@ -2138,6 +2135,9 @@ uc_compiler_compile_for_in(uc_compiler *compiler, bool local, uc_token *kvar, uc
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 
 	uc_compiler_leave_scope(compiler);
+
+	/* patch up break/continue */
+	uc_compiler_backpatch(compiler, chunk->count, skip_jmp + 5);
 }
 
 static void
@@ -2232,10 +2232,10 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 	if (test_off)
 		uc_compiler_set_jmpaddr(compiler, test_off, chunk->count);
 
+	uc_compiler_leave_scope(compiler);
+
 	/* patch up break/continue */
 	uc_compiler_backpatch(compiler, chunk->count, incr_off);
-
-	uc_compiler_leave_scope(compiler);
 }
 
 static void

@@ -1,0 +1,38 @@
+When emitting jump instructions for breaking out of for-loops, the compiler
+incorrectly set the jump target before the pop instruction clearing the
+intermediate loop variables. Since the break instruction itself already
+compiles to a series of pop instructions reverting the stack to it's the
+pre-loop state, intermediate values got popped twice, leading to a stack
+layout mismatch between compiler and VM, resulting in wrong local variable
+values or segmentation faults at runtime.
+
+-- Testcase --
+{%
+	let x = 1;
+
+	for (let y in [2])
+		break;
+
+	print(x, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+1
+-- End --
+
+
+-- Testcase --
+{%
+	let x = 1;
+
+	for (let y = 0; y < 1; y++)
+		break;
+
+	print(x, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+1
+-- End --
