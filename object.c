@@ -361,8 +361,11 @@ uc_ressource_type_add(const char *name, uc_prototype *proto, void (*freefn)(void
 
 	existing = uc_ressource_type_lookup(name);
 
-	if (existing)
+	if (existing) {
+		uc_value_put(proto->header.jso);
+
 		return existing;
+	}
 
 	uc_vector_grow(&res_types);
 
