@@ -470,7 +470,7 @@ uc_shift(uc_vm *vm, size_t nargs)
 
 	for (arridx = 0; arridx < arrlen - 1; arridx++)
 		json_object_array_put_idx(arr, arridx,
-			json_object_array_get_idx(arr, arridx + 1));
+			uc_value_get(json_object_array_get_idx(arr, arridx + 1)));
 
 	json_object_array_del_idx(arr, arrlen - 1, 1);
 #ifdef HAVE_ARRAY_SHRINK
