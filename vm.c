@@ -1749,6 +1749,7 @@ uc_vm_insn_next(uc_vm *vm, enum insn_type insn)
 				uc_vm_stack_push(vm, uc_value_get((json_object *)curr->v));
 
 			uc_vm_stack_push(vm, k);
+			uc_value_put(v);
 
 			return;
 		}
@@ -1770,9 +1771,12 @@ uc_vm_insn_next(uc_vm *vm, enum insn_type insn)
 			uc_vm_stack_push(vm, uc_value_get(json_object_array_get_idx(v, n)));
 
 			uc_vm_stack_push(vm, k);
+			uc_value_put(v);
 
 			return;
 		}
+
+		uc_value_put(k);
 
 		break;
 
@@ -1785,6 +1789,8 @@ uc_vm_insn_next(uc_vm *vm, enum insn_type insn)
 
 	if (insn == I_NEXTKV)
 		uc_vm_stack_push(vm, NULL);
+
+	uc_value_put(v);
 }
 
 static void
