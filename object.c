@@ -475,3 +475,19 @@ uc_ressource_prototype(json_object *jso)
 
 	return type ? type->proto : NULL;
 }
+
+
+#ifdef __GNUC__
+
+__attribute__((destructor))
+static void uc_ressource_types_free(void)
+{
+	size_t i;
+
+	for (i = 0; i < res_types.count; i++)
+		uc_value_put(res_types.entries[i].proto->header.jso);
+
+	uc_vector_clear(&res_types);
+}
+
+#endif

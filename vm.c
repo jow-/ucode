@@ -266,6 +266,7 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 	uc_function *function;
 	uc_closure *closure;
 	uc_upvalref *ref;
+	json_object *v;
 	size_t i;
 
 	fprintf(stderr, "  [*] CALLFRAME[%zx]\n",
@@ -281,10 +282,15 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 		fprintf(stderr, "   |- %zu constants\n",
 			chunk->constants.isize);
 
-		for (i = 0; i < chunk->constants.isize; i++)
+		for (i = 0; i < chunk->constants.isize; i++) {
+			v = uc_chunk_get_constant(chunk, i);
+
 			fprintf(stderr, "   | [%zu] %s\n",
 				i,
-				json_object_to_json_string(uc_chunk_get_constant(chunk, i)));
+				json_object_to_json_string(v));
+
+			uc_value_put(v);
+		}
 
 		closure = frame->closure;
 		function = closure->function;
@@ -294,22 +300,23 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 
 		for (i = 0; i < function->nupvals; i++) {
 			ref = closure->upvals[i];
+			v = uc_chunk_debug_get_variable(chunk, 0, i, true);
 
 			if (ref->closed)
 				fprintf(stderr, "     [%zu] <%p> %s {closed} %s\n",
 					i,
 					ref,
-					json_object_to_json_string(
-						uc_chunk_debug_get_variable(chunk, 0, i, true)),
+					json_object_to_json_string(v),
 					json_object_to_json_string(ref->value));
 			else
 				fprintf(stderr, "     [%zu] <%p> %s {open[%zu]} %s\n",
 					i,
 					ref,
-					json_object_to_json_string(
-						uc_chunk_debug_get_variable(chunk, 0, i, true)),
+					json_object_to_json_string(v),
 					ref->slot,
 					json_object_to_json_string(vm->stack.entries[ref->slot]));
+
+			uc_value_put(v);
 		}
 	}
 }
@@ -2224,6 +2231,7 @@ uc_vm_execute(uc_vm *vm, uc_function *fn, uc_prototype *globals, json_object *mo
 			fn->source, 0, true);
 
 		fprintf(stderr, "%s", msg);
+		free(msg);
 
 		uc_vm_frame_dump(vm, frame);
 	}
