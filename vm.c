@@ -1783,8 +1783,6 @@ uc_vm_insn_next(uc_vm *vm, enum insn_type insn)
 			return;
 		}
 
-		uc_value_put(k);
-
 		break;
 
 	default:
@@ -1797,6 +1795,7 @@ uc_vm_insn_next(uc_vm *vm, enum insn_type insn)
 	if (insn == I_NEXTKV)
 		uc_vm_stack_push(vm, NULL);
 
+	uc_value_put(k);
 	uc_value_put(v);
 }
 
