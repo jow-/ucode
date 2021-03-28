@@ -333,7 +333,7 @@ uc_vm_stack_push(uc_vm *vm, json_object *value)
 
 	if (vm->trace)
 		fprintf(stderr, "  [+%zd] %s\n",
-			vm->stack.count,
+			vm->stack.count - 1,
 			json_object_to_json_string(value));
 }
 
@@ -348,7 +348,7 @@ uc_vm_stack_pop(uc_vm *vm)
 
 	if (vm->trace)
 		fprintf(stderr, "  [-%zd] %s\n",
-			vm->stack.count + 1,
+			vm->stack.count,
 			json_object_to_json_string(rv));
 
 	return rv;
@@ -572,11 +572,15 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 		break;
 
 	case -2:
-		fprintf(stderr, " {%s%hx}", vm->arg.s16 < 0 ? "" : "+", vm->arg.s16);
+		fprintf(stderr, " {%c0x%hx}",
+			vm->arg.s16 < 0 ? '-' : '+',
+			vm->arg.s16 < 0 ? -(unsigned)vm->arg.s16 : vm->arg.s16);
 		break;
 
 	case -4:
-		fprintf(stderr, " {%s%x}", vm->arg.s32 < 0 ? "" : "+", vm->arg.s32);
+		fprintf(stderr, " {%c0x%x}",
+			vm->arg.s32 < 0 ? '-' : '+',
+			vm->arg.s32 < 0 ? -(unsigned)vm->arg.s32 : vm->arg.s32);
 		break;
 
 	case 1:
@@ -584,11 +588,11 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 		break;
 
 	case 2:
-		fprintf(stderr, " {%hx}", vm->arg.u16);
+		fprintf(stderr, " {0x%hx}", vm->arg.u16);
 		break;
 
 	case 4:
-		fprintf(stderr, " {%x}", vm->arg.u32);
+		fprintf(stderr, " {0x%x}", vm->arg.u32);
 		break;
 
 	default:
