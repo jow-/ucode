@@ -2291,10 +2291,10 @@ out:
 static void
 uc_compiler_compile_switch(uc_compiler *compiler)
 {
+	size_t i, test_jmp, skip_jmp, next_jmp, value_slot, default_off = 0;
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	size_t i, first_jmp, skip_jmp, next_jmp, default_off = 0;
-	bool in_case = false;
-	uc_jmplist jmps = {};
+	uc_locals *locals = &compiler->locals;
+	uc_jmplist cases = {};
 	uc_patchlist p = {};
 
 	p.parent = compiler->patchlist;
@@ -2307,10 +2307,11 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 	uc_compiler_compile_expression(compiler);
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 	uc_compiler_parse_consume(compiler, TK_LBRACE);
-	uc_compiler_declare_internal(compiler, 0, "(switch value)");
 
-	/* skip over first condition */
-	first_jmp = uc_compiler_emit_jmp(compiler, 0, 0);
+	value_slot = uc_compiler_declare_internal(compiler, 0, "(switch value)");
+
+	/* jump to branch tests */
+	test_jmp = uc_compiler_emit_jmp(compiler, 0, 0);
 
 	/* parse and compile case matches */
 	while (!uc_compiler_parse_check(compiler, TK_RBRACE) &&
@@ -2329,35 +2330,52 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 			/* remember address of default branch */
 			default_off = chunk->count;
 
-			in_case = true;
+			/* Store three values in case offset list:
+			 *  1) amount of local variables declared so far
+			 *  2) beginning of condition expression
+			 *  3) end of condition expression
+			 * For the `default` case, beginning and end offsets of the
+			 * condition expression are equal.
+			 */
+			uc_vector_grow(&cases);
+			cases.entries[cases.count++] = (locals->count - 1) - value_slot;
+
+			uc_vector_grow(&cases);
+			cases.entries[cases.count++] = chunk->count;
+
+			uc_vector_grow(&cases);
+			cases.entries[cases.count++] = chunk->count;
 		}
 
 		/* handle `case …:` */
 		else if (uc_compiler_parse_match(compiler, TK_CASE)) {
-			/* jump over `case …:` label */
-			uc_vector_grow(&jmps);
-			jmps.entries[jmps.count++] = uc_compiler_emit_jmp(compiler, 0, 0);
-
-			/* copy condition value */
-			uc_compiler_emit_insn(compiler, 0, I_COPY);
-			uc_compiler_emit_u8(compiler, 0, 0);
+			/* jump over `case …:` label expression */
+			skip_jmp = uc_compiler_emit_jmp(compiler, 0, 0);
 
 			/* compile case value expression */
 			uc_compiler_compile_expression(compiler);
 			uc_compiler_parse_consume(compiler, TK_COLON);
 
-			/* strict equality test */
-			uc_compiler_emit_insn(compiler, 0, I_EQS);
+			/* Store three values in case offset list:
+			 *  1) amount of local variables declared so far
+			 *  2) beginning of condition expression
+			 *  3) end of condition expression
+			 */
+			uc_vector_grow(&cases);
+			cases.entries[cases.count++] = (locals->count - 1) - value_slot;
 
-			/* on inequality, jump to next condition */
-			uc_vector_grow(&jmps);
-			jmps.entries[jmps.count++] = uc_compiler_emit_jmpz(compiler, 0, 0);
+			uc_vector_grow(&cases);
+			cases.entries[cases.count++] = skip_jmp + 5;
 
-			in_case = true;
+			uc_vector_grow(&cases);
+			cases.entries[cases.count++] = uc_compiler_emit_jmp(compiler, 0, 0);
+
+			/* patch jump skipping over the case value */
+			uc_compiler_set_jmpaddr(compiler, skip_jmp, chunk->count);
 		}
 
 		/* handle interleaved statement */
-		else if (in_case) {
+		else if (cases.count) {
 			uc_compiler_compile_declaration(compiler);
 		}
 
@@ -2373,35 +2391,67 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 
 	uc_compiler_parse_consume(compiler, TK_RBRACE);
 
-	/* patch jump targets for cases */
-	for (i = 0; i < jmps.count; i += 2) {
-		skip_jmp = jmps.entries[i + 0];
-		next_jmp = jmps.entries[i + 1];
+	/* evaluate case matches */
+	if (cases.count) {
+		skip_jmp = uc_compiler_emit_jmp(compiler, 0, 0);
 
-		uc_compiler_set_jmpaddr(compiler, skip_jmp, next_jmp + 5);
+		uc_compiler_set_jmpaddr(compiler, test_jmp, chunk->count);
 
-		/* have a subsequent case, patch next jump to it */
-		if (i + 2 < jmps.count)
-			uc_compiler_set_jmpaddr(compiler, next_jmp, jmps.entries[i + 2] + 5);
-		/* case was last in switch, jump to default */
-		else if (default_off)
-			uc_compiler_set_jmpaddr(compiler, next_jmp, default_off);
-		/* if no default, jump to end */
-		else
+		for (i = 0, default_off = cases.count; i < cases.count; i += 3) {
+			/* remember and skip default case */
+			if (cases.entries[i + 1] == cases.entries[i + 2]) {
+				default_off = i;
+				continue;
+			}
+
+			/* read switch match value */
+			uc_compiler_emit_insn(compiler, 0, I_LLOC);
+			uc_compiler_emit_u32(compiler, 0, value_slot);
+
+			/* jump to case value expression code */
+			uc_compiler_emit_jmp(compiler, 0, cases.entries[i + 1]);
+
+			/* patch final case value expression jump back here */
+			uc_compiler_set_jmpaddr(compiler, cases.entries[i + 2], chunk->count);
+
+			/* strict equal test */
+			uc_compiler_emit_insn(compiler, 0, I_EQS);
+
+			/* conditional jump to next match */
+			next_jmp = uc_compiler_emit_jmpz(compiler, 0, 0);
+
+			/* fill local slots */
+			while (cases.entries[i + 0] > 0) {
+				uc_compiler_emit_insn(compiler, 0, I_LNULL);
+				cases.entries[i + 0]--;
+			}
+
+			/* jump to target code */
+			uc_compiler_emit_jmp(compiler, 0, cases.entries[i + 2] + 5);
+
+			/* patch next jump */
 			uc_compiler_set_jmpaddr(compiler, next_jmp, chunk->count);
+		}
+
+		/* handle default case (if any) */
+		if (default_off < cases.count) {
+			/* fill local slots */
+			while (cases.entries[default_off + 0] > 0) {
+				uc_compiler_emit_insn(compiler, 0, I_LNULL);
+				cases.entries[default_off + 0]--;
+			}
+
+			/* jump to target */
+			uc_compiler_emit_jmp(compiler, 0, cases.entries[default_off + 2]);
+		}
+
+		uc_compiler_set_jmpaddr(compiler, skip_jmp, chunk->count);
+	}
+	else {
+		uc_compiler_set_jmpaddr(compiler, test_jmp, test_jmp + 5);
 	}
 
-	/* if we have cases, patch initial jump after the first case condition */
-	if (jmps.count)
-		uc_compiler_set_jmpaddr(compiler, first_jmp, jmps.entries[0] + 5);
-	/* ... otherwise jump into default */
-	else if (default_off)
-		uc_compiler_set_jmpaddr(compiler, first_jmp, default_off);
-	/* ... otherwise if no defualt, turn into no-op */
-	else
-		uc_compiler_set_jmpaddr(compiler, first_jmp, first_jmp + 5);
-
-	uc_vector_clear(&jmps);
+	uc_vector_clear(&cases);
 
 	uc_compiler_leave_scope(compiler);
 
