@@ -1,0 +1,39 @@
+When jumping into a case following prior cases declaring local variables,
+the preceding local variable declarations were skipped, leading to an
+unexpected stack layout which caused local variables to carry wrong
+values at run time and eventual segmentation faults when attempting to
+unwind the stack on leaving the lexical switch scope.
+
+-- Expect stdout --
+Matching 1:
+ - 1: [ null, null, 3, 4 ]
+ - 2: [ null, null, 3, 4, 5, 6 ]
+Matching 2:
+ - 2: [ null, null, null, null, 5, 6 ]
+Matching 3:
+ - default: [ 1, 2 ]
+ - 1: [ 1, 2, 3, 4 ]
+ - 2: [ 1, 2, 3, 4, 5, 6 ]
+-- End --
+
+-- Testcase --
+{%
+	for (let n in [1, 2, 3]) {
+		printf("Matching %d:\n", n);
+
+		switch (n) {
+			default:
+				let x = 1, y = 2;
+				print(" - default: ", [x, y], "\n");
+
+			case 1:
+				let a = 3, b = 4;
+				print(" - 1: ", [x, y, a, b], "\n");
+
+			case 2:
+				let c = 5, d = 6;
+				print(" - 2: ", [x, y, a, b, c, d], "\n");
+		}
+	}
+%}
+-- End --
