@@ -2016,11 +2016,15 @@ uc_compiler_compile_while(uc_compiler *compiler)
 
 	/* compile loop body */
 	if (uc_compiler_parse_match(compiler, TK_COLON)) {
+		uc_compiler_enter_scope(compiler);
+
 		if (!uc_compiler_compile_delimitted_block(compiler, TK_ENDWHILE))
 			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
 				"Expecting 'endwhile'");
 		else
 			uc_compiler_parse_advance(compiler);
+
+		uc_compiler_leave_scope(compiler);
 	}
 	else {
 		uc_compiler_compile_statement(compiler);
@@ -2116,11 +2120,15 @@ uc_compiler_compile_for_in(uc_compiler *compiler, bool local, uc_token *kvar, uc
 
 	/* compile loop body */
 	if (uc_compiler_parse_match(compiler, TK_COLON)) {
+		uc_compiler_enter_scope(compiler);
+
 		if (!uc_compiler_compile_delimitted_block(compiler, TK_ENDFOR))
 			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
 				"Expecting 'endfor'");
 		else
 			uc_compiler_parse_advance(compiler);
+
+		uc_compiler_leave_scope(compiler);
 	}
 	else {
 		uc_compiler_compile_statement(compiler);
@@ -2219,11 +2227,15 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 
 	/* Body ----------------------------------------------------------------- */
 	if (uc_compiler_parse_match(compiler, TK_COLON)) {
+		uc_compiler_enter_scope(compiler);
+
 		if (!uc_compiler_compile_delimitted_block(compiler, TK_ENDFOR))
 			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
 				"Expecting 'endfor'");
 		else
 			uc_compiler_parse_advance(compiler);
+
+		uc_compiler_leave_scope(compiler);
 	}
 	else {
 		uc_compiler_compile_statement(compiler);

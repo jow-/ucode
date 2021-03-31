@@ -24,3 +24,60 @@ actually executed.
 	print(b, "\n");
 %}
 -- End --
+
+
+Test a variation of the bug using `for in..endfor` loop syntax.
+
+-- Expect stdout --
+2
+-- End --
+
+-- Testcase --
+{%
+	for (let x in []):
+		let a = 1;
+	endfor;
+
+	let b = 2;
+
+	print(b, "\n");
+%}
+-- End --
+
+
+Test a variation of the bug using `for..endfor` count loop syntax.
+
+-- Expect stdout --
+2
+-- End --
+
+-- Testcase --
+{%
+	for (let i = 0; i < 0; i++):
+		let a = 1;
+	endfor;
+
+	let b = 2;
+
+	print(b, "\n");
+%}
+-- End --
+
+
+Test a variation of the bug using `while..endwhile` loop syntax.
+
+-- Expect stdout --
+2
+-- End --
+
+-- Testcase --
+{%
+	while (false):
+		let a = 1;
+	endwhile;
+
+	let b = 2;
+
+	print(b, "\n");
+%}
+-- End --
