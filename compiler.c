@@ -1867,12 +1867,16 @@ uc_compiler_compile_local(uc_compiler *compiler)
 static uc_tokentype_t
 uc_compiler_compile_altifblock(uc_compiler *compiler)
 {
+	uc_compiler_enter_scope(compiler);
+
 	while (true) {
 		switch (compiler->parser->curr.type) {
 		case TK_ELIF:
 		case TK_ELSE:
 		case TK_ENDIF:
 		case TK_EOF:
+			uc_compiler_leave_scope(compiler);
+
 			return compiler->parser->curr.type;
 
 		default:

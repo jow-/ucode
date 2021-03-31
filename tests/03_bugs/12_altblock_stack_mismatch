@@ -1,0 +1,26 @@
+When compiling alternative syntax blocks, such as `for ...: endfor`,
+`if ...: endif` etc., the compiler didn't assign the contained statements
+to a dedicated lexical scope, which caused a stack mismatch between
+compiler and vm when such blocks declaring local variables weren't
+actually executed.
+
+-- Expect stdout --
+2
+-- End --
+
+-- Testcase --
+{%
+	if (false):
+		let a = 1;
+	endif;
+
+	/* Due to lack of own lexical scope above, the compiler assumed
+	 * that `a` is still on stack but the code to initialize it was
+	 * never executed, so stack offsets were shifted by one from here
+	 * on throughout the rest of the program. */
+
+	let b = 2;
+
+	print(b, "\n");
+%}
+-- End --
