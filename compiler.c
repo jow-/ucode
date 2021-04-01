@@ -1757,7 +1757,6 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 	if (len > 0) {
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_SOBJ);
 		uc_compiler_emit_u32(compiler, 0, len);
-		len = 0;
 	}
 
 	/* set initial size hint */
@@ -2166,14 +2165,14 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 
 	/* Initializer ---------------------------------------------------------- */
 
-	/* We parsed a `local x` or `local x, y` expression, so (re)declare
-	 * last label as local initializer variable */
-	if (local)
-		uc_compiler_declare_local_null(compiler, var->pos, var->val);
-
-	/* If we parsed at least on label, try continue parsing as variable
+	/* If we parsed at least one label, try continue parsing as variable
 	 * expression... */
 	if (var) {
+		/* We parsed a `local x` or `local x, y` expression, so (re)declare
+		 * last label as local initializer variable */
+		if (local)
+			uc_compiler_declare_local_null(compiler, var->pos, var->val);
+
 		uc_compiler_compile_labelexpr(compiler, true);
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 
@@ -2268,10 +2267,6 @@ uc_compiler_compile_for(uc_compiler *compiler)
 
 	local = uc_compiler_parse_match(compiler, TK_LOCAL);
 
-	if (local && !uc_compiler_parse_check(compiler, TK_LABEL))
-		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
-			"Expecting label after 'local'");
-
 	if (uc_compiler_parse_match(compiler, TK_LABEL)) {
 		keyvar = compiler->parser->prev;
 		uc_value_get(keyvar.val);
@@ -2290,6 +2285,12 @@ uc_compiler_compile_for(uc_compiler *compiler)
 
 			goto out;
 		}
+	}
+	else if (local) {
+		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+			"Expecting label after 'local'");
+
+		goto out;
 	}
 
 	/*
@@ -2335,6 +2336,7 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 		/* handle `default:` */
 		if (uc_compiler_parse_match(compiler, TK_DEFAULT)) {
 			if (default_off) {
+				uc_vector_clear(&cases);
 				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 					"more than one switch default case");
 

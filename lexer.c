@@ -728,7 +728,7 @@ parse_label(uc_lexer *lex, bool no_regexp)
 
 	if (!buf_remaining(lex) || (lex->bufstart[0] != '_' && !isalnum(lex->bufstart[0]))) {
 		for (i = 0, word = &reserved_words[0]; i < ARRAY_SIZE(reserved_words); i++, word = &reserved_words[i]) {
-			if (lex->lookbehindlen == word->plen && !strncmp(lex->lookbehind, word->pat, word->plen)) {
+			if (lex->lookbehind && lex->lookbehindlen == word->plen && !strncmp(lex->lookbehind, word->pat, word->plen)) {
 				lookbehind_reset(lex);
 
 				switch (word->type) {

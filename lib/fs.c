@@ -629,6 +629,7 @@ uc_fs_getcwd(uc_vm *vm, size_t nargs)
 		if (errno == ERANGE)
 			continue;
 
+		free(buf);
 		err_return(errno);
 	}
 	while (true);
