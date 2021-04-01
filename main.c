@@ -197,7 +197,7 @@ static json_object *
 parse_envfile(FILE *fp)
 {
 	json_object *rv = NULL;
-	enum json_tokener_error err;
+	enum json_tokener_error err = json_tokener_continue;
 	struct json_tokener *tok;
 	char buf[128];
 	size_t rlen;

@@ -508,6 +508,7 @@ uc_unshift(uc_vm *vm, size_t nargs)
 static json_object *
 uc_chr(uc_vm *vm, size_t nargs)
 {
+	json_object *rv = NULL;
 	size_t idx;
 	int64_t n;
 	char *str;
@@ -528,7 +529,10 @@ uc_chr(uc_vm *vm, size_t nargs)
 		str[idx] = (char)n;
 	}
 
-	return xjs_new_string_len(str, nargs);
+	rv = xjs_new_string_len(str, nargs);
+	free(str);
+
+	return rv;
 }
 
 static json_object *
@@ -1194,6 +1198,7 @@ uc_uc(uc_vm *vm, size_t nargs)
 static json_object *
 uc_uchr(uc_vm *vm, size_t nargs)
 {
+	json_object *rv = NULL;
 	size_t idx, ulen;
 	char *p, *str;
 	int64_t n;
@@ -1226,7 +1231,10 @@ uc_uchr(uc_vm *vm, size_t nargs)
 			break;
 	}
 
-	return xjs_new_string_len(str, ulen);
+	rv = xjs_new_string_len(str, ulen);
+	free(str);
+
+	return rv;
 }
 
 static json_object *
@@ -1663,11 +1671,10 @@ invalid:
 static json_object *
 uc_require(uc_vm *vm, size_t nargs)
 {
-	const char *name = json_object_get_string(uc_get_arg(0));
-
 	json_object *val = uc_get_arg(0);
 	json_object *search, *se, *res;
 	size_t arridx, arrlen;
+	const char *name;
 
 	if (!json_object_is_type(val, json_type_string))
 		return NULL;
@@ -1882,8 +1889,7 @@ uc_replace_str(uc_vm *vm, json_object *str,
                const char *subject, regmatch_t *pmatch, size_t plen,
                char **sp, size_t *sl)
 {
-	const char *r = str ? json_object_get_string(str) : "null";
-	const char *p = r;
+	const char *p, *r = str ? json_object_get_string(str) : "null";
 	bool esc = false;
 	int i;
 
@@ -2202,13 +2208,20 @@ uc_system(uc_vm *vm, size_t nargs)
 {
 	json_object *cmdline = uc_get_arg(0);
 	json_object *timeout = uc_get_arg(1);
+	const char **arglist, *fn, *s;
 	sigset_t sigmask, sigomask;
-	const char **arglist, *fn;
 	struct timespec ts;
 	int64_t tms;
+	int rc, len;
 	pid_t cld;
 	size_t i;
-	int rc;
+
+	if (timeout && (!json_object_is_type(timeout, json_type_int) || json_object_get_int64(timeout) < 0)) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+		                      "Invalid timeout specified");
+
+		return NULL;
+	}
 
 	switch (json_object_get_type(cmdline)) {
 	case json_type_string:
@@ -2220,10 +2233,21 @@ uc_system(uc_vm *vm, size_t nargs)
 		break;
 
 	case json_type_array:
-		arglist = xalloc(sizeof(*arglist) * (json_object_array_length(cmdline) + 1));
+		len = json_object_array_length(cmdline);
 
-		for (i = 0; i < json_object_array_length(cmdline); i++)
-			arglist[i] = json_object_get_string(json_object_array_get_idx(cmdline, i));
+		if (len == 0) {
+			uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+			                      "Passed command array is empty");
+
+			return NULL;
+		}
+
+		arglist = xalloc(sizeof(*arglist) * (len + 1));
+
+		for (i = 0; i < len; i++) {
+			s = json_object_get_string(json_object_array_get_idx(cmdline, i));
+			arglist[i] = s ? s : "null";
+		}
 
 		arglist[i] = NULL;
 
@@ -2232,13 +2256,6 @@ uc_system(uc_vm *vm, size_t nargs)
 	default:
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 		                      "Passed command is neither string nor array");
-
-		return NULL;
-	}
-
-	if (timeout && (!json_object_is_type(timeout, json_type_int) || json_object_get_int64(timeout) < 0)) {
-		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
-		                      "Invalid timeout specified");
 
 		return NULL;
 	}
