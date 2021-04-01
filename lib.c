@@ -2053,7 +2053,10 @@ uc_json(uc_vm *vm, size_t nargs)
 	str = json_object_get_string(src);
 	len = json_object_get_string_len(src);
 
-	rv = json_tokener_parse_ex(tok, str, len);
+	/* NB: the len + 1 here is intentional to pass the terminating \0 byte
+	 * to the json-c parser. This is required to work-around upstream
+	 * issue #681 <https://github.com/json-c/json-c/issues/681> */
+	rv = json_tokener_parse_ex(tok, str, len + 1);
 	err = json_tokener_get_error(tok);
 
 	if (err == json_tokener_continue) {
