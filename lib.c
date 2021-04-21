@@ -2393,6 +2393,26 @@ uc_proto(uc_vm *vm, size_t nargs)
 	return ref ? uc_value_get(ref->header.jso) : NULL;
 }
 
+static json_object *
+uc_sleep(uc_vm *vm, size_t nargs)
+{
+	json_object *duration = uc_get_arg(0);
+	struct timeval tv;
+	int64_t ms;
+
+	ms = uc_cast_int64(duration);
+
+	if (errno != 0 || ms <= 0)
+		return xjs_new_boolean(false);
+
+	tv.tv_sec = ms / 1000;
+	tv.tv_usec = (ms % 1000) * 1000;
+
+	select(0, NULL, NULL, NULL, &tv);
+
+	return xjs_new_boolean(true);
+}
+
 static const uc_cfunction_list functions[] = {
 	{ "chr",		uc_chr },
 	{ "delete",		uc_delete },
@@ -2441,7 +2461,8 @@ static const uc_cfunction_list functions[] = {
 	{ "warn",		uc_warn },
 	{ "system",		uc_system },
 	{ "trace",		uc_trace },
-	{ "proto",		uc_proto }
+	{ "proto",		uc_proto },
+	{ "sleep",		uc_sleep }
 };
 
 

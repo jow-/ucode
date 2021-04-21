@@ -1085,3 +1085,8 @@ When invoked with a second prototype argument, the given `proto` value is
 set as prototype on the array or object in `val`.
 
 Throws an exception if the given prototype value is not an object.
+
+#### 6.55. `sleep(milliseconds)`
+
+Pause execution for the given amount of milliseconds. Returns `false` if
+an invalid value was passed, otherwise `true`.
