@@ -32,9 +32,9 @@
 #define UC_LEX_CONTINUE_PARSING (void *)1
 
 struct keyword {
-	int type;
+	unsigned type;
 	const char *pat;
-	int plen;
+	unsigned plen;
 	union {
 		double d;
 		bool b;
@@ -42,12 +42,12 @@ struct keyword {
 };
 
 struct token {
-	int type;
+	unsigned type;
 	union {
 		uint32_t patn;
 		char pat[4];
 	};
-	int plen;
+	unsigned plen;
 	uc_token *(*parse)(uc_lexer *, bool);
 };
 
@@ -223,10 +223,10 @@ utf8enc(char **out, int *rem, int code)
 #define UT_LEX_MAX_TOKEN_LEN 3
 
 static uc_token *
-emit_op(uc_lexer *lex, uint32_t pos, int type, struct json_object *val)
+emit_op(uc_lexer *lex, uint32_t pos, int type, uc_value_t *uv)
 {
 	lex->curr.type = type;
-	lex->curr.val = val;
+	lex->curr.uv = uv;
 	lex->curr.pos = pos;
 
 	return &lex->curr;
@@ -257,7 +257,7 @@ lookbehind_to_text(uc_lexer *lex, uint32_t pos, int type, const char *strip_trai
 				lex->lookbehindlen--;
 		}
 
-		rv = emit_op(lex, pos, type, xjs_new_string_len(lex->lookbehind, lex->lookbehindlen));
+		rv = emit_op(lex, pos, type, ucv_string_new_length(lex->lookbehind, lex->lookbehindlen));
 
 		lookbehind_reset(lex);
 	}
@@ -360,7 +360,7 @@ parse_comment(uc_lexer *lex, bool no_regexp)
 	size_t elen;
 
 	if (!buf_remaining(lex))
-		return emit_op(lex, lex->lastoff, TK_ERROR, xjs_new_string("Unterminated comment"));
+		return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated comment"));
 
 	if (!strcmp(tok->pat, "//")) {
 		end = "\n";
@@ -406,7 +406,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 	int code;
 
 	if (!buf_remaining(lex))
-		return emit_op(lex, lex->lastoff, TK_ERROR, xjs_new_string("Unterminated string"));
+		return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated string"));
 
 	for (ptr = lex->bufstart; ptr < lex->bufend; ptr++) {
 		/* continuation of escape sequence */
@@ -461,7 +461,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 				case 'u':
 					if (lex->esclen < 5) {
 						if (!isxdigit(*ptr))
-							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, xjs_new_string("Invalid escape sequence"));
+							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, ucv_string_new("Invalid escape sequence"));
 
 						lex->esc[lex->esclen++] = *ptr;
 					}
@@ -513,7 +513,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 				case 'x':
 					if (lex->esclen < 3) {
 						if (!isxdigit(*ptr))
-							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, xjs_new_string("Invalid escape sequence"));
+							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, ucv_string_new("Invalid escape sequence"));
 
 						lex->esc[lex->esclen++] = *ptr;
 					}
@@ -564,7 +564,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 						       dec(lex->esc[3]);
 
 						if (code > 255)
-							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, xjs_new_string("Invalid escape sequence"));
+							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, ucv_string_new("Invalid escape sequence"));
 
 						append_utf8(lex, code);
 
@@ -585,7 +585,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 			rv = lookbehind_to_text(lex, lex->lastoff, TK_STRING, NULL);
 
 			if (!rv)
-				rv = emit_op(lex, lex->lastoff, TK_STRING, xjs_new_string_len("", 0));
+				rv = emit_op(lex, lex->lastoff, TK_STRING, ucv_string_new_length("", 0));
 
 			return rv;
 		}
@@ -685,10 +685,11 @@ parse_regexp(uc_lexer *lex, bool no_regexp)
 
 				len = xasprintf(&s, "%c%*s",
 					(is_reg_global << 0) | (is_reg_icase << 1) | (is_reg_newline << 2),
-					json_object_get_string_len(rv->val),
-					json_object_get_string(rv->val));
+					ucv_string_length(rv->uv),
+					ucv_string_get(rv->uv));
 
-				json_object_set_string_len(rv->val, s, len);
+				ucv_free(rv->uv, false);
+				rv->uv = ucv_string_new_length(s, len);
 				free(s);
 
 				rv->type = TK_REGEXP;
@@ -733,11 +734,11 @@ parse_label(uc_lexer *lex, bool no_regexp)
 
 				switch (word->type) {
 				case TK_DOUBLE:
-					rv = emit_op(lex, lex->source->off - word->plen, word->type, uc_double_new(word->d));
+					rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_double_new(word->d));
 					break;
 
 				case TK_BOOL:
-					rv = emit_op(lex, lex->source->off - word->plen, word->type, xjs_new_boolean(word->b));
+					rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_boolean_new(word->b));
 					break;
 
 				default:
@@ -806,19 +807,19 @@ parse_number(uc_lexer *lex, bool no_regexp)
 				d = -d;
 
 			if (e > lex->lookbehind && *e == 0)
-				rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_DOUBLE, uc_double_new(d));
+				rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_DOUBLE, ucv_double_new(d));
 			else
-				rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, xjs_new_string("Invalid number literal"));
+				rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, ucv_string_new("Invalid number literal"));
 		}
 		else if (*e == 0) {
 			if (tok->pat[0] == '-')
 				n = (errno == ERANGE) ? INT64_MIN : -n;
 
-			rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_NUMBER, xjs_new_int64(n));
+			rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_NUMBER, ucv_int64_new(n));
 			//OP(rv)->is_overflow = (errno == ERANGE);
 		}
 		else {
-			rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, xjs_new_string("Invalid number literal"));
+			rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, ucv_string_new("Invalid number literal"));
 		}
 
 		lookbehind_reset(lex);
@@ -1008,7 +1009,7 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 
 			buf_consume(lex, lex->bufend - lex->bufstart);
 
-			return emit_op(lex, lex->lastoff, TK_ERROR, xjs_new_string("Unterminated template block"));
+			return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated template block"));
 		}
 
 		break;
@@ -1059,7 +1060,7 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 				if (tok->type == TK_LSTM || tok->type == TK_LEXP) {
 					buf_consume(lex, tok->plen);
 
-					return emit_op(lex, lex->source->off - tok->plen, TK_ERROR, xjs_new_string("Template blocks may not be nested"));
+					return emit_op(lex, lex->source->off - tok->plen, TK_ERROR, ucv_string_new("Template blocks may not be nested"));
 				}
 
 				/* found end of block */
@@ -1093,7 +1094,7 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 
 		/* no token matched and we do have remaining data, junk */
 		if (buf_remaining(lex))
-			return emit_op(lex, lex->source->off, TK_ERROR, xjs_new_string("Unexpected character"));
+			return emit_op(lex, lex->source->off, TK_ERROR, ucv_string_new("Unexpected character"));
 
 		/* we're at eof, allow unclosed statement blocks */
 		if (lex->block == STATEMENTS) {
@@ -1103,7 +1104,7 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 		}
 
 		/* premature EOF */
-		return emit_op(lex, lex->source->off, TK_ERROR, xjs_new_string("Unterminated template block"));
+		return emit_op(lex, lex->source->off, TK_ERROR, ucv_string_new("Unterminated template block"));
 
 
 	case UT_LEX_PARSE_TOKEN:
@@ -1188,7 +1189,7 @@ uc_lexer_next_token(uc_lexer *lex, bool no_regexp)
 }
 
 const char *
-uc_get_tokenname(int type)
+uc_get_tokenname(unsigned type)
 {
 	static char buf[sizeof("'endfunction'")];
 	size_t i;

@@ -17,6 +17,7 @@
 #include <assert.h>
 
 #include "chunk.h"
+#include "types.h"
 #include "util.h"
 
 #define OFFSETINFO_BITS (sizeof(((uc_offsetinfo *)NULL)->entries[0]) * 8)
@@ -135,14 +136,14 @@ uc_chunk_pop(uc_chunk *chunk)
 	}
 }
 
-struct json_object *
+uc_value_t *
 uc_chunk_get_constant(uc_chunk *chunk, size_t idx)
 {
 	return uc_vallist_get(&chunk->constants, idx);
 }
 
 ssize_t
-uc_chunk_add_constant(uc_chunk *chunk, struct json_object *val)
+uc_chunk_add_constant(uc_chunk *chunk, uc_value_t *val)
 {
 	return uc_vallist_add(&chunk->constants, val);
 }
@@ -165,7 +166,7 @@ uc_chunk_debug_get_srcpos(uc_chunk *chunk, size_t off)
 }
 
 void
-uc_chunk_debug_add_variable(uc_chunk *chunk, size_t from, size_t to, size_t slot, bool upval, json_object *name)
+uc_chunk_debug_add_variable(uc_chunk *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name)
 {
 	uc_variables *variables = &chunk->debuginfo.variables;
 	uc_value_list *varnames = &chunk->debuginfo.varnames;
@@ -185,12 +186,12 @@ uc_chunk_debug_add_variable(uc_chunk *chunk, size_t from, size_t to, size_t slot
 	variables->count++;
 }
 
-json_object *
+uc_value_t *
 uc_chunk_debug_get_variable(uc_chunk *chunk, size_t off, size_t slot, bool upval)
 {
 	uc_variables *variables = &chunk->debuginfo.variables;
 	uc_value_list *varnames = &chunk->debuginfo.varnames;
-	json_object *name = NULL;
+	uc_value_t *name = NULL;
 	size_t i;
 
 	assert(slot <= ((size_t)-1 / 2));

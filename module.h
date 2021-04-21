@@ -18,7 +18,6 @@
 #define __MODULE_H_
 
 #include "lib.h"
-#include "object.h"
 #include "vm.h"
 
 #define register_functions(scope, functions) \
@@ -34,23 +33,19 @@
 })
 
 #define declare_type(name, proto, freefn) \
-	ops->ressource.define(name, proto, freefn)
+	ucv_ressource_type_add(name, proto, freefn)
 
 #define alloc_ressource(data, type) \
-	ops->ressource.create(xjs_new_object(), type, data)
+	ucv_ressource_new(ucv_object_new(NULL), type, data)
 
 #define register_ressource(scope, key, res) \
 	json_object_object_add((scope)->header.jso, key, (res)->header.jso)
 
-static const uc_ops *ops;
+void uc_module_init(uc_value_t *scope) __attribute__((weak));
 
-void uc_module_init(uc_prototype *scope) __attribute__((weak));
-
-void uc_module_entry(const uc_ops *_ops, uc_prototype *scope);
-void uc_module_entry(const uc_ops *_ops, uc_prototype *scope)
+void uc_module_entry(uc_value_t *scope);
+void uc_module_entry(uc_value_t *scope)
 {
-	ops = _ops;
-
 	if (uc_module_init)
 		uc_module_init(scope);
 }

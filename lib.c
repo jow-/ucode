@@ -35,116 +35,59 @@
 #include "compiler.h"
 #include "vm.h"
 #include "lib.h"
-#include "object.h"
-
-
-const uc_ops uc = {
-	.value = {
-		.proto = uc_prototype_new,
-		.cfunc = uc_cfunction_new,
-		.dbl = uc_double_new,
-		.regexp = uc_regexp_new,
-		.tonumber = uc_cast_number,
-		.ressource = uc_ressource_new
-	},
-
-	.ressource = {
-		.define = uc_ressource_type_add,
-		.create = uc_ressource_new,
-		.data = uc_ressource_dataptr,
-		.proto = uc_ressource_prototype
-	},
-
-	.vm = {
-		.call = uc_vm_call,
-		.peek = uc_vm_stack_peek,
-		.pop = uc_vm_stack_pop,
-		.push = uc_vm_stack_push,
-		.raise = uc_vm_raise_exception
-	}
-};
-
-const uc_ops *ops = &uc;
-
-__attribute__((format(printf, 3, 5))) static void
-snprintf_append(char **dptr, size_t *dlen, const char *fmt, ssize_t sz, ...)
-{
-	va_list ap;
-	char *tmp;
-	int n;
-
-	va_start(ap, sz);
-	n = vsnprintf(NULL, 0, fmt, ap);
-	va_end(ap);
-
-	if (sz >= 0 && n > sz)
-		n = sz;
-
-	tmp = xrealloc(*dptr, *dlen + n + 1);
-
-	va_start(ap, sz);
-	vsnprintf(tmp + *dlen, n + 1, fmt, ap);
-	va_end(ap);
-
-	*dptr = tmp;
-	*dlen += n;
-}
-
-#define sprintf_append(dptr, dlen, fmt, ...) \
-	snprintf_append(dptr, dlen, fmt, -1, ##__VA_ARGS__)
 
 static void
-format_context_line(char **msg, size_t *msglen, const char *line, size_t off, bool compact)
+format_context_line(uc_stringbuf_t *buf, const char *line, size_t off, bool compact)
 {
+	unsigned padlen, i;
 	const char *p;
-	int padlen, i;
 
 	for (p = line, padlen = 0; *p != '\n' && *p != '\0'; p++) {
-		if (compact && (p - line) == off)
-			sprintf_append(msg, msglen, "\033[22m");
+		if (compact && (p - line) == (ptrdiff_t)off)
+			ucv_stringbuf_append(buf, "\033[22m");
 
 		switch (*p) {
 		case '\t':
-			sprintf_append(msg, msglen, "    ");
+			ucv_stringbuf_append(buf, "    ");
 			if (p < line + off)
 				padlen += 4;
 			break;
 
 		case '\r':
 		case '\v':
-			sprintf_append(msg, msglen, " ");
+			ucv_stringbuf_append(buf, " ");
 			if (p < line + off)
 				padlen++;
 			break;
 
 		default:
-			sprintf_append(msg, msglen, "%c", *p);
+			ucv_stringbuf_addstr(buf, p, 1);
 			if (p < line + off)
 				padlen++;
 		}
 	}
 
 	if (compact) {
-		sprintf_append(msg, msglen, "\033[m\n");
+		ucv_stringbuf_append(buf, "\033[m\n");
 
 		return;
 	}
 
-	sprintf_append(msg, msglen, "`\n  ");
+	ucv_stringbuf_append(buf, "`\n  ");
 
 	if (padlen < strlen("Near here ^")) {
 		for (i = 0; i < padlen; i++)
-			sprintf_append(msg, msglen, " ");
+			ucv_stringbuf_append(buf, " ");
 
-		sprintf_append(msg, msglen, "^-- Near here\n");
+		ucv_stringbuf_append(buf, "^-- Near here\n");
 	}
 	else {
-		sprintf_append(msg, msglen, "Near here ");
+		ucv_stringbuf_append(buf, "Near here ");
 
 		for (i = strlen("Near here "); i < padlen; i++)
-			sprintf_append(msg, msglen, "-");
+			ucv_stringbuf_append(buf, "-");
 
-		sprintf_append(msg, msglen, "^\n");
+		ucv_stringbuf_append(buf, "^\n");
 	}
 }
 
@@ -163,19 +106,19 @@ source_filename(uc_source *src, uint32_t line)
 	return buf;
 }
 
-void
-format_source_context(char **msg, size_t *msglen, uc_source *src, size_t off, bool compact)
+bool
+format_source_context(uc_stringbuf_t *buf, uc_source *src, size_t off, bool compact)
 {
 	size_t len, rlen;
 	bool truncated;
-	char buf[256];
+	char line[256];
 	long srcpos;
 	int eline;
 
 	srcpos = ftell(src->fp);
 
 	if (srcpos == -1)
-		return;
+		return false;
 
 	fseek(src->fp, 0, SEEK_SET);
 
@@ -183,93 +126,105 @@ format_source_context(char **msg, size_t *msglen, uc_source *src, size_t off, bo
 	eline = 1;
 	rlen = 0;
 
-	while (fgets(buf, sizeof(buf), src->fp)) {
-		len = strlen(buf);
+	while (fgets(line, sizeof(line), src->fp)) {
+		len = strlen(line);
 		rlen += len;
 
 		if (rlen > off) {
 			if (compact)
-				sprintf_append(msg, msglen, "\033[2;40;97m%17s  %s",
+				ucv_stringbuf_printf(buf, "\033[2;40;97m%17s  %s",
 					source_filename(src, eline),
 					truncated ? "..." : "");
 			else
-				sprintf_append(msg, msglen, "\n `%s",
+				ucv_stringbuf_printf(buf, "\n `%s",
 					truncated ? "..." : "");
 
-			format_context_line(msg, msglen, buf, len - (rlen - off) + (truncated ? 3 : 0), compact);
+			format_context_line(buf, line, len - (rlen - off) + (truncated ? 3 : 0), compact);
 			break;
 		}
 
-		truncated = (len > 0 && buf[len-1] != '\n');
+		truncated = (len > 0 && line[len-1] != '\n');
 		eline += !truncated;
 	}
 
 	fseek(src->fp, srcpos, SEEK_SET);
+
+	return true;
 }
 
-void
-format_error_context(char **msg, size_t *msglen, uc_source *src, json_object *stacktrace, size_t off)
+bool
+format_error_context(uc_stringbuf_t *buf, uc_source *src, uc_value_t *stacktrace, size_t off)
 {
-	json_object *e, *fn, *file, *line, *byte;
+	uc_value_t *e, *fn, *file, *line, *byte;
 	const char *path;
 	size_t idx;
 
-	for (idx = 0; idx < (stacktrace ? json_object_array_length(stacktrace) : 0); idx++) {
-		e = json_object_array_get_idx(stacktrace, idx);
-		fn = json_object_object_get(e, "function");
-		file = json_object_object_get(e, "filename");
+	for (idx = 0; idx < (stacktrace ? ucv_array_length(stacktrace) : 0); idx++) {
+		e = ucv_array_get(stacktrace, idx);
+		fn = ucv_object_get(e, "function", NULL);
+		file = ucv_object_get(e, "filename", NULL);
 
 		if (idx == 0) {
-			path = (file && strcmp(json_object_get_string(file), "[stdin]"))
-				? json_object_get_string(file) : NULL;
+			path = (file && strcmp(ucv_string_get(file), "[stdin]"))
+				? ucv_string_get(file) : NULL;
 
 			if (path && fn)
-				sprintf_append(msg, msglen, "In %s(), file %s, ",
-				               json_object_get_string(fn), path);
+				ucv_stringbuf_printf(buf, "In %s(), file %s, ", ucv_string_get(fn), path);
 			else if (fn)
-				sprintf_append(msg, msglen, "In %s(), ",
-				               json_object_get_string(fn));
+				ucv_stringbuf_printf(buf, "In %s(), ", ucv_string_get(fn));
 			else if (path)
-				sprintf_append(msg, msglen, "In %s, ", path);
+				ucv_stringbuf_printf(buf, "In %s, ", path);
 			else
-				sprintf_append(msg, msglen, "In ");
+				ucv_stringbuf_append(buf, "In ");
 
-			sprintf_append(msg, msglen, "line %" PRId64 ", byte %" PRId64 ":\n",
-			               json_object_get_int64(json_object_object_get(e, "line")),
-			               json_object_get_int64(json_object_object_get(e, "byte")));
+			ucv_stringbuf_printf(buf, "line %" PRId64 ", byte %" PRId64 ":\n",
+				ucv_int64_get(ucv_object_get(e, "line", NULL)),
+				ucv_int64_get(ucv_object_get(e, "byte", NULL)));
 		}
 		else {
-			line = json_object_object_get(e, "line");
-			byte = json_object_object_get(e, "byte");
+			line = ucv_object_get(e, "line", NULL);
+			byte = ucv_object_get(e, "byte", NULL);
 
-			sprintf_append(msg, msglen, "  called from %s%s (%s",
-			               fn ? "function " : "anonymous function",
-			               fn ? json_object_get_string(fn) : "",
-			               file ? json_object_get_string(file) : "");
+			ucv_stringbuf_printf(buf, "  called from %s%s (%s",
+				fn ? "function " : "anonymous function",
+				fn ? ucv_string_get(fn) : "",
+				file ? ucv_string_get(file) : "");
 
 			if (line && byte)
-				sprintf_append(msg, msglen, ":%" PRId64 ":%" PRId64 ")\n",
-				               json_object_get_int64(line),
-				               json_object_get_int64(byte));
+				ucv_stringbuf_printf(buf, ":%" PRId64 ":%" PRId64 ")\n",
+					ucv_int64_get(line),
+					ucv_int64_get(byte));
 			else
-				sprintf_append(msg, msglen, "[C])\n");
+				ucv_stringbuf_append(buf, "[C])\n");
 		}
 	}
 
-	format_source_context(msg, msglen, src, off, false);
+	return format_source_context(buf, src, off, false);
+}
+
+static char *uc_cast_string(uc_vm *vm, uc_value_t **v, bool *freeable) {
+	if (ucv_type(*v) == UC_STRING) {
+		*freeable = false;
+
+		return _ucv_string_get(v);
+	}
+
+	*freeable = true;
+
+	return ucv_to_string(vm, *v);
 }
 
 static double
-uc_cast_double(json_object *v)
+uc_cast_double(uc_value_t *v)
 {
-	enum json_type t;
+	uc_type_t t;
 	int64_t n;
 	double d;
 
 	t = uc_cast_number(v, &n, &d);
 	errno = 0;
 
-	if (t == json_type_double) {
+	if (t == UC_DOUBLE) {
 		if (isnan(d))
 			errno = EINVAL;
 		else if (!isfinite(d))
@@ -282,16 +237,16 @@ uc_cast_double(json_object *v)
 }
 
 static int64_t
-uc_cast_int64(json_object *v)
+uc_cast_int64(uc_value_t *v)
 {
-	enum json_type t;
+	uc_type_t t;
 	int64_t n;
 	double d;
 
 	t = uc_cast_number(v, &n, &d);
 	errno = 0;
 
-	if (t == json_type_double) {
+	if (t == UC_DOUBLE) {
 		if (isnan(d))
 			errno = EINVAL;
 		else if (!isfinite(d))
@@ -305,73 +260,72 @@ uc_cast_int64(json_object *v)
 	return n;
 }
 
-static json_object *
+static uc_value_t *
 uc_print_common(uc_vm *vm, size_t nargs, FILE *fh)
 {
-	json_object *item;
+	uc_value_t *item;
 	size_t reslen = 0;
 	size_t len = 0;
 	size_t arridx;
-	const char *p;
+	char *p;
 
 	for (arridx = 0; arridx < nargs; arridx++) {
 		item = uc_get_arg(arridx);
 
-		if (json_object_is_type(item, json_type_string)) {
-			p = json_object_get_string(item);
-			len = json_object_get_string_len(item);
+		if (ucv_type(item) == UC_STRING) {
+			len = ucv_string_length(item);
+			reslen += fwrite(ucv_string_get(item), 1, len, fh);
 		}
-		else {
-			p = item ? json_object_get_string(item) : NULL;
-			p = p ? p : "";
+		else if (item != NULL) {
+			p = ucv_to_string(vm, item);
 			len = strlen(p);
+			reslen += fwrite(p, 1, len, fh);
+			free(p);
 		}
-
-		reslen += fwrite(p, 1, len, fh);
 	}
 
-	return xjs_new_int64(reslen);
+	return ucv_int64_new(reslen);
 }
 
 
-static json_object *
+static uc_value_t *
 uc_print(uc_vm *vm, size_t nargs)
 {
 	return uc_print_common(vm, nargs, stdout);
 }
 
-static json_object *
+static uc_value_t *
 uc_length(uc_vm *vm, size_t nargs)
 {
-	json_object *arg = uc_get_arg(0);
+	uc_value_t *arg = uc_get_arg(0);
 
-	switch (json_object_get_type(arg)) {
-	case json_type_object:
-		return xjs_new_int64(json_object_object_length(arg));
+	switch (ucv_type(arg)) {
+	case UC_OBJECT:
+		return ucv_int64_new(ucv_object_length(arg));
 
-	case json_type_array:
-		return xjs_new_int64(json_object_array_length(arg));
+	case UC_ARRAY:
+		return ucv_int64_new(ucv_array_length(arg));
 
-	case json_type_string:
-		return xjs_new_int64(json_object_get_string_len(arg));
+	case UC_STRING:
+		return ucv_int64_new(ucv_string_length(arg));
 
 	default:
 		return NULL;
 	}
 }
 
-static json_object *
+static uc_value_t *
 uc_index(uc_vm *vm, size_t nargs, bool right)
 {
-	json_object *stack = uc_get_arg(0);
-	json_object *needle = uc_get_arg(1);
+	uc_value_t *stack = uc_get_arg(0);
+	uc_value_t *needle = uc_get_arg(1);
 	size_t arridx, len, ret = -1;
 	const char *sstr, *nstr, *p;
 
-	switch (json_object_get_type(stack)) {
-	case json_type_array:
-		for (arridx = 0, len = json_object_array_length(stack); arridx < len; arridx++) {
-			if (uc_cmp(TK_EQ, json_object_array_get_idx(stack, arridx), needle)) {
+	switch (ucv_type(stack)) {
+	case UC_ARRAY:
+		for (arridx = 0, len = ucv_array_length(stack); arridx < len; arridx++) {
+			if (uc_cmp(TK_EQ, ucv_array_get(stack, arridx), needle)) {
 				ret = arridx;
 
 				if (!right)
@@ -379,11 +333,11 @@ uc_index(uc_vm *vm, size_t nargs, bool right)
 			}
 		}
 
-		return xjs_new_int64(ret);
+		return ucv_int64_new(ret);
 
-	case json_type_string:
-		sstr = json_object_get_string(stack);
-		nstr = needle ? json_object_get_string(needle) : NULL;
+	case UC_STRING:
+		sstr = ucv_string_get(stack);
+		nstr = needle ? ucv_string_get(needle) : NULL;
 		len = needle ? strlen(nstr) : 0;
 
 		for (p = sstr; *p && len; p++) {
@@ -395,126 +349,87 @@ uc_index(uc_vm *vm, size_t nargs, bool right)
 			}
 		}
 
-		return xjs_new_int64(ret);
+		return ucv_int64_new(ret);
 
 	default:
 		return NULL;
 	}
 }
 
-static json_object *
+static uc_value_t *
 uc_lindex(uc_vm *vm, size_t nargs)
 {
 	return uc_index(vm, nargs, false);
 }
 
-static json_object *
+static uc_value_t *
 uc_rindex(uc_vm *vm, size_t nargs)
 {
 	return uc_index(vm, nargs, true);
 }
 
-static json_object *
+static uc_value_t *
 uc_push(uc_vm *vm, size_t nargs)
 {
-	json_object *arr = uc_get_arg(0);
-	json_object *item = NULL;
+	uc_value_t *arr = uc_get_arg(0);
+	uc_value_t *item = NULL;
 	size_t arridx;
 
-	if (!json_object_is_type(arr, json_type_array))
+	if (ucv_type(arr) != UC_ARRAY)
 		return NULL;
 
 	for (arridx = 1; arridx < nargs; arridx++) {
 		item = uc_get_arg(arridx);
-		json_object_array_add(arr, uc_value_get(item));
+		ucv_array_push(arr, ucv_get(item));
 	}
 
-	return uc_value_get(item);
+	return ucv_get(item);
 }
 
-static json_object *
+static uc_value_t *
 uc_pop(uc_vm *vm, size_t nargs)
 {
-	json_object *arr = uc_get_arg(0);
-	json_object *item = NULL;
-	size_t arrlen;
+	uc_value_t *arr = uc_get_arg(0);
 
-	if (!json_object_is_type(arr, json_type_array))
-		return NULL;
-
-	arrlen = json_object_array_length(arr);
-
-	if (arrlen > 0) {
-		item = uc_value_get(json_object_array_get_idx(arr, arrlen - 1));
-		json_object_array_del_idx(arr, arrlen - 1, 1);
-#ifdef HAVE_ARRAY_SHRINK
-		json_object_array_shrink(arr, 0);
-#endif
-	}
-
-	return item;
+	return ucv_array_pop(arr);
 }
 
-static json_object *
+static uc_value_t *
 uc_shift(uc_vm *vm, size_t nargs)
 {
-	json_object *arr = uc_get_arg(0);
-	json_object *item = NULL;
-	size_t arridx, arrlen;
+	uc_value_t *arr = uc_get_arg(0);
 
-	if (!json_object_is_type(arr, json_type_array))
-		return NULL;
-
-	item = uc_value_get(json_object_array_get_idx(arr, 0));
-	arrlen = json_object_array_length(arr);
-
-	for (arridx = 0; arridx < arrlen - 1; arridx++)
-		json_object_array_put_idx(arr, arridx,
-			uc_value_get(json_object_array_get_idx(arr, arridx + 1)));
-
-	json_object_array_del_idx(arr, arrlen - 1, 1);
-#ifdef HAVE_ARRAY_SHRINK
-	json_object_array_shrink(arr, 0);
-#endif
-
-	return item;
+	return ucv_array_shift(arr);
 }
 
-static json_object *
+static uc_value_t *
 uc_unshift(uc_vm *vm, size_t nargs)
 {
-	json_object *arr = uc_get_arg(0);
-	json_object *item = NULL;
-	size_t arridx, arrlen, addlen;
+	uc_value_t *arr = uc_get_arg(0);
+	uc_value_t *item = NULL;
+	size_t i;
 
-	if (!json_object_is_type(arr, json_type_array))
+	if (ucv_type(arr) != UC_ARRAY)
 		return NULL;
 
-	arrlen = json_object_array_length(arr);
-	addlen = nargs - 1;
-
-	for (arridx = arrlen; arridx > 0; arridx--)
-		json_object_array_put_idx(arr, arridx + addlen - 1,
-			uc_value_get(json_object_array_get_idx(arr, arridx - 1)));
-
-	for (arridx = 0; arridx < addlen; arridx++) {
-		item = uc_get_arg(arridx + 1);
-		json_object_array_put_idx(arr, arridx, uc_value_get(item));
+	for (i = 1; i < nargs; i++) {
+		item = uc_get_arg(i);
+		ucv_array_unshift(arr, ucv_get(item));
 	}
 
-	return uc_value_get(item);
+	return ucv_get(item);
 }
 
-static json_object *
+static uc_value_t *
 uc_chr(uc_vm *vm, size_t nargs)
 {
-	json_object *rv = NULL;
+	uc_value_t *rv = NULL;
 	size_t idx;
 	int64_t n;
 	char *str;
 
 	if (!nargs)
-		return xjs_new_string_len("", 0);
+		return ucv_string_new_length("", 0);
 
 	str = xalloc(nargs);
 
@@ -529,58 +444,68 @@ uc_chr(uc_vm *vm, size_t nargs)
 		str[idx] = (char)n;
 	}
 
-	rv = xjs_new_string_len(str, nargs);
+	rv = ucv_string_new_length(str, nargs);
 	free(str);
 
 	return rv;
 }
 
-static json_object *
+static uc_value_t *
 uc_delete(uc_vm *vm, size_t nargs)
 {
-	json_object *obj = uc_get_arg(0);
-	json_object *rv = NULL;
+	uc_value_t *obj = uc_get_arg(0);
+	uc_value_t *rv = NULL;
 	const char *key;
-	size_t arridx;
+	size_t i;
 
-	if (!json_object_is_type(obj, json_type_object))
+	if (ucv_type(obj) != UC_OBJECT)
 		return NULL;
 
-	for (arridx = 1; arridx < nargs; arridx++) {
-		uc_value_put(rv);
+	for (i = 1; i < nargs; i++) {
+		ucv_put(rv);
 
-		key = json_object_get_string(uc_get_arg(arridx));
-		rv = uc_value_get(json_object_object_get(obj, key ? key : "null"));
+		key = ucv_string_get(uc_get_arg(i));
+		rv = ucv_get(ucv_object_get(obj, key ? key : "null", NULL));
 
-		json_object_object_del(obj, key ? key : "null");
+		ucv_object_delete(obj, key ? key : "null");
 	}
 
 	return rv;
 }
 
-static json_object *
+static uc_value_t *
 uc_die(uc_vm *vm, size_t nargs)
 {
-	const char *msg = json_object_get_string(uc_get_arg(0));
+	uc_value_t *msg = uc_get_arg(0);
+	bool freeable = false;
+	char *s;
 
-	uc_vm_raise_exception(vm, EXCEPTION_USER, msg ? msg : "Died");
+	s = msg ? uc_cast_string(vm, &msg, &freeable) : "Died";
+
+	uc_vm_raise_exception(vm, EXCEPTION_USER, s);
+
+	if (freeable)
+		free(s);
 
 	return NULL;
 }
 
-static json_object *
+static uc_value_t *
 uc_exists(uc_vm *vm, size_t nargs)
 {
-	json_object *obj = uc_get_arg(0);
-	const char *key = json_object_get_string(uc_get_arg(1));
+	uc_value_t *obj = uc_get_arg(0);
+	const char *key = ucv_string_get(uc_get_arg(1));
+	bool found;
 
-	if (!json_object_is_type(obj, json_type_object))
+	if (ucv_type(obj) != UC_OBJECT)
 		return false;
 
-	return xjs_new_boolean(json_object_object_get_ex(obj, key ? key : "null", NULL));
+	ucv_object_get(obj, key ? key : "null", &found);
+
+	return ucv_boolean_new(found);
 }
 
-__attribute__((noreturn)) static json_object *
+__attribute__((noreturn)) static uc_value_t *
 uc_exit(uc_vm *vm, size_t nargs)
 {
 	int64_t n = uc_cast_int64(uc_get_arg(0));
@@ -588,37 +513,37 @@ uc_exit(uc_vm *vm, size_t nargs)
 	exit(n);
 }
 
-static json_object *
+static uc_value_t *
 uc_getenv(uc_vm *vm, size_t nargs)
 {
-	const char *key = json_object_get_string(uc_get_arg(0));
+	const char *key = ucv_string_get(uc_get_arg(0));
 	char *val = key ? getenv(key) : NULL;
 
-	return val ? xjs_new_string(val) : NULL;
+	return val ? ucv_string_new(val) : NULL;
 }
 
-static json_object *
+static uc_value_t *
 uc_filter(uc_vm *vm, size_t nargs)
 {
-	json_object *obj = uc_get_arg(0);
-	json_object *func = uc_get_arg(1);
-	json_object *rv, *arr;
+	uc_value_t *obj = uc_get_arg(0);
+	uc_value_t *func = uc_get_arg(1);
+	uc_value_t *rv, *arr;
 	size_t arridx, arrlen;
 
-	if (!json_object_is_type(obj, json_type_array))
+	if (ucv_type(obj) != UC_ARRAY)
 		return NULL;
 
-	arr = xjs_new_array();
+	arr = ucv_array_new(vm);
 
-	for (arrlen = json_object_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
+	for (arrlen = ucv_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
 		/* XXX: revisit leaks */
-		uc_vm_stack_push(vm, uc_value_get(func));
-		uc_vm_stack_push(vm, uc_value_get(json_object_array_get_idx(obj, arridx)));
-		uc_vm_stack_push(vm, xjs_new_int64(arridx));
-		uc_vm_stack_push(vm, uc_value_get(obj));
+		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, ucv_get(ucv_array_get(obj, arridx)));
+		uc_vm_stack_push(vm, ucv_int64_new(arridx));
+		uc_vm_stack_push(vm, ucv_get(obj));
 
 		if (uc_vm_call(vm, false, 3)) {
-			uc_value_put(arr);
+			ucv_put(arr);
 
 			return NULL;
 		}
@@ -626,281 +551,229 @@ uc_filter(uc_vm *vm, size_t nargs)
 		rv = uc_vm_stack_pop(vm);
 
 		if (uc_val_is_truish(rv))
-			json_object_array_add(arr, uc_value_get(json_object_array_get_idx(obj, arridx)));
+			ucv_array_push(arr, ucv_get(ucv_array_get(obj, arridx)));
 
-		uc_value_put(rv);
+		ucv_put(rv);
 	}
 
 	return arr;
 }
 
-static json_object *
+static uc_value_t *
 uc_hex(uc_vm *vm, size_t nargs)
 {
-	const char *val = json_object_get_string(uc_get_arg(0));
+	const char *val = ucv_string_get(uc_get_arg(0));
 	int64_t n;
 	char *e;
 
 	if (!val || !isxdigit(*val))
-		return uc_double_new(NAN);
+		return ucv_double_new(NAN);
 
 	n = strtoll(val, &e, 16);
 
 	if (e == val || *e)
-		return uc_double_new(NAN);
+		return ucv_double_new(NAN);
 
-	return xjs_new_int64(n);
+	return ucv_int64_new(n);
 }
 
-static json_object *
+static uc_value_t *
 uc_int(uc_vm *vm, size_t nargs)
 {
 	int64_t n = uc_cast_int64(uc_get_arg(0));
 
 	if (errno == EINVAL || errno == EOVERFLOW)
-		return uc_double_new(NAN);
+		return ucv_double_new(NAN);
 
-	return xjs_new_int64(n);
+	return ucv_int64_new(n);
 }
 
-static json_object *
+static uc_value_t *
 uc_join(uc_vm *vm, size_t nargs)
 {
-	const char *sep = json_object_get_string(uc_get_arg(0));
-	json_object *arr = uc_get_arg(1);
-	json_object *rv = NULL;
-	size_t arrlen, arridx, len = 1;
-	const char *item;
-	char *res, *p;
-	int ret;
+	uc_value_t *sep = uc_get_arg(0);
+	uc_value_t *arr = uc_get_arg(1);
+	size_t arrlen, arridx;
+	uc_stringbuf_t *buf;
 
-	if (!json_object_is_type(arr, json_type_array))
+	if (ucv_type(arr) != UC_ARRAY)
 		return NULL;
 
-	for (arrlen = json_object_array_length(arr), arridx = 0; arridx < arrlen; arridx++) {
+	buf = ucv_stringbuf_new();
+
+	for (arrlen = ucv_array_length(arr), arridx = 0; arridx < arrlen; arridx++) {
 		if (arridx > 0)
-			len += strlen(sep);
+			ucv_to_stringbuf(vm, buf, sep, false);
 
-		item = json_object_get_string(json_object_array_get_idx(arr, arridx));
-		len += item ? strlen(item) : 0;
+		ucv_to_stringbuf(vm, buf, ucv_array_get(arr, arridx), false);
 	}
 
-	p = res = xalloc(len);
-
-	for (arrlen = json_object_array_length(arr), arridx = 0; arridx < arrlen; arridx++) {
-		if (arridx > 0) {
-			ret = snprintf(p, len, "%s", sep);
-
-			if (ret < 0 || ret >= len)
-				goto out;
-
-			len -= ret;
-			p += ret;
-		}
-
-		item = json_object_get_string(json_object_array_get_idx(arr, arridx));
-
-		if (item) {
-			ret = snprintf(p, len, "%s", item);
-
-			if (ret < 0 || ret >= len)
-				goto out;
-
-			len -= ret;
-			p += ret;
-		}
-	}
-
-	rv = xjs_new_string(res);
-
-out:
-	free(res);
-
-	return rv;
+	return ucv_stringbuf_finish(buf);
 }
 
-static json_object *
+static uc_value_t *
 uc_keys(uc_vm *vm, size_t nargs)
 {
-	json_object *obj = uc_get_arg(0);
-	json_object *arr = NULL;
+	uc_value_t *obj = uc_get_arg(0);
+	uc_value_t *arr = NULL;
 
-	if (!json_object_is_type(obj, json_type_object))
+	if (ucv_type(obj) != UC_OBJECT)
 		return NULL;
 
-	arr = xjs_new_array();
+	arr = ucv_array_new(vm);
 
-	json_object_object_foreach(obj, key, val)
-		json_object_array_add(arr, xjs_new_string(key));
+	ucv_object_foreach(obj, key, val)
+		ucv_array_push(arr, ucv_string_new(key));
 
 	return arr;
 }
 
-static json_object *
+static uc_value_t *
 uc_lc(uc_vm *vm, size_t nargs)
 {
-	const char *str = json_object_get_string(uc_get_arg(0));
-	size_t len = str ? strlen(str) : 0;
-	json_object *rv = NULL;
-	char *res, *p;
+	char *str = ucv_to_string(vm, uc_get_arg(0));
+	uc_value_t *rv = NULL;
+	char *p;
 
 	if (!str)
 		return NULL;
 
-	res = p = xalloc(len);
+	for (p = str; *p; p++)
+		if (*p >= 'A' && *p <= 'Z')
+			*p |= 32;
 
-	while (*str)
-		if (*str >= 'A' && *str <= 'Z')
-			*p++ = 32 + *str++;
-		else
-			*p++ = *str++;
+	rv = ucv_string_new(str);
 
-	rv = xjs_new_string_len(res, len);
-	free(res);
+	free(str);
 
 	return rv;
 }
 
-static json_object *
+static uc_value_t *
 uc_map(uc_vm *vm, size_t nargs)
 {
-	json_object *obj = uc_get_arg(0);
-	json_object *func = uc_get_arg(1);
-	json_object *arr, *rv;
+	uc_value_t *obj = uc_get_arg(0);
+	uc_value_t *func = uc_get_arg(1);
+	uc_value_t *arr, *rv;
 	size_t arridx, arrlen;
 
-	if (!json_object_is_type(obj, json_type_array))
+	if (ucv_type(obj) != UC_ARRAY)
 		return NULL;
 
-	arr = xjs_new_array();
+	arr = ucv_array_new(vm);
 
-	for (arrlen = json_object_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
+	for (arrlen = ucv_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
 		/* XXX: revisit leaks */
-		uc_vm_stack_push(vm, uc_value_get(func));
-		uc_vm_stack_push(vm, uc_value_get(json_object_array_get_idx(obj, arridx)));
-		uc_vm_stack_push(vm, xjs_new_int64(arridx));
-		uc_vm_stack_push(vm, uc_value_get(obj));
+		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, ucv_get(ucv_array_get(obj, arridx)));
+		uc_vm_stack_push(vm, ucv_int64_new(arridx));
+		uc_vm_stack_push(vm, ucv_get(obj));
 
 		if (uc_vm_call(vm, false, 3)) {
-			uc_value_put(arr);
+			ucv_put(arr);
 
 			return NULL;
 		}
 
 		rv = uc_vm_stack_pop(vm);
 
-		json_object_array_add(arr, rv);
+		ucv_array_push(arr, rv);
 	}
 
 	return arr;
 }
 
-static json_object *
+static uc_value_t *
 uc_ord(uc_vm *vm, size_t nargs)
 {
-	json_object *obj = uc_get_arg(0);
-	json_object *rv, *pos;
+	uc_value_t *obj = uc_get_arg(0);
+	uc_value_t *rv, *pos;
 	const char *str;
 	size_t i, len;
 	int64_t n;
 
-	if (!json_object_is_type(obj, json_type_string))
+	if (ucv_type(obj) != UC_STRING)
 		return NULL;
 
-	str = json_object_get_string(obj);
-	len = json_object_get_string_len(obj);
+	str = ucv_string_get(obj);
+	len = ucv_string_length(obj);
 
 	if (nargs == 1)
-		return str[0] ? xjs_new_int64((int64_t)str[0]) : NULL;
+		return str[0] ? ucv_int64_new((int64_t)str[0]) : NULL;
 
-	rv = xjs_new_array();
+	rv = ucv_array_new(vm);
 
 	for (i = 1; i < nargs; i++) {
 		pos = uc_get_arg(i);
 
-		if (json_object_is_type(pos, json_type_int)) {
-			n = json_object_get_int64(pos);
+		if (ucv_type(pos) == UC_INTEGER) {
+			n = ucv_int64_get(pos);
 
 			if (n < 0)
 				n += len;
 
-			if (n >= 0 && n < len) {
-				json_object_array_add(rv, xjs_new_int64((int64_t)str[n]));
+			if (n >= 0 && (uint64_t)n < len) {
+				ucv_array_push(rv, ucv_int64_new((int64_t)str[n]));
 				continue;
 			}
 		}
 
-		json_object_array_add(rv, NULL);
+		ucv_array_push(rv, NULL);
 	}
 
 	return rv;
 }
 
-static json_object *
+static uc_value_t *
 uc_type(uc_vm *vm, size_t nargs)
 {
-	json_object *v = uc_get_arg(0);
-	uc_objtype_t o = uc_object_type(v);
+	uc_value_t *v = uc_get_arg(0);
+	uc_type_t t = ucv_type(v);
 
-	switch (o) {
-	case UC_OBJ_CFUNCTION:
-	case UC_OBJ_FUNCTION:
-	case UC_OBJ_CLOSURE:
-		return xjs_new_string("function");
+	switch (t) {
+	case UC_CFUNCTION:
+	case UC_FUNCTION:
+	case UC_CLOSURE:
+		return ucv_string_new("function");
 
-	case UC_OBJ_RESSOURCE:
-		return xjs_new_string("ressource");
+	case UC_INTEGER:
+		return ucv_string_new("int");
+
+	case UC_BOOLEAN:
+		return ucv_string_new("bool");
+
+	case UC_NULL:
+		return NULL;
 
 	default:
-		switch (json_object_get_type(v)) {
-		case json_type_object:
-			return xjs_new_string("object");
-
-		case json_type_array:
-			return xjs_new_string("array");
-
-		case json_type_double:
-			return xjs_new_string("double");
-
-		case json_type_int:
-			return xjs_new_string("int");
-
-		case json_type_boolean:
-			return xjs_new_string("bool");
-
-		case json_type_string:
-			return xjs_new_string("string");
-
-		default:
-			return NULL;
-		}
+		return ucv_string_new(ucv_typename(v));
 	}
 }
 
-static json_object *
+static uc_value_t *
 uc_reverse(uc_vm *vm, size_t nargs)
 {
-	json_object *obj = uc_get_arg(0);
-	json_object *rv = NULL;
+	uc_value_t *obj = uc_get_arg(0);
+	uc_value_t *rv = NULL;
 	size_t len, arridx;
 	const char *str;
 	char *dup, *p;
 
-	if (json_object_is_type(obj, json_type_array)) {
-		rv = xjs_new_array();
+	if (ucv_type(obj) == UC_ARRAY) {
+		rv = ucv_array_new(vm);
 
-		for (arridx = json_object_array_length(obj); arridx > 0; arridx--)
-			json_object_array_add(rv, uc_value_get(json_object_array_get_idx(obj, arridx - 1)));
+		for (arridx = ucv_array_length(obj); arridx > 0; arridx--)
+			ucv_array_push(rv, ucv_get(ucv_array_get(obj, arridx - 1)));
 	}
-	else if (json_object_is_type(obj, json_type_string)) {
-		len = json_object_get_string_len(obj);
-		str = json_object_get_string(obj);
+	else if (ucv_type(obj) == UC_STRING) {
+		len = ucv_string_length(obj);
+		str = ucv_string_get(obj);
 		p = dup = xalloc(len + 1);
 
 		while (len > 0)
 			*p++ = str[--len];
 
-		rv = xjs_new_string(dup);
+		rv = ucv_string_new(dup);
 
 		free(dup);
 	}
@@ -912,15 +785,15 @@ uc_reverse(uc_vm *vm, size_t nargs)
 static struct {
 	uc_vm *vm;
 	bool ex;
-	json_object *fn;
+	uc_value_t *fn;
 } sort_ctx;
 
 static int
 sort_fn(const void *k1, const void *k2)
 {
-	json_object * const *v1 = k1;
-	json_object * const *v2 = k2;
-	json_object *rv;
+	uc_value_t * const *v1 = k1;
+	uc_value_t * const *v2 = k2;
+	uc_value_t *rv;
 	int ret;
 
 	if (!sort_ctx.fn)
@@ -929,9 +802,9 @@ sort_fn(const void *k1, const void *k2)
 	if (sort_ctx.ex)
 		return 0;
 
-	uc_vm_stack_push(sort_ctx.vm, uc_value_get(sort_ctx.fn));
-	uc_vm_stack_push(sort_ctx.vm, uc_value_get(*v1));
-	uc_vm_stack_push(sort_ctx.vm, uc_value_get(*v2));
+	uc_vm_stack_push(sort_ctx.vm, ucv_get(sort_ctx.fn));
+	uc_vm_stack_push(sort_ctx.vm, ucv_get(*v1));
+	uc_vm_stack_push(sort_ctx.vm, ucv_get(*v2));
 
 	if (uc_vm_call(sort_ctx.vm, false, 2)) {
 		sort_ctx.ex = true;
@@ -943,40 +816,40 @@ sort_fn(const void *k1, const void *k2)
 
 	ret = !uc_val_is_truish(rv);
 
-	uc_value_put(rv);
+	ucv_put(rv);
 
 	return ret;
 }
 
-static json_object *
+static uc_value_t *
 uc_sort(uc_vm *vm, size_t nargs)
 {
-	json_object *arr = uc_get_arg(0);
-	json_object *fn = uc_get_arg(1);
+	uc_value_t *arr = uc_get_arg(0);
+	uc_value_t *fn = uc_get_arg(1);
 
-	if (!json_object_is_type(arr, json_type_array))
+	if (ucv_type(arr) != UC_ARRAY)
 		return NULL;
 
 	sort_ctx.vm = vm;
 	sort_ctx.fn = fn;
 
-	json_object_array_sort(arr, sort_fn);
+	ucv_array_sort(arr, sort_fn);
 
-	return sort_ctx.ex ? NULL : uc_value_get(arr);
+	return sort_ctx.ex ? NULL : ucv_get(arr);
 }
 
-static json_object *
+static uc_value_t *
 uc_splice(uc_vm *vm, size_t nargs)
 {
-	json_object *arr = uc_get_arg(0);
+	uc_value_t *arr = uc_get_arg(0);
 	int64_t ofs = uc_cast_int64(uc_get_arg(1));
 	int64_t remlen = uc_cast_int64(uc_get_arg(2));
 	size_t arrlen, addlen, idx;
 
-	if (!json_object_is_type(arr, json_type_array))
+	if (ucv_type(arr) != UC_ARRAY)
 		return NULL;
 
-	arrlen = json_object_array_length(arr);
+	arrlen = ucv_array_length(arr);
 	addlen = nargs;
 
 	if (addlen == 1) {
@@ -991,7 +864,7 @@ uc_splice(uc_vm *vm, size_t nargs)
 			if (ofs < 0)
 				ofs = 0;
 		}
-		else if (ofs > arrlen) {
+		else if ((uint64_t)ofs > arrlen) {
 			ofs = arrlen;
 		}
 
@@ -1005,7 +878,7 @@ uc_splice(uc_vm *vm, size_t nargs)
 			if (ofs < 0)
 				ofs = 0;
 		}
-		else if (ofs > arrlen) {
+		else if ((uint64_t)ofs > arrlen) {
 			ofs = arrlen;
 		}
 
@@ -1015,71 +888,71 @@ uc_splice(uc_vm *vm, size_t nargs)
 			if (remlen < 0)
 				remlen = 0;
 		}
-		else if (remlen > arrlen - ofs) {
+		else if ((uint64_t)remlen > arrlen - ofs) {
 			remlen = arrlen - ofs;
 		}
 
 		addlen -= 3;
 	}
 
-	if (addlen < remlen) {
-		json_object_array_del_idx(arr, ofs, remlen - addlen);
+	if (addlen < (uint64_t)remlen) {
+		ucv_array_delete(arr, ofs, remlen - addlen);
 	}
-	else if (addlen > remlen) {
-		for (idx = arrlen; idx > ofs; idx--)
-			json_object_array_put_idx(arr, idx + addlen - remlen - 1,
-				uc_value_get(json_object_array_get_idx(arr, idx - 1)));
+	else if (addlen > (uint64_t)remlen) {
+		for (idx = arrlen; idx > (uint64_t)ofs; idx--)
+			ucv_array_set(arr, idx + addlen - remlen - 1,
+				ucv_get(ucv_array_get(arr, idx - 1)));
 	}
 
 	for (idx = 0; idx < addlen; idx++)
-		json_object_array_put_idx(arr, ofs + idx,
-			uc_value_get(uc_get_arg(3 + idx)));
+		ucv_array_set(arr, ofs + idx,
+			ucv_get(uc_get_arg(3 + idx)));
 
-	return uc_value_get(arr);
+	return ucv_get(arr);
 }
 
-static json_object *
+static uc_value_t *
 uc_split(uc_vm *vm, size_t nargs)
 {
-	json_object *str = uc_get_arg(0);
-	json_object *sep = uc_get_arg(1);
-	json_object *arr = NULL;
+	uc_value_t *str = uc_get_arg(0);
+	uc_value_t *sep = uc_get_arg(1);
+	uc_value_t *arr = NULL;
 	const char *p, *sepstr, *splitstr;
 	int eflags = 0, res;
 	regmatch_t pmatch;
-	uc_regexp *re;
+	uc_regexp_t *re;
 	size_t seplen;
 
-	if (!sep || !json_object_is_type(str, json_type_string))
+	if (!sep || ucv_type(str) != UC_STRING)
 		return NULL;
 
-	arr = xjs_new_array();
-	splitstr = json_object_get_string(str);
+	arr = ucv_array_new(vm);
+	splitstr = ucv_string_get(str);
 
-	if (uc_object_is_type(sep, UC_OBJ_REGEXP)) {
-		re = uc_object_as_regexp(sep);
+	if (ucv_type(sep) == UC_REGEXP) {
+		re = (uc_regexp_t *)sep;
 
 		while (true) {
-			res = regexec(&re->re, splitstr, 1, &pmatch, eflags);
+			res = regexec(&re->regexp, splitstr, 1, &pmatch, eflags);
 
 			if (res == REG_NOMATCH)
 				break;
 
-			json_object_array_add(arr, xjs_new_string_len(splitstr, pmatch.rm_so));
+			ucv_array_push(arr, ucv_string_new_length(splitstr, pmatch.rm_so));
 
 			splitstr += pmatch.rm_eo;
 			eflags |= REG_NOTBOL;
 		}
 
-		json_object_array_add(arr, xjs_new_string(splitstr));
+		ucv_array_push(arr, ucv_string_new(splitstr));
 	}
-	else if (json_object_is_type(sep, json_type_string)) {
-		sepstr = json_object_get_string(sep);
+	else if (ucv_type(sep) == UC_STRING) {
+		sepstr = ucv_string_get(sep);
 
 		for (p = splitstr + (*sepstr ? 1 : 0), seplen = strlen(sepstr); *p; p++) {
 			if (!strncmp(p, sepstr, seplen)) {
 				if (*sepstr || p > splitstr)
-					json_object_array_add(arr, xjs_new_string_len(splitstr, p - splitstr));
+					ucv_array_push(arr, ucv_string_new_length(splitstr, p - splitstr));
 
 				splitstr = p + seplen;
 				p = splitstr - (*sepstr ? 1 : 0);
@@ -1087,10 +960,10 @@ uc_split(uc_vm *vm, size_t nargs)
 		}
 
 		if (*splitstr)
-			json_object_array_add(arr, xjs_new_string_len(splitstr, p - splitstr));
+			ucv_array_push(arr, ucv_string_new_length(splitstr, p - splitstr));
 	}
 	else {
-		uc_value_put(arr);
+		ucv_put(arr);
 
 		return NULL;
 	}
@@ -1098,20 +971,20 @@ uc_split(uc_vm *vm, size_t nargs)
 	return arr;
 }
 
-static json_object *
+static uc_value_t *
 uc_substr(uc_vm *vm, size_t nargs)
 {
-	json_object *str = uc_get_arg(0);
+	uc_value_t *str = uc_get_arg(0);
 	int64_t ofs = uc_cast_int64(uc_get_arg(1));
 	int64_t sublen = uc_cast_int64(uc_get_arg(2));
 	const char *p;
 	size_t len;
 
-	if (!json_object_is_type(str, json_type_string))
+	if (ucv_type(str) != UC_STRING)
 		return NULL;
 
-	p = json_object_get_string(str);
-	len = json_object_get_string_len(str);
+	p = ucv_string_get(str);
+	len = ucv_string_length(str);
 
 	switch (nargs) {
 	case 1:
@@ -1127,7 +1000,7 @@ uc_substr(uc_vm *vm, size_t nargs)
 			if (ofs < 0)
 				ofs = 0;
 		}
-		else if (ofs > len) {
+		else if ((uint64_t)ofs > len) {
 			ofs = len;
 		}
 
@@ -1142,7 +1015,7 @@ uc_substr(uc_vm *vm, size_t nargs)
 			if (ofs < 0)
 				ofs = 0;
 		}
-		else if (ofs > len) {
+		else if ((uint64_t)ofs > len) {
 			ofs = len;
 		}
 
@@ -1152,53 +1025,49 @@ uc_substr(uc_vm *vm, size_t nargs)
 			if (sublen < 0)
 				sublen = 0;
 		}
-		else if (sublen > len - ofs) {
+		else if ((uint64_t)sublen > len - ofs) {
 			sublen = len - ofs;
 		}
 
 		break;
 	}
 
-	return xjs_new_string_len(p + ofs, sublen);
+	return ucv_string_new_length(p + ofs, sublen);
 }
 
-static json_object *
+static uc_value_t *
 uc_time(uc_vm *vm, size_t nargs)
 {
 	time_t t = time(NULL);
 
-	return xjs_new_int64((int64_t)t);
+	return ucv_int64_new((int64_t)t);
 }
 
-static json_object *
+static uc_value_t *
 uc_uc(uc_vm *vm, size_t nargs)
 {
-	const char *str = json_object_get_string(uc_get_arg(0));
-	size_t len = str ? strlen(str) : 0;
-	json_object *rv = NULL;
-	char *res, *p;
+	char *str = ucv_to_string(vm, uc_get_arg(0));
+	uc_value_t *rv = NULL;
+	char *p;
 
 	if (!str)
 		return NULL;
 
-	res = p = xalloc(len);
+	for (p = str; *p; p++)
+		if (*p >= 'a' && *p <= 'z')
+			*p &= ~32;
 
-	while (*str)
-		if (*str >= 'a' && *str <= 'z')
-			*p++ = *str++ - 32;
-		else
-			*p++ = *str++;
+	rv = ucv_string_new(str);
 
-	rv = xjs_new_string_len(res, len);
-	free(res);
+	free(str);
 
 	return rv;
 }
 
-static json_object *
+static uc_value_t *
 uc_uchr(uc_vm *vm, size_t nargs)
 {
-	json_object *rv = NULL;
+	uc_value_t *rv = NULL;
 	size_t idx, ulen;
 	char *p, *str;
 	int64_t n;
@@ -1231,48 +1100,49 @@ uc_uchr(uc_vm *vm, size_t nargs)
 			break;
 	}
 
-	rv = xjs_new_string_len(str, ulen);
+	rv = ucv_string_new_length(str, ulen);
+
 	free(str);
 
 	return rv;
 }
 
-static json_object *
+static uc_value_t *
 uc_values(uc_vm *vm, size_t nargs)
 {
-	json_object *obj = uc_get_arg(0);
-	json_object *arr;
+	uc_value_t *obj = uc_get_arg(0);
+	uc_value_t *arr;
 
-	if (!json_object_is_type(obj, json_type_object))
+	if (ucv_type(obj) != UC_OBJECT)
 		return NULL;
 
-	arr = xjs_new_array();
+	arr = ucv_array_new(vm);
 
-	json_object_object_foreach(obj, key, val) {
+	ucv_object_foreach(obj, key, val) {
 		(void)key;
-		json_object_array_add(arr, uc_value_get(val));
+		ucv_array_push(arr, ucv_get(val));
 	}
 
 	return arr;
 }
 
-static json_object *
+static uc_value_t *
 uc_trim_common(uc_vm *vm, size_t nargs, bool start, bool end)
 {
-	json_object *str = uc_get_arg(0);
-	json_object *chr = uc_get_arg(1);
+	uc_value_t *str = uc_get_arg(0);
+	uc_value_t *chr = uc_get_arg(1);
 	const char *p, *c;
 	size_t len;
 
-	if (!json_object_is_type(str, json_type_string) ||
-		(chr != NULL && !json_object_is_type(chr, json_type_string)))
+	if (ucv_type(str) != UC_STRING ||
+		(chr != NULL && ucv_type(chr) != UC_STRING))
 		return NULL;
 
-	c = json_object_get_string(chr);
+	c = ucv_string_get(chr);
 	c = c ? c : " \t\r\n";
 
-	p = json_object_get_string(str);
-	len = json_object_get_string_len(str);
+	p = ucv_string_get(str);
+	len = ucv_string_length(str);
 
 	if (start) {
 		while (*p) {
@@ -1293,47 +1163,45 @@ uc_trim_common(uc_vm *vm, size_t nargs, bool start, bool end)
 		}
 	}
 
-	return xjs_new_string_len(p, len);
+	return ucv_string_new_length(p, len);
 }
 
-static json_object *
+static uc_value_t *
 uc_trim(uc_vm *vm, size_t nargs)
 {
 	return uc_trim_common(vm, nargs, true, true);
 }
 
-static json_object *
+static uc_value_t *
 uc_ltrim(uc_vm *vm, size_t nargs)
 {
 	return uc_trim_common(vm, nargs, true, false);
 }
 
-static json_object *
+static uc_value_t *
 uc_rtrim(uc_vm *vm, size_t nargs)
 {
 	return uc_trim_common(vm, nargs, false, true);
 }
 
-static size_t
-uc_printf_common(uc_vm *vm, size_t nargs, char **res)
+static void
+uc_printf_common(uc_vm *vm, size_t nargs, uc_stringbuf_t *buf)
 {
-	json_object *fmt = uc_get_arg(0);
+	uc_value_t *fmt = uc_get_arg(0);
 	char *fp, sfmt[sizeof("%0- 123456789.123456789%")];
-	union { const char *s; int64_t n; double d; } arg;
+	union { char *s; int64_t n; double d; } arg;
 	const char *fstr, *last, *p;
-	size_t len = 0, argidx = 1;
-	enum json_type t;
+	uc_type_t t = UC_NULL;
+	size_t argidx = 1;
 
-	*res = NULL;
-
-	if (json_object_is_type(fmt, json_type_string))
-		fstr = json_object_get_string(fmt);
+	if (ucv_type(fmt) == UC_STRING)
+		fstr = ucv_string_get(fmt);
 	else
 		fstr = "";
 
 	for (last = p = fstr; *p; p++) {
 		if (*p == '%') {
-			snprintf_append(res, &len, "%s", p - last, last);
+			ucv_stringbuf_addstr(buf, last, p - last);
 
 			last = p++;
 
@@ -1405,7 +1273,7 @@ uc_printf_common(uc_vm *vm, size_t nargs, char **res)
 			case 'u':
 			case 'x':
 			case 'X':
-				t = json_type_int;
+				t = UC_INTEGER;
 
 				if (argidx < nargs)
 					arg.n = uc_cast_int64(uc_get_arg(argidx++));
@@ -1420,7 +1288,7 @@ uc_printf_common(uc_vm *vm, size_t nargs, char **res)
 			case 'F':
 			case 'g':
 			case 'G':
-				t = json_type_double;
+				t = UC_DOUBLE;
 
 				if (argidx < nargs)
 					arg.d = uc_cast_double(uc_get_arg(argidx++));
@@ -1430,7 +1298,7 @@ uc_printf_common(uc_vm *vm, size_t nargs, char **res)
 				break;
 
 			case 'c':
-				t = json_type_int;
+				t = UC_INTEGER;
 
 				if (argidx < nargs)
 					arg.n = uc_cast_int64(uc_get_arg(argidx++)) & 0xff;
@@ -1440,33 +1308,31 @@ uc_printf_common(uc_vm *vm, size_t nargs, char **res)
 				break;
 
 			case 's':
-				t = json_type_string;
+				t = UC_STRING;
 
 				if (argidx < nargs)
-					arg.s = json_object_get_string(uc_get_arg(argidx++));
+					arg.s = ucv_to_string(vm, uc_get_arg(argidx++));
 				else
 					arg.s = NULL;
 
-				arg.s = arg.s ? arg.s : "(null)";
+				arg.s = arg.s ? arg.s : xstrdup("(null)");
 
 				break;
 
 			case 'J':
-				t = json_type_string;
+				t = UC_STRING;
 
 				if (argidx < nargs)
-					arg.s = json_object_to_json_string_ext(
-						uc_get_arg(argidx++),
-						JSON_C_TO_STRING_SPACED|JSON_C_TO_STRING_NOSLASHESCAPE|JSON_C_TO_STRING_STRICT);
+					arg.s = ucv_to_jsonstring(vm, uc_get_arg(argidx++));
 				else
 					arg.s = NULL;
 
-				arg.s = arg.s ? arg.s : "null";
+				arg.s = arg.s ? arg.s : xstrdup("null");
 
 				break;
 
 			case '%':
-				t = json_type_null;
+				t = UC_NULL;
 
 				break;
 
@@ -1477,66 +1343,70 @@ uc_printf_common(uc_vm *vm, size_t nargs, char **res)
 			if (fp + 2 >= sfmt + sizeof(sfmt))
 				goto next;
 
-			*fp++ = (t == json_type_string) ? 's' : *p;
+			*fp++ = (t == UC_STRING) ? 's' : *p;
 			*fp = 0;
 
-#pragma GCC diagnostic ignored "-Wformat-security"
-
 			switch (t) {
-			case json_type_int:    sprintf_append(res, &len, sfmt, arg.n); break;
-			case json_type_double: sprintf_append(res, &len, sfmt, arg.d); break;
-			case json_type_string: sprintf_append(res, &len, sfmt, arg.s); break;
-			default:               sprintf_append(res, &len, sfmt);        break;
-			}
+			case UC_INTEGER:
+				ucv_stringbuf_printf(buf, sfmt, arg.n);
+				break;
 
-#pragma GCC diagnostic pop
+			case UC_DOUBLE:
+				ucv_stringbuf_printf(buf, sfmt, arg.d);
+				break;
+
+			case UC_STRING:
+				ucv_stringbuf_printf(buf, sfmt, arg.s);
+				break;
+
+			default:
+				ucv_stringbuf_addstr(buf, sfmt, strlen(sfmt));
+				break;
+			}
 
 			last = p + 1;
 
 next:
+			if (t == UC_STRING)
+				free(arg.s);
+
 			continue;
 		}
 	}
 
-	snprintf_append(res, &len, "%s", p - last, last);
-
-	return len;
+	ucv_stringbuf_addstr(buf, last, p - last);
 }
 
-static json_object *
+static uc_value_t *
 uc_sprintf(uc_vm *vm, size_t nargs)
 {
-	json_object *rv;
-	char *str = NULL;
-	size_t len;
+	uc_stringbuf_t *buf = ucv_stringbuf_new();
 
-	len = uc_printf_common(vm, nargs, &str);
-	rv = xjs_new_string_len(str, len);
+	uc_printf_common(vm, nargs, buf);
 
-	free(str);
-
-	return rv;
+	return ucv_stringbuf_finish(buf);
 }
 
-static json_object *
+static uc_value_t *
 uc_printf(uc_vm *vm, size_t nargs)
 {
-	char *str = NULL;
+	uc_stringbuf_t *buf = xprintbuf_new();
 	size_t len;
 
-	len = uc_printf_common(vm, nargs, &str);
-	len = fwrite(str, 1, len, stdout);
+	uc_printf_common(vm, nargs, buf);
 
-	free(str);
+	len = fwrite(buf->buf, 1, printbuf_length(buf), stdout);
 
-	return xjs_new_int64(len);
+	printbuf_free(buf);
+
+	return ucv_int64_new(len);
 }
 
 static bool
-uc_require_so(uc_vm *vm, const char *path, json_object **res)
+uc_require_so(uc_vm *vm, const char *path, uc_value_t **res)
 {
-	void (*init)(const uc_ops *, uc_prototype *);
-	uc_prototype *scope;
+	void (*init)(uc_value_t *);
+	uc_value_t *scope;
 	struct stat st;
 	void *dlh;
 
@@ -1562,22 +1432,22 @@ uc_require_so(uc_vm *vm, const char *path, json_object **res)
 		return true;
 	}
 
-	scope = uc_prototype_new(NULL);
+	scope = ucv_object_new(vm);
 
-	init(&uc, scope);
+	init(scope);
 
-	*res = scope->header.jso;
+	*res = scope;
 
 	return true;
 }
 
 static bool
-uc_require_ucode(uc_vm *vm, const char *path, uc_prototype *scope, json_object **res)
+uc_require_ucode(uc_vm *vm, const char *path, uc_value_t *scope, uc_value_t **res)
 {
 	uc_exception_type_t extype;
-	uc_prototype *prev_scope;
-	uc_function *function;
-	uc_closure *closure;
+	uc_function_t *function;
+	uc_value_t *prev_scope;
+	uc_value_t *closure;
 	uc_source *source;
 	struct stat st;
 	char *err;
@@ -1606,9 +1476,9 @@ uc_require_ucode(uc_vm *vm, const char *path, uc_prototype *scope, json_object *
 		return true;
 	}
 
-	closure = uc_closure_new(function, false);
+	closure = ucv_closure_new(vm, function, false);
 
-	uc_vm_stack_push(vm, closure->header.jso);
+	uc_vm_stack_push(vm, closure);
 
 	prev_scope = vm->globals;
 	vm->globals = scope ? scope : prev_scope;
@@ -1626,11 +1496,10 @@ uc_require_ucode(uc_vm *vm, const char *path, uc_prototype *scope, json_object *
 }
 
 static bool
-uc_require_path(uc_vm *vm, const char *path_template, const char *name, json_object **res)
+uc_require_path(uc_vm *vm, const char *path_template, const char *name, uc_value_t **res)
 {
+	uc_stringbuf_t *buf = xprintbuf_new();
 	const char *p, *q, *last;
-	char *path = NULL;
-	size_t plen = 0;
 	bool rv = false;
 
 	*res = NULL;
@@ -1640,12 +1509,16 @@ uc_require_path(uc_vm *vm, const char *path_template, const char *name, json_obj
 	if (!p)
 		goto invalid;
 
-	snprintf_append(&path, &plen, "%s", p - path_template, path_template);
+	ucv_stringbuf_addstr(buf, path_template, p - path_template);
 
 	for (q = last = name;; q++) {
 		if (*q == '.' || *q == '\0') {
-			snprintf_append(&path, &plen, "%s", q - last, last);
-			sprintf_append(&path, &plen, "%s", *q ? "/" : ++p);
+			ucv_stringbuf_addstr(buf, last, q - last);
+
+			if (*q)
+				ucv_stringbuf_append(buf, "/");
+			else
+				ucv_stringbuf_addstr(buf, p + 1, strlen(p + 1));
 
 			if (*q == '\0')
 				break;
@@ -1657,45 +1530,45 @@ uc_require_path(uc_vm *vm, const char *path_template, const char *name, json_obj
 		}
 	}
 
-	if (!strcmp(p, ".so"))
-		rv = uc_require_so(vm, path, res);
-	else if (!strcmp(p, ".uc"))
-		rv = uc_require_ucode(vm, path, NULL, res);
+	if (!strcmp(p + 1, ".so"))
+		rv = uc_require_so(vm, buf->buf, res);
+	else if (!strcmp(p + 1, ".uc"))
+		rv = uc_require_ucode(vm, buf->buf, NULL, res);
 
 invalid:
-	free(path);
+	printbuf_free(buf);
 
 	return rv;
 }
 
-static json_object *
+static uc_value_t *
 uc_require(uc_vm *vm, size_t nargs)
 {
-	json_object *val = uc_get_arg(0);
-	json_object *search, *se, *res;
+	uc_value_t *val = uc_get_arg(0);
+	uc_value_t *search, *se, *res;
 	size_t arridx, arrlen;
 	const char *name;
 
-	if (!json_object_is_type(val, json_type_string))
+	if (ucv_type(val) != UC_STRING)
 		return NULL;
 
-	name = json_object_get_string(val);
-	search = uc_prototype_lookup(vm->globals, "REQUIRE_SEARCH_PATH");
+	name = ucv_string_get(val);
+	search = ucv_property_get(vm->globals, "REQUIRE_SEARCH_PATH");
 
-	if (!json_object_is_type(search, json_type_array)) {
+	if (ucv_type(search) != UC_ARRAY) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
 		                      "Global require search path not set");
 
 		return NULL;
 	}
 
-	for (arridx = 0, arrlen = json_object_array_length(search); arridx < arrlen; arridx++) {
-		se = json_object_array_get_idx(search, arridx);
+	for (arridx = 0, arrlen = ucv_array_length(search); arridx < arrlen; arridx++) {
+		se = ucv_array_get(search, arridx);
 
-		if (!json_object_is_type(se, json_type_string))
+		if (ucv_type(se) != UC_STRING)
 			continue;
 
-		if (uc_require_path(vm, json_object_get_string(se), name, &res))
+		if (uc_require_path(vm, ucv_string_get(se), name, &res))
 			return res;
 	}
 
@@ -1705,11 +1578,11 @@ uc_require(uc_vm *vm, size_t nargs)
 	return NULL;
 }
 
-static json_object *
+static uc_value_t *
 uc_iptoarr(uc_vm *vm, size_t nargs)
 {
-	json_object *ip = uc_get_arg(0);
-	json_object *res;
+	uc_value_t *ip = uc_get_arg(0);
+	uc_value_t *res;
 	union {
 		uint8_t u8[4];
 		struct in_addr in;
@@ -1717,24 +1590,24 @@ uc_iptoarr(uc_vm *vm, size_t nargs)
 	} a;
 	int i;
 
-	if (!json_object_is_type(ip, json_type_string))
+	if (ucv_type(ip) != UC_STRING)
 		return NULL;
 
-	if (inet_pton(AF_INET6, json_object_get_string(ip), &a)) {
-		res = xjs_new_array();
+	if (inet_pton(AF_INET6, ucv_string_get(ip), &a)) {
+		res = ucv_array_new(vm);
 
 		for (i = 0; i < 16; i++)
-			json_object_array_add(res, xjs_new_int64(a.in6.s6_addr[i]));
+			ucv_array_push(res, ucv_int64_new(a.in6.s6_addr[i]));
 
 		return res;
 	}
-	else if (inet_pton(AF_INET, json_object_get_string(ip), &a)) {
-		res = xjs_new_array();
+	else if (inet_pton(AF_INET, ucv_string_get(ip), &a)) {
+		res = ucv_array_new(vm);
 
-		json_object_array_add(res, xjs_new_int64(a.u8[0]));
-		json_object_array_add(res, xjs_new_int64(a.u8[1]));
-		json_object_array_add(res, xjs_new_int64(a.u8[2]));
-		json_object_array_add(res, xjs_new_int64(a.u8[3]));
+		ucv_array_push(res, ucv_int64_new(a.u8[0]));
+		ucv_array_push(res, ucv_int64_new(a.u8[1]));
+		ucv_array_push(res, ucv_int64_new(a.u8[2]));
+		ucv_array_push(res, ucv_int64_new(a.u8[3]));
 
 		return res;
 	}
@@ -1743,14 +1616,14 @@ uc_iptoarr(uc_vm *vm, size_t nargs)
 }
 
 static int
-check_byte(json_object *v)
+check_byte(uc_value_t *v)
 {
 	int n;
 
-	if (!json_object_is_type(v, json_type_int))
+	if (ucv_type(v) != UC_INTEGER)
 		return -1;
 
-	n = json_object_get_int(v);
+	n = ucv_int64_get(v);
 
 	if (n < 0 || n > 255)
 		return -1;
@@ -1758,10 +1631,10 @@ check_byte(json_object *v)
 	return n;
 }
 
-static json_object *
+static uc_value_t *
 uc_arrtoip(uc_vm *vm, size_t nargs)
 {
-	json_object *arr = uc_get_arg(0);
+	uc_value_t *arr = uc_get_arg(0);
 	union {
 		uint8_t u8[4];
 		struct in6_addr in6;
@@ -1769,13 +1642,13 @@ uc_arrtoip(uc_vm *vm, size_t nargs)
 	char buf[INET6_ADDRSTRLEN];
 	int i, n;
 
-	if (!json_object_is_type(arr, json_type_array))
+	if (ucv_type(arr) != UC_ARRAY)
 		return NULL;
 
-	switch (json_object_array_length(arr)) {
+	switch (ucv_array_length(arr)) {
 	case 4:
 		for (i = 0; i < 4; i++) {
-			n = check_byte(json_object_array_get_idx(arr, i));
+			n = check_byte(ucv_array_get(arr, i));
 
 			if (n < 0)
 				return NULL;
@@ -1785,11 +1658,11 @@ uc_arrtoip(uc_vm *vm, size_t nargs)
 
 		inet_ntop(AF_INET, &a, buf, sizeof(buf));
 
-		return xjs_new_string(buf);
+		return ucv_string_new(buf);
 
 	case 16:
 		for (i = 0; i < 16; i++) {
-			n = check_byte(json_object_array_get_idx(arr, i));
+			n = check_byte(ucv_array_get(arr, i));
 
 			if (n < 0)
 				return NULL;
@@ -1799,49 +1672,51 @@ uc_arrtoip(uc_vm *vm, size_t nargs)
 
 		inet_ntop(AF_INET6, &a, buf, sizeof(buf));
 
-		return xjs_new_string(buf);
+		return ucv_string_new(buf);
 
 	default:
 		return NULL;
 	}
 }
 
-static json_object *
+static uc_value_t *
 uc_match(uc_vm *vm, size_t nargs)
 {
-	json_object *subject = uc_get_arg(0);
-	json_object *pattern = uc_get_arg(1);
-	json_object *rv = NULL, *m;
-	int eflags = 0, res, i;
+	uc_value_t *subject = uc_get_arg(0);
+	uc_value_t *pattern = uc_get_arg(1);
+	uc_value_t *rv = NULL, *m;
 	regmatch_t pmatch[10];
-	uc_regexp *re;
-	const char *p;
+	int eflags = 0, res;
+	uc_regexp_t *re;
+	bool freeable;
+	char *p;
+	size_t i;
 
-	if (!uc_object_is_type(pattern, UC_OBJ_REGEXP) || !subject)
+	if (ucv_type(pattern) != UC_REGEXP || !subject)
 		return NULL;
 
-	p = json_object_get_string(subject);
-	re = uc_object_as_regexp(pattern);
+	p = uc_cast_string(vm, &subject, &freeable);
+	re = (uc_regexp_t *)pattern;
 
 	while (true) {
-		res = regexec(&re->re, p, ARRAY_SIZE(pmatch), pmatch, eflags);
+		res = regexec(&re->regexp, p, ARRAY_SIZE(pmatch), pmatch, eflags);
 
 		if (res == REG_NOMATCH)
 			break;
 
-		m = xjs_new_array();
+		m = ucv_array_new(vm);
 
 		for (i = 0; i < ARRAY_SIZE(pmatch) && pmatch[i].rm_so != -1; i++) {
-			json_object_array_add(m,
-				xjs_new_string_len(p + pmatch[i].rm_so,
-				                   pmatch[i].rm_eo - pmatch[i].rm_so));
+			ucv_array_push(m,
+				ucv_string_new_length(p + pmatch[i].rm_so,
+				                      pmatch[i].rm_eo - pmatch[i].rm_so));
 		}
 
 		if (re->global) {
 			if (!rv)
-				rv = xjs_new_array();
+				rv = ucv_array_new(vm);
 
-			json_object_array_add(rv, m);
+			ucv_array_push(rv, m);
 
 			p += pmatch[0].rm_eo;
 			eflags |= REG_NOTBOL;
@@ -1852,24 +1727,27 @@ uc_match(uc_vm *vm, size_t nargs)
 		}
 	}
 
+	if (freeable)
+		free(p);
+
 	return rv;
 }
 
-static json_object *
-uc_replace_cb(uc_vm *vm, json_object *func,
+static uc_value_t *
+uc_replace_cb(uc_vm *vm, uc_value_t *func,
               const char *subject, regmatch_t *pmatch, size_t plen,
-              char **sp, size_t *sl)
+              uc_stringbuf_t *resbuf)
 {
-	json_object *rv;
+	uc_value_t *rv;
 	size_t i;
 
 	/* XXX: revisit leaks */
-	uc_vm_stack_push(vm, uc_value_get(func));
+	uc_vm_stack_push(vm, ucv_get(func));
 
 	for (i = 0; i < plen && pmatch[i].rm_so != -1; i++) {
 		uc_vm_stack_push(vm,
-			xjs_new_string_len(subject + pmatch[i].rm_so,
-			                   pmatch[i].rm_eo - pmatch[i].rm_so));
+			ucv_string_new_length(subject + pmatch[i].rm_so,
+			                      pmatch[i].rm_eo - pmatch[i].rm_so));
 	}
 
 	if (uc_vm_call(vm, false, i))
@@ -1877,39 +1755,42 @@ uc_replace_cb(uc_vm *vm, json_object *func,
 
 	rv = uc_vm_stack_pop(vm);
 
-	sprintf_append(sp, sl, "%s", rv ? json_object_get_string(rv) : "null");
+	ucv_to_stringbuf(vm, resbuf, rv, false);
 
-	uc_value_put(rv);
+	ucv_put(rv);
 
 	return NULL;
 }
 
 static void
-uc_replace_str(uc_vm *vm, json_object *str,
+uc_replace_str(uc_vm *vm, uc_value_t *str,
                const char *subject, regmatch_t *pmatch, size_t plen,
-               char **sp, size_t *sl)
+               uc_stringbuf_t *resbuf)
 {
-	const char *p, *r = str ? json_object_get_string(str) : "null";
 	bool esc = false;
-	int i;
+	char *p, *r;
+	uint8_t i;
 
-	for (p = r; *p; p++) {
+	for (p = r = ucv_to_string(vm, str); *p; p++) {
 		if (esc) {
 			switch (*p) {
 			case '&':
 				if (pmatch[0].rm_so != -1)
-					snprintf_append(sp, sl, "%s", pmatch[0].rm_eo - pmatch[0].rm_so,
-					                subject + pmatch[0].rm_so);
+					ucv_stringbuf_addstr(resbuf,
+						subject + pmatch[0].rm_so,
+						pmatch[0].rm_eo - pmatch[0].rm_so);
 				break;
 
 			case '`':
 				if (pmatch[0].rm_so != -1)
-					snprintf_append(sp, sl, "%s", pmatch[0].rm_so, subject);
+					ucv_stringbuf_addstr(resbuf, subject, pmatch[0].rm_so);
 				break;
 
 			case '\'':
 				if (pmatch[0].rm_so != -1)
-					sprintf_append(sp, sl, "%s", subject + pmatch[0].rm_eo);
+					ucv_stringbuf_addstr(resbuf,
+						subject + pmatch[0].rm_eo,
+						strlen(subject + pmatch[0].rm_eo));
 				break;
 
 			case '1':
@@ -1922,19 +1803,24 @@ uc_replace_str(uc_vm *vm, json_object *str,
 			case '8':
 			case '9':
 				i = *p - '0';
-				if (i < plen && pmatch[i].rm_so != -1)
-					snprintf_append(sp, sl, "%s", pmatch[i].rm_eo - pmatch[i].rm_so,
-					                subject + pmatch[i].rm_so);
-				else
-					sprintf_append(sp, sl, "$%c", *p);
+				if (i < plen && pmatch[i].rm_so != -1) {
+					ucv_stringbuf_addstr(resbuf,
+						subject + pmatch[i].rm_so,
+						pmatch[i].rm_eo - pmatch[i].rm_so);
+				}
+				else {
+					ucv_stringbuf_append(resbuf, "$");
+					ucv_stringbuf_addstr(resbuf, p, 1);
+				}
 				break;
 
 			case '$':
-				sprintf_append(sp, sl, "$");
+				ucv_stringbuf_append(resbuf, "$");
 				break;
 
 			default:
-				sprintf_append(sp, sl, "$%c", *p);
+				ucv_stringbuf_append(resbuf, "$");
+				ucv_stringbuf_addstr(resbuf, p, 1);
 			}
 
 			esc = false;
@@ -1943,51 +1829,58 @@ uc_replace_str(uc_vm *vm, json_object *str,
 			esc = true;
 		}
 		else {
-			sprintf_append(sp, sl, "%c", *p);
+			ucv_stringbuf_addstr(resbuf, p, 1);
 		}
 	}
+
+	free(r);
 }
 
-static json_object *
+static uc_value_t *
 uc_replace(uc_vm *vm, size_t nargs)
 {
-	json_object *subject = uc_get_arg(0);
-	json_object *pattern = uc_get_arg(1);
-	json_object *replace = uc_get_arg(2);
-	json_object *rv = NULL;
-	const char *sb, *p, *l;
+	char *sb = NULL, *pt = NULL, *p, *l;
+	uc_value_t *subject = uc_get_arg(0);
+	uc_value_t *pattern = uc_get_arg(1);
+	uc_value_t *replace = uc_get_arg(2);
+	bool sb_freeable, pt_freeable;
+	uc_value_t *rv = NULL;
+	uc_stringbuf_t *resbuf;
 	regmatch_t pmatch[10];
 	int eflags = 0, res;
-	size_t sl = 0, pl;
-	char *sp = NULL;
-	uc_regexp *re;
+	uc_regexp_t *re;
+	size_t pl;
 
 	if (!pattern || !subject || !replace)
 		return NULL;
 
-	if (uc_object_is_type(pattern, UC_OBJ_REGEXP)) {
-		p = json_object_get_string(subject);
-		re = uc_object_as_regexp(pattern);
+	sb = uc_cast_string(vm, &subject, &sb_freeable);
+	resbuf = ucv_stringbuf_new();
+
+	if (ucv_type(pattern) == UC_REGEXP) {
+		re = (uc_regexp_t *)pattern;
+		p = sb;
 
 		while (true) {
-			res = regexec(&re->re, p, ARRAY_SIZE(pmatch), pmatch, eflags);
+			res = regexec(&re->regexp, p, ARRAY_SIZE(pmatch), pmatch, eflags);
 
 			if (res == REG_NOMATCH)
 				break;
 
-			snprintf_append(&sp, &sl, "%s", pmatch[0].rm_so, p);
+			ucv_stringbuf_addstr(resbuf, p, pmatch[0].rm_so);
 
-			if (uc_object_is_callable(replace)) {
-				rv = uc_replace_cb(vm, replace, p, pmatch, ARRAY_SIZE(pmatch), &sp, &sl);
+			if (ucv_is_callable(replace)) {
+				rv = uc_replace_cb(vm, replace, p, pmatch, ARRAY_SIZE(pmatch), resbuf);
 
 				if (rv) {
-					free(sp);
+					if (sb_freeable)
+						free(sb);
 
 					return rv;
 				}
 			}
 			else {
-				uc_replace_str(vm, replace, p, pmatch, ARRAY_SIZE(pmatch), &sp, &sl);
+				uc_replace_str(vm, replace, p, pmatch, ARRAY_SIZE(pmatch), resbuf);
 			}
 
 			p += pmatch[0].rm_eo;
@@ -1998,57 +1891,64 @@ uc_replace(uc_vm *vm, size_t nargs)
 				break;
 		}
 
-		sprintf_append(&sp, &sl, "%s", p);
+		ucv_stringbuf_addstr(resbuf, p, strlen(p));
 	}
 	else {
-		sb = json_object_get_string(subject);
-		p = json_object_get_string(pattern);
-		pl = strlen(p);
+		pt = uc_cast_string(vm, &pattern, &pt_freeable);
+		pl = strlen(pt);
 
-		for (l = sb; *sb; sb++) {
-			if (!strncmp(sb, p, pl)) {
-				snprintf_append(&sp, &sl, "%s", sb - l, l);
+		for (l = p = sb; *p; p++) {
+			if (!strncmp(p, pt, pl)) {
+				ucv_stringbuf_addstr(resbuf, l, p - l);
 
-				pmatch[0].rm_so = sb - l;
+				pmatch[0].rm_so = p - l;
 				pmatch[0].rm_eo = pmatch[0].rm_so + pl;
 
-				if (uc_object_is_callable(replace)) {
-					rv = uc_replace_cb(vm, replace, l, pmatch, 1, &sp, &sl);
+				if (ucv_is_callable(replace)) {
+					rv = uc_replace_cb(vm, replace, l, pmatch, 1, resbuf);
 
 					if (rv) {
-						free(sp);
+						if (sb_freeable)
+							free(sb);
+
+						if (pt_freeable)
+							free(pt);
 
 						return rv;
 					}
 				}
 				else {
-					uc_replace_str(vm, replace, l, pmatch, 1, &sp, &sl);
+					uc_replace_str(vm, replace, l, pmatch, 1, resbuf);
 				}
 
-				l = sb + pl;
-				sb += pl - 1;
+				l = p + pl;
+				p += pl - 1;
 			}
 		}
 
-		sprintf_append(&sp, &sl, "%s", l);
+		ucv_stringbuf_addstr(resbuf, l, strlen(l));
+
+		if (pt_freeable)
+			free(pt);
 	}
 
-	rv = xjs_new_string_len(sp, sl);
-	free(sp);
+	if (sb_freeable)
+		free(sb);
 
-	return rv;
+	return ucv_stringbuf_finish(resbuf);
 }
 
-static json_object *
+static uc_value_t *
 uc_json(uc_vm *vm, size_t nargs)
 {
-	json_object *rv, *src = uc_get_arg(0);
+	uc_value_t *rv, *src = uc_get_arg(0);
 	struct json_tokener *tok = NULL;
 	enum json_tokener_error err;
+	json_object *jso;
 	const char *str;
 	size_t len;
 
-	if (!json_object_is_type(src, json_type_string)) {
+	if (ucv_type(src) != UC_STRING) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 		                      "Passed value is not a string");
 
@@ -2056,24 +1956,24 @@ uc_json(uc_vm *vm, size_t nargs)
 	}
 
 	tok = xjs_new_tokener();
-	str = json_object_get_string(src);
-	len = json_object_get_string_len(src);
+	str = ucv_string_get(src);
+	len = ucv_string_length(src);
 
 	/* NB: the len + 1 here is intentional to pass the terminating \0 byte
 	 * to the json-c parser. This is required to work-around upstream
 	 * issue #681 <https://github.com/json-c/json-c/issues/681> */
-	rv = json_tokener_parse_ex(tok, str, len + 1);
+	jso = json_tokener_parse_ex(tok, str, len + 1);
 	err = json_tokener_get_error(tok);
 
 	if (err == json_tokener_continue) {
-		uc_value_put(rv);
+		json_object_put(jso);
 		uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
 		                      "Unexpected end of string in JSON data");
 
 		return NULL;
 	}
 	else if (err != json_tokener_success) {
-		uc_value_put(rv);
+		json_object_put(jso);
 		uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
 		                      "Failed to parse JSON string: %s",
 		                      json_tokener_error_desc(err));
@@ -2081,7 +1981,7 @@ uc_json(uc_vm *vm, size_t nargs)
 		return NULL;
 	}
 	else if (json_tokener_get_parse_end(tok) < len) {
-		uc_value_put(rv);
+		json_object_put(jso);
 		uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
 		                      "Trailing garbage after JSON data");
 
@@ -2089,6 +1989,10 @@ uc_json(uc_vm *vm, size_t nargs)
 	}
 
 	json_tokener_free(tok);
+
+	rv = ucv_from_json(vm, jso);
+
+	json_object_put(jso);
 
 	return rv;
 }
@@ -2126,26 +2030,24 @@ include_path(const char *curpath, const char *incpath)
 	return dup;
 }
 
-static json_object *
+static uc_value_t *
 uc_include(uc_vm *vm, size_t nargs)
 {
-	json_object *path = uc_get_arg(0);
-	json_object *scope = uc_get_arg(1);
-	json_object *rv = NULL;
-	uc_closure *closure = NULL;
-	uc_prototype *sc;
-	bool put = false;
+	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *scope = uc_get_arg(1);
+	uc_value_t *rv = NULL, *sc = NULL;
+	uc_closure_t *closure = NULL;
 	size_t i;
 	char *p;
 
-	if (!json_object_is_type(path, json_type_string)) {
+	if (ucv_type(path) != UC_STRING) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 		                      "Passed filename is not a string");
 
 		return NULL;
 	}
 
-	if (scope && !json_object_is_type(scope, json_type_object)) {
+	if (scope && ucv_type(scope) != UC_OBJECT) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 		                      "Passed scope value is not an object");
 
@@ -2163,7 +2065,7 @@ uc_include(uc_vm *vm, size_t nargs)
 	if (!closure)
 		return NULL;
 
-	p = include_path(closure->function->source->filename, json_object_get_string(path));
+	p = include_path(closure->function->source->filename, ucv_string_get(path));
 
 	if (!p) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
@@ -2172,68 +2074,67 @@ uc_include(uc_vm *vm, size_t nargs)
 		return NULL;
 	}
 
-	if (uc_object_is_type(scope, UC_OBJ_PROTOTYPE)) {
-		sc = uc_object_as_prototype(scope);
+	if (ucv_prototype_get(scope)) {
+		sc = ucv_get(scope);
 	}
 	else if (scope) {
-		sc = uc_prototype_new(vm->globals);
-		put = true;
+		sc = ucv_object_new(vm);
 
-		json_object_object_foreach(scope, key, val)
-			json_object_object_add(sc->header.jso, key, uc_value_get(val));
+		ucv_object_foreach(scope, key, val)
+			ucv_object_add(sc, key, ucv_get(val));
+
+		ucv_prototype_set(sc, ucv_get(vm->globals));
 	}
 	else {
-		sc = vm->globals;
+		sc = ucv_get(vm->globals);
 	}
 
 	if (uc_require_ucode(vm, p, sc, &rv))
-		uc_value_put(rv);
+		ucv_put(rv);
 
+	ucv_put(sc);
 	free(p);
-
-	if (put)
-		uc_value_put(sc->header.jso);
 
 	return NULL;
 }
 
-static json_object *
+static uc_value_t *
 uc_warn(uc_vm *vm, size_t nargs)
 {
 	return uc_print_common(vm, nargs, stderr);
 }
 
-static json_object *
+static uc_value_t *
 uc_system(uc_vm *vm, size_t nargs)
 {
-	json_object *cmdline = uc_get_arg(0);
-	json_object *timeout = uc_get_arg(1);
-	const char **arglist, *fn, *s;
+	uc_value_t *cmdline = uc_get_arg(0);
+	uc_value_t *timeout = uc_get_arg(1);
+	const char **arglist, *fn;
 	sigset_t sigmask, sigomask;
 	struct timespec ts;
+	size_t i, len;
 	int64_t tms;
-	int rc, len;
 	pid_t cld;
-	size_t i;
+	int rc;
 
-	if (timeout && (!json_object_is_type(timeout, json_type_int) || json_object_get_int64(timeout) < 0)) {
+	if (timeout && (ucv_type(timeout) != UC_INTEGER || ucv_int64_get(timeout) < 0)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 		                      "Invalid timeout specified");
 
 		return NULL;
 	}
 
-	switch (json_object_get_type(cmdline)) {
-	case json_type_string:
+	switch (ucv_type(cmdline)) {
+	case UC_STRING:
 		arglist = xalloc(sizeof(*arglist) * 4);
 		arglist[0] = "/bin/sh";
 		arglist[1] = "-c";
-		arglist[2] = json_object_get_string(cmdline);
+		arglist[2] = ucv_string_get(cmdline);
 		arglist[3] = NULL;
 		break;
 
-	case json_type_array:
-		len = json_object_array_length(cmdline);
+	case UC_ARRAY:
+		len = ucv_array_length(cmdline);
 
 		if (len == 0) {
 			uc_vm_raise_exception(vm, EXCEPTION_TYPE,
@@ -2244,10 +2145,8 @@ uc_system(uc_vm *vm, size_t nargs)
 
 		arglist = xalloc(sizeof(*arglist) * (len + 1));
 
-		for (i = 0; i < len; i++) {
-			s = json_object_get_string(json_object_array_get_idx(cmdline, i));
-			arglist[i] = s ? s : "null";
-		}
+		for (i = 0; i < len; i++)
+			arglist[i] = ucv_to_string(vm, ucv_array_get(cmdline, i));
 
 		arglist[i] = NULL;
 
@@ -2260,7 +2159,7 @@ uc_system(uc_vm *vm, size_t nargs)
 		return NULL;
 	}
 
-	tms = timeout ? json_object_get_int64(timeout) : 0;
+	tms = timeout ? ucv_int64_get(timeout) : 0;
 
 	if (tms > 0) {
 		sigemptyset(&sigmask);
@@ -2315,14 +2214,17 @@ uc_system(uc_vm *vm, size_t nargs)
 		if (tms > 0)
 			sigprocmask(SIG_SETMASK, &sigomask, NULL);
 
+		for (i = 0; arglist[i]; i++)
+			free((char *)arglist[i]);
+
 		free(arglist);
 
 		if (WIFEXITED(rc))
-			return xjs_new_int64(WEXITSTATUS(rc));
+			return ucv_int64_new(WEXITSTATUS(rc));
 		else if (WIFSIGNALED(rc))
-			return xjs_new_int64(-WTERMSIG(rc));
+			return ucv_int64_new(-WTERMSIG(rc));
 		else if (WIFSTOPPED(rc))
-			return xjs_new_int64(-WSTOPSIG(rc));
+			return ucv_int64_new(-WSTOPSIG(rc));
 
 		return NULL;
 	}
@@ -2330,6 +2232,9 @@ uc_system(uc_vm *vm, size_t nargs)
 fail:
 	if (tms > 0)
 		sigprocmask(SIG_SETMASK, &sigomask, NULL);
+
+	for (i = 0; arglist[i]; i++)
+		free((char *)arglist[i]);
 
 	free(arglist);
 
@@ -2339,95 +2244,61 @@ fail:
 	return NULL;
 }
 
-static json_object *
+static uc_value_t *
 uc_trace(uc_vm *vm, size_t nargs)
 {
-	json_object *level = uc_get_arg(0);
+	uc_value_t *level = uc_get_arg(0);
 	uint8_t prev_level;
 
-	if (!json_object_is_type(level, json_type_int)) {
+	if (ucv_type(level) != UC_INTEGER) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid level specified");
 
 		return NULL;
 	}
 
 	prev_level = vm->trace;
-	vm->trace = json_object_get_int64(level);
+	vm->trace = ucv_int64_get(level);
 
-	return xjs_new_int64(prev_level);
+	return ucv_int64_new(prev_level);
 }
 
-static json_object *
+static uc_value_t *
 uc_proto(uc_vm *vm, size_t nargs)
 {
-	json_object *val = uc_get_arg(0);
-	json_object *proto = NULL;
-	uc_prototype *p, *ref;
+	uc_value_t *val = uc_get_arg(0);
+	uc_value_t *proto = NULL;
 
-	if (nargs < 2) {
-		switch (uc_object_type(val)) {
-		case UC_OBJ_PROTOTYPE:
-			p = uc_object_as_prototype(val)->parent;
-
-			return p ? uc_value_get(p->header.jso) : NULL;
-
-		case UC_OBJ_RESSOURCE:
-			p = uc_ressource_prototype(val);
-
-			return p ? uc_value_get(p->header.jso) : NULL;
-
-		default:
-			return NULL;
-		}
-	}
+	if (nargs < 2)
+		return ucv_get(ucv_prototype_get(val));
 
 	proto = uc_get_arg(1);
 
-	switch (uc_object_type(proto)) {
-	case UC_OBJ_PROTOTYPE:
-		p = uc_object_as_prototype(proto);
-		break;
+	if (!ucv_prototype_set(val, proto))
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Passed value is neither a prototype, ressource or object");
 
-	case UC_OBJ_RESSOURCE:
-		p = uc_ressource_prototype(proto);
-		break;
+	ucv_get(proto);
 
-	default:
-		switch (json_object_get_type(proto)) {
-		case json_type_object:
-			p = uc_protoref_new(proto, NULL);
-			break;
-
-		default:
-			uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Passed value is neither a prototype, ressource or object");
-
-			return NULL;
-		}
-	}
-
-	ref = uc_protoref_new(val, p);
-
-	return ref ? uc_value_get(ref->header.jso) : NULL;
+	return ucv_get(val);
 }
 
-static json_object *
+static uc_value_t *
 uc_sleep(uc_vm *vm, size_t nargs)
 {
-	json_object *duration = uc_get_arg(0);
+	uc_value_t *duration = uc_get_arg(0);
 	struct timeval tv;
 	int64_t ms;
 
 	ms = uc_cast_int64(duration);
 
 	if (errno != 0 || ms <= 0)
-		return xjs_new_boolean(false);
+		return ucv_boolean_new(false);
 
 	tv.tv_sec = ms / 1000;
 	tv.tv_usec = (ms % 1000) * 1000;
 
 	select(0, NULL, NULL, NULL, &tv);
 
-	return xjs_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
 static const uc_cfunction_list functions[] = {
@@ -2484,7 +2355,7 @@ static const uc_cfunction_list functions[] = {
 
 
 void
-uc_lib_init(uc_prototype *scope)
+uc_lib_init(uc_value_t *scope)
 {
 	uc_add_proto_functions(scope, functions);
 }

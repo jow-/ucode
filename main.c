@@ -55,14 +55,14 @@ print_usage(const char *app)
 }
 
 static void
-globals_init(uc_prototype *scope)
+globals_init(uc_vm *vm, uc_value_t *scope)
 {
-	json_object *arr = xjs_new_array();
+	uc_value_t *arr = ucv_array_new(vm);
 	const char *p, *last;
 
 	for (p = last = LIB_SEARCH_PATH;; p++) {
 		if (*p == ':' || *p == '\0') {
-			json_object_array_add(arr, xjs_new_string_len(last, p - last));
+			ucv_array_push(arr, ucv_string_new_length(last, p - last));
 
 			if (!*p)
 				break;
@@ -71,11 +71,11 @@ globals_init(uc_prototype *scope)
 		}
 	}
 
-	json_object_object_add(scope->header.jso, "REQUIRE_SEARCH_PATH", arr);
+	ucv_object_add(scope, "REQUIRE_SEARCH_PATH", arr);
 }
 
 static void
-register_variable(uc_prototype *scope, const char *key, json_object *val)
+register_variable(uc_value_t *scope, const char *key, uc_value_t *val)
 {
 	char *name = strdup(key);
 	char *p;
@@ -87,17 +87,17 @@ register_variable(uc_prototype *scope, const char *key, json_object *val)
 		if (!isalnum(*p) && *p != '_')
 			*p = '_';
 
-	json_object_object_add(scope->header.jso, name, val);
+	ucv_object_add(scope, name, val);
 	free(name);
 }
 
 
 static int
 parse(uc_parse_config *config, uc_source *src,
-      bool skip_shebang, json_object *env, json_object *modules)
+      bool skip_shebang, uc_value_t *env, uc_value_t *modules)
 {
-	uc_prototype *globals = uc_prototype_new(NULL), *rootscope = NULL;
-	uc_function *entry;
+	uc_value_t *globals = NULL;
+	uc_function_t *entry;
 	uc_vm vm = {};
 	char c, c2, *err;
 	int rc = 0;
@@ -131,25 +131,24 @@ parse(uc_parse_config *config, uc_source *src,
 		goto out;
 	}
 
+	globals = ucv_object_new(&vm);
+
 	/* load global variables */
-	globals_init(globals);
+	globals_init(&vm, globals);
 
 	/* load env variables */
 	if (env) {
-		json_object_object_foreach(env, key, val)
-			register_variable(globals, key, uc_value_get(val));
+		ucv_object_foreach(env, key, val)
+			register_variable(globals, key, ucv_get(val));
 	}
 
 	/* load std functions into global scope */
 	uc_lib_init(globals);
 
 	/* create instance of global scope, set "global" property on it */
-	rootscope = uc_protoref_new(xjs_new_object(), globals);
+	ucv_object_add(globals, "global", ucv_get(globals));
 
-	json_object_object_add(rootscope->header.jso, "global",
-		uc_value_get(globals->header.jso));
-
-	rc = uc_vm_execute(&vm, entry, rootscope, modules);
+	rc = uc_vm_execute(&vm, entry, globals, modules);
 
 	if (rc) {
 		rc = 1;
@@ -158,10 +157,6 @@ parse(uc_parse_config *config, uc_source *src,
 
 out:
 	uc_vm_free(&vm);
-	uc_value_put(globals->header.jso);
-
-	if (rootscope)
-		uc_value_put(rootscope->header.jso);
 
 	return rc;
 }
@@ -193,12 +188,13 @@ read_stdin(char **ptr)
 	return uc_source_new_buffer("[stdin]", *ptr, tlen);
 }
 
-static json_object *
+static uc_value_t *
 parse_envfile(FILE *fp)
 {
-	json_object *rv = NULL;
 	enum json_tokener_error err = json_tokener_continue;
 	struct json_tokener *tok;
+	json_object *jso = NULL;
+	uc_value_t *rv;
 	char buf[128];
 	size_t rlen;
 
@@ -210,19 +206,24 @@ parse_envfile(FILE *fp)
 		if (rlen == 0)
 			break;
 
-		rv = json_tokener_parse_ex(tok, buf, rlen);
+		jso = json_tokener_parse_ex(tok, buf, rlen);
 		err = json_tokener_get_error(tok);
 
 		if (err != json_tokener_continue)
 			break;
 	}
 
-	if (err != json_tokener_success || !json_object_is_type(rv, json_type_object)) {
-		json_object_put(rv);
-		rv = NULL;
+	if (err != json_tokener_success || !json_object_is_type(jso, json_type_object)) {
+		json_object_put(jso);
+
+		return NULL;
 	}
 
 	json_tokener_free(tok);
+
+	rv = ucv_from_json(NULL, jso);
+
+	json_object_put(jso);
 
 	return rv;
 }
@@ -230,7 +231,7 @@ parse_envfile(FILE *fp)
 int
 main(int argc, char **argv)
 {
-	json_object *env = NULL, *modules = NULL, *o, *p;
+	uc_value_t *env = NULL, *modules = NULL, *o, *p;
 	uc_source *source = NULL, *envfile = NULL;
 	char *stdin = NULL, *c;
 	bool shebang = false;
@@ -335,27 +336,27 @@ main(int argc, char **argv)
 				goto out;
 			}
 
-			env = env ? env : xjs_new_object();
+			env = env ? env : ucv_object_new(NULL);
 
 			if (c > optarg && optarg[0]) {
-				p = xjs_new_object();
-				json_object_object_add(env, optarg, p);
+				p = ucv_object_new(NULL);
+				ucv_object_add(env, optarg, p);
 			}
 			else {
 				p = env;
 			}
 
-			json_object_object_foreach(o, key, val)
-				json_object_object_add(p, key, json_object_get(val));
+			ucv_object_foreach(o, key, val)
+				ucv_object_add(p, key, ucv_get(val));
 
-			json_object_put(o);
+			ucv_put(o);
 
 			break;
 
 		case 'm':
-			modules = modules ? modules : xjs_new_array();
+			modules = modules ? modules : ucv_array_new(NULL);
 
-			json_object_array_add(modules, xjs_new_string(optarg));
+			ucv_array_push(modules, ucv_string_new(optarg));
 
 			break;
 		}
@@ -382,8 +383,8 @@ main(int argc, char **argv)
 	rv = parse(&config, source, shebang, env, modules);
 
 out:
-	json_object_put(modules);
-	json_object_put(env);
+	ucv_put(modules);
+	ucv_put(env);
 
 	uc_source_put(source);
 

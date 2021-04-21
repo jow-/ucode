@@ -28,29 +28,29 @@
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
 //static const uc_ops *ops;
-static uc_ressource_type *file_type, *proc_type, *dir_type;
+static uc_ressource_type_t *file_type, *proc_type, *dir_type;
 
 static int last_error = 0;
 
-static json_object *
+static uc_value_t *
 uc_fs_error(uc_vm *vm, size_t nargs)
 {
-	json_object *errmsg;
+	uc_value_t *errmsg;
 
 	if (last_error == 0)
 		return NULL;
 
-	errmsg = json_object_new_string(strerror(last_error));
+	errmsg = ucv_string_new(strerror(last_error));
 	last_error = 0;
 
 	return errmsg;
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_read_common(uc_vm *vm, size_t nargs, const char *type)
 {
-	json_object *limit = uc_get_arg(0);
-	json_object *rv = NULL;
+	uc_value_t *limit = uc_get_arg(0);
+	uc_value_t *rv = NULL;
 	char buf[128], *p = NULL, *tmp;
 	size_t rlen, len = 0;
 	const char *lstr;
@@ -61,8 +61,8 @@ uc_fs_read_common(uc_vm *vm, size_t nargs, const char *type)
 	if (!fp || !*fp)
 		err_return(EBADF);
 
-	if (json_object_is_type(limit, json_type_string)) {
-		lstr = json_object_get_string(limit);
+	if (ucv_type(limit) == UC_STRING) {
+		lstr = ucv_string_get(limit);
 
 		if (!strcmp(lstr, "line")) {
 			while (true) {
@@ -110,8 +110,8 @@ uc_fs_read_common(uc_vm *vm, size_t nargs, const char *type)
 			return NULL;
 		}
 	}
-	else if (json_object_is_type(limit, json_type_int)) {
-		lsize = json_object_get_int64(limit);
+	else if (ucv_type(limit) == UC_INTEGER) {
+		lsize = ucv_int64_get(limit);
 
 		if (lsize <= 0)
 			return NULL;
@@ -132,43 +132,43 @@ uc_fs_read_common(uc_vm *vm, size_t nargs, const char *type)
 		err_return(EINVAL);
 	}
 
-	rv = json_object_new_string_len(p, len);
+	rv = ucv_string_new_length(p, len);
 	free(p);
 
 	return rv;
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_write_common(uc_vm *vm, size_t nargs, const char *type)
 {
-	json_object *data = uc_get_arg(0);
+	uc_value_t *data = uc_get_arg(0);
 	size_t len, wsize;
-	const char *str;
+	char *str;
 
 	FILE **fp = uc_get_self(type);
 
 	if (!fp || !*fp)
 		err_return(EBADF);
 
-	if (json_object_is_type(data, json_type_string)) {
-		str = json_object_get_string(data);
-		len = json_object_get_string_len(data);
+	if (ucv_type(data) == UC_STRING) {
+		len = ucv_string_length(data);
+		wsize = fwrite(ucv_string_get(data), 1, len, *fp);
 	}
 	else {
-		str = json_object_to_json_string(data);
+		str = ucv_to_jsonstring(vm, data);
 		len = str ? strlen(str) : 0;
+		wsize = fwrite(str, 1, len, *fp);
+		free(str);
 	}
-
-	wsize = fwrite(str, 1, len, *fp);
 
 	if (wsize < len && ferror(*fp))
 		err_return(errno);
 
-	return json_object_new_int64(wsize);
+	return ucv_int64_new(wsize);
 }
 
 
-static json_object *
+static uc_value_t *
 uc_fs_pclose(uc_vm *vm, size_t nargs)
 {
 	FILE **fp = uc_get_self("fs.proc");
@@ -184,38 +184,38 @@ uc_fs_pclose(uc_vm *vm, size_t nargs)
 		err_return(errno);
 
 	if (WIFEXITED(rc))
-		return xjs_new_int64(WEXITSTATUS(rc));
+		return ucv_int64_new(WEXITSTATUS(rc));
 
 	if (WIFSIGNALED(rc))
-		return xjs_new_int64(-WTERMSIG(rc));
+		return ucv_int64_new(-WTERMSIG(rc));
 
-	return xjs_new_int64(0);
+	return ucv_int64_new(0);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_pread(uc_vm *vm, size_t nargs)
 {
 	return uc_fs_read_common(vm, nargs, "fs.proc");
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_pwrite(uc_vm *vm, size_t nargs)
 {
 	return uc_fs_write_common(vm, nargs, "fs.proc");
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_popen(uc_vm *vm, size_t nargs)
 {
-	json_object *comm = uc_get_arg(0);
-	json_object *mode = uc_get_arg(1);
+	uc_value_t *comm = uc_get_arg(0);
+	uc_value_t *mode = uc_get_arg(1);
 	FILE *fp;
 
-	if (!json_object_is_type(comm, json_type_string))
+	if (ucv_type(comm) != UC_STRING)
 		err_return(EINVAL);
 
-	fp = popen(json_object_get_string(comm),
-		json_object_is_type(mode, json_type_string) ? json_object_get_string(mode) : "r");
+	fp = popen(ucv_string_get(comm),
+		ucv_type(mode) == UC_STRING ? ucv_string_get(mode) : "r");
 
 	if (!fp)
 		err_return(errno);
@@ -224,7 +224,7 @@ uc_fs_popen(uc_vm *vm, size_t nargs)
 }
 
 
-static json_object *
+static uc_value_t *
 uc_fs_close(uc_vm *vm, size_t nargs)
 {
 	FILE **fp = uc_get_self("fs.file");
@@ -235,26 +235,26 @@ uc_fs_close(uc_vm *vm, size_t nargs)
 	fclose(*fp);
 	*fp = NULL;
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_read(uc_vm *vm, size_t nargs)
 {
 	return uc_fs_read_common(vm, nargs, "fs.file");
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_write(uc_vm *vm, size_t nargs)
 {
 	return uc_fs_write_common(vm, nargs, "fs.file");
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_seek(uc_vm *vm, size_t nargs)
 {
-	json_object *ofs  = uc_get_arg(0);
-	json_object *how  = uc_get_arg(1);
+	uc_value_t *ofs = uc_get_arg(0);
+	uc_value_t *how = uc_get_arg(1);
 	int whence, res;
 	long offset;
 
@@ -265,27 +265,27 @@ uc_fs_seek(uc_vm *vm, size_t nargs)
 
 	if (!ofs)
 		offset = 0;
-	else if (!json_object_is_type(ofs, json_type_int))
+	else if (ucv_type(ofs) != UC_INTEGER)
 		err_return(EINVAL);
 	else
-		offset = (long)json_object_get_int64(ofs);
+		offset = (long)ucv_int64_get(ofs);
 
 	if (!how)
 		whence = 0;
-	else if (!json_object_is_type(how, json_type_int))
+	else if (ucv_type(how) != UC_INTEGER)
 		err_return(EINVAL);
 	else
-		whence = (int)json_object_get_int64(how);
+		whence = (int)ucv_int64_get(how);
 
 	res = fseek(*fp, offset, whence);
 
 	if (res < 0)
 		err_return(errno);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_tell(uc_vm *vm, size_t nargs)
 {
 	long offset;
@@ -300,21 +300,21 @@ uc_fs_tell(uc_vm *vm, size_t nargs)
 	if (offset < 0)
 		err_return(errno);
 
-	return json_object_new_int64(offset);
+	return ucv_int64_new(offset);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_open(uc_vm *vm, size_t nargs)
 {
-	json_object *path = uc_get_arg(0);
-	json_object *mode = uc_get_arg(1);
+	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *mode = uc_get_arg(1);
 	FILE *fp;
 
-	if (!json_object_is_type(path, json_type_string))
+	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
 
-	fp = fopen(json_object_get_string(path),
-		json_object_is_type(mode, json_type_string) ? json_object_get_string(mode) : "r");
+	fp = fopen(ucv_string_get(path),
+		ucv_type(mode) == UC_STRING ? ucv_string_get(mode) : "r");
 
 	if (!fp)
 		err_return(errno);
@@ -323,7 +323,7 @@ uc_fs_open(uc_vm *vm, size_t nargs)
 }
 
 
-static json_object *
+static uc_value_t *
 uc_fs_readdir(uc_vm *vm, size_t nargs)
 {
 	DIR **dp = uc_get_self("fs.dir");
@@ -338,10 +338,10 @@ uc_fs_readdir(uc_vm *vm, size_t nargs)
 	if (!e)
 		err_return(errno);
 
-	return json_object_new_string(e->d_name);
+	return ucv_string_new(e->d_name);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_telldir(uc_vm *vm, size_t nargs)
 {
 	DIR **dp = uc_get_self("fs.dir");
@@ -355,30 +355,30 @@ uc_fs_telldir(uc_vm *vm, size_t nargs)
 	if (position == -1)
 		err_return(errno);
 
-	return json_object_new_int64((int64_t)position);
+	return ucv_int64_new((int64_t)position);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_seekdir(uc_vm *vm, size_t nargs)
 {
-	json_object *ofs = uc_get_arg(0);
+	uc_value_t *ofs = uc_get_arg(0);
 	DIR **dp = uc_get_self("fs.dir");
 	long position;
 
-	if (!json_object_is_type(ofs, json_type_int))
+	if (ucv_type(ofs) != UC_INTEGER)
 		err_return(EINVAL);
 
 	if (!dp || !*dp)
 		err_return(EBADF);
 
-	position = (long)json_object_get_int64(ofs);
+	position = (long)ucv_int64_get(ofs);
 
 	seekdir(*dp, position);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_closedir(uc_vm *vm, size_t nargs)
 {
 	DIR **dp = uc_get_self("fs.dir");
@@ -389,19 +389,19 @@ uc_fs_closedir(uc_vm *vm, size_t nargs)
 	closedir(*dp);
 	*dp = NULL;
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_opendir(uc_vm *vm, size_t nargs)
 {
-	json_object *path = uc_get_arg(0);
+	uc_value_t *path = uc_get_arg(0);
 	DIR *dp;
 
-	if (!json_object_is_type(path, json_type_string))
+	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
 
-	dp = opendir(json_object_get_string(path));
+	dp = opendir(ucv_string_get(path));
 
 	if (!dp)
 		err_return(errno);
@@ -409,15 +409,15 @@ uc_fs_opendir(uc_vm *vm, size_t nargs)
 	return uc_alloc_ressource(dir_type, dp);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_readlink(uc_vm *vm, size_t nargs)
 {
-	json_object *path = uc_get_arg(0);
-	json_object *res;
+	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *res;
 	ssize_t buflen = 0, rv;
 	char *buf = NULL, *tmp;
 
-	if (!json_object_is_type(path, json_type_string))
+	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
 
 	do {
@@ -430,7 +430,7 @@ uc_fs_readlink(uc_vm *vm, size_t nargs)
 		}
 
 		buf = tmp;
-		rv = readlink(json_object_get_string(path), buf, buflen);
+		rv = readlink(ucv_string_get(path), buf, buflen);
 
 		if (rv == -1) {
 			free(buf);
@@ -442,173 +442,173 @@ uc_fs_readlink(uc_vm *vm, size_t nargs)
 	}
 	while (true);
 
-	res = json_object_new_string_len(buf, rv);
+	res = ucv_string_new_length(buf, rv);
 
 	free(buf);
 
 	return res;
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_stat_common(uc_vm *vm, size_t nargs, bool use_lstat)
 {
-	json_object *path = uc_get_arg(0);
-	json_object *res, *o;
+	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *res, *o;
 	struct stat st;
 	int rv;
 
-	if (!json_object_is_type(path, json_type_string))
+	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
 
-	rv = (use_lstat ? lstat : stat)(json_object_get_string(path), &st);
+	rv = (use_lstat ? lstat : stat)(ucv_string_get(path), &st);
 
 	if (rv == -1)
 		err_return(errno);
 
-	res = json_object_new_object();
+	res = ucv_object_new(vm);
 
 	if (!res)
 		err_return(ENOMEM);
 
-	o = json_object_new_object();
+	o = ucv_object_new(vm);
 
 	if (o) {
-		json_object_object_add(o, "major", json_object_new_int64(major(st.st_dev)));
-		json_object_object_add(o, "minor", json_object_new_int64(minor(st.st_dev)));
+		ucv_object_add(o, "major", ucv_int64_new(major(st.st_dev)));
+		ucv_object_add(o, "minor", ucv_int64_new(minor(st.st_dev)));
 
-		json_object_object_add(res, "dev", o);
+		ucv_object_add(res, "dev", o);
 	}
 
-	o = json_object_new_object();
+	o = ucv_object_new(vm);
 
 	if (o) {
-		json_object_object_add(o, "setuid", json_object_new_boolean(st.st_mode & S_ISUID));
-		json_object_object_add(o, "setgid", json_object_new_boolean(st.st_mode & S_ISGID));
-		json_object_object_add(o, "sticky", json_object_new_boolean(st.st_mode & S_ISVTX));
+		ucv_object_add(o, "setuid", ucv_boolean_new(st.st_mode & S_ISUID));
+		ucv_object_add(o, "setgid", ucv_boolean_new(st.st_mode & S_ISGID));
+		ucv_object_add(o, "sticky", ucv_boolean_new(st.st_mode & S_ISVTX));
 
-		json_object_object_add(o, "user_read", json_object_new_boolean(st.st_mode & S_IRUSR));
-		json_object_object_add(o, "user_write", json_object_new_boolean(st.st_mode & S_IWUSR));
-		json_object_object_add(o, "user_exec", json_object_new_boolean(st.st_mode & S_IXUSR));
+		ucv_object_add(o, "user_read", ucv_boolean_new(st.st_mode & S_IRUSR));
+		ucv_object_add(o, "user_write", ucv_boolean_new(st.st_mode & S_IWUSR));
+		ucv_object_add(o, "user_exec", ucv_boolean_new(st.st_mode & S_IXUSR));
 
-		json_object_object_add(o, "group_read", json_object_new_boolean(st.st_mode & S_IRGRP));
-		json_object_object_add(o, "group_write", json_object_new_boolean(st.st_mode & S_IWGRP));
-		json_object_object_add(o, "group_exec", json_object_new_boolean(st.st_mode & S_IXGRP));
+		ucv_object_add(o, "group_read", ucv_boolean_new(st.st_mode & S_IRGRP));
+		ucv_object_add(o, "group_write", ucv_boolean_new(st.st_mode & S_IWGRP));
+		ucv_object_add(o, "group_exec", ucv_boolean_new(st.st_mode & S_IXGRP));
 
-		json_object_object_add(o, "other_read", json_object_new_boolean(st.st_mode & S_IROTH));
-		json_object_object_add(o, "other_write", json_object_new_boolean(st.st_mode & S_IWOTH));
-		json_object_object_add(o, "other_exec", json_object_new_boolean(st.st_mode & S_IXOTH));
+		ucv_object_add(o, "other_read", ucv_boolean_new(st.st_mode & S_IROTH));
+		ucv_object_add(o, "other_write", ucv_boolean_new(st.st_mode & S_IWOTH));
+		ucv_object_add(o, "other_exec", ucv_boolean_new(st.st_mode & S_IXOTH));
 
-		json_object_object_add(res, "perm", o);
+		ucv_object_add(res, "perm", o);
 	}
 
-	json_object_object_add(res, "inode", json_object_new_int64((int64_t)st.st_ino));
-	json_object_object_add(res, "mode", json_object_new_int64((int64_t)st.st_mode & ~S_IFMT));
-	json_object_object_add(res, "nlink", json_object_new_int64((int64_t)st.st_nlink));
-	json_object_object_add(res, "uid", json_object_new_int64((int64_t)st.st_uid));
-	json_object_object_add(res, "gid", json_object_new_int64((int64_t)st.st_gid));
-	json_object_object_add(res, "size", json_object_new_int64((int64_t)st.st_size));
-	json_object_object_add(res, "blksize", json_object_new_int64((int64_t)st.st_blksize));
-	json_object_object_add(res, "blocks", json_object_new_int64((int64_t)st.st_blocks));
-	json_object_object_add(res, "atime", json_object_new_int64((int64_t)st.st_atime));
-	json_object_object_add(res, "mtime", json_object_new_int64((int64_t)st.st_mtime));
-	json_object_object_add(res, "ctime", json_object_new_int64((int64_t)st.st_ctime));
+	ucv_object_add(res, "inode", ucv_int64_new((int64_t)st.st_ino));
+	ucv_object_add(res, "mode", ucv_int64_new((int64_t)st.st_mode & ~S_IFMT));
+	ucv_object_add(res, "nlink", ucv_int64_new((int64_t)st.st_nlink));
+	ucv_object_add(res, "uid", ucv_int64_new((int64_t)st.st_uid));
+	ucv_object_add(res, "gid", ucv_int64_new((int64_t)st.st_gid));
+	ucv_object_add(res, "size", ucv_int64_new((int64_t)st.st_size));
+	ucv_object_add(res, "blksize", ucv_int64_new((int64_t)st.st_blksize));
+	ucv_object_add(res, "blocks", ucv_int64_new((int64_t)st.st_blocks));
+	ucv_object_add(res, "atime", ucv_int64_new((int64_t)st.st_atime));
+	ucv_object_add(res, "mtime", ucv_int64_new((int64_t)st.st_mtime));
+	ucv_object_add(res, "ctime", ucv_int64_new((int64_t)st.st_ctime));
 
 	if (S_ISREG(st.st_mode))
-		json_object_object_add(res, "type", json_object_new_string("file"));
+		ucv_object_add(res, "type", ucv_string_new("file"));
 	else if (S_ISDIR(st.st_mode))
-		json_object_object_add(res, "type", json_object_new_string("directory"));
+		ucv_object_add(res, "type", ucv_string_new("directory"));
 	else if (S_ISCHR(st.st_mode))
-		json_object_object_add(res, "type", json_object_new_string("char"));
+		ucv_object_add(res, "type", ucv_string_new("char"));
 	else if (S_ISBLK(st.st_mode))
-		json_object_object_add(res, "type", json_object_new_string("block"));
+		ucv_object_add(res, "type", ucv_string_new("block"));
 	else if (S_ISFIFO(st.st_mode))
-		json_object_object_add(res, "type", json_object_new_string("fifo"));
+		ucv_object_add(res, "type", ucv_string_new("fifo"));
 	else if (S_ISLNK(st.st_mode))
-		json_object_object_add(res, "type", json_object_new_string("link"));
+		ucv_object_add(res, "type", ucv_string_new("link"));
 	else if (S_ISSOCK(st.st_mode))
-		json_object_object_add(res, "type", json_object_new_string("socket"));
+		ucv_object_add(res, "type", ucv_string_new("socket"));
 	else
-		json_object_object_add(res, "type", json_object_new_string("unknown"));
+		ucv_object_add(res, "type", ucv_string_new("unknown"));
 
 	return res;
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_stat(uc_vm *vm, size_t nargs)
 {
 	return uc_fs_stat_common(vm, nargs, false);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_lstat(uc_vm *vm, size_t nargs)
 {
 	return uc_fs_stat_common(vm, nargs, true);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_mkdir(uc_vm *vm, size_t nargs)
 {
-	json_object *path = uc_get_arg(0);
-	json_object *mode = uc_get_arg(1);
+	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *mode = uc_get_arg(1);
 
-	if (!json_object_is_type(path, json_type_string) ||
-	    (mode && !json_object_is_type(mode, json_type_int)))
+	if (ucv_type(path) != UC_STRING ||
+	    (mode && ucv_type(mode) != UC_INTEGER))
 		err_return(EINVAL);
 
-	if (mkdir(json_object_get_string(path), (mode_t)(mode ? json_object_get_int64(mode) : 0777)) == -1)
+	if (mkdir(ucv_string_get(path), (mode_t)(mode ? ucv_int64_get(mode) : 0777)) == -1)
 		err_return(errno);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_rmdir(uc_vm *vm, size_t nargs)
 {
-	json_object *path = uc_get_arg(0);
+	uc_value_t *path = uc_get_arg(0);
 
-	if (!json_object_is_type(path, json_type_string))
+	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
 
-	if (rmdir(json_object_get_string(path)) == -1)
+	if (rmdir(ucv_string_get(path)) == -1)
 		err_return(errno);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_symlink(uc_vm *vm, size_t nargs)
 {
-	json_object *dest = uc_get_arg(0);
-	json_object *path = uc_get_arg(1);
+	uc_value_t *dest = uc_get_arg(0);
+	uc_value_t *path = uc_get_arg(1);
 
-	if (!json_object_is_type(dest, json_type_string) ||
-	    !json_object_is_type(path, json_type_string))
+	if (ucv_type(dest) != UC_STRING ||
+	    ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
 
-	if (symlink(json_object_get_string(dest), json_object_get_string(path)) == -1)
+	if (symlink(ucv_string_get(dest), ucv_string_get(path)) == -1)
 		err_return(errno);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_unlink(uc_vm *vm, size_t nargs)
 {
-	json_object *path = uc_get_arg(0);
+	uc_value_t *path = uc_get_arg(0);
 
-	if (!json_object_is_type(path, json_type_string))
+	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
 
-	if (unlink(json_object_get_string(path)) == -1)
+	if (unlink(ucv_string_get(path)) == -1)
 		err_return(errno);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_getcwd(uc_vm *vm, size_t nargs)
 {
-	json_object *res;
+	uc_value_t *res;
 	char *buf = NULL, *tmp;
 	size_t buflen = 0;
 
@@ -634,25 +634,25 @@ uc_fs_getcwd(uc_vm *vm, size_t nargs)
 	}
 	while (true);
 
-	res = json_object_new_string(buf);
+	res = ucv_string_new(buf);
 
 	free(buf);
 
 	return res;
 }
 
-static json_object *
+static uc_value_t *
 uc_fs_chdir(uc_vm *vm, size_t nargs)
 {
-	json_object *path = uc_get_arg(0);
+	uc_value_t *path = uc_get_arg(0);
 
-	if (!json_object_is_type(path, json_type_string))
+	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
 
-	if (chdir(json_object_get_string(path)) == -1)
+	if (chdir(ucv_string_get(path)) == -1)
 		err_return(errno);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
 static const uc_cfunction_list proc_fns[] = {
@@ -720,7 +720,7 @@ static void close_dir(void *ud)
 		closedir(dp);
 }
 
-void uc_module_init(uc_prototype *scope)
+void uc_module_init(uc_value_t *scope)
 {
 	uc_add_proto_functions(scope, global_fns);
 
@@ -728,7 +728,7 @@ void uc_module_init(uc_prototype *scope)
 	file_type = uc_declare_type("fs.file", file_fns, close_file);
 	dir_type = uc_declare_type("fs.dir", dir_fns, close_dir);
 
-	uc_add_proto_val(scope, "stdin", uc_alloc_ressource(file_type, stdin));
-	uc_add_proto_val(scope, "stdout", uc_alloc_ressource(file_type, stdout));
-	uc_add_proto_val(scope, "stderr", uc_alloc_ressource(file_type, stderr));
+	ucv_object_add(scope, "stdin", uc_alloc_ressource(file_type, stdin));
+	ucv_object_add(scope, "stdout", uc_alloc_ressource(file_type, stdout));
+	ucv_object_add(scope, "stderr", uc_alloc_ressource(file_type, stderr));
 }

@@ -21,7 +21,6 @@
 #include <stdarg.h>
 
 #include "chunk.h"
-#include "object.h"
 #include "util.h"
 #include "lexer.h"
 
@@ -102,7 +101,6 @@ typedef struct {
 	int8_t stack_pop;
 	int8_t stack_push;
 	int8_t operand_bytes;
-	bool operand_is_skip;
 } uc_insn_definition;
 
 typedef enum {
@@ -116,30 +114,31 @@ typedef enum {
 
 typedef struct {
 	uc_exception_type_t type;
-	json_object *stacktrace;
+	uc_value_t *stacktrace;
 	char *message;
 } uc_exception;
 
 typedef struct {
 	uint8_t *ip;
-	uc_closure *closure;
-	uc_cfunction *cfunction;
+	uc_closure_t *closure;
+	uc_cfunction_t *cfunction;
 	size_t stackframe;
-	json_object *ctx;
+	uc_value_t *ctx;
 	bool mcall;
 } uc_callframe;
 
 uc_declare_vector(uc_callframes, uc_callframe);
-uc_declare_vector(uc_stack, json_object *);
+uc_declare_vector(uc_stack, uc_value_t *);
 
 typedef struct uc_vm {
 	uc_stack stack;
 	uc_exception exception;
 	uc_callframes callframes;
-	uc_upvalref *open_upvals;
+	uc_upvalref_t *open_upvals;
 	uc_parse_config *config;
-	uc_prototype *globals;
+	uc_value_t *globals;
 	uc_source *sources;
+	uc_weakref_t values;
 	union {
 		uint32_t u32;
 		int32_t s32;
@@ -163,15 +162,15 @@ extern uint32_t insns[__I_MAX];
 void uc_vm_init(uc_vm *vm, uc_parse_config *config);
 void uc_vm_free(uc_vm *vm);
 
-void uc_vm_stack_push(uc_vm *vm, json_object *value);
-json_object *uc_vm_stack_pop(uc_vm *vm);
-json_object *uc_vm_stack_peek(uc_vm *vm, size_t offset);
+void uc_vm_stack_push(uc_vm *vm, uc_value_t *value);
+uc_value_t *uc_vm_stack_pop(uc_vm *vm);
+uc_value_t *uc_vm_stack_peek(uc_vm *vm, size_t offset);
 
 uc_exception_type_t uc_vm_call(uc_vm *vm, bool mcall, size_t nargs);
 
 void __attribute__((format(printf, 3, 0)))
 uc_vm_raise_exception(uc_vm *vm, uc_exception_type_t type, const char *fmt, ...);
 
-uc_vm_status_t uc_vm_execute(uc_vm *vm, uc_function *fn, uc_prototype *globals, json_object *modules);
+uc_vm_status_t uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t *globals, uc_value_t *modules);
 
 #endif /* __VM_H_ */

@@ -245,4 +245,15 @@ static inline int xvasprintf(char **strp, const char *fmt, va_list ap) {
 	return len;
 }
 
+static inline struct printbuf *xprintbuf_new(void) {
+	struct printbuf *pb = printbuf_new();
+
+	if (!pb) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	return pb;
+}
+
 #endif /* __UTIL_H_ */

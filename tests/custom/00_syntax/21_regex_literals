@@ -23,7 +23,7 @@ regular expression engine.
 Testing regular expression type.
 
 -- Expect stdout --
-object
+regexp
 -- End --
 
 -- Testcase --

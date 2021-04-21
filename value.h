@@ -46,36 +46,25 @@ typedef struct {
 	char *data;
 } uc_value_list;
 
-json_object *uc_double_new(double v);
+typedef struct uc_value_t uc_value_t;
 
-bool uc_eq(json_object *v1, json_object *v2);
-bool uc_cmp(int how, json_object *v1, json_object *v2);
-bool uc_val_is_truish(json_object *val);
+bool uc_cmp(int how, uc_value_t *v1, uc_value_t *v2);
+bool uc_val_is_truish(uc_value_t *val);
 
-enum json_type uc_cast_number(json_object *v, int64_t *n, double *d);
+typedef enum uc_type_t uc_type_t;
+typedef struct uc_value_t uc_value_t;
+uc_type_t uc_cast_number(uc_value_t *v, int64_t *n, double *d);
 
-json_object *uc_getval(json_object *scope, json_object *key);
-json_object *uc_setval(json_object *scope, json_object *key, json_object *val);
+typedef struct uc_vm uc_vm;
+
+uc_value_t *uc_getval(uc_vm *, uc_value_t *scope, uc_value_t *key);
+uc_value_t *uc_setval(uc_vm *, uc_value_t *scope, uc_value_t *key, uc_value_t *val);
 
 void uc_vallist_init(uc_value_list *list);
 void uc_vallist_free(uc_value_list *list);
 
-ssize_t uc_vallist_add(uc_value_list *list, json_object *value);
+ssize_t uc_vallist_add(uc_value_list *list, uc_value_t *value);
 uc_value_type_t uc_vallist_type(uc_value_list *list, size_t idx);
-struct json_object *uc_vallist_get(uc_value_list *list, size_t idx);
-
-#define uc_value_get(val) \
-	({ \
-		struct json_object *__o = val; \
-		/*fprintf(stderr, "get(%p // %s) [%d + 1] @ %s:%d\n", __o, json_object_to_json_string(__o), getrefcnt(__o), __FILE__, __LINE__);*/ \
-		json_object_get(__o); \
-	})
-
-#define uc_value_put(val) \
-	({ \
-		struct json_object *__o = val; \
-		/*fprintf(stderr, "put(%p // %s) [%d - 1] @ %s:%d\n", __o, json_object_to_json_string(__o), getrefcnt(__o), __FILE__, __LINE__);*/ \
-		json_object_put(__o); \
-	})
+uc_value_t *uc_vallist_get(uc_value_list *list, size_t idx);
 
 #endif /* __VALUE_H_ */
