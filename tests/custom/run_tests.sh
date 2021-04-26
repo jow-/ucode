@@ -5,6 +5,7 @@ topdir=$(readlink -f "$testdir/../..")
 
 line='........................................'
 ucode_bin=${UCODE_BIN:-"$topdir/ucode"}
+ucode_lib=${UCODE_LIB:-"$topdir"}
 
 extract_sections() {
 	local file=$1
@@ -53,7 +54,7 @@ run_testcase() {
 
 	(
 		cd "$topdir"
-		$ucode_bin -e '{ "REQUIRE_SEARCH_PATH": [ "'"$topdir"'/*.so" ] }' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
+		$ucode_bin -e '{ "REQUIRE_SEARCH_PATH": [ "'"$ucode_lib"'/*.so" ] }' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
 	)
 
 	touch "$dir/empty"
