@@ -260,7 +260,7 @@ uc_cmp(int how, uc_value_t *v1, uc_value_t *v2)
 	}
 	else {
 		if (t1 == t2 && !ucv_is_scalar(v1)) {
-			delta = (void *)v1 - (void *)v2;
+			delta = (intptr_t)v1 - (intptr_t)v2;
 		}
 		else {
 			t1 = uc_cast_number(v1, &n1, &d1);

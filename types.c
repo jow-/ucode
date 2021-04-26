@@ -927,7 +927,7 @@ ucv_closure_new(uc_vm *vm, uc_function_t *function, bool arrow_fn)
 	closure->header.refcount = 1;
 	closure->function = function;
 	closure->is_arrow = arrow_fn;
-	closure->upvals = function->nupvals ? ((void *)closure + ALIGN(sizeof(*closure))) : NULL;
+	closure->upvals = function->nupvals ? (uc_upvalref_t **)((uintptr_t)closure + ALIGN(sizeof(*closure))) : NULL;
 
 	if (vm)
 		ucv_ref(&vm->values, &closure->ref);
@@ -1590,8 +1590,8 @@ ucv_to_stringbuf(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 
 		ucv_stringbuf_printf(pb, "%sfunction%s%s(...) { [native code] }%s",
 			json ? "\"" : "",
-			cfunction->name ? " " : "",
-			cfunction->name ? cfunction->name : "",
+			cfunction->name[0] ? " " : "",
+			cfunction->name[0] ? cfunction->name : "",
 			json ? "\"" : "");
 
 		break;
@@ -1739,6 +1739,7 @@ ucv_equal(uc_value_t *uv1, uc_value_t *uv2)
 		}
 
 		ucv_object_foreach(uv2, key2, val2) {
+			(void)val2;
 			ucv_object_get(uv1, key2, &b1);
 
 			if (!b1)
@@ -1772,7 +1773,7 @@ ucv_gc(uc_vm *vm, bool final)
 
 	/* unref unreachable objects */
 	for (ref = vm->values.next; ref != &vm->values; ref = ref->next) {
-		val = (void *)ref - offsetof(uc_array_t, ref);
+		val = (uc_value_t *)((uintptr_t)ref - offsetof(uc_array_t, ref));
 
 		if (ucv_is_marked(val))
 			ucv_clear_mark(val);
@@ -1782,7 +1783,7 @@ ucv_gc(uc_vm *vm, bool final)
 
 	/* free destroyed objects */
 	for (ref = vm->values.next, tmp = ref->next; ref != &vm->values; ref = tmp, tmp = tmp->next) {
-		val = (void *)ref - offsetof(uc_array_t, ref);
+		val = (uc_value_t *)((uintptr_t)ref - offsetof(uc_array_t, ref));
 
 		if (val->type == UC_NULL) {
 			ucv_unref(ref);

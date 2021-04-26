@@ -255,7 +255,7 @@ uc_uci_get_any(uc_vm *vm, size_t nargs, bool all)
 	uc_value_t *conf = uc_get_arg(0);
 	uc_value_t *sect = uc_get_arg(1);
 	uc_value_t *opt = uc_get_arg(2);
-	struct uci_ptr ptr = {};
+	struct uci_ptr ptr = { 0 };
 	int rv;
 
 	if (!c || !*c)
@@ -330,7 +330,7 @@ uc_uci_get_first(uc_vm *vm, size_t nargs)
 	struct uci_package *p = NULL;
 	struct uci_section *sc;
 	struct uci_element *e;
-	struct uci_ptr ptr = {};
+	struct uci_ptr ptr = { 0 };
 	int rv;
 
 	if (ucv_type(conf) != UC_STRING ||
@@ -465,7 +465,7 @@ uc_uci_set(uc_vm *vm, size_t nargs)
 	uc_value_t *conf = uc_get_arg(0);
 	uc_value_t *sect = uc_get_arg(1);
 	uc_value_t *opt = NULL, *val = NULL;
-	struct uci_ptr ptr = {};
+	struct uci_ptr ptr = { 0 };
 	bool is_list = false;
 	size_t i;
 	int rv;
@@ -570,7 +570,7 @@ uc_uci_delete(uc_vm *vm, size_t nargs)
 	uc_value_t *conf = uc_get_arg(0);
 	uc_value_t *sect = uc_get_arg(1);
 	uc_value_t *opt = uc_get_arg(2);
-	struct uci_ptr ptr = {};
+	struct uci_ptr ptr = { 0 };
 	int rv;
 
 	if (ucv_type(conf) != UC_STRING ||
@@ -605,7 +605,7 @@ uc_uci_rename(uc_vm *vm, size_t nargs)
 	uc_value_t *conf = uc_get_arg(0);
 	uc_value_t *sect = uc_get_arg(1);
 	uc_value_t *opt = NULL, *val = NULL;
-	struct uci_ptr ptr = {};
+	struct uci_ptr ptr = { 0 };
 	int rv;
 
 	if (ucv_type(conf) != UC_STRING ||
@@ -665,7 +665,7 @@ uc_uci_reorder(uc_vm *vm, size_t nargs)
 	uc_value_t *conf = uc_get_arg(0);
 	uc_value_t *sect = uc_get_arg(1);
 	uc_value_t *val = uc_get_arg(2);
-	struct uci_ptr ptr = {};
+	struct uci_ptr ptr = { 0 };
 	int64_t n;
 	int rv;
 
@@ -705,7 +705,7 @@ uc_uci_pkg_command(uc_vm *vm, size_t nargs, enum pkg_cmd cmd)
 	uc_value_t *conf = uc_get_arg(0);
 	struct uci_element *e, *tmp;
 	struct uci_package *p;
-	struct uci_ptr ptr = {};
+	struct uci_ptr ptr = { 0 };
 	int rv, res = UCI_OK;
 
 	if (cmd != CMD_REVERT && conf)

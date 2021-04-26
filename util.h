@@ -218,6 +218,7 @@ static inline struct json_tokener *xjs_new_tokener(void) {
 	return tok;
 }
 
+__attribute__((format(printf, 2, 0)))
 static inline int xasprintf(char **strp, const char *fmt, ...) {
 	va_list ap;
 	int len;
@@ -234,6 +235,7 @@ static inline int xasprintf(char **strp, const char *fmt, ...) {
 	return len;
 }
 
+__attribute__((format(printf, 2, 0)))
 static inline int xvasprintf(char **strp, const char *fmt, va_list ap) {
 	int len = vasprintf(strp, fmt, ap);
 

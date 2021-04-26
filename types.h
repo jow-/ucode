@@ -22,8 +22,10 @@
 #include <regex.h>
 #include <json-c/json.h>
 
-#include "source.h"
-#include "chunk.h"
+#include "util.h"
+
+
+/* Value types and generic value header */
 
 typedef enum uc_type_t {
 	UC_NULL,
@@ -47,6 +49,58 @@ typedef struct uc_value_t {
 	uint32_t u64:1;
 	uint32_t refcount:26;
 } uc_value_t;
+
+
+/* Constant list defintions */
+
+typedef struct {
+	size_t isize;
+	size_t dsize;
+	uint64_t *index;
+	char *data;
+} uc_value_list;
+
+
+/* Source buffer defintions */
+
+uc_declare_vector(uc_lineinfo, uint8_t);
+
+typedef struct {
+	char *filename, *buffer;
+	FILE *fp;
+	size_t usecount, off;
+	uc_lineinfo lineinfo;
+} uc_source;
+
+
+/* Bytecode chunk defintions */
+
+typedef struct {
+	size_t from, to, target, slot;
+} uc_ehrange;
+
+typedef struct {
+	size_t from, to, slot, nameidx;
+} uc_varrange;
+
+uc_declare_vector(uc_ehranges, uc_ehrange);
+uc_declare_vector(uc_variables, uc_varrange);
+uc_declare_vector(uc_offsetinfo, uint8_t);
+
+typedef struct {
+	size_t count;
+	uint8_t *entries;
+	uc_value_list constants;
+	uc_ehranges ehranges;
+	struct {
+		uc_variables variables;
+		uc_value_list varnames;
+		uc_offsetinfo offsets;
+	} debuginfo;
+} uc_chunk;
+
+
+/* Value type structures */
 
 typedef struct uc_weakref_t {
 	struct uc_weakref_t *prev;
@@ -144,6 +198,69 @@ typedef struct {
 
 uc_declare_vector(uc_ressource_types_t, uc_ressource_type_t);
 
+
+/* Parser definitions */
+
+typedef struct {
+	bool lstrip_blocks;
+	bool trim_blocks;
+	bool strict_declarations;
+} uc_parse_config;
+
+
+/* VM definitions */
+
+typedef enum {
+	EXCEPTION_NONE,
+	EXCEPTION_SYNTAX,
+	EXCEPTION_RUNTIME,
+	EXCEPTION_TYPE,
+	EXCEPTION_REFERENCE,
+	EXCEPTION_USER
+} uc_exception_type_t;
+
+typedef struct {
+	uc_exception_type_t type;
+	uc_value_t *stacktrace;
+	char *message;
+} uc_exception;
+
+typedef struct {
+	uint8_t *ip;
+	uc_closure_t *closure;
+	uc_cfunction_t *cfunction;
+	size_t stackframe;
+	uc_value_t *ctx;
+	bool mcall;
+} uc_callframe;
+
+uc_declare_vector(uc_callframes, uc_callframe);
+uc_declare_vector(uc_stack, uc_value_t *);
+
+struct uc_vm {
+	uc_stack stack;
+	uc_exception exception;
+	uc_callframes callframes;
+	uc_upvalref_t *open_upvals;
+	uc_parse_config *config;
+	uc_value_t *globals;
+	uc_source *sources;
+	uc_weakref_t values;
+	union {
+		uint32_t u32;
+		int32_t s32;
+		uint16_t u16;
+		int16_t s16;
+		uint8_t u8;
+		int8_t s8;
+	} arg;
+	size_t spread_values;
+	uint8_t trace;
+};
+
+
+/* Value API */
+
 typedef struct printbuf uc_stringbuf_t;
 
 void ucv_free(uc_value_t *, bool);
@@ -162,7 +279,7 @@ uc_value_t *ucv_string_new_length(const char *, size_t);
 size_t ucv_string_length(uc_value_t *);
 
 char *_ucv_string_get(uc_value_t **);
-#define ucv_string_get(uv) ({ uc_value_t * volatile p = (uv); _ucv_string_get((uc_value_t **)&p); })
+#define ucv_string_get(uv) _ucv_string_get((uc_value_t **)&uv)
 
 uc_stringbuf_t *ucv_stringbuf_new(void);
 uc_value_t *ucv_stringbuf_finish(uc_stringbuf_t *);
@@ -200,16 +317,17 @@ bool ucv_object_add(uc_value_t *, const char *, uc_value_t *);
 bool ucv_object_delete(uc_value_t *, const char *);
 size_t ucv_object_length(uc_value_t *);
 
-#define ucv_object_foreach(obj, key, val) \
-	char *key; \
-	uc_value_t *val __attribute__((__unused__)); \
-	for (struct lh_entry *entry ## key = (ucv_type(obj) == UC_OBJECT) ? ((uc_object_t *)obj)->table->head : NULL, *entry_next ## key = NULL; \
-		({ if (entry ## key) { \
-			key = (char *)entry ## key->k; \
-			val = (uc_value_t *)entry ## key->v; \
-			entry_next ## key = entry ## key->next; \
-		} ; entry ## key; }); \
-		entry ## key = entry_next ## key)
+#define ucv_object_foreach(obj, key, val)														\
+	char *key = NULL;																			\
+	uc_value_t *val = NULL;																		\
+	struct lh_entry *entry##key;																\
+	struct lh_entry *entry_next##key = NULL;													\
+	for (entry##key = (ucv_type(obj) == UC_OBJECT) ? ((uc_object_t *)obj)->table->head : NULL;	\
+	     (entry##key ? (key = (char *)lh_entry_k(entry##key),									\
+	                    val = (uc_value_t *)lh_entry_v(entry##key),								\
+	                    entry_next##key = entry##key->next, entry##key)							\
+	                 : 0);																		\
+	     entry##key = entry_next##key)
 
 uc_value_t *ucv_function_new(const char *, size_t, uc_source *);
 size_t ucv_function_srcpos(uc_value_t *, size_t);

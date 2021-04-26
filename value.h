@@ -29,6 +29,8 @@
 
 #include <stdio.h>
 
+#include "types.h"
+
 typedef enum {
 	TAG_INVAL = 0,
 	TAG_NUM = 1,
@@ -39,23 +41,10 @@ typedef enum {
 	TAG_PTR = 6
 } uc_value_type_t;
 
-typedef struct {
-	size_t isize;
-	size_t dsize;
-	uint64_t *index;
-	char *data;
-} uc_value_list;
-
-typedef struct uc_value_t uc_value_t;
-
 bool uc_cmp(int how, uc_value_t *v1, uc_value_t *v2);
 bool uc_val_is_truish(uc_value_t *val);
 
-typedef enum uc_type_t uc_type_t;
-typedef struct uc_value_t uc_value_t;
 uc_type_t uc_cast_number(uc_value_t *v, int64_t *n, double *d);
-
-typedef struct uc_vm uc_vm;
 
 uc_value_t *uc_getval(uc_vm *, uc_value_t *scope, uc_value_t *key);
 uc_value_t *uc_setval(uc_vm *, uc_value_t *scope, uc_value_t *key, uc_value_t *val);

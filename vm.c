@@ -232,9 +232,9 @@ uc_vm_decode_insn(uc_vm *vm, uc_callframe *frame, uc_chunk *chunk)
 
 	case -4:
 		vm->arg.s32 = (
-			frame->ip[0] * 0x1000000 +
-			frame->ip[1] * 0x10000 +
-			frame->ip[2] * 0x100 +
+			frame->ip[0] * 0x1000000UL +
+			frame->ip[1] * 0x10000UL +
+			frame->ip[2] * 0x100UL +
 			frame->ip[3]
 		) - 0x7fffffff;
 		frame->ip += 4;
@@ -247,9 +247,9 @@ uc_vm_decode_insn(uc_vm *vm, uc_callframe *frame, uc_chunk *chunk)
 
 	case 4:
 		vm->arg.u32 = (
-			frame->ip[0] * 0x1000000 +
-			frame->ip[1] * 0x10000 +
-			frame->ip[2] * 0x100 +
+			frame->ip[0] * 0x1000000UL +
+			frame->ip[1] * 0x10000UL +
+			frame->ip[2] * 0x100UL +
 			frame->ip[3]
 		);
 		frame->ip += 4;
@@ -307,7 +307,7 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 			ref = closure->upvals[i];
 			v = uc_chunk_debug_get_variable(chunk, 0, i, true);
 			s = ucv_to_string(NULL, v);
-			fprintf(stderr, "     [%zu] <%p> %s ", i, ref, s);
+			fprintf(stderr, "     [%zu] <%p> %s ", i, (void *)ref, s);
 			free(s);
 
 			if (ref->closed) {
@@ -588,13 +588,13 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 	case -2:
 		fprintf(stderr, " {%c0x%hx}",
 			vm->arg.s16 < 0 ? '-' : '+',
-			vm->arg.s16 < 0 ? -(unsigned)vm->arg.s16 : (unsigned)vm->arg.s16);
+			(uint16_t)(vm->arg.s16 < 0 ? -vm->arg.s16 : vm->arg.s16));
 		break;
 
 	case -4:
 		fprintf(stderr, " {%c0x%x}",
 			vm->arg.s32 < 0 ? '-' : '+',
-			vm->arg.s32 < 0 ? -(unsigned)vm->arg.s32 : (unsigned)vm->arg.s32);
+			(uint32_t)(vm->arg.s32 < 0 ? -vm->arg.s32 : vm->arg.s32));
 		break;
 
 	case 1:
@@ -1035,7 +1035,7 @@ uc_vm_capture_upval(uc_vm *vm, size_t slot)
 	if (curr && curr->slot == slot) {
 		if (vm->trace) {
 			s = ucv_to_string(NULL, vm->stack.entries[slot]);
-			fprintf(stderr, "  {+%zu} <%p> %s\n", slot, curr, s);
+			fprintf(stderr, "  {+%zu} <%p> %s\n", slot, (void *)curr, s);
 			free(s);
 		}
 
@@ -1047,7 +1047,7 @@ uc_vm_capture_upval(uc_vm *vm, size_t slot)
 
 	if (vm->trace) {
 		s = ucv_to_string(NULL, vm->stack.entries[slot]);
-		fprintf(stderr, "  {*%zu} <%p> %s\n", slot, created, s);
+		fprintf(stderr, "  {*%zu} <%p> %s\n", slot, (void *)created, s);
 		free(s);
 	}
 
@@ -1072,7 +1072,7 @@ uc_vm_close_upvals(uc_vm *vm, size_t slot)
 
 		if (vm->trace) {
 			s = ucv_to_string(NULL, ref->value);
-			fprintf(stderr, "  {!%zu} <%p> %s\n", ref->slot, ref, s);
+			fprintf(stderr, "  {!%zu} <%p> %s\n", ref->slot, (void *)ref, s);
 			free(s);
 		}
 
@@ -1528,11 +1528,13 @@ static void
 uc_vm_insn_sobj(uc_vm *vm, enum insn_type insn)
 {
 	uc_value_t *obj = uc_vm_stack_peek(vm, vm->arg.u32);
+	uc_value_t *val;
 	size_t idx;
 
 	for (idx = 0; idx < vm->arg.u32; idx += 2) {
+		val = uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1);
 		ucv_object_add(obj,
-			ucv_string_get(uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1)),
+			ucv_string_get(val),
 			ucv_get(uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2)));
 	}
 
@@ -1972,6 +1974,8 @@ uc_vm_callframe_pop(uc_vm *vm)
 static void
 uc_vm_output_exception(uc_vm *vm)
 {
+	uc_value_t *ctx;
+
 	if (vm->exception.type == EXCEPTION_USER)
 		fprintf(stderr, "%s\n", vm->exception.message);
 	else
@@ -1979,10 +1983,9 @@ uc_vm_output_exception(uc_vm *vm)
 			    exception_type_strings[vm->exception.type] ? exception_type_strings[vm->exception.type] : "Error",
 			    vm->exception.message);
 
-	fprintf(stderr, "%s\n\n",
-		ucv_string_get(
-			ucv_object_get(
-				ucv_array_get(vm->exception.stacktrace, 0), "context", NULL)));
+	ctx = ucv_object_get(ucv_array_get(vm->exception.stacktrace, 0), "context", NULL);
+
+	fprintf(stderr, "%s\n\n", ucv_string_get(ctx));
 }
 
 static uc_vm_status_t

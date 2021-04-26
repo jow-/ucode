@@ -38,7 +38,7 @@ struct keyword {
 	union {
 		double d;
 		bool b;
-	};
+	} u;
 };
 
 struct token {
@@ -46,7 +46,7 @@ struct token {
 	union {
 		uint32_t patn;
 		char pat[4];
-	};
+	} u;
 	unsigned plen;
 	uc_token *(*parse)(uc_lexer *, bool);
 };
@@ -135,33 +135,33 @@ static const struct token tokens[] = {
 };
 
 static const struct keyword reserved_words[] = {
-	{ TK_ENDFUNC,	"endfunction", 11, {} },
+	{ TK_ENDFUNC,	"endfunction", 11, { 0 } },
 	{ TK_DOUBLE,	"Infinity", 8, { .d = INFINITY } },
-	{ TK_CONTINUE,	"continue", 8, {} },
-	{ TK_ENDWHILE,	"endwhile", 8, {} },
-	{ TK_FUNC,		"function", 8, {} },
-	{ TK_DEFAULT,	"default", 7, {} },
-	{ TK_RETURN,	"return", 6, {} },
-	{ TK_ENDFOR,	"endfor", 6, {} },
-	{ TK_SWITCH,	"switch", 6, {} },
-	{ TK_LOCAL,		"local", 5, {} },
-	{ TK_ENDIF,		"endif", 5, {} },
-	{ TK_WHILE,		"while", 5, {} },
-	{ TK_BREAK,		"break", 5, {} },
-	{ TK_CATCH,		"catch", 5, {} },
+	{ TK_CONTINUE,	"continue", 8, { 0 } },
+	{ TK_ENDWHILE,	"endwhile", 8, { 0 } },
+	{ TK_FUNC,		"function", 8, { 0 } },
+	{ TK_DEFAULT,	"default", 7, { 0 } },
+	{ TK_RETURN,	"return", 6, { 0 } },
+	{ TK_ENDFOR,	"endfor", 6, { 0 } },
+	{ TK_SWITCH,	"switch", 6, { 0 } },
+	{ TK_LOCAL,		"local", 5, { 0 } },
+	{ TK_ENDIF,		"endif", 5, { 0 } },
+	{ TK_WHILE,		"while", 5, { 0 } },
+	{ TK_BREAK,		"break", 5, { 0 } },
+	{ TK_CATCH,		"catch", 5, { 0 } },
 	{ TK_BOOL,		"false", 5, { .b = false } },
 	{ TK_BOOL,		"true",  4, { .b = true } },
-	{ TK_ELIF,		"elif",  4, {} },
-	{ TK_ELSE,		"else",  4, {} },
-	{ TK_THIS,		"this",  4, {} },
-	{ TK_NULL,		"null",  4, {} },
-	{ TK_CASE,		"case",  4, {} },
+	{ TK_ELIF,		"elif",  4, { 0 } },
+	{ TK_ELSE,		"else",  4, { 0 } },
+	{ TK_THIS,		"this",  4, { 0 } },
+	{ TK_NULL,		"null",  4, { 0 } },
+	{ TK_CASE,		"case",  4, { 0 } },
 	{ TK_DOUBLE,	"NaN",   3, { .d = NAN } },
-	{ TK_TRY,		"try",   3, {} },
-	{ TK_FOR,		"for",   3, {} },
-	{ TK_LOCAL,		"let",   3, {} },
-	{ TK_IF,		"if",    2, {} },
-	{ TK_IN,		"in",    2, {} },
+	{ TK_TRY,		"try",   3, { 0 } },
+	{ TK_FOR,		"for",   3, { 0 } },
+	{ TK_LOCAL,		"let",   3, { 0 } },
+	{ TK_IF,		"if",    2, { 0 } },
+	{ TK_IN,		"in",    2, { 0 } },
 };
 
 
@@ -362,7 +362,7 @@ parse_comment(uc_lexer *lex, bool no_regexp)
 	if (!buf_remaining(lex))
 		return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated comment"));
 
-	if (!strcmp(tok->pat, "//")) {
+	if (!strcmp(tok->u.pat, "//")) {
 		end = "\n";
 		elen = 1;
 	}
@@ -400,7 +400,7 @@ static uc_token *
 parse_string(uc_lexer *lex, bool no_regexp)
 {
 	const struct token *tok = lex->tok;
-	char q = tok->pat[0];
+	char q = tok->u.pat[0];
 	char *ptr, *c;
 	uc_token *rv;
 	int code;
@@ -438,7 +438,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 
 				default:
 					lex->is_escape = false;
-					c = strchr("a\ab\be\ef\fn\nr\rt\tv\v", *ptr);
+					c = strchr("a\ab\be\033f\fn\nr\rt\tv\v", *ptr);
 
 					if (c && *c >= 'a') {
 						lookbehind_append(lex, c + 1, 1);
@@ -725,7 +725,7 @@ parse_label(uc_lexer *lex, bool no_regexp)
 	size_t i;
 
 	if (!lex->lookbehind && tok->plen)
-		lookbehind_append(lex, tok->pat, tok->plen);
+		lookbehind_append(lex, tok->u.pat, tok->plen);
 
 	if (!buf_remaining(lex) || (lex->bufstart[0] != '_' && !isalnum(lex->bufstart[0]))) {
 		for (i = 0, word = &reserved_words[0]; i < ARRAY_SIZE(reserved_words); i++, word = &reserved_words[i]) {
@@ -734,11 +734,11 @@ parse_label(uc_lexer *lex, bool no_regexp)
 
 				switch (word->type) {
 				case TK_DOUBLE:
-					rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_double_new(word->d));
+					rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_double_new(word->u.d));
 					break;
 
 				case TK_BOOL:
-					rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_boolean_new(word->b));
+					rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_boolean_new(word->u.b));
 					break;
 
 				default:
@@ -803,7 +803,7 @@ parse_number(uc_lexer *lex, bool no_regexp)
 		if (*e == '.' || *e == 'e' || *e == 'E') {
 			d = strtod(lex->lookbehind, &e);
 
-			if (tok->pat[0] == '-')
+			if (tok->u.pat[0] == '-')
 				d = -d;
 
 			if (e > lex->lookbehind && *e == 0)
@@ -812,7 +812,7 @@ parse_number(uc_lexer *lex, bool no_regexp)
 				rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, ucv_string_new("Invalid number literal"));
 		}
 		else if (*e == 0) {
-			if (tok->pat[0] == '-')
+			if (tok->u.pat[0] == '-')
 				n = (errno == ERANGE) ? INT64_MIN : -n;
 
 			rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_NUMBER, ucv_int64_new(n));
@@ -857,7 +857,8 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 
 		rem = lex->bufend - lex->bufstart;
 
-		memcpy(lex->buf, lex->bufstart, rem);
+		if (rem)
+			memcpy(lex->buf, lex->bufstart, rem);
 
 		rlen = fread(lex->buf + rem, 1, lex->buflen - rem, fp);
 
@@ -1042,8 +1043,8 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 
 			c = buf_remaining(lex) ? lex->bufstart[0] : 0;
 
-			if (tok->plen ? ((search.n & masks[tok->plen]) == tok->patn)
-			              : (c >= tok->pat[0] && c <= tok->pat[1])) {
+			if (tok->plen ? ((search.n & masks[tok->plen]) == tok->u.patn)
+			              : (c >= tok->u.pat[0] && c <= tok->u.pat[1])) {
 				lex->lastoff = lex->source->off;
 
 				/* token has a parse method, switch state */
@@ -1067,7 +1068,7 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 				else if ((lex->block == STATEMENTS && tok->type == TK_RSTM) ||
 				         (lex->block == EXPRESSION && tok->type == TK_REXP)) {
 					/* strip whitespace after block */
-					if (tok->pat[0] == '-')
+					if (tok->u.pat[0] == '-')
 						lex->modifier = MINUS;
 
 					/* strip newline after statement block */
@@ -1207,7 +1208,7 @@ uc_get_tokenname(unsigned type)
 		if (tokens[i].type != type)
 			continue;
 
-		snprintf(buf, sizeof(buf), "'%s'", tokens[i].pat);
+		snprintf(buf, sizeof(buf), "'%s'", tokens[i].u.pat);
 
 		return buf;
 	}

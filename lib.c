@@ -35,6 +35,7 @@
 #include "compiler.h"
 #include "vm.h"
 #include "lib.h"
+#include "source.h"
 
 static void
 format_context_line(uc_stringbuf_t *buf, const char *line, size_t off, bool compact)
@@ -454,9 +455,11 @@ static uc_value_t *
 uc_delete(uc_vm *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_get_arg(0);
+	uc_value_t *key = NULL;
 	uc_value_t *rv = NULL;
-	const char *key;
+	bool freeable;
 	size_t i;
+	char *k;
 
 	if (ucv_type(obj) != UC_OBJECT)
 		return NULL;
@@ -464,10 +467,14 @@ uc_delete(uc_vm *vm, size_t nargs)
 	for (i = 1; i < nargs; i++) {
 		ucv_put(rv);
 
-		key = ucv_string_get(uc_get_arg(i));
-		rv = ucv_get(ucv_object_get(obj, key ? key : "null", NULL));
+		key = uc_get_arg(i);
+		k = uc_cast_string(vm, &key, &freeable);
+		rv = ucv_get(ucv_object_get(obj, k, NULL));
 
-		ucv_object_delete(obj, key ? key : "null");
+		ucv_object_delete(obj, k);
+
+		if (freeable)
+			free(k);
 	}
 
 	return rv;
@@ -482,7 +489,7 @@ uc_die(uc_vm *vm, size_t nargs)
 
 	s = msg ? uc_cast_string(vm, &msg, &freeable) : "Died";
 
-	uc_vm_raise_exception(vm, EXCEPTION_USER, s);
+	uc_vm_raise_exception(vm, EXCEPTION_USER, "%s", s);
 
 	if (freeable)
 		free(s);
@@ -494,13 +501,19 @@ static uc_value_t *
 uc_exists(uc_vm *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_get_arg(0);
-	const char *key = ucv_string_get(uc_get_arg(1));
-	bool found;
+	uc_value_t *key = uc_get_arg(1);
+	bool found, freeable;
+	char *k;
 
 	if (ucv_type(obj) != UC_OBJECT)
 		return false;
 
-	ucv_object_get(obj, key ? key : "null", &found);
+	k = uc_cast_string(vm, &key, &freeable);
+
+	ucv_object_get(obj, k, &found);
+
+	if (freeable)
+		free(k);
 
 	return ucv_boolean_new(found);
 }
@@ -516,8 +529,9 @@ uc_exit(uc_vm *vm, size_t nargs)
 static uc_value_t *
 uc_getenv(uc_vm *vm, size_t nargs)
 {
-	const char *key = ucv_string_get(uc_get_arg(0));
-	char *val = key ? getenv(key) : NULL;
+	uc_value_t *key = uc_get_arg(0);
+	char *k = ucv_string_get(key);
+	char *val = k ? getenv(k) : NULL;
 
 	return val ? ucv_string_new(val) : NULL;
 }
@@ -562,16 +576,18 @@ uc_filter(uc_vm *vm, size_t nargs)
 static uc_value_t *
 uc_hex(uc_vm *vm, size_t nargs)
 {
-	const char *val = ucv_string_get(uc_get_arg(0));
+	uc_value_t *val = uc_get_arg(0);
+	char *e, *v;
 	int64_t n;
-	char *e;
 
-	if (!val || !isxdigit(*val))
+	v = ucv_string_get(val);
+
+	if (!v || !isxdigit(*v))
 		return ucv_double_new(NAN);
 
-	n = strtoll(val, &e, 16);
+	n = strtoll(v, &e, 16);
 
-	if (e == val || *e)
+	if (e == v || *e)
 		return ucv_double_new(NAN);
 
 	return ucv_int64_new(n);
@@ -622,8 +638,10 @@ uc_keys(uc_vm *vm, size_t nargs)
 
 	arr = ucv_array_new(vm);
 
-	ucv_object_foreach(obj, key, val)
+	ucv_object_foreach(obj, key, val) {
+		(void)val;
 		ucv_array_push(arr, ucv_string_new(key));
+	}
 
 	return arr;
 }
@@ -1423,7 +1441,7 @@ uc_require_so(uc_vm *vm, const char *path, uc_value_t **res)
 		return true;
 	}
 
-	init = dlsym(dlh, "uc_module_entry");
+	*(void **)(&init) = dlsym(dlh, "uc_module_entry");
 
 	if (!init) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,

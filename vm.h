@@ -23,6 +23,7 @@
 #include "chunk.h"
 #include "util.h"
 #include "lexer.h"
+#include "types.h"
 
 #define __insns \
 __insn(NOOP) \
@@ -102,54 +103,6 @@ typedef struct {
 	int8_t stack_push;
 	int8_t operand_bytes;
 } uc_insn_definition;
-
-typedef enum {
-	EXCEPTION_NONE,
-	EXCEPTION_SYNTAX,
-	EXCEPTION_RUNTIME,
-	EXCEPTION_TYPE,
-	EXCEPTION_REFERENCE,
-	EXCEPTION_USER
-} uc_exception_type_t;
-
-typedef struct {
-	uc_exception_type_t type;
-	uc_value_t *stacktrace;
-	char *message;
-} uc_exception;
-
-typedef struct {
-	uint8_t *ip;
-	uc_closure_t *closure;
-	uc_cfunction_t *cfunction;
-	size_t stackframe;
-	uc_value_t *ctx;
-	bool mcall;
-} uc_callframe;
-
-uc_declare_vector(uc_callframes, uc_callframe);
-uc_declare_vector(uc_stack, uc_value_t *);
-
-typedef struct uc_vm {
-	uc_stack stack;
-	uc_exception exception;
-	uc_callframes callframes;
-	uc_upvalref_t *open_upvals;
-	uc_parse_config *config;
-	uc_value_t *globals;
-	uc_source *sources;
-	uc_weakref_t values;
-	union {
-		uint32_t u32;
-		int32_t s32;
-		uint16_t u16;
-		int16_t s16;
-		uint8_t u8;
-		int8_t s8;
-	} arg;
-	size_t spread_values;
-	uint8_t trace;
-} uc_vm;
 
 typedef enum {
 	STATUS_OK,

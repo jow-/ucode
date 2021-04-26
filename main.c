@@ -98,7 +98,7 @@ parse(uc_parse_config *config, uc_source *src,
 {
 	uc_value_t *globals = NULL;
 	uc_function_t *entry;
-	uc_vm vm = {};
+	uc_vm vm = { 0 };
 	int c, c2, rc = 0;
 	char *err;
 
@@ -285,7 +285,12 @@ main(int argc, char **argv)
 			if (source)
 				fprintf(stderr, "Options -i and -s are exclusive\n");
 
-			source = uc_source_new_buffer("[-s argument]", xstrdup(optarg), strlen(optarg));
+			c = xstrdup(optarg);
+			source = uc_source_new_buffer("[-s argument]", c, strlen(c));
+
+			if (!source)
+				free(c);
+
 			break;
 
 		case 'S':

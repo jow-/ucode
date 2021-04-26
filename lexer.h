@@ -127,12 +127,6 @@ typedef struct {
 } uc_token;
 
 typedef struct {
-	bool lstrip_blocks;
-	bool trim_blocks;
-	bool strict_declarations;
-} uc_parse_config;
-
-typedef struct {
 	uc_lex_state_t state;
 	uc_parse_config *config;
 	uc_source *source;

@@ -468,7 +468,12 @@ uc_compiler_emit_s32(uc_compiler *compiler, size_t srcpos, int32_t n)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t lineoff = uc_compiler_set_srcpos(compiler, srcpos);
-	uint32_t v = n + 0x7fffffff;
+	uint32_t v;
+
+	if (n <= 0)
+		v = n + 0x7fffffff;
+	else
+		v = (uint32_t)n + 0x7fffffff;
 
 	uc_chunk_add(chunk, v / 0x1000000, lineoff);
 	uc_chunk_add(chunk, (v / 0x10000) % 0x100, 0);
@@ -555,9 +560,9 @@ uc_compiler_get_jmpaddr(uc_compiler *compiler, size_t off)
 	assert(off + 4 < chunk->count);
 
 	return (
-		chunk->entries[off + 1] * 0x1000000 +
-		chunk->entries[off + 2] * 0x10000 +
-		chunk->entries[off + 3] * 0x100 +
+		chunk->entries[off + 1] * 0x1000000UL +
+		chunk->entries[off + 2] * 0x10000UL +
+		chunk->entries[off + 3] * 0x100UL +
 		chunk->entries[off + 4]
 	) - 0x7fffffff;
 }
@@ -1065,7 +1070,7 @@ static bool
 uc_compiler_compile_arrowfn(uc_compiler *compiler, uc_value_t *args, bool restarg)
 {
 	bool array = (ucv_type(args) == UC_ARRAY);
-	uc_compiler fncompiler = {};
+	uc_compiler fncompiler = { 0 };
 	size_t i, pos, load_off;
 	uc_function_t *fn;
 	ssize_t slot;
@@ -1283,7 +1288,7 @@ static void
 uc_compiler_compile_call(uc_compiler *compiler, bool assignable)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	uc_jmplist spreads = {};
+	uc_jmplist spreads = { 0 };
 	enum insn_type type;
 	size_t i, nargs = 0;
 
@@ -1422,7 +1427,7 @@ uc_compiler_compile_delimitted_block(uc_compiler *compiler, uc_tokentype_t endty
 static void
 uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
 {
-	uc_compiler fncompiler = {};
+	uc_compiler fncompiler = { 0 };
 	uc_value_t *name = NULL;
 	ssize_t slot = -1, pos;
 	uc_tokentype_t type;
@@ -1891,7 +1896,7 @@ uc_compiler_compile_if(uc_compiler *compiler)
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off, jmp_off, i;
 	bool expect_endif = false;
-	uc_jmplist elifs = {};
+	uc_jmplist elifs = { 0 };
 	uc_tokentype_t type;
 
 	/* parse & compile condition expression */
@@ -1996,7 +2001,7 @@ uc_compiler_compile_while(uc_compiler *compiler)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t cond_off, jmpz_off, end_off;
-	uc_patchlist p = {};
+	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2044,7 +2049,7 @@ uc_compiler_compile_for_in(uc_compiler *compiler, bool local, uc_token *kvar, uc
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t skip_jmp, test_jmp, key_slot, val_slot;
-	uc_patchlist p = {};
+	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2154,7 +2159,7 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t test_off = 0, incr_off, skip_off, cond_off = 0;
-	uc_patchlist p = {};
+	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2254,7 +2259,7 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 static void
 uc_compiler_compile_for(uc_compiler *compiler)
 {
-	uc_token keyvar = {}, valvar = {};
+	uc_token keyvar = { 0 }, valvar = { 0 };
 	bool local;
 
 	uc_compiler_parse_consume(compiler, TK_LPAREN);
@@ -2309,8 +2314,8 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 	size_t i, test_jmp, skip_jmp, next_jmp, value_slot, default_off = 0;
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	uc_locals *locals = &compiler->locals;
-	uc_jmplist cases = {};
-	uc_patchlist p = {};
+	uc_jmplist cases = { 0 };
+	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;

@@ -35,7 +35,7 @@ check that ucode provides proper error messages:
   One of -i or -s is required
   [1]
 
-  $ ucode -m foo -s ''
+  $ ucode -m foo -s ' '
   Runtime error: No module named 'foo' could be found
   At start of program
   
@@ -53,6 +53,7 @@ check that ucode can load fs module:
   One of -i or -s is required
   [1]
 
-  $ ucode -m fs -s ''
+  $ ucode -m fs -s ' '
+    (no-eol)
 
   $ touch moo; ucode -m fs -i moo
