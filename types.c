@@ -963,7 +963,7 @@ ucv_ressource_type_add(const char *name, uc_value_t *proto, void (*freefn)(void 
 static uc_ressource_type_t *
 ucv_ressource_type_get(size_t type)
 {
-	return (type < res_types.count) ? &res_types.entries[type] : NULL;
+	return (type > 0 && type <= res_types.count) ? &res_types.entries[type - 1] : NULL;
 }
 
 uc_ressource_type_t *
@@ -987,7 +987,7 @@ ucv_ressource_new(uc_ressource_type_t *type, void *data)
 	res = xalloc(sizeof(*res));
 	res->header.type = UC_RESSOURCE;
 	res->header.refcount = 1;
-	res->type = type - res_types.entries;
+	res->type = type ? (type - res_types.entries) + 1 : 0;
 	res->data = data;
 
 	return &res->header;

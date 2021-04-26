@@ -1807,10 +1807,8 @@ uc_vm_insn_next(uc_vm *vm, enum insn_type insn)
 		abort();
 	}
 
-	if (k == NULL) {
+	if (k == NULL)
 		k = ucv_ressource_new(NULL, NULL);
-		((uc_ressource_t *)k)->type = UINT64_MAX;
-	}
 
 	iterk = (uc_ressource_t *)k;
 
