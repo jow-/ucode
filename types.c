@@ -1152,7 +1152,7 @@ uc_value_t *
 ucv_from_json(uc_vm *vm, json_object *jso)
 {
 	//uc_array_t *arr;
-	uc_value_t *uv;
+	uc_value_t *uv, *item;
 	int64_t n;
 	size_t i;
 
@@ -1177,8 +1177,19 @@ ucv_from_json(uc_vm *vm, json_object *jso)
 	case json_type_object:
 		uv = ucv_object_new(vm);
 
-		json_object_object_foreach(jso, key, val)
-			ucv_object_add(uv, key, ucv_from_json(vm, val));
+		json_object_object_foreach(jso, key, val) {
+			item = ucv_from_json(vm, val);
+
+			if (!ucv_object_add(uv, key, item))
+				ucv_put(item);
+
+#ifdef __clang_analyzer__
+			/* Clang static analyzer does not understand that the object retains
+			 * our item so pretend to free it here to suppress the false positive
+			 * memory leak warning. */
+			ucv_put(item);
+#endif
+		}
 
 		return uv;
 
@@ -1193,8 +1204,19 @@ ucv_from_json(uc_vm *vm, json_object *jso)
 		*/
 		uv = ucv_array_new(vm);
 
-		for (i = 0; i < json_object_array_length(jso); i++)
-			ucv_array_push(uv, ucv_from_json(vm, json_object_array_get_idx(jso, i)));
+		for (i = 0; i < json_object_array_length(jso); i++) {
+			item = ucv_from_json(vm, json_object_array_get_idx(jso, i));
+
+			if (!ucv_array_push(uv, item))
+				ucv_put(item);
+
+#ifdef __clang_analyzer__
+			/* Clang static analyzer does not understand that the array retains
+			 * our item so pretend to free it here to suppress the false positive
+			 * memory leak warning. */
+			ucv_put(item);
+#endif
+		}
 
 		return uv;
 
@@ -1284,7 +1306,7 @@ ucv_to_string_json_encoded(uc_stringbuf_t *pb, const char *s, size_t len, bool r
 	if (!regexp)
 		ucv_stringbuf_append(pb, "\"");
 
-	for (i = 0; i < len; i++, s++) {
+	for (i = 0; s != NULL && i < len; i++, s++) {
 		switch (*s) {
 		case '"':
 			ucv_stringbuf_append(pb, "\\\"");
@@ -1340,6 +1362,8 @@ ucv_call_tostring(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 	uc_value_t *proto = ucv_prototype_get(uv);
 	uc_value_t *tostr = ucv_object_get(proto, "tostring", NULL);
 	uc_value_t *str;
+	size_t l;
+	char *s;
 
 	if (!ucv_is_callable(tostr))
 		return false;
@@ -1353,10 +1377,13 @@ ucv_call_tostring(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 	str = uc_vm_stack_pop(vm);
 
 	if (ucv_type(str) == UC_STRING) {
+		s = ucv_string_get(str);
+		l = ucv_string_length(str);
+
 		if (json)
-			ucv_to_string_json_encoded(pb, ucv_string_get(str), ucv_string_length(str), false);
-		else
-			ucv_stringbuf_addstr(pb, ucv_string_get(str), ucv_string_length(str));
+			ucv_to_string_json_encoded(pb, s, l, false);
+		else if (s)
+			ucv_stringbuf_addstr(pb, s, l);
 	}
 	else if (json) {
 		ucv_stringbuf_append(pb, "\"\"");
@@ -1384,8 +1411,9 @@ ucv_to_stringbuf(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 	uc_regexp_t *regexp;
 	uc_value_t *argname;
 	uc_array_t *array;
-	size_t i;
+	size_t i, l;
 	double d;
+	char *s;
 
 	if (ucv_is_marked(uv)) {
 		ucv_stringbuf_append(pb, "null");
@@ -1438,10 +1466,16 @@ ucv_to_stringbuf(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 		break;
 
 	case UC_STRING:
-		if (json)
-			ucv_to_string_json_encoded(pb, ucv_string_get(uv), ucv_string_length(uv), false);
-		else
-			ucv_stringbuf_addstr(pb, ucv_string_get(uv), ucv_string_length(uv));
+		s = ucv_string_get(uv);
+		l = ucv_string_length(uv);
+
+		if (s) {
+			if (json)
+				ucv_to_string_json_encoded(pb, s, l, false);
+			else
+				ucv_stringbuf_addstr(pb, s, l);
+		}
+
 		break;
 
 	case UC_ARRAY:
@@ -1530,12 +1564,19 @@ ucv_to_stringbuf(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 			if (i == function->nargs && function->vararg)
 				ucv_stringbuf_append(pb, "...");
 
-			if (argname)
-				ucv_stringbuf_addstr(pb, ucv_string_get(argname), ucv_string_length(argname));
-			else
-				ucv_stringbuf_printf(pb, "[arg%zu]", i);
+			if (argname) {
+				s = ucv_string_get(argname);
+				l = ucv_string_length(argname);
 
-			ucv_put(argname);
+				if (s)
+					ucv_stringbuf_addstr(pb, s, l);
+
+				ucv_put(argname);
+
+				continue;
+			}
+
+			ucv_stringbuf_printf(pb, "[arg%zu]", i);
 		}
 
 		ucv_stringbuf_printf(pb, ")%s { ... }%s",
@@ -1619,6 +1660,7 @@ ucv_equal(uc_value_t *uv1, uc_value_t *uv2)
 {
 	uc_type_t t1 = ucv_type(uv1);
 	uc_type_t t2 = ucv_type(uv2);
+	const char *s1, *s2;
 	uint64_t u1, u2;
 	int64_t n1, n2;
 	bool b1, b2;
@@ -1661,13 +1703,15 @@ ucv_equal(uc_value_t *uv1, uc_value_t *uv2)
 		return false;
 
 	case UC_STRING:
+		s1 = ucv_string_get(uv1);
+		s2 = ucv_string_get(uv2);
 		u1 = ucv_string_length(uv1);
 		u2 = ucv_string_length(uv2);
 
-		if (u1 != u2)
+		if (s1 == NULL || s2 == NULL || u1 != u2)
 			return false;
 
-		return (memcmp(ucv_string_get(uv1), ucv_string_get(uv2), u1) == 0);
+		return (memcmp(s1, s2, u1) == 0);
 
 	case UC_ARRAY:
 		u1 = ucv_array_length(uv1);
