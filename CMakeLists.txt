@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.17)
 include(CheckFunctionExists)
 include(CheckSymbolExists)
 
@@ -104,6 +104,7 @@ IF(UNIT_TESTING)
   ENABLE_TESTING()
   ADD_DEFINITIONS(-DUNIT_TESTING)
   ADD_SUBDIRECTORY(tests)
+  LIST(APPEND CMAKE_CTEST_ARGUMENTS "--output-on-failure")
 
   IF(CMAKE_C_COMPILER_ID STREQUAL "Clang")
 	ADD_EXECUTABLE(ucode-san ${UCODE_SOURCES})
