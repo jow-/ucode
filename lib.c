@@ -2127,9 +2127,9 @@ uc_system(uc_vm *vm, size_t nargs)
 	switch (ucv_type(cmdline)) {
 	case UC_STRING:
 		arglist = xalloc(sizeof(*arglist) * 4);
-		arglist[0] = "/bin/sh";
-		arglist[1] = "-c";
-		arglist[2] = ucv_string_get(cmdline);
+		arglist[0] = xstrdup("/bin/sh");
+		arglist[1] = xstrdup("-c");
+		arglist[2] = ucv_to_string(vm, cmdline);
 		arglist[3] = NULL;
 		break;
 
