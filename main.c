@@ -99,8 +99,8 @@ parse(uc_parse_config *config, uc_source *src,
 	uc_value_t *globals = NULL;
 	uc_function_t *entry;
 	uc_vm vm = {};
-	char c, c2, *err;
-	int rc = 0;
+	int c, c2, rc = 0;
+	char *err;
 
 	uc_vm_init(&vm, config);
 
