@@ -779,6 +779,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 	struct lh_entry *existing_entry;
 	uc_value_t *existing_value;
 	unsigned long hash;
+	void *k;
 
 	if (ucv_type(uv) != UC_OBJECT)
 		return false;
@@ -787,7 +788,15 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 	existing_entry = lh_table_lookup_entry_w_hash(object->table, (const void *)key, hash);
 
 	if (existing_entry == NULL) {
-		return (lh_table_insert_w_hash(object->table, xstrdup(key), val, hash, 0) == 0);
+		k = xstrdup(key);
+
+		if (lh_table_insert_w_hash(object->table, k, val, hash, 0) != 0) {
+			free(k);
+
+			return false;
+		}
+
+		return true;
 	}
 
 	existing_value = (uc_value_t *)lh_entry_v(existing_entry);
