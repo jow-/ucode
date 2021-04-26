@@ -24,25 +24,3 @@ jobs:
           path: |
             build/scan
             tests/cram/**/*.t.err
-
-  sdk_build:
-    name: Build with OpenWrt ${{ matrix.sdk_platform }} SDK (out of tree)
-    runs-on: ubuntu-20.04
-
-    strategy:
-      fail-fast: false
-      matrix:
-        sdk_platform:
-          - ath79-generic
-          - imx6-generic
-          - malta-be
-          - mvebu-cortexa53
-
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Out of tree build with OpenWrt ${{ matrix.sdk_platform }} SDK
-        uses: ynezz/gh-actions-openwrt-ci-sdk@v0.0.1
-        env:
-          CI_TARGET_SDK_RELEASE: master
-          CI_TARGET_SDK_IMAGE: ${{ matrix.sdk_platform }}
