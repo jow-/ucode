@@ -356,7 +356,7 @@ ucv_stringbuf_new(void)
 		}
 	};
 
-	printbuf_memappend_fast(sb, (char *)&ustr, sizeof(ustr));
+	printbuf_memappend_fast(sb, (char *)&ustr, (int)sizeof(ustr));
 
 	return sb;
 }
@@ -1397,7 +1397,7 @@ ucv_call_tostring(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 void
 _ucv_stringbuf_append(uc_stringbuf_t *pb, const char *str, size_t len)
 {
-	printbuf_memappend_fast(pb, str, len);
+	printbuf_memappend_fast(pb, str, (int)len);
 }
 
 void

@@ -888,7 +888,7 @@ uc_splice(uc_vm *vm, size_t nargs)
 			if (remlen < 0)
 				remlen = 0;
 		}
-		else if ((uint64_t)remlen > arrlen - ofs) {
+		else if ((uint64_t)remlen > arrlen - (uint64_t)ofs) {
 			remlen = arrlen - ofs;
 		}
 
@@ -1025,7 +1025,7 @@ uc_substr(uc_vm *vm, size_t nargs)
 			if (sublen < 0)
 				sublen = 0;
 		}
-		else if ((uint64_t)sublen > len - ofs) {
+		else if ((uint64_t)sublen > len - (uint64_t)ofs) {
 			sublen = len - ofs;
 		}
 

@@ -1836,7 +1836,7 @@ uc_vm_insn_next(uc_vm *vm, enum insn_type insn)
 		n = (uintptr_t)iterk->data;
 
 		if (n < ucv_array_length(v)) {
-			iterk->data = (void *)(n + 1);
+			iterk->data = (void *)(uintptr_t)(n + 1);
 
 			if (insn == I_NEXTKV)
 				uc_vm_stack_push(vm, ucv_uint64_new(n));

@@ -348,7 +348,7 @@ add_num(uc_value_list *list, int64_t n)
 		list->index[list->isize++] = (TAG_TYPE)(TAG_NUM | TAG_SET_NV(n));
 	}
 	else {
-		if (list->dsize + sz > TAG_MASK) {
+		if ((TAG_TYPE)list->dsize + sz > TAG_MASK) {
 			fprintf(stderr, "Constant data too large\n");
 			abort();
 		}
@@ -400,7 +400,7 @@ add_dbl(uc_value_list *list, double d)
 {
 	size_t sz = TAG_ALIGN(sizeof(d));
 
-	if (list->dsize + sz > TAG_MASK) {
+	if ((TAG_TYPE)list->dsize + sz > TAG_MASK) {
 		fprintf(stderr, "Constant data too large\n");
 		abort();
 	}
@@ -450,7 +450,7 @@ add_str(uc_value_list *list, const char *s, size_t slen)
 
 	sz = TAG_ALIGN(sizeof(uint32_t) + slen);
 
-	if (list->dsize + sz > TAG_MASK) {
+	if ((TAG_TYPE)list->dsize + sz > TAG_MASK) {
 		fprintf(stderr, "Constant data too large\n");
 		abort();
 	}
@@ -528,7 +528,7 @@ add_ptr(uc_value_list *list, void *ptr)
 {
 	size_t sz = TAG_ALIGN(sizeof(ptr));
 
-	if (list->dsize + sz > TAG_MASK) {
+	if ((TAG_TYPE)list->dsize + sz > TAG_MASK) {
 		fprintf(stderr, "Constant data too large\n");
 		abort();
 	}
