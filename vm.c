@@ -842,8 +842,10 @@ uc_vm_get_error_context(uc_vm *vm)
 
 	if (offset)
 		format_error_context(buf, frame->closure->function->source, stacktrace, offset);
+	else if (frame->ip != chunk->entries)
+		ucv_stringbuf_printf(buf, "At instruction %zu", (frame->ip - chunk->entries) - 1);
 	else
-		ucv_stringbuf_printf(buf, "At offset %zu", (frame->ip - chunk->entries) - 1);
+		ucv_stringbuf_append(buf, "At start of program");
 
 	ucv_object_add(ucv_array_get(stacktrace, 0), "context", ucv_stringbuf_finish(buf));
 

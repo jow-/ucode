@@ -37,13 +37,13 @@ check that ucode provides proper error messages:
 
   $ ucode -m foo -s ''
   Runtime error: No module named 'foo' could be found
-  At offset 0
+  At start of program
   
   [1]
 
   $ touch moo; ucode -m foo -i moo
   Runtime error: No module named 'foo' could be found
-  At offset 0
+  At start of program
   
   [1]
 
