@@ -967,7 +967,7 @@ uc_split(uc_vm *vm, size_t nargs)
 	else if (ucv_type(sep) == UC_STRING) {
 		sepstr = ucv_string_get(sep);
 
-		for (p = splitstr + (*sepstr ? 1 : 0), seplen = strlen(sepstr); *p; p++) {
+		for (p = splitstr, seplen = strlen(sepstr); *p; p++) {
 			if (!strncmp(p, sepstr, seplen)) {
 				if (*sepstr || p > splitstr)
 					ucv_array_push(arr, ucv_string_new_length(splitstr, p - splitstr));
@@ -977,8 +977,7 @@ uc_split(uc_vm *vm, size_t nargs)
 			}
 		}
 
-		if (*splitstr)
-			ucv_array_push(arr, ucv_string_new_length(splitstr, p - splitstr));
+		ucv_array_push(arr, ucv_string_new_length(splitstr, p - splitstr));
 	}
 	else {
 		ucv_put(arr);

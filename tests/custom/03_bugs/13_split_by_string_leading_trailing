@@ -1,0 +1,11 @@
+When splitting a string, the existing uc_split() implementation failed
+to produce an empty leading and trailing result array element when the
+subject string started or ended with a delimitter.
+
+-- Expect stdout --
+[ "", "foo", "" ]
+-- End --
+
+-- Testcase --
+{{ split("/foo/", "/") }}
+-- End --
