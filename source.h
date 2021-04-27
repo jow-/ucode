@@ -22,16 +22,8 @@
 #include <stdio.h>
 
 #include "util.h"
+#include "types.h"
 
-
-uc_declare_vector(uc_lineinfo, uint8_t);
-
-typedef struct {
-	char *filename, *buffer;
-	FILE *fp;
-	size_t usecount, off;
-	uc_lineinfo lineinfo;
-} uc_source;
 
 uc_source *uc_source_new_file(const char *path);
 uc_source *uc_source_new_buffer(const char *name, char *buf, size_t len);

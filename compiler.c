@@ -88,7 +88,7 @@ uc_compiler_parse_rules[TK_ERROR + 1] = {
 };
 
 static ssize_t
-uc_compiler_declare_local(uc_compiler *compiler, json_object *name);
+uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name);
 
 static ssize_t
 uc_compiler_initialize_local(uc_compiler *compiler);
@@ -96,11 +96,11 @@ uc_compiler_initialize_local(uc_compiler *compiler);
 static void
 uc_compiler_init(uc_compiler *compiler, const char *name, size_t srcpos, uc_source *source)
 {
-	json_object *varname = xjs_new_string("(callee)");
+	uc_value_t *varname = ucv_string_new("(callee)");
 
 	compiler->scope_depth = 0;
 
-	compiler->function = uc_function_new(name, srcpos, source);
+	compiler->function = ucv_function_new(name, srcpos, source);
 
 	compiler->locals.count = 0;
 	compiler->locals.entries = NULL;
@@ -117,69 +117,65 @@ uc_compiler_init(uc_compiler *compiler, const char *name, size_t srcpos, uc_sour
 	/* reserve stack slot 0 */
 	uc_compiler_declare_local(compiler, varname);
 	uc_compiler_initialize_local(compiler);
-	uc_value_put(varname);
+	ucv_put(varname);
 }
 
 static uc_chunk *
 uc_compiler_current_chunk(uc_compiler *compiler)
 {
-	return &compiler->function->chunk;
+	uc_function_t *fn = (uc_function_t *)compiler->function;
+
+	return &fn->chunk;
+}
+
+static uc_source *
+uc_compiler_current_source(uc_compiler *compiler)
+{
+	uc_function_t *fn = (uc_function_t *)compiler->function;
+
+	return fn->source;
 }
 
 __attribute__((format(printf, 3, 0))) static void
 uc_compiler_syntax_error(uc_compiler *compiler, size_t off, const char *fmt, ...)
 {
+	uc_stringbuf_t *buf = compiler->parser->error;
 	size_t line = 0, byte = 0, len = 0;
-	char *context = NULL;
-	char *s, *tmp;
 	va_list ap;
+	char *s;
 
 	if (compiler->parser->synchronizing)
 		return;
 
 	compiler->parser->synchronizing = true;
 
+	if (!buf)
+		buf = compiler->parser->error = xprintbuf_new();
+
 	if (!off)
-		off = uc_function_get_srcpos(compiler->function,
+		off = ucv_function_srcpos(compiler->function,
 			uc_compiler_current_chunk(compiler)->count);
 
 	if (off) {
 		byte = off;
-		line = uc_source_get_line(compiler->function->source, &byte);
-
-		format_error_context(&context, &len, compiler->function->source, NULL, off);
+		line = uc_source_get_line(uc_compiler_current_source(compiler), &byte);
 	}
 
 	va_start(ap, fmt);
-	xvasprintf(&s, fmt, ap);
+	len = xvasprintf(&s, fmt, ap);
 	va_end(ap);
 
-	xasprintf(&tmp, "Syntax error: %s\n", s);
+	ucv_stringbuf_append(buf, "Syntax error: ");
+	ucv_stringbuf_addstr(buf, s, len);
+	ucv_stringbuf_append(buf, "\n");
+
 	free(s);
-	s = tmp;
 
-	if (line) {
-		xasprintf(&tmp, "%sIn line %zu, byte %zu:\n", s, line, byte);
-		free(s);
-		s = tmp;
-	}
+	if (line)
+		ucv_stringbuf_printf(buf, "In line %zu, byte %zu:\n", line, byte);
 
-	if (context) {
-		xasprintf(&tmp, "%s%s\n\n", s, context);
-		free(context);
-		free(s);
-		s = tmp;
-	}
-
-	if (compiler->parser->error) {
-		xasprintf(&tmp, "%s%s", compiler->parser->error, s);
-		free(compiler->parser->error);
-		free(s);
-		compiler->parser->error = tmp;
-	}
-	else {
-		compiler->parser->error = s;
-	}
+	if (format_error_context(buf, uc_compiler_current_source(compiler), NULL, off))
+		ucv_stringbuf_append(buf, "\n\n");
 }
 
 static size_t
@@ -201,7 +197,7 @@ uc_compiler_parse_advance(uc_compiler *compiler)
 {
 	bool no_regexp;
 
-	uc_value_put(compiler->parser->prev.val);
+	ucv_put(compiler->parser->prev.uv);
 	compiler->parser->prev = compiler->parser->curr;
 
 	while (true) {
@@ -262,10 +258,10 @@ uc_compiler_parse_advance(uc_compiler *compiler)
 			break;
 
 		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos, "%s",
-			json_object_get_string(compiler->parser->curr.val));
+			ucv_string_get(compiler->parser->curr.uv));
 
-		uc_value_put(compiler->parser->curr.val);
-		compiler->parser->curr.val = NULL;
+		ucv_put(compiler->parser->curr.uv);
+		compiler->parser->curr.uv = NULL;
 	}
 }
 
@@ -472,7 +468,12 @@ uc_compiler_emit_s32(uc_compiler *compiler, size_t srcpos, int32_t n)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t lineoff = uc_compiler_set_srcpos(compiler, srcpos);
-	uint32_t v = n + 0x7fffffff;
+	uint32_t v;
+
+	if (n <= 0)
+		v = n + 0x7fffffff;
+	else
+		v = (uint32_t)n + 0x7fffffff;
 
 	uc_chunk_add(chunk, v / 0x1000000, lineoff);
 	uc_chunk_add(chunk, (v / 0x10000) % 0x100, 0);
@@ -505,7 +506,7 @@ uc_compiler_set_u32(uc_compiler *compiler, size_t off, uint32_t n)
 }
 
 static size_t
-uc_compiler_emit_constant(uc_compiler *compiler, size_t srcpos, json_object *val)
+uc_compiler_emit_constant(uc_compiler *compiler, size_t srcpos, uc_value_t *val)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t cidx = uc_chunk_add_constant(chunk, val);
@@ -517,7 +518,7 @@ uc_compiler_emit_constant(uc_compiler *compiler, size_t srcpos, json_object *val
 }
 
 static size_t
-uc_compiler_emit_regexp(uc_compiler *compiler, size_t srcpos, json_object *val)
+uc_compiler_emit_regexp(uc_compiler *compiler, size_t srcpos, uc_value_t *val)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t cidx = uc_chunk_add_constant(chunk, val);
@@ -559,9 +560,9 @@ uc_compiler_get_jmpaddr(uc_compiler *compiler, size_t off)
 	assert(off + 4 < chunk->count);
 
 	return (
-		chunk->entries[off + 1] * 0x1000000 +
-		chunk->entries[off + 2] * 0x10000 +
-		chunk->entries[off + 3] * 0x100 +
+		chunk->entries[off + 1] * 0x1000000UL +
+		chunk->entries[off + 2] * 0x10000UL +
+		chunk->entries[off + 3] * 0x100UL +
 		chunk->entries[off + 4]
 	) - 0x7fffffff;
 }
@@ -581,7 +582,7 @@ uc_compiler_set_jmpaddr(uc_compiler *compiler, size_t off, uint32_t dest)
 	chunk->entries[off + 4] = addr % 0x100;
 }
 
-static uc_function *
+static uc_function_t *
 uc_compiler_finish(uc_compiler *compiler)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
@@ -600,7 +601,7 @@ uc_compiler_finish(uc_compiler *compiler)
 			false,
 			locals->entries[i].name);
 
-		uc_value_put(locals->entries[i].name);
+		ucv_put(locals->entries[i].name);
 	}
 
 	for (i = 0; i < upvals->count; i++) {
@@ -611,19 +612,19 @@ uc_compiler_finish(uc_compiler *compiler)
 			true,
 			upvals->entries[i].name);
 
-		uc_value_put(upvals->entries[i].name);
+		ucv_put(upvals->entries[i].name);
 	}
 
 	uc_vector_clear(locals);
 	uc_vector_clear(upvals);
 
 	if (compiler->parser->error) {
-		uc_value_put(compiler->function->header.jso);
+		ucv_put(compiler->function);
 
 		return NULL;
 	}
 
-	return compiler->function;
+	return (uc_function_t *)compiler->function;
 }
 
 static void
@@ -640,7 +641,7 @@ uc_compiler_leave_scope(uc_compiler *compiler)
 
 	compiler->scope_depth--;
 
-	while (locals->count > 0 && locals->entries[locals->count - 1].depth > compiler->scope_depth) {
+	while (locals->count > 0 && locals->entries[locals->count - 1].depth > (ssize_t)compiler->scope_depth) {
 		locals->count--;
 
 		uc_chunk_debug_add_variable(chunk,
@@ -650,7 +651,7 @@ uc_compiler_leave_scope(uc_compiler *compiler)
 			false,
 			locals->entries[locals->count].name);
 
-		uc_value_put(locals->entries[locals->count].name);
+		ucv_put(locals->entries[locals->count].name);
 		locals->entries[locals->count].name = NULL;
 
 		uc_compiler_emit_insn(compiler, 0,
@@ -659,7 +660,7 @@ uc_compiler_leave_scope(uc_compiler *compiler)
 }
 
 static ssize_t
-uc_compiler_declare_local(uc_compiler *compiler, json_object *name)
+uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	uc_locals *locals = &compiler->locals;
@@ -675,15 +676,15 @@ uc_compiler_declare_local(uc_compiler *compiler, json_object *name)
 		return -1;
 	}
 
-	str1 = json_object_get_string(name);
-	len1 = json_object_get_string_len(name);
+	str1 = ucv_string_get(name);
+	len1 = ucv_string_length(name);
 
 	for (i = locals->count; i > 0; i--) {
-		if (locals->entries[i - 1].depth != -1 && locals->entries[i - 1].depth < compiler->scope_depth)
+		if (locals->entries[i - 1].depth != -1 && locals->entries[i - 1].depth < (ssize_t)compiler->scope_depth)
 			break;
 
-		str2 = json_object_get_string(locals->entries[i - 1].name);
-		len2 = json_object_get_string_len(locals->entries[i - 1].name);
+		str2 = ucv_string_get(locals->entries[i - 1].name);
+		len2 = ucv_string_length(locals->entries[i - 1].name);
 
 		if (len1 == len2 && !strcmp(str1, str2)) {
 			if (compiler->parser->config &&
@@ -699,7 +700,7 @@ uc_compiler_declare_local(uc_compiler *compiler, json_object *name)
 
 	uc_vector_grow(locals);
 
-	locals->entries[locals->count].name = uc_value_get(name);
+	locals->entries[locals->count].name = ucv_get(name);
 	locals->entries[locals->count].depth = -1;
 	locals->entries[locals->count].captured = false;
 	locals->entries[locals->count].from = chunk->count;
@@ -719,18 +720,18 @@ uc_compiler_initialize_local(uc_compiler *compiler)
 }
 
 static ssize_t
-uc_compiler_resolve_local(uc_compiler *compiler, json_object *name)
+uc_compiler_resolve_local(uc_compiler *compiler, uc_value_t *name)
 {
 	uc_locals *locals = &compiler->locals;
 	const char *str1, *str2;
 	size_t i, len1, len2;
 
-	str1 = json_object_get_string(name);
-	len1 = json_object_get_string_len(name);
+	str1 = ucv_string_get(name);
+	len1 = ucv_string_length(name);
 
 	for (i = locals->count; i > 0; i--) {
-		str2 = json_object_get_string(locals->entries[i - 1].name);
-		len2 = json_object_get_string_len(locals->entries[i - 1].name);
+		str2 = ucv_string_get(locals->entries[i - 1].name);
+		len2 = ucv_string_length(locals->entries[i - 1].name);
 
 		if (len1 != len2 || strcmp(str1, str2))
 			continue;
@@ -749,9 +750,9 @@ uc_compiler_resolve_local(uc_compiler *compiler, json_object *name)
 }
 
 static ssize_t
-uc_compiler_add_upval(uc_compiler *compiler, ssize_t idx, bool local, json_object *name)
+uc_compiler_add_upval(uc_compiler *compiler, size_t idx, bool local, uc_value_t *name)
 {
-	uc_function *function = compiler->function;
+	uc_function_t *function = (uc_function_t *)compiler->function;
 	uc_upvals *upvals = &compiler->upvals;
 	uc_upval *uv;
 	size_t i;
@@ -771,7 +772,7 @@ uc_compiler_add_upval(uc_compiler *compiler, ssize_t idx, bool local, json_objec
 
 	upvals->entries[upvals->count].local = local;
 	upvals->entries[upvals->count].index = idx;
-	upvals->entries[upvals->count].name  = uc_value_get(name);
+	upvals->entries[upvals->count].name  = ucv_get(name);
 
 	function->nupvals++;
 
@@ -779,7 +780,7 @@ uc_compiler_add_upval(uc_compiler *compiler, ssize_t idx, bool local, json_objec
 }
 
 static ssize_t
-uc_compiler_resolve_upval(uc_compiler *compiler, json_object *name)
+uc_compiler_resolve_upval(uc_compiler *compiler, uc_value_t *name)
 {
 	ssize_t idx;
 
@@ -989,7 +990,7 @@ uc_compiler_compile_binary(uc_compiler *compiler, bool assignable)
 }
 
 static enum insn_type
-uc_compiler_emit_variable_rw(uc_compiler *compiler, json_object *varname, uc_tokentype_t type)
+uc_compiler_emit_variable_rw(uc_compiler *compiler, uc_value_t *varname, uc_tokentype_t type)
 {
 	enum insn_type insn;
 	uint32_t sub_insn;
@@ -1050,7 +1051,7 @@ uc_compiler_compile_expression(uc_compiler *compiler)
 }
 
 static bool
-uc_compiler_compile_assignment(uc_compiler *compiler, json_object *var)
+uc_compiler_compile_assignment(uc_compiler *compiler, uc_value_t *var)
 {
 	uc_tokentype_t type = compiler->parser->curr.type;
 
@@ -1066,12 +1067,12 @@ uc_compiler_compile_assignment(uc_compiler *compiler, json_object *var)
 }
 
 static bool
-uc_compiler_compile_arrowfn(uc_compiler *compiler, json_object *args, bool restarg)
+uc_compiler_compile_arrowfn(uc_compiler *compiler, uc_value_t *args, bool restarg)
 {
-	bool array = json_object_is_type(args, json_type_array);
-	uc_compiler fncompiler = {};
+	bool array = (ucv_type(args) == UC_ARRAY);
+	uc_compiler fncompiler = { 0 };
 	size_t i, pos, load_off;
-	uc_function *fn;
+	uc_function_t *fn;
 	ssize_t slot;
 
 	if (!uc_compiler_parse_match(compiler, TK_ARROW))
@@ -1080,21 +1081,22 @@ uc_compiler_compile_arrowfn(uc_compiler *compiler, json_object *args, bool resta
 	pos = compiler->parser->prev.pos;
 
 	uc_compiler_init(&fncompiler, NULL, compiler->parser->prev.pos,
-		compiler->function->source);
+		uc_compiler_current_source(compiler));
 
 	fncompiler.parent = compiler;
 	fncompiler.parser = compiler->parser;
 
-	fncompiler.function->arrow = true;
-	fncompiler.function->vararg = args ? restarg : false;
-	fncompiler.function->nargs = array ? json_object_array_length(args) : !!args;
+	fn = (uc_function_t *)fncompiler.function;
+	fn->arrow = true;
+	fn->vararg = args ? restarg : false;
+	fn->nargs = array ? ucv_array_length(args) : !!args;
 
 	uc_compiler_enter_scope(&fncompiler);
 
 	/* declare local variables for arguments */
-	for (i = 0; i < fncompiler.function->nargs; i++) {
+	for (i = 0; i < fn->nargs; i++) {
 		slot = uc_compiler_declare_local(&fncompiler,
-			array ? json_object_array_get_idx(args, i) : args);
+			array ? ucv_array_get(args, i) : args);
 
 		if (slot != -1)
 			uc_compiler_syntax_error(&fncompiler, pos,
@@ -1112,8 +1114,8 @@ uc_compiler_compile_arrowfn(uc_compiler *compiler, json_object *args, bool resta
 		uc_compiler_parse_consume(&fncompiler, TK_RBRACE);
 
 		/* overwrite last pop result with return */
-		if (fncompiler.function->chunk.count) {
-			uc_chunk_pop(&fncompiler.function->chunk);
+		if (fn->chunk.count) {
+			uc_chunk_pop(&fn->chunk);
 			uc_compiler_emit_insn(&fncompiler, 0, I_RETURN);
 		}
 	}
@@ -1127,7 +1129,7 @@ uc_compiler_compile_arrowfn(uc_compiler *compiler, json_object *args, bool resta
 	load_off = uc_compiler_emit_u32(compiler, 0, 0);
 
 	/* encode upvalue information */
-	for (i = 0; i < fncompiler.function->nupvals; i++)
+	for (i = 0; i < fn->nupvals; i++)
 		uc_compiler_emit_s32(compiler, 0,
 			fncompiler.upvals.entries[i].local
 				? -(fncompiler.upvals.entries[i].index + 1)
@@ -1139,13 +1141,13 @@ uc_compiler_compile_arrowfn(uc_compiler *compiler, json_object *args, bool resta
 	if (fn)
 		uc_compiler_set_u32(compiler, load_off,
 			uc_chunk_add_constant(uc_compiler_current_chunk(compiler),
-				fn->header.jso));
+				&fn->header));
 
 	return true;
 }
 
 static uc_tokentype_t
-uc_compiler_compile_var_or_arrowfn(uc_compiler *compiler, bool assignable, json_object *name)
+uc_compiler_compile_var_or_arrowfn(uc_compiler *compiler, bool assignable, uc_value_t *name)
 {
 	uc_tokentype_t rv;
 
@@ -1166,7 +1168,7 @@ uc_compiler_compile_var_or_arrowfn(uc_compiler *compiler, bool assignable, json_
 static void
 uc_compiler_compile_paren(uc_compiler *compiler, bool assignable)
 {
-	json_object *varnames = NULL, *varname;
+	uc_value_t *varnames = NULL, *varname;
 	bool maybe_arrowfn = false;
 	bool restarg = false;
 
@@ -1175,17 +1177,17 @@ uc_compiler_compile_paren(uc_compiler *compiler, bool assignable)
 	while (true) {
 		if (uc_compiler_parse_match(compiler, TK_LABEL)) {
 			if (!varnames)
-				varnames = xjs_new_array();
+				varnames = ucv_array_new(NULL);
 
-			json_object_array_add(varnames, uc_value_get(compiler->parser->prev.val));
+			ucv_array_push(varnames, ucv_get(compiler->parser->prev.uv));
 		}
 		else if (uc_compiler_parse_match(compiler, TK_ELLIP)) {
 			uc_compiler_parse_consume(compiler, TK_LABEL);
 
 			if (!varnames)
-				varnames = xjs_new_array();
+				varnames = ucv_array_new(NULL);
 
-			json_object_array_add(varnames, uc_value_get(compiler->parser->prev.val));
+			ucv_array_push(varnames, ucv_get(compiler->parser->prev.uv));
 
 			uc_compiler_parse_consume(compiler, TK_RPAREN);
 
@@ -1232,8 +1234,8 @@ uc_compiler_compile_paren(uc_compiler *compiler, bool assignable)
 	 * consecutive labels. */
 	if (varnames) {
 		/* Get last variable name */
-		varname = json_object_array_get_idx(varnames,
-			json_object_array_length(varnames) - 1);
+		varname = ucv_array_get(varnames,
+			ucv_array_length(varnames) - 1);
 
 		/* If we consumed the right paren, the expression is complete and we
 		 * only need to emit a variable read operation for the last parsed
@@ -1279,14 +1281,14 @@ uc_compiler_compile_paren(uc_compiler *compiler, bool assignable)
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 
 out:
-	uc_value_put(varnames);
+	ucv_put(varnames);
 }
 
 static void
 uc_compiler_compile_call(uc_compiler *compiler, bool assignable)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	uc_jmplist spreads = {};
+	uc_jmplist spreads = { 0 };
 	enum insn_type type;
 	size_t i, nargs = 0;
 
@@ -1358,20 +1360,20 @@ uc_compiler_compile_constant(uc_compiler *compiler, bool assignable)
 
 	case TK_BOOL:
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos,
-			json_object_get_boolean(compiler->parser->prev.val) ? I_LTRUE : I_LFALSE);
+			ucv_boolean_get(compiler->parser->prev.uv) ? I_LTRUE : I_LFALSE);
 		break;
 
 	case TK_DOUBLE:
 	case TK_STRING:
-		uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.val);
+		uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
 		break;
 
 	case TK_REGEXP:
-		uc_compiler_emit_regexp(compiler, compiler->parser->prev.pos, compiler->parser->prev.val);
+		uc_compiler_emit_regexp(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
 		break;
 
 	case TK_NUMBER:
-		n = json_object_get_int64(compiler->parser->prev.val);
+		n = ucv_int64_get(compiler->parser->prev.uv);
 
 		if (n >= -0x7f && n <= 0x7f) {
 			uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LOAD8);
@@ -1386,7 +1388,7 @@ uc_compiler_compile_constant(uc_compiler *compiler, bool assignable)
 			uc_compiler_emit_s32(compiler, compiler->parser->prev.pos, n);
 		}
 		else {
-			uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.val);
+			uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
 		}
 
 		break;
@@ -1406,10 +1408,10 @@ uc_compiler_compile_comma(uc_compiler *compiler, bool assignable)
 static void
 uc_compiler_compile_labelexpr(uc_compiler *compiler, bool assignable)
 {
-	json_object *label = uc_value_get(compiler->parser->prev.val);
+	uc_value_t *label = ucv_get(compiler->parser->prev.uv);
 
 	uc_compiler_compile_var_or_arrowfn(compiler, assignable, label);
-	uc_value_put(label);
+	ucv_put(label);
 }
 
 static bool
@@ -1425,18 +1427,18 @@ uc_compiler_compile_delimitted_block(uc_compiler *compiler, uc_tokentype_t endty
 static void
 uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
 {
-	uc_compiler fncompiler = {};
-	json_object *name = NULL;
+	uc_compiler fncompiler = { 0 };
+	uc_value_t *name = NULL;
 	ssize_t slot = -1, pos;
 	uc_tokentype_t type;
 	size_t i, load_off;
-	uc_function *fn;
+	uc_function_t *fn;
 
 	pos = compiler->parser->prev.pos;
 	type = compiler->parser->prev.type;
 
 	if (uc_compiler_parse_match(compiler, TK_LABEL)) {
-		name = compiler->parser->prev.val;
+		name = compiler->parser->prev.uv;
 
 		/* Named functions are syntactic sugar for local variable declaration
 		 * with function value assignment. If a name token was encountered,
@@ -1448,11 +1450,12 @@ uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
 	}
 
 	uc_compiler_init(&fncompiler,
-		name ? json_object_get_string(name) : NULL, compiler->parser->prev.pos,
-		compiler->function->source);
+		name ? ucv_string_get(name) : NULL, compiler->parser->prev.pos,
+		uc_compiler_current_source(compiler));
 
 	fncompiler.parent = compiler;
 	fncompiler.parser = compiler->parser;
+	fn = (uc_function_t *)fncompiler.function;
 
 	uc_compiler_parse_consume(&fncompiler, TK_LPAREN);
 
@@ -1464,15 +1467,15 @@ uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
 			break;
 
 		if (uc_compiler_parse_match(&fncompiler, TK_ELLIP))
-			fncompiler.function->vararg = true;
+			fn->vararg = true;
 
 		if (uc_compiler_parse_match(&fncompiler, TK_LABEL)) {
-			fncompiler.function->nargs++;
+			fn->nargs++;
 
-			uc_compiler_declare_local(&fncompiler, fncompiler.parser->prev.val);
+			uc_compiler_declare_local(&fncompiler, fncompiler.parser->prev.uv);
 			uc_compiler_initialize_local(&fncompiler);
 
-			if (fncompiler.function->vararg ||
+			if (fn->vararg ||
 			    !uc_compiler_parse_match(&fncompiler, TK_COMMA))
 				break;
 		}
@@ -1505,7 +1508,7 @@ uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
 	load_off = uc_compiler_emit_u32(compiler, 0, 0);
 
 	/* encode upvalue information */
-	for (i = 0; i < fncompiler.function->nupvals; i++)
+	for (i = 0; i < fn->nupvals; i++)
 		uc_compiler_emit_s32(compiler, 0,
 			fncompiler.upvals.entries[i].local
 				? -(fncompiler.upvals.entries[i].index + 1)
@@ -1517,7 +1520,7 @@ uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
 	if (fn)
 		uc_compiler_set_u32(compiler, load_off,
 			uc_chunk_add_constant(uc_compiler_current_chunk(compiler),
-				fn->header.jso));
+				&fn->header));
 
 	/* if a local variable of the same name already existed, overwrite its value
 	 * with the compiled function here */
@@ -1563,7 +1566,7 @@ uc_compiler_compile_dot(uc_compiler *compiler, bool assignable)
 {
 	/* parse label lhs */
 	uc_compiler_parse_consume(compiler, TK_LABEL);
-	uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.val);
+	uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
 
 	/* depending on context, compile into I_UVAL, I_SVAL or I_LVAL operation */
 	if (!assignable || !uc_compiler_compile_assignment(compiler, NULL))
@@ -1718,7 +1721,7 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 
 			/* load label */
 			uc_compiler_emit_constant(compiler, compiler->parser->prev.pos,
-				compiler->parser->prev.val);
+				compiler->parser->prev.uv);
 
 			/* If the property name is a plain label followed by a comma or
 			 * closing curly brace, treat it as ES2015 property shorthand
@@ -1727,7 +1730,7 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 			    (uc_compiler_parse_check(compiler, TK_COMMA) ||
 			     uc_compiler_parse_check(compiler, TK_RBRACE))) {
 				uc_compiler_emit_variable_rw(compiler,
-					compiler->parser->prev.val, 0);
+					compiler->parser->prev.uv, 0);
 			}
 
 			/* ... otherwise treat it as ordinary `key: value` tuple */
@@ -1757,7 +1760,6 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 	if (len > 0) {
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_SOBJ);
 		uc_compiler_emit_u32(compiler, 0, len);
-		len = 0;
 	}
 
 	/* set initial size hint */
@@ -1766,7 +1768,7 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 
 
 static void
-uc_compiler_declare_local_null(uc_compiler *compiler, size_t srcpos, json_object *varname)
+uc_compiler_declare_local_null(uc_compiler *compiler, size_t srcpos, uc_value_t *varname)
 {
 	ssize_t existing_slot = uc_compiler_declare_local(compiler, varname);
 
@@ -1820,7 +1822,7 @@ uc_compiler_declare_internal(uc_compiler *compiler, size_t srcpos, const char *n
 
 	uc_vector_grow(locals);
 
-	locals->entries[locals->count].name = xjs_new_string(name);
+	locals->entries[locals->count].name = ucv_string_new(name);
 	locals->entries[locals->count].depth = compiler->scope_depth;
 	locals->entries[locals->count].captured = false;
 	locals->entries[locals->count].from = chunk->count;
@@ -1839,7 +1841,7 @@ uc_compiler_compile_local(uc_compiler *compiler)
 		uc_compiler_parse_consume(compiler, TK_LABEL);
 
 		/* declare local variable */
-		slot = uc_compiler_declare_local(compiler, compiler->parser->prev.val);
+		slot = uc_compiler_declare_local(compiler, compiler->parser->prev.uv);
 
 		/* if followed by '=', parse initializer expression */
 		if (uc_compiler_parse_match(compiler, TK_ASSIGN))
@@ -1894,7 +1896,7 @@ uc_compiler_compile_if(uc_compiler *compiler)
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off, jmp_off, i;
 	bool expect_endif = false;
-	uc_jmplist elifs = {};
+	uc_jmplist elifs = { 0 };
 	uc_tokentype_t type;
 
 	/* parse & compile condition expression */
@@ -1999,7 +2001,7 @@ uc_compiler_compile_while(uc_compiler *compiler)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t cond_off, jmpz_off, end_off;
-	uc_patchlist p = {};
+	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2047,7 +2049,7 @@ uc_compiler_compile_for_in(uc_compiler *compiler, bool local, uc_token *kvar, uc
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t skip_jmp, test_jmp, key_slot, val_slot;
-	uc_patchlist p = {};
+	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2063,10 +2065,10 @@ uc_compiler_compile_for_in(uc_compiler *compiler, bool local, uc_token *kvar, uc
 
 	/* declare loop variables */
 	if (local) {
-		uc_compiler_declare_local_null(compiler, kvar->pos, kvar->val);
+		uc_compiler_declare_local_null(compiler, kvar->pos, kvar->uv);
 
 		if (vvar)
-			uc_compiler_declare_local_null(compiler, vvar->pos, vvar->val);
+			uc_compiler_declare_local_null(compiler, vvar->pos, vvar->uv);
 	}
 
 	/* value to iterate */
@@ -2110,12 +2112,12 @@ uc_compiler_compile_for_in(uc_compiler *compiler, bool local, uc_token *kvar, uc
 
 	/* set key and value variables */
 	if (vvar) {
-		uc_compiler_emit_variable_rw(compiler, vvar->val, TK_ASSIGN);
+		uc_compiler_emit_variable_rw(compiler, vvar->uv, TK_ASSIGN);
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 	}
 
 	/* set key variable */
-	uc_compiler_emit_variable_rw(compiler, kvar->val, TK_ASSIGN);
+	uc_compiler_emit_variable_rw(compiler, kvar->uv, TK_ASSIGN);
 	uc_compiler_emit_insn(compiler, 0, I_POP);
 
 	/* compile loop body */
@@ -2157,7 +2159,7 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t test_off = 0, incr_off, skip_off, cond_off = 0;
-	uc_patchlist p = {};
+	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2166,14 +2168,14 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 
 	/* Initializer ---------------------------------------------------------- */
 
-	/* We parsed a `local x` or `local x, y` expression, so (re)declare
-	 * last label as local initializer variable */
-	if (local)
-		uc_compiler_declare_local_null(compiler, var->pos, var->val);
-
-	/* If we parsed at least on label, try continue parsing as variable
+	/* If we parsed at least one label, try continue parsing as variable
 	 * expression... */
 	if (var) {
+		/* We parsed a `local x` or `local x, y` expression, so (re)declare
+		 * last label as local initializer variable */
+		if (local)
+			uc_compiler_declare_local_null(compiler, var->pos, var->uv);
+
 		uc_compiler_compile_labelexpr(compiler, true);
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 
@@ -2257,7 +2259,7 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 static void
 uc_compiler_compile_for(uc_compiler *compiler)
 {
-	uc_token keyvar = {}, valvar = {};
+	uc_token keyvar = { 0 }, valvar = { 0 };
 	bool local;
 
 	uc_compiler_parse_consume(compiler, TK_LPAREN);
@@ -2268,19 +2270,15 @@ uc_compiler_compile_for(uc_compiler *compiler)
 
 	local = uc_compiler_parse_match(compiler, TK_LOCAL);
 
-	if (local && !uc_compiler_parse_check(compiler, TK_LABEL))
-		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
-			"Expecting label after 'local'");
-
 	if (uc_compiler_parse_match(compiler, TK_LABEL)) {
 		keyvar = compiler->parser->prev;
-		uc_value_get(keyvar.val);
+		ucv_get(keyvar.uv);
 
 		if (uc_compiler_parse_match(compiler, TK_COMMA)) {
 			uc_compiler_parse_consume(compiler, TK_LABEL);
 
 			valvar = compiler->parser->prev;
-			uc_value_get(valvar.val);
+			ucv_get(valvar.uv);
 		}
 
 		/* is a for-in loop */
@@ -2291,17 +2289,23 @@ uc_compiler_compile_for(uc_compiler *compiler)
 			goto out;
 		}
 	}
+	else if (local) {
+		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+			"Expecting label after 'local'");
+
+		goto out;
+	}
 
 	/*
 	 * The previous expression ruled out a for-in loop, so continue parsing
 	 * as counting for loop...
 	 */
 	uc_compiler_compile_for_count(compiler, local,
-		valvar.val ? &valvar : (keyvar.val ? &keyvar : NULL));
+		valvar.uv ? &valvar : (keyvar.uv ? &keyvar : NULL));
 
 out:
-	uc_value_put(keyvar.val);
-	uc_value_put(valvar.val);
+	ucv_put(keyvar.uv);
+	ucv_put(valvar.uv);
 }
 
 static void
@@ -2310,8 +2314,8 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 	size_t i, test_jmp, skip_jmp, next_jmp, value_slot, default_off = 0;
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	uc_locals *locals = &compiler->locals;
-	uc_jmplist cases = {};
-	uc_patchlist p = {};
+	uc_jmplist cases = { 0 };
+	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2335,6 +2339,7 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 		/* handle `default:` */
 		if (uc_compiler_parse_match(compiler, TK_DEFAULT)) {
 			if (default_off) {
+				uc_vector_clear(&cases);
 				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 					"more than one switch default case");
 
@@ -2521,7 +2526,7 @@ uc_compiler_compile_try(uc_compiler *compiler)
 	if (uc_compiler_parse_match(compiler, TK_LPAREN)) {
 		uc_compiler_parse_consume(compiler, TK_LABEL);
 
-		uc_compiler_declare_local(compiler, compiler->parser->prev.val);
+		uc_compiler_declare_local(compiler, compiler->parser->prev.uv);
 		uc_compiler_initialize_local(compiler);
 
 		uc_compiler_parse_consume(compiler, TK_RPAREN);
@@ -2563,7 +2568,7 @@ uc_compiler_compile_control(uc_compiler *compiler)
 	}
 
 	/* pop locals in scope up to this point */
-	for (i = locals->count; i > 0 && locals->entries[i - 1].depth == compiler->scope_depth; i--)
+	for (i = locals->count; i > 0 && (size_t)locals->entries[i - 1].depth == compiler->scope_depth; i--)
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 
 	uc_vector_grow(p);
@@ -2612,7 +2617,7 @@ uc_compiler_compile_tplexp(uc_compiler *compiler)
 static void
 uc_compiler_compile_text(uc_compiler *compiler)
 {
-	uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.val);
+	uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
 	uc_compiler_emit_insn(compiler, 0, I_PRINT);
 }
 
@@ -2703,12 +2708,12 @@ uc_compiler_compile_declaration(uc_compiler *compiler)
 		uc_compiler_parse_synchronize(compiler);
 }
 
-uc_function *
+uc_function_t *
 uc_compile(uc_parse_config *config, uc_source *source, char **errp)
 {
 	uc_parser parser = { .config = config };
 	uc_compiler compiler = { .parser = &parser };
-	uc_function *fn;
+	uc_function_t *fn;
 
 	uc_lexer_init(&parser.lex, config, source);
 	uc_compiler_init(&compiler, "main", 0, source);
@@ -2720,8 +2725,13 @@ uc_compile(uc_parse_config *config, uc_source *source, char **errp)
 
 	fn = uc_compiler_finish(&compiler);
 
-	if (errp)
-		*errp = parser.error;
+	if (errp) {
+		*errp = parser.error ? parser.error->buf : NULL;
+		free(parser.error);
+	}
+	else {
+		printbuf_free(parser.error);
+	}
 
 	uc_lexer_free(&parser.lex);
 

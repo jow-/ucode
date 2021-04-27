@@ -21,105 +21,105 @@
 
 static bool srand_called = false;
 
-static json_object *
+static uc_value_t *
 uc_abs(uc_vm *vm, size_t nargs)
 {
-	json_object *v = uc_get_arg(0);
-	enum json_type t;
+	uc_value_t *v = uc_get_arg(0);
+	uc_type_t t;
 	int64_t n;
 	double d;
 
-	if (json_object_is_type(v, json_type_null))
-		return uc_alloc_double(NAN);
+	if (ucv_type(v) == UC_NULL)
+		return ucv_double_new(NAN);
 
 	t = uc_to_number(v, &n, &d);
 
-	if (t == json_type_double)
-		return (isnan(d) || d < 0) ? uc_alloc_double(-d) : json_object_get(v);
+	if (t == UC_DOUBLE)
+		return (isnan(d) || d < 0) ? ucv_double_new(-d) : ucv_get(v);
 
-	return (n < 0) ? json_object_new_int64(-n) : json_object_get(v);
+	return (n < 0) ? ucv_int64_new(-n) : ucv_get(v);
 }
 
-static json_object *
+static uc_value_t *
 uc_atan2(uc_vm *vm, size_t nargs)
 {
 	double d1 = uc_to_double(uc_get_arg(0));
 	double d2 = uc_to_double(uc_get_arg(1));
 
 	if (isnan(d1) || isnan(d2))
-		return uc_alloc_double(NAN);
+		return ucv_double_new(NAN);
 
-	return uc_alloc_double(atan2(d1, d2));
+	return ucv_double_new(atan2(d1, d2));
 }
 
-static json_object *
+static uc_value_t *
 uc_cos(uc_vm *vm, size_t nargs)
 {
 	double d = uc_to_double(uc_get_arg(0));
 
 	if (isnan(d))
-		return uc_alloc_double(NAN);
+		return ucv_double_new(NAN);
 
-	return uc_alloc_double(cos(d));
+	return ucv_double_new(cos(d));
 }
 
-static json_object *
+static uc_value_t *
 uc_exp(uc_vm *vm, size_t nargs)
 {
 	double d = uc_to_double(uc_get_arg(0));
 
 	if (isnan(d))
-		return uc_alloc_double(NAN);
+		return ucv_double_new(NAN);
 
-	return uc_alloc_double(exp(d));
+	return ucv_double_new(exp(d));
 }
 
-static json_object *
+static uc_value_t *
 uc_log(uc_vm *vm, size_t nargs)
 {
 	double d = uc_to_double(uc_get_arg(0));
 
 	if (isnan(d))
-		return uc_alloc_double(NAN);
+		return ucv_double_new(NAN);
 
-	return uc_alloc_double(log(d));
+	return ucv_double_new(log(d));
 }
 
-static json_object *
+static uc_value_t *
 uc_sin(uc_vm *vm, size_t nargs)
 {
 	double d = uc_to_double(uc_get_arg(0));
 
 	if (isnan(d))
-		return uc_alloc_double(NAN);
+		return ucv_double_new(NAN);
 
-	return uc_alloc_double(sin(d));
+	return ucv_double_new(sin(d));
 }
 
-static json_object *
+static uc_value_t *
 uc_sqrt(uc_vm *vm, size_t nargs)
 {
 	double d = uc_to_double(uc_get_arg(0));
 
 	if (isnan(d))
-		return uc_alloc_double(NAN);
+		return ucv_double_new(NAN);
 
-	return uc_alloc_double(sqrt(d));
+	return ucv_double_new(sqrt(d));
 }
 
-static json_object *
+static uc_value_t *
 uc_pow(uc_vm *vm, size_t nargs)
 {
 	double x = uc_to_double(uc_get_arg(0));
 	double y = uc_to_double(uc_get_arg(1));
 
 	if (isnan(x) || isnan(y))
-		return uc_alloc_double(NAN);
+		return ucv_double_new(NAN);
 
-	return uc_alloc_double(pow(x, y));
+	return ucv_double_new(pow(x, y));
 }
 
-static json_object *
+static uc_value_t *
 uc_rand(uc_vm *vm, size_t nargs)
 {
 	struct timeval tv;
@@ -131,10 +131,10 @@ uc_rand(uc_vm *vm, size_t nargs)
 		srand_called = true;
 	}
 
-	return json_object_new_int64(rand());
+	return ucv_int64_new(rand());
 }
 
-static json_object *
+static uc_value_t *
 uc_srand(uc_vm *vm, size_t nargs)
 {
 	int64_t n = uc_to_int64(uc_get_arg(0));
@@ -158,7 +158,7 @@ static const uc_cfunction_list math_fns[] = {
 	{ "srand",	uc_srand },
 };
 
-void uc_module_init(uc_prototype *scope)
+void uc_module_init(uc_value_t *scope)
 {
 	uc_add_proto_functions(scope, math_fns);
 }

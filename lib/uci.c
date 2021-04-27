@@ -22,7 +22,7 @@
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
 static int last_error = 0;
-static uc_ressource_type *cursor_type;
+static uc_ressource_type_t *cursor_type;
 
 enum pkg_cmd {
 	CMD_SAVE,
@@ -30,11 +30,11 @@ enum pkg_cmd {
 	CMD_REVERT
 };
 
-static json_object *
+static uc_value_t *
 uc_uci_error(uc_vm *vm, size_t nargs)
 {
 	char buf[sizeof("Unknown error: -9223372036854775808")];
-	json_object *errmsg;
+	uc_value_t *errmsg;
 
 	const char *errstr[] = {
 		[UCI_ERR_MEM] =       "Out of memory",
@@ -49,12 +49,12 @@ uc_uci_error(uc_vm *vm, size_t nargs)
 	if (last_error == 0)
 		return NULL;
 
-	if (last_error >= 0 && last_error < ARRAY_SIZE(errstr)) {
-		errmsg = json_object_new_string(errstr[last_error]);
+	if (last_error >= 0 && (unsigned)last_error < ARRAY_SIZE(errstr)) {
+		errmsg = ucv_string_new(errstr[last_error]);
 	}
 	else {
 		snprintf(buf, sizeof(buf), "Unknown error: %d", last_error);
-		errmsg = json_object_new_string(buf);
+		errmsg = ucv_string_new(buf);
 	}
 
 	last_error = 0;
@@ -63,16 +63,16 @@ uc_uci_error(uc_vm *vm, size_t nargs)
 }
 
 
-static json_object *
+static uc_value_t *
 uc_uci_cursor(uc_vm *vm, size_t nargs)
 {
-	json_object *cdir = uc_get_arg(0);
-	json_object *sdir = uc_get_arg(1);
+	uc_value_t *cdir = uc_get_arg(0);
+	uc_value_t *sdir = uc_get_arg(1);
 	struct uci_context *c;
 	int rv;
 
-	if ((cdir && !json_object_is_type(cdir, json_type_string)) ||
-	    (sdir && !json_object_is_type(sdir, json_type_string)))
+	if ((cdir && ucv_type(cdir) != UC_STRING) ||
+	    (sdir && ucv_type(sdir) != UC_STRING))
 		err_return(UCI_ERR_INVAL);
 
 	c = uci_alloc_context();
@@ -81,14 +81,14 @@ uc_uci_cursor(uc_vm *vm, size_t nargs)
 		err_return(UCI_ERR_MEM);
 
 	if (cdir) {
-		rv = uci_set_confdir(c, json_object_get_string(cdir));
+		rv = uci_set_confdir(c, ucv_string_get(cdir));
 
 		if (rv)
 			err_return(rv);
 	}
 
 	if (sdir) {
-		rv = uci_set_savedir(c, json_object_get_string(sdir));
+		rv = uci_set_savedir(c, ucv_string_get(sdir));
 
 		if (rv)
 			err_return(rv);
@@ -98,54 +98,57 @@ uc_uci_cursor(uc_vm *vm, size_t nargs)
 }
 
 
-static json_object *
+static uc_value_t *
 uc_uci_load(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
+	uc_value_t *conf = uc_get_arg(0);
 	struct uci_element *e;
+	char *s;
 
 	if (!c || !*c)
 		err_return(UCI_ERR_INVAL);
 
-	if (!json_object_is_type(conf, json_type_string))
+	if (ucv_type(conf) != UC_STRING)
 		err_return(UCI_ERR_INVAL);
 
+	s = ucv_string_get(conf);
+
 	uci_foreach_element(&(*c)->root, e) {
-		if (!strcmp(e->name, json_object_get_string(conf))) {
+		if (!strcmp(e->name, s)) {
 			uci_unload(*c, uci_to_package(e));
 			break;
 		}
 	}
 
-	if (uci_load(*c, json_object_get_string(conf), NULL))
+	if (uci_load(*c, s, NULL))
 		err_return((*c)->err);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_unload(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
+	uc_value_t *conf = uc_get_arg(0);
 	struct uci_element *e;
 
 	if (!c || !*c)
 		err_return(UCI_ERR_INVAL);
 
-	if (!json_object_is_type(conf, json_type_string))
+	if (ucv_type(conf) != UC_STRING)
 		err_return(UCI_ERR_INVAL);
 
 	uci_foreach_element(&(*c)->root, e) {
-		if (!strcmp(e->name, json_object_get_string(conf))) {
+		if (!strcmp(e->name, ucv_string_get(conf))) {
 			uci_unload(*c, uci_to_package(e));
 
-			return json_object_new_boolean(true);
+			return ucv_boolean_new(true);
 		}
 	}
 
-	return json_object_new_boolean(false);
+	return ucv_boolean_new(false);
 }
 
 static int
@@ -177,22 +180,22 @@ lookup_ptr(struct uci_context *ctx, struct uci_ptr *ptr, bool extended)
 	return uci_lookup_ptr(ctx, ptr, NULL, extended);
 }
 
-static json_object *
-option_to_json(struct uci_option *o)
+static uc_value_t *
+option_to_uval(uc_vm *vm, struct uci_option *o)
 {
-	json_object *arr;
 	struct uci_element *e;
+	uc_value_t *arr;
 
 	switch (o->type) {
 	case UCI_TYPE_STRING:
-		return json_object_new_string(o->v.string);
+		return ucv_string_new(o->v.string);
 
 	case UCI_TYPE_LIST:
-		arr = json_object_new_array();
+		arr = ucv_array_new(vm);
 
 		if (arr)
 			uci_foreach_element(&o->v.list, e)
-				json_object_array_add(arr, json_object_new_string(e->name));
+				ucv_array_push(arr, ucv_string_new(e->name));
 
 		return arr;
 
@@ -201,36 +204,36 @@ option_to_json(struct uci_option *o)
 	}
 }
 
-static json_object *
-section_to_json(struct uci_section *s, int index)
+static uc_value_t *
+section_to_uval(uc_vm *vm, struct uci_section *s, int index)
 {
-	json_object *so = json_object_new_object();
+	uc_value_t *so = ucv_object_new(vm);
 	struct uci_element *e;
 	struct uci_option *o;
 
 	if (!so)
 		return NULL;
 
-	json_object_object_add(so, ".anonymous", json_object_new_boolean(s->anonymous));
-	json_object_object_add(so, ".type", json_object_new_string(s->type));
-	json_object_object_add(so, ".name", json_object_new_string(s->e.name));
+	ucv_object_add(so, ".anonymous", ucv_boolean_new(s->anonymous));
+	ucv_object_add(so, ".type", ucv_string_new(s->type));
+	ucv_object_add(so, ".name", ucv_string_new(s->e.name));
 
 	if (index >= 0)
-		json_object_object_add(so, ".index", json_object_new_int64(index));
+		ucv_object_add(so, ".index", ucv_int64_new(index));
 
 	uci_foreach_element(&s->options, e) {
 		o = uci_to_option(e);
-		json_object_object_add(so, o->e.name, option_to_json(o));
+		ucv_object_add(so, o->e.name, option_to_uval(vm, o));
 	}
 
 	return so;
 }
 
-static json_object *
-package_to_json(struct uci_package *p)
+static uc_value_t *
+package_to_uval(uc_vm *vm, struct uci_package *p)
 {
-	json_object *po = json_object_new_object();
-	json_object *so;
+	uc_value_t *po = ucv_object_new(vm);
+	uc_value_t *so;
 	struct uci_element *e;
 	int i = 0;
 
@@ -238,37 +241,37 @@ package_to_json(struct uci_package *p)
 		return NULL;
 
 	uci_foreach_element(&p->sections, e) {
-		so = section_to_json(uci_to_section(e), i++);
-		json_object_object_add(po, e->name, so);
+		so = section_to_uval(vm, uci_to_section(e), i++);
+		ucv_object_add(po, e->name, so);
 	}
 
 	return po;
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_get_any(uc_vm *vm, size_t nargs, bool all)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
-	json_object *sect = uc_get_arg(1);
-	json_object *opt = uc_get_arg(2);
-	struct uci_ptr ptr = {};
+	uc_value_t *conf = uc_get_arg(0);
+	uc_value_t *sect = uc_get_arg(1);
+	uc_value_t *opt = uc_get_arg(2);
+	struct uci_ptr ptr = { 0 };
 	int rv;
 
 	if (!c || !*c)
 		err_return(UCI_ERR_INVAL);
 
-	if (!json_object_is_type(conf, json_type_string) ||
-	    (sect && !json_object_is_type(sect, json_type_string)) ||
-	    (opt && !json_object_is_type(opt, json_type_string)))
+	if ((ucv_type(conf) != UC_STRING) ||
+	    (sect && ucv_type(sect) != UC_STRING) ||
+	    (opt && ucv_type(opt) != UC_STRING))
 		err_return(UCI_ERR_INVAL);
 
 	if ((!sect && !all) || (opt && all))
 		err_return(UCI_ERR_INVAL);
 
-	ptr.package = json_object_get_string(conf);
-	ptr.section = sect ? json_object_get_string(sect) : NULL;
-	ptr.option = opt ? json_object_get_string(opt) : NULL;
+	ptr.package = ucv_string_get(conf);
+	ptr.section = sect ? ucv_string_get(sect) : NULL;
+	ptr.option = opt ? ucv_string_get(opt) : NULL;
 
 	rv = lookup_ptr(*c, &ptr, true);
 
@@ -283,60 +286,60 @@ uc_uci_get_any(uc_vm *vm, size_t nargs, bool all)
 			if (!ptr.s)
 				err_return(UCI_ERR_NOTFOUND);
 
-			return section_to_json(ptr.s, -1);
+			return section_to_uval(vm, ptr.s, -1);
 		}
 
 		if (!ptr.p)
 			err_return(UCI_ERR_NOTFOUND);
 
-		return package_to_json(ptr.p);
+		return package_to_uval(vm, ptr.p);
 	}
 
 	if (ptr.option) {
 		if (!ptr.o)
 			err_return(UCI_ERR_NOTFOUND);
 
-		return option_to_json(ptr.o);
+		return option_to_uval(vm, ptr.o);
 	}
 
 	if (!ptr.s)
 		err_return(UCI_ERR_NOTFOUND);
 
-	return json_object_new_string(ptr.s->type);
+	return ucv_string_new(ptr.s->type);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_get(uc_vm *vm, size_t nargs)
 {
 	return uc_uci_get_any(vm, nargs, false);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_get_all(uc_vm *vm, size_t nargs)
 {
 	return uc_uci_get_any(vm, nargs, true);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_get_first(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
-	json_object *type = uc_get_arg(1);
-	json_object *opt = uc_get_arg(2);
+	uc_value_t *conf = uc_get_arg(0);
+	uc_value_t *type = uc_get_arg(1);
+	uc_value_t *opt = uc_get_arg(2);
 	struct uci_package *p = NULL;
 	struct uci_section *sc;
 	struct uci_element *e;
-	struct uci_ptr ptr = {};
+	struct uci_ptr ptr = { 0 };
 	int rv;
 
-	if (!json_object_is_type(conf, json_type_string) ||
-	    !json_object_is_type(type, json_type_string) ||
-	    (opt && !json_object_is_type(opt, json_type_string)))
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(type) != UC_STRING ||
+	    (opt && ucv_type(opt) != UC_STRING))
 		err_return(UCI_ERR_INVAL);
 
 	uci_foreach_element(&(*c)->root, e) {
-		if (strcmp(e->name, json_object_get_string(conf)))
+		if (strcmp(e->name, ucv_string_get(conf)))
 			continue;
 
 		p = uci_to_package(e);
@@ -349,15 +352,15 @@ uc_uci_get_first(uc_vm *vm, size_t nargs)
 	uci_foreach_element(&p->sections, e) {
 		sc = uci_to_section(e);
 
-		if (strcmp(sc->type, json_object_get_string(type)))
+		if (strcmp(sc->type, ucv_string_get(type)))
 			continue;
 
 		if (!opt)
-			return json_object_new_string(sc->e.name);
+			return ucv_string_new(sc->e.name);
 
-		ptr.package = json_object_get_string(conf);
+		ptr.package = ucv_string_get(conf);
 		ptr.section = sc->e.name;
-		ptr.option = json_object_get_string(opt);
+		ptr.option = ucv_string_get(opt);
 		ptr.p = p;
 		ptr.s = sc;
 
@@ -369,29 +372,29 @@ uc_uci_get_first(uc_vm *vm, size_t nargs)
 		if (!(ptr.flags & UCI_LOOKUP_COMPLETE))
 			err_return(UCI_ERR_NOTFOUND);
 
-		return option_to_json(ptr.o);
+		return option_to_uval(vm, ptr.o);
 	}
 
 	err_return(UCI_ERR_NOTFOUND);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_add(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
-	json_object *type = uc_get_arg(1);
+	uc_value_t *conf = uc_get_arg(0);
+	uc_value_t *type = uc_get_arg(1);
 	struct uci_element *e = NULL;
 	struct uci_package *p = NULL;
 	struct uci_section *sc = NULL;
 	int rv;
 
-	if (!json_object_is_type(conf, json_type_string) ||
-	    !json_object_is_type(type, json_type_string))
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(type) != UC_STRING)
 	    err_return(UCI_ERR_INVAL);
 
 	uci_foreach_element(&(*c)->root, e) {
-		if (!strcmp(e->name, json_object_get_string(conf))) {
+		if (!strcmp(e->name, ucv_string_get(conf))) {
 			p = uci_to_package(e);
 			break;
 		}
@@ -400,73 +403,75 @@ uc_uci_add(uc_vm *vm, size_t nargs)
 	if (!p)
 		err_return(UCI_ERR_NOTFOUND);
 
-	rv = uci_add_section(*c, p, json_object_get_string(type), &sc);
+	rv = uci_add_section(*c, p, ucv_string_get(type), &sc);
 
 	if (rv != UCI_OK)
 		err_return(rv);
 	else if (!sc)
 		err_return(UCI_ERR_NOTFOUND);
 
-	return json_object_new_string(sc->e.name);
+	return ucv_string_new(sc->e.name);
 }
 
 static bool
-json_to_value(json_object *val, const char **p, bool *is_list)
+uval_to_uci(uc_vm *vm, uc_value_t *val, const char **p, bool *is_list)
 {
-	json_object *item;
+	uc_value_t *item;
 
 	*p = NULL;
 
 	if (is_list)
 		*is_list = false;
 
-	switch (json_object_get_type(val)) {
-	case json_type_object:
-		return false;
-
-	case json_type_array:
-		if (json_object_array_length(val) == 0)
+	switch (ucv_type(val)) {
+	case UC_ARRAY:
+		if (ucv_array_length(val) == 0)
 			return false;
 
-		item = json_object_array_get_idx(val, 0);
+		item = ucv_array_get(val, 0);
 
 		/* don't recurse */
-		if (json_object_is_type(item, json_type_array))
+		if (ucv_type(item) == UC_ARRAY)
 			return false;
 
 		if (is_list)
 			*is_list = true;
 
-		return json_to_value(item, p, NULL);
+		return uval_to_uci(vm, item, p, NULL);
 
-	case json_type_boolean:
-		*p = json_object_get_boolean(val) ? "1" : "0";
+	case UC_BOOLEAN:
+		*p = xstrdup(ucv_boolean_get(val) ? "1" : "0");
 
 		return true;
 
-	case json_type_null:
+	case UC_DOUBLE:
+	case UC_INTEGER:
+	case UC_STRING:
+		*p = ucv_to_string(vm, val);
+		/* fall through */
+
+	case UC_NULL:
 		return true;
 
 	default:
-		*p = json_object_get_string(val);
-
-		return true;
+		return false;
 	}
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_set(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
-	json_object *sect = uc_get_arg(1);
-	json_object *opt = NULL, *val = NULL;
-	struct uci_ptr ptr = {};
+	uc_value_t *conf = uc_get_arg(0);
+	uc_value_t *sect = uc_get_arg(1);
+	uc_value_t *opt = NULL, *val = NULL;
+	struct uci_ptr ptr = { 0 };
 	bool is_list = false;
-	int rv, i;
+	size_t i;
+	int rv;
 
-	if (!json_object_is_type(conf, json_type_string) ||
-	    !json_object_is_type(sect, json_type_string))
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(sect) != UC_STRING)
 	    err_return(UCI_ERR_INVAL);
 
 	switch (nargs) {
@@ -475,7 +480,7 @@ uc_uci_set(uc_vm *vm, size_t nargs)
 		opt = uc_get_arg(2);
 		val = uc_get_arg(3);
 
-		if (!json_object_is_type(opt, json_type_string))
+		if (ucv_type(opt) != UC_STRING)
 			err_return(UCI_ERR_INVAL);
 
 		break;
@@ -484,7 +489,7 @@ uc_uci_set(uc_vm *vm, size_t nargs)
 	case 3:
 		val = uc_get_arg(2);
 
-		if (!json_object_is_type(val, json_type_string))
+		if (ucv_type(val) != UC_STRING)
 			err_return(UCI_ERR_INVAL);
 
 		break;
@@ -493,9 +498,9 @@ uc_uci_set(uc_vm *vm, size_t nargs)
 		err_return(UCI_ERR_INVAL);
 	}
 
-	ptr.package = json_object_get_string(conf);
-	ptr.section = json_object_get_string(sect);
-	ptr.option = opt ? json_object_get_string(opt) : NULL;
+	ptr.package = ucv_string_get(conf);
+	ptr.section = ucv_string_get(sect);
+	ptr.option = opt ? ucv_string_get(opt) : NULL;
 
 	rv = lookup_ptr(*c, &ptr, true);
 
@@ -505,18 +510,19 @@ uc_uci_set(uc_vm *vm, size_t nargs)
 	if (!ptr.s && ptr.option)
 		err_return(UCI_ERR_NOTFOUND);
 
-	if (!json_to_value(val, &ptr.value, &is_list))
+	if (!uval_to_uci(vm, val, &ptr.value, &is_list))
 		err_return(UCI_ERR_INVAL);
 
 	if (is_list) {
 		/* if we got a one-element array, delete existing option (if any)
 		 * and iterate array at offset 0 */
-		if (json_object_array_length(val) == 1) {
+		if (ucv_array_length(val) == 1) {
 			i = 0;
 
-			if (ptr.o) {
-				ptr.value = NULL;
+			free((char *)ptr.value);
+			ptr.value = NULL;
 
+			if (ptr.o) {
 				rv = uci_delete(*c, &ptr);
 
 				if (rv != UCI_OK)
@@ -529,16 +535,18 @@ uc_uci_set(uc_vm *vm, size_t nargs)
 			i = 1;
 
 			rv = uci_set(*c, &ptr);
+			free((char *)ptr.value);
 
 			if (rv != UCI_OK)
 				err_return(rv);
 		}
 
-		for (; i < json_object_array_length(val); i++) {
-			if (!json_to_value(json_object_array_get_idx(val, i), &ptr.value, NULL))
+		for (; i < ucv_array_length(val); i++) {
+			if (!uval_to_uci(vm, ucv_array_get(val, i), &ptr.value, NULL))
 				continue;
 
 			rv = uci_add_list(*c, &ptr);
+			free((char *)ptr.value);
 
 			if (rv != UCI_OK)
 				err_return(rv);
@@ -546,32 +554,33 @@ uc_uci_set(uc_vm *vm, size_t nargs)
 	}
 	else {
 		rv = uci_set(*c, &ptr);
+		free((char *)ptr.value);
 
 		if (rv != UCI_OK)
 			err_return(rv);
 	}
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_delete(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
-	json_object *sect = uc_get_arg(1);
-	json_object *opt = uc_get_arg(2);
-	struct uci_ptr ptr = {};
+	uc_value_t *conf = uc_get_arg(0);
+	uc_value_t *sect = uc_get_arg(1);
+	uc_value_t *opt = uc_get_arg(2);
+	struct uci_ptr ptr = { 0 };
 	int rv;
 
-	if (!json_object_is_type(conf, json_type_string) ||
-	    !json_object_is_type(sect, json_type_string) ||
-	    (opt && !json_object_is_type(opt, json_type_string)))
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(sect) != UC_STRING ||
+	    (opt && ucv_type(opt) != UC_STRING))
 	    err_return(UCI_ERR_INVAL);
 
-	ptr.package = json_object_get_string(conf);
-	ptr.section = json_object_get_string(sect);
-	ptr.option = opt ? json_object_get_string(opt) : NULL;
+	ptr.package = ucv_string_get(conf);
+	ptr.section = ucv_string_get(sect);
+	ptr.option = opt ? ucv_string_get(opt) : NULL;
 
 	rv = lookup_ptr(*c, &ptr, true);
 
@@ -586,21 +595,21 @@ uc_uci_delete(uc_vm *vm, size_t nargs)
 	if (rv != UCI_OK)
 		err_return(rv);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_rename(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
-	json_object *sect = uc_get_arg(1);
-	json_object *opt = NULL, *val = NULL;
-	struct uci_ptr ptr = {};
+	uc_value_t *conf = uc_get_arg(0);
+	uc_value_t *sect = uc_get_arg(1);
+	uc_value_t *opt = NULL, *val = NULL;
+	struct uci_ptr ptr = { 0 };
 	int rv;
 
-	if (!json_object_is_type(conf, json_type_string) ||
-	    !json_object_is_type(sect, json_type_string))
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(sect) != UC_STRING)
 	    err_return(UCI_ERR_INVAL);
 
 	switch (nargs) {
@@ -609,8 +618,8 @@ uc_uci_rename(uc_vm *vm, size_t nargs)
 		opt = uc_get_arg(2);
 		val = uc_get_arg(3);
 
-		if (!json_object_is_type(opt, json_type_string) ||
-		    !json_object_is_type(val, json_type_string))
+		if (ucv_type(opt) != UC_STRING ||
+		    ucv_type(val) != UC_STRING)
 			err_return(UCI_ERR_INVAL);
 
 		break;
@@ -619,7 +628,7 @@ uc_uci_rename(uc_vm *vm, size_t nargs)
 	case 3:
 		val = uc_get_arg(2);
 
-		if (!json_object_is_type(val, json_type_string))
+		if (ucv_type(val) != UC_STRING)
 			err_return(UCI_ERR_INVAL);
 
 		break;
@@ -628,10 +637,10 @@ uc_uci_rename(uc_vm *vm, size_t nargs)
 		err_return(UCI_ERR_INVAL);
 	}
 
-	ptr.package = json_object_get_string(conf);
-	ptr.section = json_object_get_string(sect);
-	ptr.option = opt ? json_object_get_string(opt) : NULL;
-	ptr.value = json_object_get_string(val);
+	ptr.package = ucv_string_get(conf);
+	ptr.section = ucv_string_get(sect);
+	ptr.option = opt ? ucv_string_get(opt) : NULL;
+	ptr.value = ucv_string_get(val);
 
 	rv = lookup_ptr(*c, &ptr, true);
 
@@ -646,32 +655,32 @@ uc_uci_rename(uc_vm *vm, size_t nargs)
 	if (rv != UCI_OK)
 		err_return(rv);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_reorder(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
-	json_object *sect = uc_get_arg(1);
-	json_object *val = uc_get_arg(2);
-	struct uci_ptr ptr = {};
+	uc_value_t *conf = uc_get_arg(0);
+	uc_value_t *sect = uc_get_arg(1);
+	uc_value_t *val = uc_get_arg(2);
+	struct uci_ptr ptr = { 0 };
 	int64_t n;
 	int rv;
 
-	if (!json_object_is_type(conf, json_type_string) ||
-	    !json_object_is_type(sect, json_type_string) ||
-	    !json_object_is_type(val, json_type_int))
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(sect) != UC_STRING ||
+	    ucv_type(val) != UC_INTEGER)
 	    err_return(UCI_ERR_INVAL);
 
-	n = json_object_get_int64(val);
+	n = ucv_int64_get(val);
 
 	if (n < 0)
 		err_return(UCI_ERR_INVAL);
 
-	ptr.package = json_object_get_string(conf);
-	ptr.section = json_object_get_string(sect);
+	ptr.package = ucv_string_get(conf);
+	ptr.section = ucv_string_get(sect);
 
 	rv = lookup_ptr(*c, &ptr, true);
 
@@ -686,29 +695,29 @@ uc_uci_reorder(uc_vm *vm, size_t nargs)
 	if (rv != UCI_OK)
 		err_return(rv);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_pkg_command(uc_vm *vm, size_t nargs, enum pkg_cmd cmd)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
+	uc_value_t *conf = uc_get_arg(0);
 	struct uci_element *e, *tmp;
 	struct uci_package *p;
-	struct uci_ptr ptr = {};
+	struct uci_ptr ptr = { 0 };
 	int rv, res = UCI_OK;
 
 	if (cmd != CMD_REVERT && conf)
 		err_return(UCI_ERR_INVAL);
 
-	if (conf && !json_object_is_type(conf, json_type_string))
+	if (conf && ucv_type(conf) != UC_STRING)
 		err_return(UCI_ERR_INVAL);
 
 	uci_foreach_element_safe(&(*c)->root, tmp, e) {
 		p = uci_to_package(e);
 
-		if (conf && strcmp(e->name, json_object_get_string(conf)))
+		if (conf && strcmp(e->name, ucv_string_get(conf)))
 			continue;
 
 		switch (cmd) {
@@ -736,29 +745,29 @@ uc_uci_pkg_command(uc_vm *vm, size_t nargs, enum pkg_cmd cmd)
 	if (res != UCI_OK)
 		err_return(res);
 
-	return json_object_new_boolean(true);
+	return ucv_boolean_new(true);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_save(uc_vm *vm, size_t nargs)
 {
 	return uc_uci_pkg_command(vm, nargs, CMD_SAVE);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_commit(uc_vm *vm, size_t nargs)
 {
 	return uc_uci_pkg_command(vm, nargs, CMD_COMMIT);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_revert(uc_vm *vm, size_t nargs)
 {
 	return uc_uci_pkg_command(vm, nargs, CMD_REVERT);
 }
 
-static json_object *
-change_to_json(struct uci_delta *d)
+static uc_value_t *
+change_to_uval(uc_vm *vm, struct uci_delta *d)
 {
 	const char *types[] = {
 		[UCI_CMD_REORDER]  = "order",
@@ -770,36 +779,36 @@ change_to_json(struct uci_delta *d)
 		[UCI_CMD_CHANGE]   = "set",
 	};
 
-	json_object *a;
+	uc_value_t *a;
 
 	if (!d->section)
 		return NULL;
 
-	a = json_object_new_array();
+	a = ucv_array_new(vm);
 
 	if (!a)
 		return NULL;
 
-	json_object_array_add(a, json_object_new_string(types[d->cmd]));
-	json_object_array_add(a, json_object_new_string(d->section));
+	ucv_array_push(a, ucv_string_new(types[d->cmd]));
+	ucv_array_push(a, ucv_string_new(d->section));
 
 	if (d->e.name)
-		json_object_array_add(a, json_object_new_string(d->e.name));
+		ucv_array_push(a, ucv_string_new(d->e.name));
 
 	if (d->value) {
 		if (d->cmd == UCI_CMD_REORDER)
-			json_object_array_add(a, json_object_new_int64(strtoul(d->value, NULL, 10)));
+			ucv_array_push(a, ucv_int64_new(strtoul(d->value, NULL, 10)));
 		else
-			json_object_array_add(a, json_object_new_string(d->value));
+			ucv_array_push(a, ucv_string_new(d->value));
 	}
 
 	return a;
 }
 
-static json_object *
-changes_to_json(struct uci_context *ctx, const char *package)
+static uc_value_t *
+changes_to_uval(uc_vm *vm, struct uci_context *ctx, const char *package)
 {
-	json_object *a = NULL, *c;
+	uc_value_t *a = NULL, *c;
 	struct uci_package *p = NULL;
 	struct uci_element *e;
 	bool unload = false;
@@ -820,23 +829,23 @@ changes_to_json(struct uci_context *ctx, const char *package)
 		return NULL;
 
 	if (!uci_list_empty(&p->delta) || !uci_list_empty(&p->saved_delta)) {
-		a = json_object_new_array();
+		a = ucv_array_new(vm);
 
 		if (!a)
 			err_return(UCI_ERR_MEM);
 
 		uci_foreach_element(&p->saved_delta, e) {
-			c = change_to_json(uci_to_delta(e));
+			c = change_to_uval(vm, uci_to_delta(e));
 
 			if (c)
-				json_object_array_add(a, c);
+				ucv_array_push(a, c);
 		}
 
 		uci_foreach_element(&p->delta, e) {
-			c = change_to_json(uci_to_delta(e));
+			c = change_to_uval(vm, uci_to_delta(e));
 
 			if (c)
-				json_object_array_add(a, c);
+				ucv_array_push(a, c);
 		}
 	}
 
@@ -846,16 +855,16 @@ changes_to_json(struct uci_context *ctx, const char *package)
 	return a;
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_changes(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
-	json_object *res, *chg;
+	uc_value_t *conf = uc_get_arg(0);
+	uc_value_t *res, *chg;
 	char **configs;
 	int rv, i;
 
-	if (conf && !json_object_is_type(conf, json_type_string))
+	if (conf && ucv_type(conf) != UC_STRING)
 		err_return(UCI_ERR_INVAL);
 
 	rv = uci_list_configs(*c, &configs);
@@ -863,21 +872,16 @@ uc_uci_changes(uc_vm *vm, size_t nargs)
 	if (rv != UCI_OK)
 		err_return(rv);
 
-	res = json_object_new_object();
-
-	if (!res) {
-		free(configs);
-		err_return(UCI_ERR_MEM);
-	}
+	res = ucv_object_new(vm);
 
 	for (i = 0; configs[i]; i++) {
-		if (conf && strcmp(configs[i], json_object_get_string(conf)))
+		if (conf && strcmp(configs[i], ucv_string_get(conf)))
 			continue;
 
-		chg = changes_to_json(*c, configs[i]);
+		chg = changes_to_uval(vm, *c, configs[i]);
 
 		if (chg)
-			json_object_object_add(res, configs[i], chg);
+			ucv_object_add(res, configs[i], chg);
 	}
 
 	free(configs);
@@ -885,14 +889,14 @@ uc_uci_changes(uc_vm *vm, size_t nargs)
 	return res;
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_foreach(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *conf = uc_get_arg(0);
-	json_object *type = uc_get_arg(1);
-	json_object *func = uc_get_arg(2);
-	json_object *rv = NULL;
+	uc_value_t *conf = uc_get_arg(0);
+	uc_value_t *type = uc_get_arg(1);
+	uc_value_t *func = uc_get_arg(2);
+	uc_value_t *rv = NULL;
 	struct uci_package *p = NULL;
 	struct uci_element *e, *tmp;
 	struct uci_section *sc;
@@ -901,12 +905,12 @@ uc_uci_foreach(uc_vm *vm, size_t nargs)
 	bool ret = false;
 	int i = 0;
 
-	if (!json_object_is_type(conf, json_type_string) ||
-	    (type && !json_object_is_type(type, json_type_string)))
+	if (ucv_type(conf) != UC_STRING ||
+	    (type && ucv_type(type) != UC_STRING))
 	    err_return(UCI_ERR_INVAL);
 
 	uci_foreach_element(&(*c)->root, e) {
-		if (strcmp(e->name, json_object_get_string(conf)))
+		if (strcmp(e->name, ucv_string_get(conf)))
 			continue;
 
 		p = uci_to_package(e);
@@ -920,11 +924,11 @@ uc_uci_foreach(uc_vm *vm, size_t nargs)
 		sc = uci_to_section(e);
 		i++;
 
-		if (type && strcmp(sc->type, json_object_get_string(type)))
+		if (type && strcmp(sc->type, ucv_string_get(type)))
 			continue;
 
-		uc_push_val(uc_value_get(func));
-		uc_push_val(section_to_json(sc, i - 1));
+		uc_push_val(ucv_get(func));
+		uc_push_val(section_to_uval(vm, sc, i - 1));
 
 		ex = uc_call(1);
 
@@ -934,9 +938,9 @@ uc_uci_foreach(uc_vm *vm, size_t nargs)
 
 		ret = true;
 		rv = uc_pop_val();
-		stop = (json_object_is_type(rv, json_type_boolean) && !json_object_get_boolean(rv));
+		stop = (ucv_type(rv) == UC_BOOLEAN && !ucv_boolean_get(rv));
 
-		json_object_put(rv);
+		ucv_put(rv);
 
 		if (stop)
 			break;
@@ -944,14 +948,14 @@ uc_uci_foreach(uc_vm *vm, size_t nargs)
 
 	/* XXX: rethrow */
 
-	return json_object_new_boolean(ret);
+	return ucv_boolean_new(ret);
 }
 
-static json_object *
+static uc_value_t *
 uc_uci_configs(uc_vm *vm, size_t nargs)
 {
 	struct uci_context **c = uc_get_self("uci.cursor");
-	json_object *a;
+	uc_value_t *a;
 	char **configs;
 	int i, rv;
 
@@ -960,15 +964,10 @@ uc_uci_configs(uc_vm *vm, size_t nargs)
 	if (rv != UCI_OK)
 		err_return(rv);
 
-	a = json_object_new_array();
-
-	if (!a) {
-		free(configs);
-		err_return(UCI_ERR_MEM);
-	}
+	a = ucv_array_new(vm);
 
 	for (i = 0; configs[i]; i++)
-		json_object_array_add(a, json_object_new_string(configs[i]));
+		ucv_array_push(a, ucv_string_new(configs[i]));
 
 	free(configs);
 
@@ -1006,7 +1005,7 @@ static void close_uci(void *ud) {
 	uci_free_context((struct uci_context *)ud);
 }
 
-void uc_module_init(uc_prototype *scope)
+void uc_module_init(uc_value_t *scope)
 {
 	uc_add_proto_functions(scope, global_fns);
 

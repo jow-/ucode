@@ -32,22 +32,22 @@
 #define UC_LEX_CONTINUE_PARSING (void *)1
 
 struct keyword {
-	int type;
+	unsigned type;
 	const char *pat;
-	int plen;
+	unsigned plen;
 	union {
 		double d;
 		bool b;
-	};
+	} u;
 };
 
 struct token {
-	int type;
+	unsigned type;
 	union {
 		uint32_t patn;
 		char pat[4];
-	};
-	int plen;
+	} u;
+	unsigned plen;
 	uc_token *(*parse)(uc_lexer *, bool);
 };
 
@@ -65,103 +65,103 @@ static uc_token *parse_number(uc_lexer *, bool);
 static uc_token *parse_label(uc_lexer *, bool);
 
 static const struct token tokens[] = {
-	{ TK_ASLEFT,	{ .pat = "<<=" },   3 },
-	{ TK_ASRIGHT,	{ .pat = ">>=" },   3 },
-	{ TK_LEXP,		{ .pat = "{{-" },   3 },
-	{ TK_REXP,		{ .pat = "-}}" },   3 },
-	{ TK_LSTM,		{ .pat = "{%+" },   3 },
-	{ TK_LSTM,		{ .pat = "{%-" },   3 },
-	{ TK_RSTM,		{ .pat = "-%}" },   3 },
-	{ TK_EQS,		{ .pat = "===" },   3 },
-	{ TK_NES,		{ .pat = "!==" },   3 },
-	{ TK_ELLIP,		{ .pat = "..." },   3 },
-	{ TK_AND,		{ .pat = "&&" },    2 },
-	{ TK_ASADD,		{ .pat = "+=" },    2 },
-	{ TK_ASBAND,	{ .pat = "&=" },    2 },
-	{ TK_ASBOR,		{ .pat = "|=" },    2 },
-	{ TK_ASBXOR,	{ .pat = "^=" },    2 },
-	//{ TK_ASDIV,	{ .pat = "/=" },    2 },
-	{ TK_ASMOD,		{ .pat = "%=" },    2 },
-	{ TK_ASMUL,		{ .pat = "*=" },    2 },
-	{ TK_ASSUB,		{ .pat = "-=" },    2 },
-	{ TK_DEC,		{ .pat = "--" },    2 },
-	{ TK_INC,		{ .pat = "++" },    2 },
-	{ TK_EQ,		{ .pat = "==" },    2 },
-	{ TK_NE,		{ .pat = "!=" },    2 },
-	{ TK_LE,		{ .pat = "<=" },    2 },
-	{ TK_GE,		{ .pat = ">=" },    2 },
-	{ TK_LSHIFT,	{ .pat = "<<" },    2 },
-	{ TK_RSHIFT,	{ .pat = ">>" },    2 },
+	{ TK_ASLEFT,	{ .pat = "<<=" },   3, NULL },
+	{ TK_ASRIGHT,	{ .pat = ">>=" },   3, NULL },
+	{ TK_LEXP,		{ .pat = "{{-" },   3, NULL },
+	{ TK_REXP,		{ .pat = "-}}" },   3, NULL },
+	{ TK_LSTM,		{ .pat = "{%+" },   3, NULL },
+	{ TK_LSTM,		{ .pat = "{%-" },   3, NULL },
+	{ TK_RSTM,		{ .pat = "-%}" },   3, NULL },
+	{ TK_EQS,		{ .pat = "===" },   3, NULL },
+	{ TK_NES,		{ .pat = "!==" },   3, NULL },
+	{ TK_ELLIP,		{ .pat = "..." },   3, NULL },
+	{ TK_AND,		{ .pat = "&&" },    2, NULL },
+	{ TK_ASADD,		{ .pat = "+=" },    2, NULL },
+	{ TK_ASBAND,	{ .pat = "&=" },    2, NULL },
+	{ TK_ASBOR,		{ .pat = "|=" },    2, NULL },
+	{ TK_ASBXOR,	{ .pat = "^=" },    2, NULL },
+	//{ TK_ASDIV,	{ .pat = "/=" },    2, NULL },
+	{ TK_ASMOD,		{ .pat = "%=" },    2, NULL },
+	{ TK_ASMUL,		{ .pat = "*=" },    2, NULL },
+	{ TK_ASSUB,		{ .pat = "-=" },    2, NULL },
+	{ TK_DEC,		{ .pat = "--" },    2, NULL },
+	{ TK_INC,		{ .pat = "++" },    2, NULL },
+	{ TK_EQ,		{ .pat = "==" },    2, NULL },
+	{ TK_NE,		{ .pat = "!=" },    2, NULL },
+	{ TK_LE,		{ .pat = "<=" },    2, NULL },
+	{ TK_GE,		{ .pat = ">=" },    2, NULL },
+	{ TK_LSHIFT,	{ .pat = "<<" },    2, NULL },
+	{ TK_RSHIFT,	{ .pat = ">>" },    2, NULL },
 	{ 0,			{ .pat = "//" },    2, parse_comment },
 	{ 0,			{ .pat = "/*" },    2, parse_comment },
-	{ TK_OR,		{ .pat = "||" },    2 },
-	{ TK_LEXP,		{ .pat = "{{" },    2 },
-	{ TK_REXP,		{ .pat = "}}" },    2 },
-	{ TK_LSTM,		{ .pat = "{%" },    2 },
-	{ TK_RSTM,		{ .pat = "%}" },    2 },
-	{ TK_ARROW,		{ .pat = "=>" },    2 },
-	{ TK_ADD,		{ .pat = "+" },     1 },
-	{ TK_ASSIGN,	{ .pat = "=" },     1 },
-	{ TK_BAND,		{ .pat = "&" },     1 },
-	{ TK_BOR,		{ .pat = "|" },     1 },
-	{ TK_LBRACK,	{ .pat = "[" },     1 },
-	{ TK_RBRACK,	{ .pat = "]" },     1 },
-	{ TK_BXOR,		{ .pat = "^" },     1 },
-	{ TK_LBRACE,	{ .pat = "{" },     1 },
-	{ TK_RBRACE,	{ .pat = "}" },     1 },
-	{ TK_COLON,		{ .pat = ":" },     1 },
-	{ TK_COMMA,		{ .pat = "," },     1 },
-	{ TK_COMPL,		{ .pat = "~" },     1 },
-	//{ TK_DIV,		{ .pat = "/" },     1 },
-	{ TK_GT,		{ .pat = ">" },     1 },
-	{ TK_NOT,		{ .pat = "!" },     1 },
-	{ TK_LT,		{ .pat = "<" },     1 },
-	{ TK_MOD,		{ .pat = "%" },     1 },
-	{ TK_MUL,		{ .pat = "*" },     1 },
-	{ TK_LPAREN,	{ .pat = "(" },     1 },
-	{ TK_RPAREN,	{ .pat = ")" },     1 },
-	{ TK_QMARK,		{ .pat = "?" },     1 },
-	{ TK_SCOL,		{ .pat = ";" },     1 },
-	//{ TK_SUB,		{ .pat = "-" },     1 },
-	{ TK_DOT,		{ .pat = "." },     1 },
+	{ TK_OR,		{ .pat = "||" },    2, NULL },
+	{ TK_LEXP,		{ .pat = "{{" },    2, NULL },
+	{ TK_REXP,		{ .pat = "}}" },    2, NULL },
+	{ TK_LSTM,		{ .pat = "{%" },    2, NULL },
+	{ TK_RSTM,		{ .pat = "%}" },    2, NULL },
+	{ TK_ARROW,		{ .pat = "=>" },    2, NULL },
+	{ TK_ADD,		{ .pat = "+" },     1, NULL },
+	{ TK_ASSIGN,	{ .pat = "=" },     1, NULL },
+	{ TK_BAND,		{ .pat = "&" },     1, NULL },
+	{ TK_BOR,		{ .pat = "|" },     1, NULL },
+	{ TK_LBRACK,	{ .pat = "[" },     1, NULL },
+	{ TK_RBRACK,	{ .pat = "]" },     1, NULL },
+	{ TK_BXOR,		{ .pat = "^" },     1, NULL },
+	{ TK_LBRACE,	{ .pat = "{" },     1, NULL },
+	{ TK_RBRACE,	{ .pat = "}" },     1, NULL },
+	{ TK_COLON,		{ .pat = ":" },     1, NULL },
+	{ TK_COMMA,		{ .pat = "," },     1, NULL },
+	{ TK_COMPL,		{ .pat = "~" },     1, NULL },
+	//{ TK_DIV,		{ .pat = "/" },     1, NULL },
+	{ TK_GT,		{ .pat = ">" },     1, NULL },
+	{ TK_NOT,		{ .pat = "!" },     1, NULL },
+	{ TK_LT,		{ .pat = "<" },     1, NULL },
+	{ TK_MOD,		{ .pat = "%" },     1, NULL },
+	{ TK_MUL,		{ .pat = "*" },     1, NULL },
+	{ TK_LPAREN,	{ .pat = "(" },     1, NULL },
+	{ TK_RPAREN,	{ .pat = ")" },     1, NULL },
+	{ TK_QMARK,		{ .pat = "?" },     1, NULL },
+	{ TK_SCOL,		{ .pat = ";" },     1, NULL },
+	//{ TK_SUB,		{ .pat = "-" },     1, NULL },
+	{ TK_DOT,		{ .pat = "." },     1, NULL },
 	{ TK_STRING,	{ .pat = "'" },     1, parse_string },
 	{ TK_STRING,	{ .pat = "\"" },    1, parse_string },
 	{ TK_REGEXP,	{ .pat = "/" },     1, parse_regexp },
-	{ TK_LABEL,		{ .pat = "_" },     1, parse_label  },
-	{ TK_LABEL,		{ .pat = "az" },    0, parse_label  },
-	{ TK_LABEL,		{ .pat = "AZ" },    0, parse_label  },
+	{ TK_LABEL,		{ .pat = "_" },     1, parse_label },
+	{ TK_LABEL,		{ .pat = "az" },    0, parse_label },
+	{ TK_LABEL,		{ .pat = "AZ" },    0, parse_label },
 	{ TK_NUMBER,	{ .pat = "-" },     1, parse_number },
 	{ TK_NUMBER,	{ .pat = "09" },    0, parse_number },
 };
 
 static const struct keyword reserved_words[] = {
-	{ TK_ENDFUNC,	"endfunction", 11 },
+	{ TK_ENDFUNC,	"endfunction", 11, { 0 } },
 	{ TK_DOUBLE,	"Infinity", 8, { .d = INFINITY } },
-	{ TK_CONTINUE,	"continue", 8 },
-	{ TK_ENDWHILE,	"endwhile", 8 },
-	{ TK_FUNC,		"function", 8 },
-	{ TK_DEFAULT,	"default", 7 },
-	{ TK_RETURN,	"return", 6 },
-	{ TK_ENDFOR,	"endfor", 6 },
-	{ TK_SWITCH,	"switch", 6 },
-	{ TK_LOCAL,		"local", 5 },
-	{ TK_ENDIF,		"endif", 5 },
-	{ TK_WHILE,		"while", 5 },
-	{ TK_BREAK,		"break", 5 },
-	{ TK_CATCH,		"catch", 5 },
+	{ TK_CONTINUE,	"continue", 8, { 0 } },
+	{ TK_ENDWHILE,	"endwhile", 8, { 0 } },
+	{ TK_FUNC,		"function", 8, { 0 } },
+	{ TK_DEFAULT,	"default", 7, { 0 } },
+	{ TK_RETURN,	"return", 6, { 0 } },
+	{ TK_ENDFOR,	"endfor", 6, { 0 } },
+	{ TK_SWITCH,	"switch", 6, { 0 } },
+	{ TK_LOCAL,		"local", 5, { 0 } },
+	{ TK_ENDIF,		"endif", 5, { 0 } },
+	{ TK_WHILE,		"while", 5, { 0 } },
+	{ TK_BREAK,		"break", 5, { 0 } },
+	{ TK_CATCH,		"catch", 5, { 0 } },
 	{ TK_BOOL,		"false", 5, { .b = false } },
 	{ TK_BOOL,		"true",  4, { .b = true } },
-	{ TK_ELIF,		"elif",  4 },
-	{ TK_ELSE,		"else",  4 },
-	{ TK_THIS,		"this",  4 },
-	{ TK_NULL,		"null",  4 },
-	{ TK_CASE,		"case",  4 },
+	{ TK_ELIF,		"elif",  4, { 0 } },
+	{ TK_ELSE,		"else",  4, { 0 } },
+	{ TK_THIS,		"this",  4, { 0 } },
+	{ TK_NULL,		"null",  4, { 0 } },
+	{ TK_CASE,		"case",  4, { 0 } },
 	{ TK_DOUBLE,	"NaN",   3, { .d = NAN } },
-	{ TK_TRY,		"try",   3 },
-	{ TK_FOR,		"for",   3 },
-	{ TK_LOCAL,		"let",   3 },
-	{ TK_IF,		"if",    2 },
-	{ TK_IN,		"in",    2 },
+	{ TK_TRY,		"try",   3, { 0 } },
+	{ TK_FOR,		"for",   3, { 0 } },
+	{ TK_LOCAL,		"let",   3, { 0 } },
+	{ TK_IF,		"if",    2, { 0 } },
+	{ TK_IN,		"in",    2, { 0 } },
 };
 
 
@@ -223,10 +223,10 @@ utf8enc(char **out, int *rem, int code)
 #define UT_LEX_MAX_TOKEN_LEN 3
 
 static uc_token *
-emit_op(uc_lexer *lex, uint32_t pos, int type, struct json_object *val)
+emit_op(uc_lexer *lex, uint32_t pos, int type, uc_value_t *uv)
 {
 	lex->curr.type = type;
-	lex->curr.val = val;
+	lex->curr.uv = uv;
 	lex->curr.pos = pos;
 
 	return &lex->curr;
@@ -257,7 +257,7 @@ lookbehind_to_text(uc_lexer *lex, uint32_t pos, int type, const char *strip_trai
 				lex->lookbehindlen--;
 		}
 
-		rv = emit_op(lex, pos, type, xjs_new_string_len(lex->lookbehind, lex->lookbehindlen));
+		rv = emit_op(lex, pos, type, ucv_string_new_length(lex->lookbehind, lex->lookbehindlen));
 
 		lookbehind_reset(lex);
 	}
@@ -360,9 +360,9 @@ parse_comment(uc_lexer *lex, bool no_regexp)
 	size_t elen;
 
 	if (!buf_remaining(lex))
-		return emit_op(lex, lex->lastoff, TK_ERROR, xjs_new_string("Unterminated comment"));
+		return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated comment"));
 
-	if (!strcmp(tok->pat, "//")) {
+	if (!strcmp(tok->u.pat, "//")) {
 		end = "\n";
 		elen = 1;
 	}
@@ -400,13 +400,13 @@ static uc_token *
 parse_string(uc_lexer *lex, bool no_regexp)
 {
 	const struct token *tok = lex->tok;
-	char q = tok->pat[0];
+	char q = tok->u.pat[0];
 	char *ptr, *c;
 	uc_token *rv;
 	int code;
 
 	if (!buf_remaining(lex))
-		return emit_op(lex, lex->lastoff, TK_ERROR, xjs_new_string("Unterminated string"));
+		return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated string"));
 
 	for (ptr = lex->bufstart; ptr < lex->bufend; ptr++) {
 		/* continuation of escape sequence */
@@ -438,7 +438,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 
 				default:
 					lex->is_escape = false;
-					c = strchr("a\ab\be\ef\fn\nr\rt\tv\v", *ptr);
+					c = strchr("a\ab\be\033f\fn\nr\rt\tv\v", *ptr);
 
 					if (c && *c >= 'a') {
 						lookbehind_append(lex, c + 1, 1);
@@ -461,7 +461,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 				case 'u':
 					if (lex->esclen < 5) {
 						if (!isxdigit(*ptr))
-							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, xjs_new_string("Invalid escape sequence"));
+							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, ucv_string_new("Invalid escape sequence"));
 
 						lex->esc[lex->esclen++] = *ptr;
 					}
@@ -513,7 +513,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 				case 'x':
 					if (lex->esclen < 3) {
 						if (!isxdigit(*ptr))
-							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, xjs_new_string("Invalid escape sequence"));
+							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, ucv_string_new("Invalid escape sequence"));
 
 						lex->esc[lex->esclen++] = *ptr;
 					}
@@ -564,7 +564,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 						       dec(lex->esc[3]);
 
 						if (code > 255)
-							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, xjs_new_string("Invalid escape sequence"));
+							return emit_op(lex, lex->source->off + lex->esclen + 1, TK_ERROR, ucv_string_new("Invalid escape sequence"));
 
 						append_utf8(lex, code);
 
@@ -585,7 +585,7 @@ parse_string(uc_lexer *lex, bool no_regexp)
 			rv = lookbehind_to_text(lex, lex->lastoff, TK_STRING, NULL);
 
 			if (!rv)
-				rv = emit_op(lex, lex->lastoff, TK_STRING, xjs_new_string_len("", 0));
+				rv = emit_op(lex, lex->lastoff, TK_STRING, ucv_string_new_length("", 0));
 
 			return rv;
 		}
@@ -685,10 +685,11 @@ parse_regexp(uc_lexer *lex, bool no_regexp)
 
 				len = xasprintf(&s, "%c%*s",
 					(is_reg_global << 0) | (is_reg_icase << 1) | (is_reg_newline << 2),
-					json_object_get_string_len(rv->val),
-					json_object_get_string(rv->val));
+					ucv_string_length(rv->uv),
+					ucv_string_get(rv->uv));
 
-				json_object_set_string_len(rv->val, s, len);
+				ucv_free(rv->uv, false);
+				rv->uv = ucv_string_new_length(s, len);
 				free(s);
 
 				rv->type = TK_REGEXP;
@@ -724,20 +725,20 @@ parse_label(uc_lexer *lex, bool no_regexp)
 	size_t i;
 
 	if (!lex->lookbehind && tok->plen)
-		lookbehind_append(lex, tok->pat, tok->plen);
+		lookbehind_append(lex, tok->u.pat, tok->plen);
 
 	if (!buf_remaining(lex) || (lex->bufstart[0] != '_' && !isalnum(lex->bufstart[0]))) {
 		for (i = 0, word = &reserved_words[0]; i < ARRAY_SIZE(reserved_words); i++, word = &reserved_words[i]) {
-			if (lex->lookbehindlen == word->plen && !strncmp(lex->lookbehind, word->pat, word->plen)) {
+			if (lex->lookbehind && lex->lookbehindlen == word->plen && !strncmp(lex->lookbehind, word->pat, word->plen)) {
 				lookbehind_reset(lex);
 
 				switch (word->type) {
 				case TK_DOUBLE:
-					rv = emit_op(lex, lex->source->off - word->plen, word->type, uc_double_new(word->d));
+					rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_double_new(word->u.d));
 					break;
 
 				case TK_BOOL:
-					rv = emit_op(lex, lex->source->off - word->plen, word->type, xjs_new_boolean(word->b));
+					rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_boolean_new(word->u.b));
 					break;
 
 				default:
@@ -802,23 +803,23 @@ parse_number(uc_lexer *lex, bool no_regexp)
 		if (*e == '.' || *e == 'e' || *e == 'E') {
 			d = strtod(lex->lookbehind, &e);
 
-			if (tok->pat[0] == '-')
+			if (tok->u.pat[0] == '-')
 				d = -d;
 
 			if (e > lex->lookbehind && *e == 0)
-				rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_DOUBLE, uc_double_new(d));
+				rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_DOUBLE, ucv_double_new(d));
 			else
-				rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, xjs_new_string("Invalid number literal"));
+				rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, ucv_string_new("Invalid number literal"));
 		}
 		else if (*e == 0) {
-			if (tok->pat[0] == '-')
+			if (tok->u.pat[0] == '-')
 				n = (errno == ERANGE) ? INT64_MIN : -n;
 
-			rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_NUMBER, xjs_new_int64(n));
+			rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_NUMBER, ucv_int64_new(n));
 			//OP(rv)->is_overflow = (errno == ERANGE);
 		}
 		else {
-			rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, xjs_new_string("Invalid number literal"));
+			rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, ucv_string_new("Invalid number literal"));
 		}
 
 		lookbehind_reset(lex);
@@ -856,7 +857,8 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 
 		rem = lex->bufend - lex->bufstart;
 
-		memcpy(lex->buf, lex->bufstart, rem);
+		if (rem)
+			memcpy(lex->buf, lex->bufstart, rem);
 
 		rlen = fread(lex->buf + rem, 1, lex->buflen - rem, fp);
 
@@ -1008,7 +1010,7 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 
 			buf_consume(lex, lex->bufend - lex->bufstart);
 
-			return emit_op(lex, lex->lastoff, TK_ERROR, xjs_new_string("Unterminated template block"));
+			return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated template block"));
 		}
 
 		break;
@@ -1041,8 +1043,8 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 
 			c = buf_remaining(lex) ? lex->bufstart[0] : 0;
 
-			if (tok->plen ? ((search.n & masks[tok->plen]) == tok->patn)
-			              : (c >= tok->pat[0] && c <= tok->pat[1])) {
+			if (tok->plen ? ((search.n & masks[tok->plen]) == tok->u.patn)
+			              : (c >= tok->u.pat[0] && c <= tok->u.pat[1])) {
 				lex->lastoff = lex->source->off;
 
 				/* token has a parse method, switch state */
@@ -1059,14 +1061,14 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 				if (tok->type == TK_LSTM || tok->type == TK_LEXP) {
 					buf_consume(lex, tok->plen);
 
-					return emit_op(lex, lex->source->off - tok->plen, TK_ERROR, xjs_new_string("Template blocks may not be nested"));
+					return emit_op(lex, lex->source->off - tok->plen, TK_ERROR, ucv_string_new("Template blocks may not be nested"));
 				}
 
 				/* found end of block */
 				else if ((lex->block == STATEMENTS && tok->type == TK_RSTM) ||
 				         (lex->block == EXPRESSION && tok->type == TK_REXP)) {
 					/* strip whitespace after block */
-					if (tok->pat[0] == '-')
+					if (tok->u.pat[0] == '-')
 						lex->modifier = MINUS;
 
 					/* strip newline after statement block */
@@ -1093,7 +1095,7 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 
 		/* no token matched and we do have remaining data, junk */
 		if (buf_remaining(lex))
-			return emit_op(lex, lex->source->off, TK_ERROR, xjs_new_string("Unexpected character"));
+			return emit_op(lex, lex->source->off, TK_ERROR, ucv_string_new("Unexpected character"));
 
 		/* we're at eof, allow unclosed statement blocks */
 		if (lex->block == STATEMENTS) {
@@ -1103,7 +1105,7 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 		}
 
 		/* premature EOF */
-		return emit_op(lex, lex->source->off, TK_ERROR, xjs_new_string("Unterminated template block"));
+		return emit_op(lex, lex->source->off, TK_ERROR, ucv_string_new("Unterminated template block"));
 
 
 	case UT_LEX_PARSE_TOKEN:
@@ -1188,7 +1190,7 @@ uc_lexer_next_token(uc_lexer *lex, bool no_regexp)
 }
 
 const char *
-uc_get_tokenname(int type)
+uc_get_tokenname(unsigned type)
 {
 	static char buf[sizeof("'endfunction'")];
 	size_t i;
@@ -1206,7 +1208,7 @@ uc_get_tokenname(int type)
 		if (tokens[i].type != type)
 			continue;
 
-		snprintf(buf, sizeof(buf), "'%s'", tokens[i].pat);
+		snprintf(buf, sizeof(buf), "'%s'", tokens[i].u.pat);
 
 		return buf;
 	}

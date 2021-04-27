@@ -28,8 +28,8 @@
 #endif
 
 #include "source.h"
-#include "object.h"
 #include "lexer.h"
+#include "types.h"
 #include "util.h"
 
 typedef enum {
@@ -72,14 +72,14 @@ struct uc_patchlist {
 typedef struct uc_patchlist uc_patchlist;
 
 typedef struct {
-	json_object *name;
+	uc_value_t *name;
 	ssize_t depth;
 	size_t from;
 	bool captured;
 } uc_local;
 
 typedef struct {
-	json_object *name;
+	uc_value_t *name;
 	size_t index;
 	bool local;
 } uc_upval;
@@ -93,7 +93,7 @@ typedef struct {
 	uc_lexer lex;
 	uc_token prev, curr;
 	bool synchronizing;
-	char *error;
+	uc_stringbuf_t *error;
 } uc_parser;
 
 struct uc_compiler {
@@ -101,7 +101,7 @@ struct uc_compiler {
 	uc_locals locals;
 	uc_upvals upvals;
 	uc_patchlist *patchlist;
-	uc_function *function;
+	uc_value_t *function;
 	uc_parser *parser;
 	size_t scope_depth, current_srcpos, last_insn;
 	bool statement_emitted;
@@ -115,6 +115,6 @@ typedef struct {
 	uc_precedence_t precedence;
 } uc_parse_rule;
 
-uc_function *uc_compile(uc_parse_config *config, uc_source *source, char **errp);
+uc_function_t *uc_compile(uc_parse_config *config, uc_source *source, char **errp);
 
 #endif /* __COMPILER_H_ */

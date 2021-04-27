@@ -22,42 +22,18 @@
 
 #include "value.h"
 #include "util.h"
-
-
-typedef struct {
-	size_t from, to, target, slot;
-} uc_ehrange;
-
-typedef struct {
-	size_t from, to, slot, nameidx;
-} uc_varrange;
-
-uc_declare_vector(uc_ehranges, uc_ehrange);
-uc_declare_vector(uc_variables, uc_varrange);
-uc_declare_vector(uc_offsetinfo, uint8_t);
-
-typedef struct {
-	size_t count;
-	uint8_t *entries;
-	uc_value_list constants;
-	uc_ehranges ehranges;
-	struct {
-		uc_variables variables;
-		uc_value_list varnames;
-		uc_offsetinfo offsets;
-	} debuginfo;
-} uc_chunk;
+#include "types.h"
 
 void uc_chunk_init(uc_chunk *chunk);
 void uc_chunk_free(uc_chunk *chunk);
 size_t uc_chunk_add(uc_chunk *chunk, uint8_t byte, size_t line);
 
-ssize_t uc_chunk_add_constant(uc_chunk *chunk, struct json_object *value);
-struct json_object *uc_chunk_get_constant(uc_chunk *chunk, size_t idx);
+ssize_t uc_chunk_add_constant(uc_chunk *chunk, uc_value_t *value);
+uc_value_t *uc_chunk_get_constant(uc_chunk *chunk, size_t idx);
 void uc_chunk_pop(uc_chunk *chunk);
 
 size_t uc_chunk_debug_get_srcpos(uc_chunk *chunk, size_t off);
-void uc_chunk_debug_add_variable(uc_chunk *chunk, size_t from, size_t to, size_t slot, bool upval, json_object *name);
-json_object *uc_chunk_debug_get_variable(uc_chunk *chunk, size_t off, size_t slot, bool upval);
+void uc_chunk_debug_add_variable(uc_chunk *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name);
+uc_value_t *uc_chunk_debug_get_variable(uc_chunk *chunk, size_t off, size_t slot, bool upval);
 
 #endif /* __CHUNK_H_ */

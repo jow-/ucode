@@ -8,3 +8,4 @@ parser.out
 contrib/lemon
 utpl
 lib/*.so
+tests/cram/*.t.err

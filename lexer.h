@@ -18,6 +18,7 @@
 #define __LEXER_H_
 
 #include "source.h"
+#include "types.h"
 
 
 typedef enum {
@@ -121,15 +122,9 @@ typedef enum {
 
 typedef struct {
 	uc_tokentype_t type;
-	json_object *val;
+	uc_value_t *uv;
 	size_t pos;
 } uc_token;
-
-typedef struct {
-	bool lstrip_blocks;
-	bool trim_blocks;
-	bool strict_declarations;
-} uc_parse_config;
 
 typedef struct {
 	uc_lex_state_t state;
@@ -170,6 +165,6 @@ uc_token *uc_lexer_next_token(uc_lexer *lex, bool no_regexp);
 bool utf8enc(char **out, int *rem, int code);
 
 const char *
-uc_get_tokenname(int type);
+uc_get_tokenname(unsigned type);
 
 #endif /* __LEXER_H_ */

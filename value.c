@@ -23,8 +23,8 @@
 #include "util.h"
 #include "chunk.h"
 #include "value.h"
-#include "object.h"
 #include "lexer.h" /* TK_* */
+#include "vm.h"
 
 #define TAG_TYPE			uint64_t
 #define TAG_BITS			3
@@ -44,70 +44,39 @@
 #define UC_VALLIST_CHUNK_SIZE	8
 
 
-static int
-uc_double_tostring(json_object *v, struct printbuf *pb, int level, int flags)
-{
-	bool strict = (level > 0) || (flags & JSON_C_TO_STRING_STRICT);
-	double d = json_object_get_double(v);
-
-	if (isnan(d))
-		return sprintbuf(pb, strict ? "\"NaN\"" : "NaN");
-
-	if (d == INFINITY)
-		return sprintbuf(pb, strict ? "1e309" : "Infinity");
-
-	if (d == -INFINITY)
-		return sprintbuf(pb, strict ? "-1e309" : "-Infinity");
-
-	return sprintbuf(pb, "%g", d);
-}
-
-json_object *
-uc_double_new(double v)
-{
-	json_object *d = json_object_new_double(v);
-
-	if (!d) {
-		fprintf(stderr, "Out of memory\n");
-		abort();
-	}
-
-	json_object_set_serializer(d, uc_double_tostring, NULL, NULL);
-
-	return d;
-}
-
 bool
-uc_val_is_truish(json_object *val)
+uc_val_is_truish(uc_value_t *val)
 {
 	double d;
 
-	switch (json_object_get_type(val)) {
-	case json_type_int:
-		return (json_object_get_int64(val) != 0);
+	switch (ucv_type(val)) {
+	case UC_INTEGER:
+		if (ucv_is_u64(val))
+			return (ucv_uint64_get(val) != 0);
 
-	case json_type_double:
-		d = json_object_get_double(val);
+		return (ucv_int64_get(val) != 0);
+
+	case UC_DOUBLE:
+		d = ucv_double_get(val);
 
 		return (d != 0 && !isnan(d));
 
-	case json_type_boolean:
-		return (json_object_get_boolean(val) != false);
+	case UC_BOOLEAN:
+		return ucv_boolean_get(val);
 
-	case json_type_string:
-		return (json_object_get_string_len(val) > 0);
+	case UC_STRING:
+		return (ucv_string_length(val) > 0);
 
-	case json_type_array:
-	case json_type_object:
-		return true;
+	case UC_NULL:
+		return false;
 
 	default:
-		return false;
+		return true;
 	}
 }
 
-enum json_type
-uc_cast_number(json_object *v, int64_t *n, double *d)
+uc_type_t
+uc_cast_number(uc_value_t *v, int64_t *n, double *d)
 {
 	bool is_double = false;
 	const char *s;
@@ -116,27 +85,27 @@ uc_cast_number(json_object *v, int64_t *n, double *d)
 	*d = 0.0;
 	*n = 0;
 
-	switch (json_object_get_type(v)) {
-	case json_type_int:
-		*n = json_object_get_int64(v);
+	switch (ucv_type(v)) {
+	case UC_INTEGER:
+		*n = ucv_int64_get(v);
 
-		return json_type_int;
+		return UC_INTEGER;
 
-	case json_type_double:
-		*d = json_object_get_double(v);
+	case UC_DOUBLE:
+		*d = ucv_double_get(v);
 
-		return json_type_double;
+		return UC_DOUBLE;
 
-	case json_type_null:
-		return json_type_int;
+	case UC_NULL:
+		return UC_INTEGER;
 
-	case json_type_boolean:
-		*n = json_object_get_boolean(v) ? 1 : 0;
+	case UC_BOOLEAN:
+		*n = ucv_boolean_get(v);
 
-		return json_type_int;
+		return UC_INTEGER;
 
-	case json_type_string:
-		s = json_object_get_string(v);
+	case UC_STRING:
+		s = ucv_string_get(v);
 
 		while (isspace(*s))
 			s++;
@@ -162,141 +131,144 @@ uc_cast_number(json_object *v, int64_t *n, double *d)
 		if (*e) {
 			*d = NAN;
 
-			return json_type_double;
+			return UC_DOUBLE;
 		}
 
 		if (is_double)
-			return json_type_double;
+			return UC_DOUBLE;
 
-		return json_type_int;
+		return UC_INTEGER;
 
 	default:
 		*d = NAN;
 
-		return json_type_double;
+		return UC_DOUBLE;
 	}
 }
 
-static json_object *
-uc_getproto(json_object *obj)
+static char *
+uc_tostring(uc_vm *vm, uc_value_t *val)
 {
-	uc_prototype *proto;
+	if (ucv_type(val) != UC_STRING)
+		return ucv_to_string(vm, val);
 
-	switch (uc_object_type(obj)) {
-	case UC_OBJ_RESSOURCE:
-		proto = uc_ressource_prototype(obj);
-		break;
-
-	case UC_OBJ_PROTOTYPE:
-		proto = uc_object_as_prototype(obj)->parent;
-		break;
-
-	default:
-		proto = NULL;
-	}
-
-	return proto ? proto->header.jso : NULL;
+	return NULL;
 }
 
-json_object *
-uc_getval(json_object *scope, json_object *key)
+static int64_t
+uc_toidx(uc_value_t *val)
 {
-	json_object *o, *v;
 	const char *k;
 	int64_t idx;
 	double d;
 	char *e;
 
-	if (json_object_is_type(scope, json_type_array)) {
-		/* only consider doubles with integer values as array keys */
-		if (json_object_is_type(key, json_type_double)) {
-			d = json_object_get_double(key);
+	/* only consider doubles with integer values as array keys */
+	if (ucv_type(val) == UC_DOUBLE) {
+		d = ucv_double_get(val);
 
-			if ((double)(int64_t)(d) == d)
-				idx = (int64_t)d;
-			else
-				idx = -1;
-		}
-		else if (json_object_is_type(key, json_type_int)) {
-			idx = json_object_get_int64(key);
-		}
-		else if (json_object_is_type(key, json_type_string)) {
-			errno = 0;
-			k = json_object_get_string(key);
-			idx = strtoll(k, &e, 0);
+		if ((double)(int64_t)(d) != d)
+			return -1;
 
-			if (errno != 0 || e == k || *e != 0)
-				idx = -1;
-		}
-		else {
-			idx = -1;
-		}
+		return (int64_t)d;
+	}
+	else if (ucv_type(val) == UC_INTEGER) {
+		return ucv_int64_get(val);
+	}
+	else if (ucv_type(val) == UC_STRING) {
+		errno = 0;
+		k = ucv_string_get(val);
+		idx = strtoll(k, &e, 0);
 
-		if (idx >= 0 && idx < json_object_array_length(scope))
-			return json_object_get(json_object_array_get_idx(scope, idx));
+		if (errno != 0 || e == k || *e != 0)
+			return -1;
+
+		return idx;
 	}
 
-	for (o = scope, k = key ? json_object_get_string(key) : "null"; o; o = uc_getproto(o)) {
-		if (!json_object_is_type(o, json_type_object))
-			continue;
-
-		if (json_object_object_get_ex(o, k, &v))
-			return json_object_get(v);
-	}
-
-	return NULL;
+	return -1;
 }
 
-json_object *
-uc_setval(json_object *scope, json_object *key, json_object *val)
+uc_value_t *
+uc_getval(uc_vm *vm, uc_value_t *scope, uc_value_t *key)
+{
+	uc_value_t *o, *v = NULL;
+	int64_t idx;
+	bool found;
+	char *k;
+
+	if (ucv_type(scope) == UC_ARRAY) {
+		idx = uc_toidx(key);
+
+		if (idx >= 0 && (uint64_t)idx < ucv_array_length(scope))
+			return ucv_get(ucv_array_get(scope, idx));
+	}
+
+	k = uc_tostring(vm, key);
+
+	for (o = scope; o; o = ucv_prototype_get(o)) {
+		if (ucv_type(o) != UC_OBJECT)
+			continue;
+
+		v = ucv_object_get(o, k ? k : ucv_string_get(key), &found);
+
+		if (found)
+			break;
+	}
+
+	free(k);
+
+	return ucv_get(v);
+}
+
+uc_value_t *
+uc_setval(uc_vm *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
 {
 	int64_t idx;
+	char *s;
+	bool rv;
 
 	if (!key)
 		return NULL;
 
-	if (json_object_is_type(scope, json_type_array)) {
-		errno = 0;
-		idx = json_object_get_int64(key);
+	if (ucv_type(scope) == UC_ARRAY) {
+		idx = uc_toidx(key);
 
-		if (errno != 0)
+		if (idx < 0 || !ucv_array_set(scope, idx, val))
 			return NULL;
 
-		if (json_object_array_put_idx(scope, idx, val))
-			return NULL;
-
-		return json_object_get(val);
+		return ucv_get(val);
 	}
 
-	if (json_object_object_add(scope, key ? json_object_get_string(key) : "null", val))
-		return NULL;
+	s = uc_tostring(vm, key);
+	rv = ucv_object_add(scope, s ? s : ucv_string_get(key), val);
+	free(s);
 
-	return json_object_get(val);
+	return rv ? ucv_get(val) : NULL;
 }
 
 bool
-uc_cmp(int how, json_object *v1, json_object *v2)
+uc_cmp(int how, uc_value_t *v1, uc_value_t *v2)
 {
-	enum json_type t1 = json_object_get_type(v1);
-	enum json_type t2 = json_object_get_type(v2);
+	uc_type_t t1 = ucv_type(v1);
+	uc_type_t t2 = ucv_type(v2);
 	int64_t n1, n2, delta;
 	double d1, d2;
 
-	if (t1 == json_type_string && t2 == json_type_string) {
-		delta = strcmp(json_object_get_string(v1), json_object_get_string(v2));
+	if (t1 == UC_STRING && t2 == UC_STRING) {
+		delta = strcmp(ucv_string_get(v1), ucv_string_get(v2));
 	}
 	else {
-		if ((t1 == json_type_array && t2 == json_type_array) ||
-		    (t1 == json_type_object && t2 == json_type_object))	{
-			delta = (void *)v1 - (void *)v2;
+		if (t1 == t2 && !ucv_is_scalar(v1)) {
+			delta = (intptr_t)v1 - (intptr_t)v2;
 		}
 		else {
 			t1 = uc_cast_number(v1, &n1, &d1);
 			t2 = uc_cast_number(v2, &n2, &d2);
 
-			if (t1 == json_type_double || t2 == json_type_double) {
-				d1 = (t1 == json_type_double) ? d1 : (double)n1;
-				d2 = (t2 == json_type_double) ? d2 : (double)n2;
+			if (t1 == UC_DOUBLE || t2 == UC_DOUBLE) {
+				d1 = (t1 == UC_DOUBLE) ? d1 : (double)n1;
+				d2 = (t2 == UC_DOUBLE) ? d2 : (double)n2;
 
 				/* all comparison results except `!=` involving NaN are false */
 				if (isnan(d1) || isnan(d2))
@@ -339,44 +311,6 @@ uc_cmp(int how, json_object *v1, json_object *v2)
 	}
 }
 
-bool
-uc_eq(json_object *v1, json_object *v2)
-{
-	uc_objtype_t o1 = uc_object_type(v1);
-	uc_objtype_t o2 = uc_object_type(v2);
-	enum json_type t1 = json_object_get_type(v1);
-	enum json_type t2 = json_object_get_type(v2);
-
-	if (o1 != o2 || t1 != t2)
-		return false;
-
-	switch (t1) {
-	case json_type_array:
-	case json_type_object:
-		return (v1 == v2);
-
-	case json_type_boolean:
-		return (json_object_get_boolean(v1) == json_object_get_boolean(v2));
-
-	case json_type_double:
-		if (isnan(json_object_get_double(v1)) || isnan(json_object_get_double(v2)))
-			return false;
-
-		return (json_object_get_double(v1) == json_object_get_double(v2));
-
-	case json_type_int:
-		return (json_object_get_int64(v1) == json_object_get_int64(v2));
-
-	case json_type_string:
-		return !strcmp(json_object_get_string(v1), json_object_get_string(v2));
-
-	case json_type_null:
-		return true;
-	}
-
-	return false;
-}
-
 void
 uc_vallist_init(uc_value_list *list)
 {
@@ -389,14 +323,14 @@ uc_vallist_init(uc_value_list *list)
 void
 uc_vallist_free(uc_value_list *list)
 {
-	json_object *o;
+	uc_value_t *o;
 	size_t i;
 
 	for (i = 0; i < list->isize; i++) {
 		if (TAG_GET_TYPE(list->index[i]) == TAG_PTR) {
 			o = uc_vallist_get(list, i);
-			uc_value_put(o);
-			uc_value_put(o);
+			ucv_put(o);
+			ucv_put(o);
 		}
 	}
 
@@ -414,7 +348,7 @@ add_num(uc_value_list *list, int64_t n)
 		list->index[list->isize++] = (TAG_TYPE)(TAG_NUM | TAG_SET_NV(n));
 	}
 	else {
-		if (list->dsize + sz > TAG_MASK) {
+		if ((TAG_TYPE)list->dsize + sz > TAG_MASK) {
 			fprintf(stderr, "Constant data too large\n");
 			abort();
 		}
@@ -466,7 +400,7 @@ add_dbl(uc_value_list *list, double d)
 {
 	size_t sz = TAG_ALIGN(sizeof(d));
 
-	if (list->dsize + sz > TAG_MASK) {
+	if ((TAG_TYPE)list->dsize + sz > TAG_MASK) {
 		fprintf(stderr, "Constant data too large\n");
 		abort();
 	}
@@ -507,7 +441,7 @@ add_str(uc_value_list *list, const char *s, size_t slen)
 	uint32_t sl;
 	size_t sz;
 	char *dst;
-	int i;
+	size_t i;
 
 	if (slen > UINT32_MAX) {
 		fprintf(stderr, "String constant too long\n");
@@ -516,7 +450,7 @@ add_str(uc_value_list *list, const char *s, size_t slen)
 
 	sz = TAG_ALIGN(sizeof(uint32_t) + slen);
 
-	if (list->dsize + sz > TAG_MASK) {
+	if ((TAG_TYPE)list->dsize + sz > TAG_MASK) {
 		fprintf(stderr, "Constant data too large\n");
 		abort();
 	}
@@ -594,7 +528,7 @@ add_ptr(uc_value_list *list, void *ptr)
 {
 	size_t sz = TAG_ALIGN(sizeof(ptr));
 
-	if (list->dsize + sz > TAG_MASK) {
+	if ((TAG_TYPE)list->dsize + sz > TAG_MASK) {
 		fprintf(stderr, "Constant data too large\n");
 		abort();
 	}
@@ -609,7 +543,7 @@ add_ptr(uc_value_list *list, void *ptr)
 }
 
 ssize_t
-uc_vallist_add(uc_value_list *list, json_object *value)
+uc_vallist_add(uc_value_list *list, uc_value_t *value)
 {
 	ssize_t existing;
 
@@ -618,42 +552,43 @@ uc_vallist_add(uc_value_list *list, json_object *value)
 		memset(&list->index[list->isize], 0, UC_VALLIST_CHUNK_SIZE);
 	}
 
-	switch (json_object_get_type(value)) {
-	case json_type_int:
-		existing = find_num(list, json_object_get_int64(value));
+	switch (ucv_type(value)) {
+	case UC_INTEGER:
+		/* XXX: u64 */
+		existing = find_num(list, ucv_int64_get(value));
 
 		if (existing > -1)
 			return existing;
 
-		add_num(list, json_object_get_int64(value));
+		add_num(list, ucv_int64_get(value));
 
 		break;
 
-	case json_type_double:
-		existing = find_dbl(list, json_object_get_double(value));
+	case UC_DOUBLE:
+		existing = find_dbl(list, ucv_double_get(value));
 
 		if (existing > -1)
 			return existing;
 
-		add_dbl(list, json_object_get_double(value));
+		add_dbl(list, ucv_double_get(value));
 
 		break;
 
-	case json_type_string:
+	case UC_STRING:
 		existing = find_str(list,
-			json_object_get_string(value),
-			json_object_get_string_len(value));
+			ucv_string_get(value),
+			ucv_string_length(value));
 
 		if (existing > -1)
 			return existing;
 
 		add_str(list,
-			json_object_get_string(value),
-			json_object_get_string_len(value));
+			ucv_string_get(value),
+			ucv_string_length(value));
 
 		break;
 
-	case json_type_object:
+	case UC_FUNCTION:
 		add_ptr(list, value);
 		break;
 
@@ -673,28 +608,28 @@ uc_vallist_type(uc_value_list *list, size_t idx)
 	return TAG_GET_TYPE(list->index[idx]);
 }
 
-json_object *
+uc_value_t *
 uc_vallist_get(uc_value_list *list, size_t idx)
 {
 	char str[sizeof(TAG_TYPE)];
-	size_t len;
-	int n;
+	size_t n, len;
 
 	switch (uc_vallist_type(list, idx)) {
 	case TAG_NUM:
-		return xjs_new_int64(TAG_GET_NV(list->index[idx]));
+		return ucv_int64_new(TAG_GET_NV(list->index[idx]));
 
 	case TAG_LNUM:
 		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(int64_t) > list->dsize)
 			return NULL;
 
-		return xjs_new_int64(be64toh(*(int64_t *)(list->data + TAG_GET_OFFSET(list->index[idx]))));
+		/* XXX: u64 */
+		return ucv_int64_new(be64toh(*(int64_t *)(list->data + TAG_GET_OFFSET(list->index[idx]))));
 
 	case TAG_DBL:
 		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(double) > list->dsize)
 			return NULL;
 
-		return uc_double_new(*(double *)(list->data + TAG_GET_OFFSET(list->index[idx])));
+		return ucv_double_new(*(double *)(list->data + TAG_GET_OFFSET(list->index[idx])));
 
 	case TAG_STR:
 		len = TAG_GET_STR_L(list->index[idx]);
@@ -702,7 +637,7 @@ uc_vallist_get(uc_value_list *list, size_t idx)
 		for (n = 0; n < len; n++)
 			str[n] = (list->index[idx] >> ((n + 1) << 3));
 
-		return xjs_new_string_len(str, len);
+		return ucv_string_new_length(str, len);
 
 	case TAG_LSTR:
 		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(uint32_t) > list->dsize)
@@ -713,13 +648,13 @@ uc_vallist_get(uc_value_list *list, size_t idx)
 		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(uint32_t) + len > list->dsize)
 			return NULL;
 
-		return xjs_new_string_len(list->data + TAG_GET_OFFSET(list->index[idx]) + sizeof(uint32_t), len);
+		return ucv_string_new_length(list->data + TAG_GET_OFFSET(list->index[idx]) + sizeof(uint32_t), len);
 
 	case TAG_PTR:
 		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(void *) > list->dsize)
 			return NULL;
 
-		return uc_value_get(*(json_object **)(list->data + TAG_GET_OFFSET(list->index[idx])));
+		return ucv_get(*(uc_value_t **)(list->data + TAG_GET_OFFSET(list->index[idx])));
 
 	default:
 		return NULL;

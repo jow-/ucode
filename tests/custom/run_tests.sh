@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
+testdir=$(dirname "$0")
+topdir=$(readlink -f "$testdir/../..")
+
 line='........................................'
+ucode_bin=${UCODE_BIN:-"$topdir/ucode"}
+ucode_lib=${UCODE_LIB:-"$topdir"}
 
 extract_sections() {
 	local file=$1
@@ -47,7 +52,10 @@ run_testcase() {
 	local code=$6
 	local fail=0
 
-	./ucode -e '{ "REQUIRE_SEARCH_PATH": [ "./lib/*.so" ] }' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
+	(
+		cd "$topdir"
+		$ucode_bin -e '{ "REQUIRE_SEARCH_PATH": [ "'"$ucode_lib"'/*.so" ] }' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
+	)
 
 	touch "$dir/empty"
 	printf "%d\n" $? > "$dir/res.code"
@@ -162,7 +170,7 @@ use_test() {
 	return 1
 }
 
-for catdir in tests/[0-9][0-9]_*; do
+for catdir in "$testdir/"[0-9][0-9]_*; do
 	[ -d "$catdir" ] || continue
 
 	printf "\n##\n## Running %s tests\n##\n\n" "${catdir##*/[0-9][0-9]_}"
@@ -176,3 +184,4 @@ for catdir in tests/[0-9][0-9]_*; do
 done
 
 printf "\nRan %d tests, %d okay, %d failures\n" $n_tests $((n_tests - n_fails)) $n_fails
+exit $n_fails
