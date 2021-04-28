@@ -1,0 +1,16 @@
+When an incomplete expression was parsed at the very end of the input
+buffer, the source code context line was not properly printed.
+
+-- Expect stderr --
+Syntax error: Expecting expression
+In line 1, byte 7:
+
+ `{% 1+`
+       ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{% 1+
+-- End --

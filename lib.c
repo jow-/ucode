@@ -131,7 +131,7 @@ format_source_context(uc_stringbuf_t *buf, uc_source *src, size_t off, bool comp
 		len = strlen(line);
 		rlen += len;
 
-		if (rlen > off) {
+		if (rlen >= off) {
 			if (compact)
 				ucv_stringbuf_printf(buf, "\033[2;40;97m%17s  %s",
 					source_filename(src, eline),
