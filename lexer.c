@@ -663,8 +663,8 @@ parse_regexp(uc_lexer *lex)
 	case UT_LEX_PARSE_REGEX_FLAGS:
 		rv = (uc_token *)lex->lookbehind;
 
-		while (lex->bufstart < lex->bufend) {
-			switch (lex->bufstart[0]) {
+		while (lex->bufstart < lex->bufend || lex->eof) {
+			switch (lex->eof ? EOF : lex->bufstart[0]) {
 			case 'g':
 				buf_consume(lex, 1);
 				is_reg_global = true;

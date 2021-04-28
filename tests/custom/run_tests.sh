@@ -28,6 +28,11 @@ extract_sections() {
 				outfile=$(printf "%s/%03d.%s" "$dir" $count "$tag")
 				printf "" > "$outfile"
 			;;
+			"-- End (no-eol) --")
+				truncate -s -1 "$outfile"
+				tag=""
+				outfile=""
+			;;
 			"-- End --")
 				tag=""
 				outfile=""

@@ -1,0 +1,9 @@
+When parsing a regexp literal at the end of the source buffer, the lexer
+ended up in an infinite loop watining for a non-flag character.
+
+-- Expect stdout --
+-- End --
+
+-- Testcase --
+{% /a/
+-- End (no-eol) --
