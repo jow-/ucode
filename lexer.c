@@ -48,7 +48,7 @@ struct token {
 		char pat[4];
 	} u;
 	unsigned plen;
-	uc_token *(*parse)(uc_lexer *, bool);
+	uc_token *(*parse)(uc_lexer *);
 };
 
 #define dec(o) \
@@ -58,11 +58,11 @@ struct token {
 	(((x) >= 'a') ? (10 + (x) - 'a') : \
 		(((x) >= 'A') ? (10 + (x) - 'A') : dec(x)))
 
-static uc_token *parse_comment(uc_lexer *, bool);
-static uc_token *parse_string(uc_lexer *, bool);
-static uc_token *parse_regexp(uc_lexer *, bool);
-static uc_token *parse_number(uc_lexer *, bool);
-static uc_token *parse_label(uc_lexer *, bool);
+static uc_token *parse_comment(uc_lexer *);
+static uc_token *parse_string(uc_lexer *);
+static uc_token *parse_regexp(uc_lexer *);
+static uc_token *parse_number(uc_lexer *);
+static uc_token *parse_label(uc_lexer *);
 
 static const struct token tokens[] = {
 	{ TK_ASLEFT,	{ .pat = "<<=" },   3, NULL },
@@ -353,7 +353,7 @@ buf_consume(uc_lexer *lex, size_t len) {
 }
 
 static uc_token *
-parse_comment(uc_lexer *lex, bool no_regexp)
+parse_comment(uc_lexer *lex)
 {
 	const struct token *tok = lex->tok;
 	const char *ptr, *end;
@@ -397,7 +397,7 @@ append_utf8(uc_lexer *lex, int code) {
 }
 
 static uc_token *
-parse_string(uc_lexer *lex, bool no_regexp)
+parse_string(uc_lexer *lex)
 {
 	const struct token *tok = lex->tok;
 	char q = tok->u.pat[0];
@@ -625,7 +625,7 @@ enum {
 };
 
 static uc_token *
-parse_regexp(uc_lexer *lex, bool no_regexp)
+parse_regexp(uc_lexer *lex)
 {
 	bool is_reg_global = false, is_reg_icase = false, is_reg_newline = false;
 	uc_token *rv;
@@ -634,7 +634,7 @@ parse_regexp(uc_lexer *lex, bool no_regexp)
 
 	switch (lex->esc[0]) {
 	case UT_LEX_PARSE_REGEX_INIT:
-		if (no_regexp) {
+		if (lex->no_regexp) {
 			if (buf_startswith(lex, "=")) {
 				buf_consume(lex, 1);
 
@@ -648,7 +648,7 @@ parse_regexp(uc_lexer *lex, bool no_regexp)
 		break;
 
 	case UT_LEX_PARSE_REGEX_PATTERN:
-		rv = parse_string(lex, no_regexp);
+		rv = parse_string(lex);
 
 		if (rv && rv->type == TK_ERROR)
 			return rv;
@@ -716,7 +716,7 @@ parse_regexp(uc_lexer *lex, bool no_regexp)
  */
 
 static uc_token *
-parse_label(uc_lexer *lex, bool no_regexp)
+parse_label(uc_lexer *lex)
 {
 	const struct token *tok = lex->tok;
 	const struct keyword *word;
@@ -728,24 +728,26 @@ parse_label(uc_lexer *lex, bool no_regexp)
 		lookbehind_append(lex, tok->u.pat, tok->plen);
 
 	if (!buf_remaining(lex) || (lex->bufstart[0] != '_' && !isalnum(lex->bufstart[0]))) {
-		for (i = 0, word = &reserved_words[0]; i < ARRAY_SIZE(reserved_words); i++, word = &reserved_words[i]) {
-			if (lex->lookbehind && lex->lookbehindlen == word->plen && !strncmp(lex->lookbehind, word->pat, word->plen)) {
-				lookbehind_reset(lex);
+		if (lex->no_keyword == false) {
+			for (i = 0, word = &reserved_words[0]; i < ARRAY_SIZE(reserved_words); i++, word = &reserved_words[i]) {
+				if (lex->lookbehind && lex->lookbehindlen == word->plen && !strncmp(lex->lookbehind, word->pat, word->plen)) {
+					lookbehind_reset(lex);
 
-				switch (word->type) {
-				case TK_DOUBLE:
-					rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_double_new(word->u.d));
-					break;
+					switch (word->type) {
+					case TK_DOUBLE:
+						rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_double_new(word->u.d));
+						break;
 
-				case TK_BOOL:
-					rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_boolean_new(word->u.b));
-					break;
+					case TK_BOOL:
+						rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_boolean_new(word->u.b));
+						break;
 
-				default:
-					rv = emit_op(lex, lex->source->off - word->plen, word->type, NULL);
+					default:
+						rv = emit_op(lex, lex->source->off - word->plen, word->type, NULL);
+					}
+
+					return rv;
 				}
-
-				return rv;
 			}
 		}
 
@@ -784,7 +786,7 @@ is_numeric_char(uc_lexer *lex, char c)
 }
 
 static uc_token *
-parse_number(uc_lexer *lex, bool no_regexp)
+parse_number(uc_lexer *lex)
 {
 	const struct token *tok = lex->tok;
 	uc_token *rv = NULL;
@@ -837,7 +839,7 @@ parse_number(uc_lexer *lex, bool no_regexp)
 }
 
 static uc_token *
-lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
+lex_step(uc_lexer *lex, FILE *fp)
 {
 	uint32_t masks[] = { 0, le32toh(0x000000ff), le32toh(0x0000ffff), le32toh(0x00ffffff), le32toh(0xffffffff) };
 	union { uint32_t n; char str[4]; } search;
@@ -1110,7 +1112,7 @@ lex_step(uc_lexer *lex, FILE *fp, bool no_regexp)
 
 	case UT_LEX_PARSE_TOKEN:
 		tok = lex->tok;
-		rv = tok->parse(lex, no_regexp);
+		rv = tok->parse(lex);
 
 		if (rv) {
 			memset(lex->esc, 0, sizeof(lex->esc));
@@ -1175,15 +1177,22 @@ uc_lexer_free(uc_lexer *lex)
 }
 
 uc_token *
-uc_lexer_next_token(uc_lexer *lex, bool no_regexp)
+uc_lexer_next_token(uc_lexer *lex)
 {
-	uc_token *rv;
+	uc_token *rv = NULL;
 
 	while (lex->state != UT_LEX_EOF) {
-		rv = lex_step(lex, lex->source->fp, no_regexp);
+		rv = lex_step(lex, lex->source->fp);
 
 		if (rv != NULL)
-			return rv;
+			break;
+	}
+
+	if (rv) {
+		lex->no_keyword = false;
+		lex->no_regexp = false;
+
+		return rv;
 	}
 
 	return emit_op(lex, lex->source->off, TK_EOF, NULL);

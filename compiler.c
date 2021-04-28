@@ -195,64 +195,11 @@ uc_compiler_set_srcpos(uc_compiler *compiler, size_t srcpos)
 static void
 uc_compiler_parse_advance(uc_compiler *compiler)
 {
-	bool no_regexp;
-
 	ucv_put(compiler->parser->prev.uv);
 	compiler->parser->prev = compiler->parser->curr;
 
 	while (true) {
-		/* Follow JSLint logic and treat a slash after any of the
-		* `(,=:[!&|?{};` characters as the beginning of a regex
-		* literal... */
-		switch (compiler->parser->prev.type) {
-		case TK_LPAREN:
-		case TK_COMMA:
-
-		case TK_ASADD:
-		case TK_ASBAND:
-		case TK_ASBOR:
-		case TK_ASBXOR:
-		case TK_ASDIV:
-		case TK_ASLEFT:
-		case TK_ASMOD:
-		case TK_ASMUL:
-		case TK_ASRIGHT:
-		case TK_ASSIGN:
-		case TK_ASSUB:
-		case TK_EQ:
-		case TK_EQS:
-		case TK_GE:
-		case TK_LE:
-		case TK_NE:
-		case TK_NES:
-
-		case TK_COLON:
-		case TK_LBRACK:
-		case TK_NOT:
-
-		case TK_AND:
-		case TK_BAND:
-
-		case TK_OR:
-		case TK_BOR:
-
-		case TK_QMARK:
-
-		case TK_LBRACE:
-		case TK_RBRACE:
-
-		case TK_LSTM:
-		case TK_LEXP:
-
-		case TK_SCOL:
-			no_regexp = false;
-			break;
-
-		default:
-			no_regexp = (compiler->parser->prev.type != 0);
-		}
-
-		compiler->parser->curr = *uc_lexer_next_token(&compiler->parser->lex, no_regexp);
+		compiler->parser->curr = *uc_lexer_next_token(&compiler->parser->lex);
 
 		if (compiler->parser->curr.type != TK_ERROR)
 			break;
@@ -359,22 +306,41 @@ uc_compiler_parse_precedence(uc_compiler *compiler, uc_precedence_t precedence)
 	uc_parse_rule *rule;
 	bool assignable;
 
-	uc_compiler_parse_advance(compiler);
-
-	rule = uc_compiler_parse_rule(compiler->parser->prev.type);
+	rule = uc_compiler_parse_rule(compiler->parser->curr.type);
 
 	if (!rule->prefix) {
-		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos, "Expecting expression");
+		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos, "Expecting expression");
+		uc_compiler_parse_advance(compiler);
 
 		return;
 	}
+
+	/* allow reserved words as property names in object literals */
+	if (rule->prefix == uc_compiler_compile_object)
+		compiler->parser->lex.no_keyword = true;
+
+	/* unless a sub-expression follows, treat subsequent slash as division
+	 * operator and not as beginning of regexp literal */
+	if (rule->prefix != uc_compiler_compile_paren &&
+	    rule->prefix != uc_compiler_compile_unary &&
+	    rule->prefix != uc_compiler_compile_array)
+		compiler->parser->lex.no_regexp = true;
+
+	uc_compiler_parse_advance(compiler);
 
 	assignable = (precedence <= P_ASSIGN);
 	rule->prefix(compiler, assignable);
 
 	while (precedence <= uc_compiler_parse_rule(compiler->parser->curr.type)->precedence) {
+		rule = uc_compiler_parse_rule(compiler->parser->curr.type);
+
+		/* allow reserved words in property accessors */
+		if (rule->infix == uc_compiler_compile_dot)
+			compiler->parser->lex.no_keyword = true;
+
 		uc_compiler_parse_advance(compiler);
-		uc_compiler_parse_rule(compiler->parser->prev.type)->infix(compiler, assignable);
+
+		rule->infix(compiler, assignable);
 	}
 
 	if (assignable && uc_compiler_parse_at_assignment_op(compiler))
@@ -1207,7 +1173,14 @@ uc_compiler_compile_paren(uc_compiler *compiler, bool assignable)
 			continue;
 		}
 		else {
-			maybe_arrowfn = uc_compiler_parse_match(compiler, TK_RPAREN);
+			maybe_arrowfn = uc_compiler_parse_check(compiler, TK_RPAREN);
+
+			if (maybe_arrowfn) {
+				/* A subsequent slash cannot be a regular expression literal */
+				compiler->parser->lex.no_regexp = true;
+				uc_compiler_parse_advance(compiler);
+			}
+
 			break;
 		}
 	}
@@ -1276,6 +1249,9 @@ uc_compiler_compile_paren(uc_compiler *compiler, bool assignable)
 	if (!uc_compiler_parse_check(compiler, TK_RPAREN))
 		uc_compiler_compile_expression(compiler);
 
+	/* A subsequent slash cannot be a regular expression literal */
+	compiler->parser->lex.no_regexp = true;
+
 	/* At this point we expect the end of the parenthesized expression, anything
 	 * else is a syntax error */
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
@@ -1315,6 +1291,8 @@ uc_compiler_compile_call(uc_compiler *compiler, bool assignable)
 		while (uc_compiler_parse_match(compiler, TK_COMMA));
 	}
 
+	/* after a function call expression, no regexp literal can follow */
+	compiler->parser->lex.no_regexp = true;
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 
 	/* if lhs is a dot or bracket expression, emit a method call */
@@ -1564,6 +1542,9 @@ uc_compiler_compile_or(uc_compiler *compiler, bool assignable)
 static void
 uc_compiler_compile_dot(uc_compiler *compiler, bool assignable)
 {
+	/* no regexp literal possible after property access */
+	compiler->parser->lex.no_regexp = true;
+
 	/* parse label lhs */
 	uc_compiler_parse_consume(compiler, TK_LABEL);
 	uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
@@ -1578,6 +1559,9 @@ uc_compiler_compile_subscript(uc_compiler *compiler, bool assignable)
 {
 	/* compile lhs */
 	uc_compiler_compile_expression(compiler);
+
+	/* no regexp literal possible after computed property access */
+	compiler->parser->lex.no_regexp = true;
 	uc_compiler_parse_consume(compiler, TK_RBRACK);
 
 	/* depending on context, compile into I_UVAL, I_SVAL or I_LVAL operation */
@@ -1653,6 +1637,8 @@ uc_compiler_compile_array(uc_compiler *compiler, bool assignable)
 	}
 	while (uc_compiler_parse_match(compiler, TK_COMMA));
 
+	/* no regexp literal possible after array literal */
+	compiler->parser->lex.no_regexp = true;
 	uc_compiler_parse_consume(compiler, TK_RBRACK);
 
 	/* push items on stack */
@@ -1751,9 +1737,13 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 
 		hint_count += 2;
 		len += 2;
+
+		compiler->parser->lex.no_keyword = true;
 	}
 	while (uc_compiler_parse_match(compiler, TK_COMMA));
 
+	/* no regexp literal possible after object literal */
+	compiler->parser->lex.no_regexp = true;
 	uc_compiler_parse_consume(compiler, TK_RBRACE);
 
 	/* set items on stack */

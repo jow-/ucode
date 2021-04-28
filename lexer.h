@@ -132,6 +132,8 @@ typedef struct {
 	uc_source *source;
 	uint8_t eof:1;
 	uint8_t is_escape:1;
+	uint8_t no_regexp:1;
+	uint8_t no_keyword:1;
 	size_t buflen;
 	char *buf, *bufstart, *bufend;
 	size_t lookbehindlen;
@@ -160,7 +162,7 @@ typedef struct {
 void uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source);
 void uc_lexer_free(uc_lexer *lex);
 
-uc_token *uc_lexer_next_token(uc_lexer *lex, bool no_regexp);
+uc_token *uc_lexer_next_token(uc_lexer *lex);
 
 bool utf8enc(char **out, int *rem, int code);
 
