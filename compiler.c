@@ -820,7 +820,7 @@ uc_compiler_emit_inc_dec(uc_compiler *compiler, uc_tokentype_t toktype, bool is_
 	uint32_t cidx = 0;
 
 	/* determine kind of emitted load instruction and operand value (if any) */
-	type = chunk->entries[compiler->last_insn];
+	type = chunk->entries ? chunk->entries[compiler->last_insn] : 0;
 
 	if (type == I_LVAR || type == I_LLOC || type == I_LUPV) {
 		cidx = uc_compiler_get_u32(compiler, compiler->last_insn + 1);

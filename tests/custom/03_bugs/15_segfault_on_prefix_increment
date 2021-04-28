@@ -1,0 +1,18 @@
+When parsing an invalid pre- or post-decrement expression as first
+statement of a source buffer, the compiler crashed while attempting
+to look up the type of the previous instruction within a not-yet
+allocated chunk buffer.
+
+-- Expect stderr --
+Syntax error: Unterminated string
+In line 1, byte 6:
+
+ `{% ++"`
+       ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{% ++"
+-- End --
