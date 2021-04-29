@@ -359,9 +359,6 @@ parse_comment(uc_lexer *lex)
 	const char *ptr, *end;
 	size_t elen;
 
-	if (!buf_remaining(lex))
-		return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated comment"));
-
 	if (!strcmp(tok->u.pat, "//")) {
 		end = "\n";
 		elen = 1;
@@ -380,6 +377,13 @@ parse_comment(uc_lexer *lex)
 	}
 
 	buf_consume(lex, ptr - lex->bufstart);
+
+	if (lex->eof) {
+		lex->state = UT_LEX_EOF;
+
+		if (elen == 2)
+			return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated comment"));
+	}
 
 	return NULL;
 }

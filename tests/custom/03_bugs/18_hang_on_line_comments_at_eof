@@ -1,0 +1,31 @@
+When parsing a comment near EOF, or a comment escaping the end
+of an expression block, the lexer did end up in an infinite loop.
+
+-- Expect stderr --
+Syntax error: Expecting expression
+In line 1, byte 9:
+
+ `{{ // }}`
+          ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{{ // }}
+-- End --
+
+
+-- Expect stderr --
+Syntax error: Unterminated comment
+In line 1, byte 4:
+
+ `{{ /* }}`
+     ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{{ /* }}
+-- End --
