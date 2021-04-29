@@ -1107,6 +1107,8 @@ lex_step(uc_lexer *lex, FILE *fp)
 		}
 
 		/* premature EOF */
+		lex->state = UT_LEX_EOF;
+
 		return emit_op(lex, lex->source->off, TK_ERROR, ucv_string_new("Unterminated template block"));
 
 

@@ -1,0 +1,16 @@
+When parsing an unclosed expression block, the lexer did end up in an
+infinite loop.
+
+-- Expect stderr --
+Syntax error: Unterminated template block
+In line 1, byte 6:
+
+ `{{ 1`
+      ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{{ 1
+-- End --
