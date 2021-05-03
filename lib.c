@@ -1227,7 +1227,7 @@ uc_printf_common(uc_vm *vm, size_t nargs, uc_stringbuf_t *buf)
 
 			memset(&arg, 0, sizeof(arg));
 
-			while (strchr("0- ", *p)) {
+			while (*p != '\0' && strchr("0- ", *p)) {
 				if (fp + 1 >= sfmt + sizeof(sfmt))
 					goto next;
 
@@ -1352,6 +1352,10 @@ uc_printf_common(uc_vm *vm, size_t nargs, uc_stringbuf_t *buf)
 				t = UC_NULL;
 
 				break;
+
+			case '\0':
+				p--;
+				/* fall through */
 
 			default:
 				goto next;
