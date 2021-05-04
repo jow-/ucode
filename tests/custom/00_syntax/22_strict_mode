@@ -1,0 +1,92 @@
+Ucode borrows the `"use strict";` statement from ECMA script to enable
+strict variable semantics for the entire script or for the enclosing
+function.
+
+With strict mode enabled, attempts to use undeclared local variables
+or attempts to read global variables which have not been assigned yet
+will raise an exception.
+
+
+1. To enable strict mode for the entire script, it should be the first
+statement of the program.
+
+-- Expect stderr --
+Reference error: access to undeclared variable x
+In line 4, byte 8:
+
+ `    print(x);`
+            ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{%
+	"use strict";
+
+	print(x);
+%}
+-- End --
+
+
+2. To enable strict mode for a single function, the "use strict" expression
+should be the first statement of the function body.
+
+-- Expect stdout --
+a() = null
+-- End --
+
+-- Expect stderr --
+Reference error: access to undeclared variable x
+In b(), line 9, byte 24:
+  called from anonymous function ([stdin]:13:4)
+
+ `        printf("b() = %J\n", x);`
+  Near here -------------------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	function a() {
+		printf("a() = %J\n", x);
+	}
+
+	function b() {
+		"use strict";
+
+		printf("b() = %J\n", x);
+	}
+
+	a();
+	b();
+%}
+-- End --
+
+
+3. When "use strict" is not the first statement, it has no effect.
+
+-- Expect stdout --
+b=null
+c=null
+-- End --
+
+-- Testcase --
+{%
+	function t() {
+		a = 1;
+
+		"use strict";
+
+		printf("b=%J\n", b);
+	}
+
+	t();
+
+	"use strict";
+
+	printf("c=%J\n", c);
+
+%}
+-- End --

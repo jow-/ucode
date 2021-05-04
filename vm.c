@@ -197,6 +197,12 @@ uc_vm_current_chunk(uc_vm *vm)
 	return uc_vm_frame_chunk(uc_vm_current_frame(vm));
 }
 
+static bool
+uc_vm_is_strict(uc_vm *vm)
+{
+	return uc_vm_current_frame(vm)->strict;
+}
+
 static enum insn_type
 uc_vm_decode_insn(uc_vm *vm, uc_callframe *frame, uc_chunk *chunk)
 {
@@ -542,6 +548,7 @@ uc_vm_call_function(uc_vm *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, siz
 	frame->ctx = ctx;
 	frame->ip = function->chunk.entries;
 	frame->mcall = mcall;
+	frame->strict = function->strict;
 
 	if (vm->trace)
 		uc_vm_frame_dump(vm, frame);
@@ -958,7 +965,7 @@ uc_vm_insn_load_var(uc_vm *vm, enum insn_type insn)
 		next = ucv_prototype_get(scope);
 
 		if (!next) {
-			if (vm->config->strict_declarations) {
+			if (uc_vm_is_strict(vm)) {
 				uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
 				                      "access to undeclared variable %s",
 				                      ucv_string_get(name));
@@ -1131,7 +1138,7 @@ uc_vm_insn_store_var(uc_vm *vm, enum insn_type insn)
 		next = ucv_prototype_get(scope);
 
 		if (!next) {
-			if (vm->config->strict_declarations) {
+			if (uc_vm_is_strict(vm)) {
 				uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
 				                      "access to undeclared variable %s",
 				                      ucv_string_get(name));
@@ -1374,7 +1381,7 @@ uc_vm_insn_update_var(uc_vm *vm, enum insn_type insn)
 		next = ucv_prototype_get(scope);
 
 		if (!next) {
-			if (vm->config->strict_declarations) {
+			if (uc_vm_is_strict(vm)) {
 				uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
 				                      "access to undeclared variable %s",
 				                      ucv_string_get(name));
@@ -2289,6 +2296,7 @@ uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t *globals, uc_value_t *mod
 	frame->closure = closure;
 	frame->stackframe = 0;
 	frame->ip = uc_vm_frame_chunk(frame)->entries;
+	frame->strict = fn->strict;
 
 	if (vm->trace) {
 		buf = xprintbuf_new();
