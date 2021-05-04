@@ -1374,7 +1374,6 @@ uc_compiler_compile_constant(uc_compiler *compiler, bool assignable)
 		if (uc_compiler_is_use_strict_pragma(compiler)) {
 			fn = (uc_function_t *)compiler->function;
 			fn->strict = true;
-			break;
 		}
 
 		/* fall through */

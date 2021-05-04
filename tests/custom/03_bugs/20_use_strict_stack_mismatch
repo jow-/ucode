@@ -1,0 +1,17 @@
+When compiling the `use strict` statement, the compiler omitted the
+corresponding load instruction, leading to a mismatch of the expected
+stack layout between compiler and VM.
+
+-- Expect stdout --
+1
+-- End --
+
+-- Testcase --
+{%
+	"use strict";
+
+	let x = 1;
+
+	print(x, "\n");
+%}
+-- End --
