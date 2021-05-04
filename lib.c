@@ -2338,6 +2338,28 @@ uc_sleep(uc_vm *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+static uc_value_t *
+uc_assert(uc_vm *vm, size_t nargs)
+{
+	uc_value_t *cond = uc_get_arg(0);
+	uc_value_t *msg = uc_get_arg(1);
+	bool freeable = false;
+	char *s;
+
+	if (!uc_val_is_truish(cond)) {
+		s = msg ? uc_cast_string(vm, &msg, &freeable) : "Assertion failed";
+
+		uc_vm_raise_exception(vm, EXCEPTION_USER, "%s", s);
+
+		if (freeable)
+			free(s);
+
+		return NULL;
+	}
+
+	return ucv_get(cond);
+}
+
 static const uc_cfunction_list functions[] = {
 	{ "chr",		uc_chr },
 	{ "delete",		uc_delete },
@@ -2387,7 +2409,8 @@ static const uc_cfunction_list functions[] = {
 	{ "system",		uc_system },
 	{ "trace",		uc_trace },
 	{ "proto",		uc_proto },
-	{ "sleep",		uc_sleep }
+	{ "sleep",		uc_sleep },
+	{ "assert",		uc_assert }
 };
 
 

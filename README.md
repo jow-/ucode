@@ -1108,3 +1108,8 @@ Throws an exception if the given prototype value is not an object.
 
 Pause execution for the given amount of milliseconds. Returns `false` if
 an invalid value was passed, otherwise `true`.
+
+#### 6.56. `assert(cond[, message])`
+
+Raise an exception with the given `message` parameter if the value in `cond`
+is not truish. When `message` is omitted, the default value is `Assertion failed`.
