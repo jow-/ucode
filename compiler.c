@@ -1193,6 +1193,10 @@ uc_compiler_compile_paren(uc_compiler *compiler, bool assignable)
 				uc_compiler_parse_advance(compiler);
 			}
 
+			/* If we encouter a dot, treat potential subsequent keyword as label */
+			if (uc_compiler_parse_check(compiler, TK_DOT))
+				compiler->parser->lex.no_keyword = true;
+
 			break;
 		}
 	}

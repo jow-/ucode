@@ -1,0 +1,17 @@
+When compiling a parenthesized property access expression, the compiler
+didn't instruct the lexer to treat a potential subsequent keyword as label,
+leading to an incorrect syntax error exception.
+
+-- Expect stdout --
+true
+true
+-- End --
+
+-- Testcase --
+{%
+	let x = { default: true };
+
+	print(x.default, "\n");		// this was okay
+	print((x.default), "\n");	// this failed
+%}
+-- End --
