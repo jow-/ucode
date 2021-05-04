@@ -94,9 +94,10 @@ static ssize_t
 uc_compiler_initialize_local(uc_compiler *compiler);
 
 static void
-uc_compiler_init(uc_compiler *compiler, const char *name, size_t srcpos, uc_source *source)
+uc_compiler_init(uc_compiler *compiler, const char *name, size_t srcpos, uc_source *source, bool strict)
 {
 	uc_value_t *varname = ucv_string_new("(callee)");
+	uc_function_t *fn;
 
 	compiler->scope_depth = 0;
 
@@ -113,6 +114,9 @@ uc_compiler_init(uc_compiler *compiler, const char *name, size_t srcpos, uc_sour
 	compiler->parent = NULL;
 
 	compiler->current_srcpos = srcpos;
+
+	fn = (uc_function_t *)compiler->function;
+	fn->strict = strict;
 
 	/* reserve stack slot 0 */
 	uc_compiler_declare_local(compiler, varname);
@@ -625,6 +629,14 @@ uc_compiler_leave_scope(uc_compiler *compiler)
 	}
 }
 
+static bool
+uc_compiler_is_strict(uc_compiler *compiler)
+{
+	uc_function_t *fn = (uc_function_t *)compiler->function;
+
+	return fn->strict;
+}
+
 static ssize_t
 uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name)
 {
@@ -653,8 +665,7 @@ uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name)
 		len2 = ucv_string_length(locals->entries[i - 1].name);
 
 		if (len1 == len2 && !strcmp(str1, str2)) {
-			if (compiler->parser->config &&
-			    compiler->parser->config->strict_declarations) {
+			if (uc_compiler_is_strict(compiler)) {
 				uc_compiler_syntax_error(compiler, 0, "Variable '%s' redeclared", str2);
 
 				return -1;
@@ -1047,7 +1058,8 @@ uc_compiler_compile_arrowfn(uc_compiler *compiler, uc_value_t *args, bool restar
 	pos = compiler->parser->prev.pos;
 
 	uc_compiler_init(&fncompiler, NULL, compiler->parser->prev.pos,
-		uc_compiler_current_source(compiler));
+		uc_compiler_current_source(compiler),
+		uc_compiler_is_strict(compiler));
 
 	fncompiler.parent = compiler;
 	fncompiler.parser = compiler->parser;
@@ -1322,9 +1334,26 @@ uc_compiler_compile_post_inc(uc_compiler *compiler, bool assignable)
 	uc_compiler_emit_inc_dec(compiler, compiler->parser->prev.type, true);
 }
 
+static bool
+uc_compiler_is_use_strict_pragma(uc_compiler *compiler)
+{
+	uc_value_t *v;
+
+	if (uc_compiler_current_chunk(compiler)->count > 0)
+		return false;
+
+	if (compiler->parser->lex.block != STATEMENTS)
+		return false;
+
+	v = compiler->parser->prev.uv;
+
+	return (strcmp(ucv_string_get(v), "use strict") == 0);
+}
+
 static void
 uc_compiler_compile_constant(uc_compiler *compiler, bool assignable)
 {
+	uc_function_t *fn;
 	int64_t n;
 
 	switch (compiler->parser->prev.type) {
@@ -1341,8 +1370,16 @@ uc_compiler_compile_constant(uc_compiler *compiler, bool assignable)
 			ucv_boolean_get(compiler->parser->prev.uv) ? I_LTRUE : I_LFALSE);
 		break;
 
-	case TK_DOUBLE:
 	case TK_STRING:
+		if (uc_compiler_is_use_strict_pragma(compiler)) {
+			fn = (uc_function_t *)compiler->function;
+			fn->strict = true;
+			break;
+		}
+
+		/* fall through */
+
+	case TK_DOUBLE:
 		uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
 		break;
 
@@ -1429,7 +1466,8 @@ uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
 
 	uc_compiler_init(&fncompiler,
 		name ? ucv_string_get(name) : NULL, compiler->parser->prev.pos,
-		uc_compiler_current_source(compiler));
+		uc_compiler_current_source(compiler),
+		uc_compiler_is_strict(compiler));
 
 	fncompiler.parent = compiler;
 	fncompiler.parser = compiler->parser;
@@ -2706,7 +2744,8 @@ uc_compile(uc_parse_config *config, uc_source *source, char **errp)
 	uc_function_t *fn;
 
 	uc_lexer_init(&parser.lex, config, source);
-	uc_compiler_init(&compiler, "main", 0, source);
+	uc_compiler_init(&compiler, "main", 0, source,
+		config && config->strict_declarations);
 
 	uc_compiler_parse_advance(&compiler);
 

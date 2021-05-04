@@ -150,7 +150,7 @@ typedef struct {
 
 typedef struct {
 	uc_value_t header;
-	bool arrow, vararg;
+	bool arrow, vararg, strict;
 	size_t nargs;
 	size_t nupvals;
 	size_t srcpos;
@@ -231,7 +231,7 @@ typedef struct {
 	uc_cfunction_t *cfunction;
 	size_t stackframe;
 	uc_value_t *ctx;
-	bool mcall;
+	bool mcall, strict;
 } uc_callframe;
 
 uc_declare_vector(uc_callframes, uc_callframe);
