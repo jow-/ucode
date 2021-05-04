@@ -1210,6 +1210,7 @@ uc_printf_common(uc_vm *vm, size_t nargs, uc_stringbuf_t *buf)
 	const char *fstr, *last, *p;
 	uc_type_t t = UC_NULL;
 	size_t argidx = 1;
+	int i, pad_size;
 
 	if (ucv_type(fmt) == UC_STRING)
 		fstr = ucv_string_get(fmt);
@@ -1227,7 +1228,7 @@ uc_printf_common(uc_vm *vm, size_t nargs, uc_stringbuf_t *buf)
 
 			memset(&arg, 0, sizeof(arg));
 
-			while (strchr("0- ", *p)) {
+			while (*p != '\0' && strchr("0- ", *p)) {
 				if (fp + 1 >= sfmt + sizeof(sfmt))
 					goto next;
 
@@ -1339,10 +1340,25 @@ uc_printf_common(uc_vm *vm, size_t nargs, uc_stringbuf_t *buf)
 			case 'J':
 				t = UC_STRING;
 
-				if (argidx < nargs)
-					arg.s = ucv_to_jsonstring(vm, uc_get_arg(argidx++));
-				else
+				pad_size = 0;
+
+				for (i = 0; sfmt + i < fp; i++) {
+					if (sfmt[i] == '.') {
+						pad_size = 1 + atoi(&sfmt[i + 1]);
+						fp = &sfmt[i];
+						break;
+					}
+				}
+
+				if (argidx < nargs) {
+					arg.s = ucv_to_jsonstring_formatted(vm,
+						uc_get_arg(argidx++),
+						pad_size > 0 ? (pad_size > 1 ? ' ' : '\t') : '\0',
+						pad_size > 0 ? (pad_size > 1 ? pad_size - 1 : 1) : 0);
+				}
+				else {
 					arg.s = NULL;
+				}
 
 				arg.s = arg.s ? arg.s : xstrdup("null");
 
@@ -1352,6 +1368,10 @@ uc_printf_common(uc_vm *vm, size_t nargs, uc_stringbuf_t *buf)
 				t = UC_NULL;
 
 				break;
+
+			case '\0':
+				p--;
+				/* fall through */
 
 			default:
 				goto next;

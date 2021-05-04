@@ -898,7 +898,11 @@ libc's `printf()` implementation, namely it allows the `d`, `i`, `o`, `u`, `x`,
 `X`, `e`, `E`, `f`, `F`, `g`, `G`, `c` and `s` conversions.
 
 Additionally, an ucode specific `J` format is implemented, which causes the
-corresponding value to be formatted as JSON string.
+corresponding value to be formatted as JSON string. By prefixing the `J` format
+letter with a precision specifier, the resulting JSON output will be pretty
+printed. A precision of `0` will use tabs for indentation, any other positive
+precision will use that many spaces for indentation while a negative or omitted
+precision specifier will turn off pretty printing.
 
 Other format specifiers such as `n` or `z` are not accepted and returned
 verbatim. Format specifiers including `*` and `$` directives are rejected as
@@ -911,6 +915,20 @@ well.
   printf("%c%c%c\n", 65, 98, 99); // Abc
   printf("%g\n", 10 / 3.0);       // 3.33333
   printf("%J", [1,2,3]);          // [ 1, 2, 3 ]
+
+  printf("%.J", [1,2,3]);
+  // [
+  //         1,
+  //         2,
+  //         3
+  // ]
+
+  printf("%.2J", [1,2,3]);
+  // [
+  //   1,
+  //   2,
+  //   3
+  // ]
 %}
 ```
 

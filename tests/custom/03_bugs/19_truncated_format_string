@@ -1,0 +1,14 @@
+When processing a truncated format string, uc_printf_common() - which is
+used by `sprintf()` and `printf()` in ucode - appended trailing garbage
+to the resulting string.
+
+-- Expect stdout --
+[ 37, null ]
+-- End --
+
+-- Testcase --
+{%
+	let s = sprintf("%");
+	print(ord(s, 0, 1), "\n");
+%}
+-- End --

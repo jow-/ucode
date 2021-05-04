@@ -355,8 +355,11 @@ uc_value_t *ucv_from_json(uc_vm *, json_object *);
 json_object *ucv_to_json(uc_value_t *);
 
 char *ucv_to_string(uc_vm *, uc_value_t *);
-char *ucv_to_jsonstring(uc_vm *, uc_value_t *);
-void ucv_to_stringbuf(uc_vm *, uc_stringbuf_t *, uc_value_t *, bool);
+char *ucv_to_jsonstring_formatted(uc_vm *, uc_value_t *, char, size_t);
+void ucv_to_stringbuf_formatted(uc_vm *, uc_stringbuf_t *, uc_value_t *, size_t, char, size_t);
+
+#define ucv_to_jsonstring(vm, val) ucv_to_jsonstring_formatted(vm, val, '\1', 0)
+#define ucv_to_stringbuf(vm, buf, val, json) ucv_to_stringbuf_formatted(vm, buf, val, 0, json ? '\1' : '\0', 0)
 
 static inline bool
 ucv_is_callable(uc_value_t *uv)

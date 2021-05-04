@@ -1400,9 +1400,22 @@ _ucv_stringbuf_append(uc_stringbuf_t *pb, const char *str, size_t len)
 	printbuf_memappend_fast(pb, str, (int)len);
 }
 
-void
-ucv_to_stringbuf(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
+static void
+ucv_to_stringbuf_add_padding(uc_stringbuf_t *pb, char pad_char, size_t pad_size)
 {
+	if (pad_char != '\0' && pad_char != '\1') {
+		ucv_stringbuf_append(pb, "\n");
+		printbuf_memset(pb, -1, pad_char, pad_size);
+	}
+	else {
+		ucv_stringbuf_append(pb, " ");
+	}
+}
+
+void
+ucv_to_stringbuf_formatted(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t depth, char pad_char, size_t pad_size)
+{
+	bool json = (pad_char != '\0');
 	uc_ressource_type_t *restype;
 	uc_ressource_t *ressource;
 	uc_cfunction_t *cfunction;
@@ -1485,14 +1498,14 @@ ucv_to_stringbuf(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 
 		for (i = 0; i < array->count; i++) {
 			if (i)
-				ucv_stringbuf_append(pb, ", ");
-			else
-				ucv_stringbuf_append(pb, " ");
+				ucv_stringbuf_append(pb, ",");
 
-			ucv_to_stringbuf(vm, pb, array->entries[i], true);
+			ucv_to_stringbuf_add_padding(pb, pad_char, (depth + 1) * pad_size);
+			ucv_to_stringbuf_formatted(vm, pb, array->entries[i], depth + 1, pad_char ? pad_char : '\1', pad_size);
 		}
 
-		ucv_stringbuf_append(pb, " ]");
+		ucv_to_stringbuf_add_padding(pb, pad_char, depth * pad_size);
+		ucv_stringbuf_append(pb, "]");
 		break;
 
 	case UC_OBJECT:
@@ -1501,16 +1514,16 @@ ucv_to_stringbuf(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 		i = 0;
 		ucv_object_foreach(uv, key, val) {
 			if (i++)
-				ucv_stringbuf_append(pb, ", ");
-			else
-				ucv_stringbuf_append(pb, " ");
+				ucv_stringbuf_append(pb, ",");
 
+			ucv_to_stringbuf_add_padding(pb, pad_char, (depth + 1) * pad_size);
 			ucv_to_string_json_encoded(pb, key, strlen(key), false);
 			ucv_stringbuf_append(pb, ": ");
-			ucv_to_stringbuf(vm, pb, val, true);
+			ucv_to_stringbuf_formatted(vm, pb, val, depth + 1, pad_char ? pad_char : '\1', pad_size);
 		}
 
-		ucv_stringbuf_append(pb, " }");
+		ucv_to_stringbuf_add_padding(pb, pad_char, depth * pad_size);
+		ucv_stringbuf_append(pb, "}");
 		break;
 
 	case UC_REGEXP:
@@ -1629,12 +1642,12 @@ ucv_to_stringbuf(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 }
 
 static char *
-ucv_to_string_any(uc_vm *vm, uc_value_t *uv, bool json)
+ucv_to_string_any(uc_vm *vm, uc_value_t *uv, char pad_char, size_t pad_size)
 {
 	uc_stringbuf_t *pb = xprintbuf_new();
 	char *rv;
 
-	ucv_to_stringbuf(vm, pb, uv, json);
+	ucv_to_stringbuf_formatted(vm, pb, uv, 0, pad_char, pad_size);
 
 	rv = pb->buf;
 
@@ -1646,13 +1659,13 @@ ucv_to_string_any(uc_vm *vm, uc_value_t *uv, bool json)
 char *
 ucv_to_string(uc_vm *vm, uc_value_t *uv)
 {
-	return ucv_to_string_any(vm, uv, false);
+	return ucv_to_string_any(vm, uv, '\0', 0);
 }
 
 char *
-ucv_to_jsonstring(uc_vm *vm, uc_value_t *uv)
+ucv_to_jsonstring_formatted(uc_vm *vm, uc_value_t *uv, char pad_char, size_t pad_size)
 {
-	return ucv_to_string_any(vm, uv, true);
+	return ucv_to_string_any(vm, uv, pad_char ? pad_char : '\1', pad_size);
 }
 
 bool
