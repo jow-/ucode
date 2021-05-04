@@ -98,12 +98,6 @@ enum insn_type {
 	__I_MAX
 };
 
-typedef struct {
-	int8_t stack_pop;
-	int8_t stack_push;
-	int8_t operand_bytes;
-} uc_insn_definition;
-
 typedef enum {
 	STATUS_OK,
 	ERROR_COMPILE,

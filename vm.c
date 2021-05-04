@@ -32,82 +32,43 @@ static const char *insn_names[__I_MAX] = {
 	__insns
 };
 
-static const uc_insn_definition insn_defs[__I_MAX] = {
-	[I_NOOP] = { 0, 0, 0 },
+static const int8_t insn_operand_bytes[__I_MAX] = {
+	[I_LOAD] = 4,
+	[I_LOAD8] = -1,
+	[I_LOAD16] = -2,
+	[I_LOAD32] = -4,
 
-	[I_LOAD] = { 0, 1, 4 },
-	[I_LOAD8] = { 0, 1, -1 },
-	[I_LOAD16] = { 0, 1, -2 },
-	[I_LOAD32] = { 0, 1, -4 },
+	[I_LREXP] = 4,
 
-	[I_LREXP] = { 0, 1, 4 },
-	[I_LNULL] = { 0, 1, 0 },
-	[I_LTRUE] = { 0, 1, 0 },
-	[I_LFALSE] = { 0, 1, 0 },
-	[I_LTHIS] = { 0, 1, 0 },
+	[I_LLOC] = 4,
+	[I_LVAR] = 4,
+	[I_LUPV] = 4,
 
-	[I_LLOC] = { 0, 1, 4 },
-	[I_LVAR] = { 0, 1, 4 },
-	[I_LUPV] = { 0, 1, 4 },
-	[I_LVAL] = { 2, 1, 0 },
+	[I_CLFN] = 4,
+	[I_ARFN] = 4,
 
-	[I_CLFN] = { 0, 1, 4 },
-	[I_ARFN] = { 0, 1, 4 },
+	[I_SLOC] = 4,
+	[I_SUPV] = 4,
+	[I_SVAR] = 4,
 
-	[I_SLOC] = { 0, 0, 4 },
-	[I_SUPV] = { 0, 0, 4 },
-	[I_SVAR] = { 0, 0, 4 },
-	[I_SVAL] = { 3, 1, 0 },
+	[I_ULOC] = 4,
+	[I_UUPV] = 4,
+	[I_UVAR] = 4,
+	[I_UVAL] = 1,
 
-	[I_ULOC] = { 1, 0, 4 },
-	[I_UUPV] = { 1, 0, 4 },
-	[I_UVAR] = { 1, 0, 4 },
-	[I_UVAL] = { 3, 1, 1 },
+	[I_NARR] = 4,
+	[I_PARR] = 4,
 
-	[I_NARR] = { 0, 1, 4 },
-	[I_PARR] = { -1, 0, 4 },
-	[I_MARR] = { 1, 0, 0 },
+	[I_NOBJ] = 4,
+	[I_SOBJ] = 4,
 
-	[I_NOBJ] = { 0, 1, 4 },
-	[I_SOBJ] = { -1, 0, 4 },
-	[I_MOBJ] = { 1, 0, 0 },
+	[I_JMP] = -4,
+	[I_JMPZ] = -4,
 
-	[I_ADD] = { 2, 1, 0 },
-	[I_SUB] = { 2, 1, 0 },
-	[I_MUL] = { 2, 1, 0 },
-	[I_DIV] = { 2, 1, 0 },
-	[I_MOD] = { 2, 1, 0 },
-	[I_LSHIFT] = { 2, 1, 0 },
-	[I_RSHIFT] = { 2, 1, 0 },
-	[I_BAND] = { 2, 1, 0 },
-	[I_BXOR] = { 2, 1, 0 },
-	[I_BOR] = { 2, 1, 0 },
-	[I_EQ] = { 2, 1, 0 },
-	[I_NE] = { 2, 1, 0 },
-	[I_EQS] = { 2, 1, 0 },
-	[I_NES] = { 2, 1, 0 },
-	[I_LT] = { 2, 1, 0 },
-	[I_GT] = { 2, 1, 0 },
-	[I_IN] = { 2, 1, 0 },
+	[I_COPY] = 1,
 
-	[I_JMP] = { 0, 0, -4 },
-	[I_JMPZ] = { 1, 0, -4 },
-
-	[I_COPY] = { 0, 1, 1 },
-	[I_POP] = { 1, 0, 0 },
-	[I_CUPV] = { 1, 0, 0 },
-
-	[I_PLUS] = { 1, 1, 0 },
-	[I_MINUS] = { 1, 1, 0 },
-
-	[I_RETURN] = { 1, 0, 0 },
-	[I_CALL] = { -2, 1, 4 },
-	[I_MCALL] = { -3, 1, 4 },
-
-	[I_NEXTK] = { 2, 2, 0 },
-	[I_NEXTKV] = { 2, 3, 0 },
-
-	[I_PRINT] = { 1, 0, 0 }
+	[I_CALL] = 4,
+	[I_MCALL] = 4
 };
 
 static const char *exception_type_strings[] = {
@@ -211,9 +172,9 @@ uc_vm_decode_insn(uc_vm *vm, uc_callframe *frame, uc_chunk *chunk)
 	insn = frame->ip[0];
 	frame->ip++;
 
-	assert(frame->ip + abs(insn_defs[insn].operand_bytes) <= end);
+	assert(frame->ip + abs(insn_operand_bytes[insn]) <= end);
 
-	switch (insn_defs[insn].operand_bytes) {
+	switch (insn_operand_bytes[insn]) {
 	case 0:
 		break;
 
@@ -256,7 +217,7 @@ uc_vm_decode_insn(uc_vm *vm, uc_callframe *frame, uc_chunk *chunk)
 		break;
 
 	default:
-		fprintf(stderr, "Unhandled operand format: %d\n", insn_defs[insn].operand_bytes);
+		fprintf(stderr, "Unhandled operand format: %" PRId8 "\n", insn_operand_bytes[insn]);
 		abort();
 	}
 
@@ -577,7 +538,7 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 
 	fprintf(stderr, "%08zx  %s", pos - chunk->entries, insn_names[insn]);
 
-	switch (insn_defs[insn].operand_bytes) {
+	switch (insn_operand_bytes[insn]) {
 	case 0:
 		break;
 
@@ -610,7 +571,7 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 		break;
 
 	default:
-		fprintf(stderr, " (unknown operand format: %d)", insn_defs[insn].operand_bytes);
+		fprintf(stderr, " (unknown operand format: %" PRId8 ")", insn_operand_bytes[insn]);
 		break;
 	}
 

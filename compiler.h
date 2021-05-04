@@ -104,7 +104,6 @@ struct uc_compiler {
 	uc_value_t *function;
 	uc_parser *parser;
 	size_t scope_depth, current_srcpos, last_insn;
-	bool statement_emitted;
 };
 
 typedef struct uc_compiler uc_compiler;
