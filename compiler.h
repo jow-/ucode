@@ -66,7 +66,7 @@ typedef enum {
 
 struct uc_patchlist {
 	struct uc_patchlist *parent;
-	size_t count, *entries;
+	size_t depth, count, *entries;
 };
 
 typedef struct uc_patchlist uc_patchlist;

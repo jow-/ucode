@@ -2031,8 +2031,8 @@ static void
 uc_compiler_compile_while(uc_compiler *compiler)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_patchlist p = { .depth = compiler->scope_depth };
 	size_t cond_off, jmpz_off, end_off;
-	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2079,8 +2079,8 @@ static void
 uc_compiler_compile_for_in(uc_compiler *compiler, bool local, uc_token *kvar, uc_token *vvar)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_patchlist p = { .depth = compiler->scope_depth + 1 };
 	size_t skip_jmp, test_jmp, key_slot, val_slot;
-	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2190,7 +2190,7 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	size_t test_off = 0, incr_off, skip_off, cond_off = 0;
-	uc_patchlist p = { 0 };
+	uc_patchlist p = { .depth = compiler->scope_depth + 1 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2344,9 +2344,9 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 {
 	size_t i, test_jmp, skip_jmp, next_jmp, value_slot, default_off = 0;
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_patchlist p = { .depth = compiler->scope_depth };
 	uc_locals *locals = &compiler->locals;
 	uc_jmplist cases = { 0 };
-	uc_patchlist p = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2599,7 +2599,7 @@ uc_compiler_compile_control(uc_compiler *compiler)
 	}
 
 	/* pop locals in scope up to this point */
-	for (i = locals->count; i > 0 && (size_t)locals->entries[i - 1].depth == compiler->scope_depth; i--)
+	for (i = locals->count; i > 0 && (size_t)locals->entries[i - 1].depth > p->depth; i--)
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 
 	uc_vector_grow(p);

@@ -1,0 +1,59 @@
+When compiling a break or continue statement, the compiler emitted pop
+instructions for local variables within the scope the break or continue
+keyword appeared in, but it must also pop local variables in enclosing
+scopes up until the scope of the containing loop or switch body.
+
+-- Expect stdout --
+1
+2
+3
+-- End --
+
+-- Testcase --
+{%
+	for (let i = 1; i <= 3; i++) {
+		while (true) {
+			let n = i;
+
+			print(n, "\n");
+
+			{
+				// The `let n` stack slot is not popped since it is
+				// outside of break's scope...
+				break;
+			}
+		}
+	}
+%}
+-- End --
+
+-- Expect stdout --
+1
+2
+3
+2
+4
+6
+3
+6
+9
+-- End --
+
+-- Testcase --
+{%
+	for (let i = 1; i <= 3; i++) {
+		for (let j = 1; j <= 3; j++) {
+			let n = i * j;
+
+			print(n, "\n");
+
+			if (j == 1)
+			{
+				// The `let n` stack slot is not popped since it is
+				// outside of continue's scope...
+				continue;
+			}
+		}
+	}
+%}
+-- End --
