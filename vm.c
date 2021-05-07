@@ -116,6 +116,8 @@ void uc_vm_init(uc_vm *vm, uc_parse_config *config)
 	vm->values.prev = &vm->values;
 	vm->values.next = &vm->values;
 
+	vm->strbuf = NULL;
+
 	uc_vm_reset_stack(vm);
 }
 
@@ -136,6 +138,8 @@ void uc_vm_free(uc_vm *vm)
 	uc_vm_reset_stack(vm);
 	uc_vector_clear(&vm->stack);
 	uc_vector_clear(&vm->callframes);
+
+	printbuf_free(vm->strbuf);
 
 	ucv_gc(vm, true);
 }
@@ -231,6 +235,24 @@ uc_vm_decode_insn(uc_vm *vm, uc_callframe *frame, uc_chunk *chunk)
 }
 
 
+static char *
+uc_vm_format_val(uc_vm *vm, uc_value_t *val)
+{
+	if (!vm->strbuf)
+		vm->strbuf = xprintbuf_new();
+	else
+		printbuf_reset(vm->strbuf);
+
+	ucv_to_stringbuf(NULL, vm->strbuf, val, true);
+
+	if (printbuf_length(vm->strbuf) >= 64) {
+		printbuf_memset(vm->strbuf, 60, '.', 3);
+		printbuf_memset(vm->strbuf, 63, 0, 1);
+	}
+
+	return vm->strbuf->buf;
+}
+
 static void
 uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 {
@@ -240,7 +262,6 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 	uc_upvalref_t *ref;
 	uc_value_t *v;
 	size_t i;
-	char *s;
 
 	fprintf(stderr, "  [*] CALLFRAME[%zx]\n",
 		frame - vm->callframes.entries);
@@ -248,9 +269,8 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 	fprintf(stderr, "   |- stackframe %zu/%zu\n",
 		frame->stackframe, vm->stack.count);
 
-	s = ucv_to_string(NULL, frame->ctx);
-	fprintf(stderr, "   |- ctx %s\n", s);
-	free(s);
+	fprintf(stderr, "   |- ctx %s\n",
+		uc_vm_format_val(vm, frame->ctx));
 
 	if (chunk) {
 		fprintf(stderr, "   |- %zu constants\n",
@@ -258,9 +278,10 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 
 		for (i = 0; i < chunk->constants.isize; i++) {
 			v = uc_chunk_get_constant(chunk, i);
-			s = ucv_to_jsonstring(NULL, v);
-			fprintf(stderr, "   | [%zu] %s\n", i, s);
-			free(s);
+
+			fprintf(stderr, "   | [%zu] %s\n",
+				i, uc_vm_format_val(vm, v));
+
 			ucv_put(v);
 		}
 
@@ -273,21 +294,21 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 		for (i = 0; i < function->nupvals; i++) {
 			ref = closure->upvals[i];
 			v = uc_chunk_debug_get_variable(chunk, 0, i, true);
-			s = ucv_to_string(NULL, v);
-			fprintf(stderr, "     [%zu] <%p> %s ", i, (void *)ref, s);
-			free(s);
+
+			fprintf(stderr, "     [%zu] <%p> %s ",
+				i, (void *)ref, uc_vm_format_val(vm, v));
 
 			if (ref->closed) {
-				s = ucv_to_jsonstring(NULL, ref->value);
-				fprintf(stderr, "{closed} %s\n", s);
+				fprintf(stderr, "{closed} %s\n",
+					uc_vm_format_val(vm, ref->value));
 			}
 			else {
-				s = ucv_to_jsonstring(NULL, vm->stack.entries[ref->slot]);
-				fprintf(stderr, "{open[%zu]} %s\n", ref->slot, s);
+				fprintf(stderr, "{open[%zu]} %s\n",
+					ref->slot,
+					uc_vm_format_val(vm, vm->stack.entries[ref->slot]));
 			}
 
 			ucv_put(v);
-			free(s);
 		}
 	}
 }
@@ -295,8 +316,6 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 void
 uc_vm_stack_push(uc_vm *vm, uc_value_t *value)
 {
-	char *s;
-
 	uc_vector_grow(&vm->stack);
 
 	ucv_put(vm->stack.entries[vm->stack.count]);
@@ -305,9 +324,9 @@ uc_vm_stack_push(uc_vm *vm, uc_value_t *value)
 	vm->stack.count++;
 
 	if (vm->trace) {
-		s = ucv_to_jsonstring(NULL, value);
-		fprintf(stderr, "  [+%zd] %s\n", vm->stack.count - 1, s);
-		free(s);
+		fprintf(stderr, "  [+%zd] %s\n",
+			vm->stack.count - 1,
+			uc_vm_format_val(vm, value));
 	}
 }
 
@@ -315,16 +334,15 @@ uc_value_t *
 uc_vm_stack_pop(uc_vm *vm)
 {
 	uc_value_t *rv;
-	char *s;
 
 	vm->stack.count--;
 	rv = vm->stack.entries[vm->stack.count];
 	vm->stack.entries[vm->stack.count] = NULL;
 
 	if (vm->trace) {
-		s = ucv_to_jsonstring(NULL, rv);
-		fprintf(stderr, "  [-%zd] %s\n", vm->stack.count, s);
-		free(s);
+		fprintf(stderr, "  [-%zd] %s\n",
+			vm->stack.count,
+			uc_vm_format_val(vm, rv));
 	}
 
 	return rv;
@@ -339,12 +357,10 @@ uc_vm_stack_peek(uc_vm *vm, size_t offset)
 static void
 uc_vm_stack_set(uc_vm *vm, size_t offset, uc_value_t *value)
 {
-	char *s;
-
 	if (vm->trace) {
-		s = ucv_to_jsonstring(NULL, value);
-		fprintf(stderr, "  [!%zu] %s\n", offset, s);
-		free(s);
+		fprintf(stderr, "  [!%zu] %s\n",
+			offset,
+			uc_vm_format_val(vm, value));
 	}
 
 	ucv_put(vm->stack.entries[offset]);
@@ -528,7 +544,6 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 	uc_stringbuf_t *buf = NULL;
 	uc_value_t *cnst = NULL;
 	size_t srcpos;
-	char *s;
 
 	srcpos = ucv_function_srcpos((uc_value_t *)frame->closure->function, pos - chunk->entries);
 
@@ -587,11 +602,11 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 	case I_LVAR:
 	case I_SVAR:
 		cnst = uc_chunk_get_constant(uc_vm_frame_chunk(uc_vector_last(&vm->callframes)), vm->arg.u32);
-		s = cnst ? ucv_to_jsonstring(NULL, cnst) : NULL;
 
-		fprintf(stderr, "\t; %s", s ? s : "(?)");
+		fprintf(stderr, "\t; %s",
+			cnst ? uc_vm_format_val(vm, cnst) : "(?)");
+
 		ucv_put(cnst);
-		free(s);
 		break;
 
 	case I_LLOC:
@@ -599,11 +614,11 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 	case I_SLOC:
 	case I_SUPV:
 		cnst = uc_chunk_debug_get_variable(chunk, pos - chunk->entries, vm->arg.u32, (insn == I_LUPV || insn == I_SUPV));
-		s = cnst ? ucv_to_jsonstring(NULL, cnst) : NULL;
 
-		fprintf(stderr, "\t; %s", s ? s : "(?)");
+		fprintf(stderr, "\t; %s",
+			cnst ? uc_vm_format_val(vm, cnst) : "(?)");
+
 		ucv_put(cnst);
-		free(s);
 		break;
 
 	case I_ULOC:
@@ -615,14 +630,11 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 		if (!cnst)
 			cnst = uc_chunk_get_constant(uc_vm_frame_chunk(uc_vector_last(&vm->callframes)), vm->arg.u32 & 0x00ffffff);
 
-		s = cnst ? ucv_to_jsonstring(NULL, cnst) : NULL;
-
 		fprintf(stderr, "\t; %s (%s)",
-			s ? s : "(?)",
+			cnst ? uc_vm_format_val(vm, cnst) : "(?)",
 			insn_names[vm->arg.u32 >> 24]);
 
 		ucv_put(cnst);
-		free(s);
 		break;
 
 	case I_UVAL:
@@ -1031,7 +1043,6 @@ static void
 uc_vm_close_upvals(uc_vm *vm, size_t slot)
 {
 	uc_upvalref_t *ref;
-	char *s;
 
 	while (vm->open_upvals && vm->open_upvals->slot >= slot) {
 		ref = vm->open_upvals;
@@ -1039,9 +1050,9 @@ uc_vm_close_upvals(uc_vm *vm, size_t slot)
 		ref->closed = true;
 
 		if (vm->trace) {
-			s = ucv_to_string(NULL, ref->value);
-			fprintf(stderr, "  {!%zu} <%p> %s\n", ref->slot, (void *)ref, s);
-			free(s);
+			fprintf(stderr, "  {!%zu} <%p> %s\n", ref->slot,
+				(void *)ref,
+				uc_vm_format_val(vm, ref->value));
 		}
 
 		vm->open_upvals = ref->next;

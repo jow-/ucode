@@ -237,6 +237,8 @@ typedef struct {
 uc_declare_vector(uc_callframes, uc_callframe);
 uc_declare_vector(uc_stack, uc_value_t *);
 
+typedef struct printbuf uc_stringbuf_t;
+
 struct uc_vm {
 	uc_stack stack;
 	uc_exception exception;
@@ -256,12 +258,11 @@ struct uc_vm {
 	} arg;
 	size_t spread_values;
 	uint8_t trace;
+	uc_stringbuf_t *strbuf;
 };
 
 
 /* Value API */
-
-typedef struct printbuf uc_stringbuf_t;
 
 void ucv_free(uc_value_t *, bool);
 void ucv_put(uc_value_t *);
