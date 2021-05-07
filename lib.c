@@ -807,15 +807,64 @@ static struct {
 } sort_ctx;
 
 static int
+default_cmp(uc_value_t *v1, uc_value_t *v2)
+{
+	uc_type_t t1, t2;
+	int64_t n1, n2;
+	double d1, d2;
+	char *s1, *s2;
+	bool f1, f2;
+
+	if (ucv_type(v1) == UC_INTEGER || ucv_type(v1) == UC_DOUBLE ||
+	    ucv_type(v2) == UC_INTEGER || ucv_type(v2) == UC_DOUBLE) {
+		t1 = uc_cast_number(v1, &n1, &d1);
+		t2 = uc_cast_number(v2, &n2, &d2);
+
+		if (t1 == UC_DOUBLE || t2 == UC_DOUBLE) {
+			d1 = (t1 == UC_DOUBLE) ? d1 : (double)n1;
+			d2 = (t2 == UC_DOUBLE) ? d2 : (double)n2;
+
+			if (d1 < d2)
+				return -1;
+
+			if (d1 > d2)
+				return 1;
+
+			return 0;
+		}
+
+		if (n1 < n2)
+			return -1;
+
+		if (n1 > n2)
+			return 1;
+
+		return 0;
+	}
+
+	s1 = uc_cast_string(sort_ctx.vm, &v1, &f1);
+	s2 = uc_cast_string(sort_ctx.vm, &v2, &f2);
+
+	n1 = strcmp(s1, s2);
+
+	if (f1) free(s1);
+	if (f2) free(s2);
+
+	return n1;
+}
+
+static int
 sort_fn(const void *k1, const void *k2)
 {
 	uc_value_t * const *v1 = k1;
 	uc_value_t * const *v2 = k2;
 	uc_value_t *rv;
-	int ret;
+	uc_type_t t;
+	int64_t n;
+	double d;
 
 	if (!sort_ctx.fn)
-		return !uc_cmp(TK_LT, *v1, *v2);
+		return default_cmp(*v1, *v2);
 
 	if (sort_ctx.ex)
 		return 0;
@@ -831,12 +880,26 @@ sort_fn(const void *k1, const void *k2)
 	}
 
 	rv = uc_vm_stack_pop(sort_ctx.vm);
+	t = uc_cast_number(rv, &n, &d);
 
-	ret = !uc_val_is_truish(rv);
+	if (t == UC_DOUBLE) {
+		if (d < 0)
+			n = -1;
+
+		if (d > 0)
+			n = 1;
+	}
+	else {
+		if (n < 0)
+			n = -1;
+
+		if (n > 0)
+			n = 1;
+	}
 
 	ucv_put(rv);
 
-	return ret;
+	return n;
 }
 
 static uc_value_t *
