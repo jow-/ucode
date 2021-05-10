@@ -998,7 +998,7 @@ json('{"a":true, "b":123}')   // { "a": true, "b": 123 }
 json('[1,2,')                 // Throws exception
 ```
 
-#### 6.50. `include(path, scope)`
+#### 6.50. `include(path[, scope])`
 
 Evaluate and include the file at the given path and optionally override the
 execution scope with the given scope object.
@@ -1113,3 +1113,9 @@ an invalid value was passed, otherwise `true`.
 
 Raise an exception with the given `message` parameter if the value in `cond`
 is not truish. When `message` is omitted, the default value is `Assertion failed`.
+
+#### 6.57. `render(path[, scope])`
+
+Like `include()` but capture output of included file as string and return it.
+
+See `include()` for details on scoping.
