@@ -118,6 +118,8 @@ void uc_vm_init(uc_vm *vm, uc_parse_config *config)
 
 	vm->strbuf = NULL;
 
+	vm->output = stdout;
+
 	uc_vm_reset_stack(vm);
 }
 
@@ -1896,12 +1898,12 @@ uc_vm_insn_print(uc_vm *vm, enum insn_type insn)
 	case UC_OBJECT:
 	case UC_ARRAY:
 		p = ucv_to_jsonstring(vm, v);
-		fwrite(p, 1, strlen(p), stdout);
+		fwrite(p, 1, strlen(p), vm->output);
 		free(p);
 		break;
 
 	case UC_STRING:
-		fwrite(ucv_string_get(v), 1, ucv_string_length(v), stdout);
+		fwrite(ucv_string_get(v), 1, ucv_string_length(v), vm->output);
 		break;
 
 	case UC_NULL:
@@ -1909,7 +1911,7 @@ uc_vm_insn_print(uc_vm *vm, enum insn_type insn)
 
 	default:
 		p = ucv_to_string(vm, v);
-		fwrite(p, 1, strlen(p), stdout);
+		fwrite(p, 1, strlen(p), vm->output);
 		free(p);
 	}
 

@@ -292,7 +292,7 @@ uc_print_common(uc_vm *vm, size_t nargs, FILE *fh)
 static uc_value_t *
 uc_print(uc_vm *vm, size_t nargs)
 {
-	return uc_print_common(vm, nargs, stdout);
+	return uc_print_common(vm, nargs, vm->output);
 }
 
 static uc_value_t *
@@ -1495,7 +1495,7 @@ uc_printf(uc_vm *vm, size_t nargs)
 
 	uc_printf_common(vm, nargs, buf);
 
-	len = fwrite(buf->buf, 1, printbuf_length(buf), stdout);
+	len = fwrite(buf->buf, 1, printbuf_length(buf), vm->output);
 
 	printbuf_free(buf);
 
