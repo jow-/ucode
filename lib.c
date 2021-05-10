@@ -292,7 +292,7 @@ uc_print_common(uc_vm *vm, size_t nargs, FILE *fh)
 static uc_value_t *
 uc_print(uc_vm *vm, size_t nargs)
 {
-	return uc_print_common(vm, nargs, stdout);
+	return uc_print_common(vm, nargs, vm->output);
 }
 
 static uc_value_t *
@@ -1495,7 +1495,7 @@ uc_printf(uc_vm *vm, size_t nargs)
 
 	uc_printf_common(vm, nargs, buf);
 
-	len = fwrite(buf->buf, 1, printbuf_length(buf), stdout);
+	len = fwrite(buf->buf, 1, printbuf_length(buf), vm->output);
 
 	printbuf_free(buf);
 
@@ -2199,6 +2199,53 @@ uc_include(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
+uc_render(uc_vm *vm, size_t nargs)
+{
+	uc_string_t *ustr = NULL;
+	FILE *mem, *prev;
+	size_t len = 0;
+
+	mem = open_memstream((char **)&ustr, &len);
+
+	if (!mem)
+		goto out;
+
+	/* reserve space for uc_string_t header... */
+	if (fseek(mem, sizeof(*ustr), SEEK_SET))
+		goto out;
+
+	/* divert VM output to memory fd */
+	prev = vm->output;
+	vm->output = mem;
+
+	/* execute include */
+	(void) uc_include(vm, nargs);
+
+	/* restore previous VM output */
+	vm->output = prev;
+	fclose(mem);
+
+	/* update uc_string_t length */
+	ustr->header.type = UC_STRING;
+	ustr->header.refcount = 1;
+	ustr->length = len - sizeof(*ustr);
+
+	return &ustr->header;
+
+out:
+	uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+	                      "Unable to initialize output memory: %s",
+	                      strerror(errno));
+
+	if (mem)
+		fclose(mem);
+
+	free(ustr);
+
+	return NULL;
+}
+
+static uc_value_t *
 uc_warn(uc_vm *vm, size_t nargs)
 {
 	return uc_print_common(vm, nargs, stderr);
@@ -2473,7 +2520,8 @@ static const uc_cfunction_list functions[] = {
 	{ "trace",		uc_trace },
 	{ "proto",		uc_proto },
 	{ "sleep",		uc_sleep },
-	{ "assert",		uc_assert }
+	{ "assert",		uc_assert },
+	{ "render",		uc_render }
 };
 
 

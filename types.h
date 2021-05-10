@@ -259,6 +259,7 @@ struct uc_vm {
 	size_t spread_values;
 	uint8_t trace;
 	uc_stringbuf_t *strbuf;
+	FILE *output;
 };
 
 
