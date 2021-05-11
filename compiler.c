@@ -1869,7 +1869,7 @@ uc_compiler_declare_internal(uc_compiler *compiler, size_t srcpos, const char *n
 }
 
 static void
-uc_compiler_compile_local(uc_compiler *compiler)
+uc_compiler_compile_declexpr(uc_compiler *compiler)
 {
 	ssize_t slot;
 
@@ -1899,7 +1899,12 @@ uc_compiler_compile_local(uc_compiler *compiler)
 		}
 	}
 	while (uc_compiler_parse_match(compiler, TK_COMMA));
+}
 
+static void
+uc_compiler_compile_local(uc_compiler *compiler)
+{
+	uc_compiler_compile_declexpr(compiler);
 	uc_compiler_parse_consume(compiler, TK_SCOL);
 }
 
@@ -2218,8 +2223,15 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 
 		/* If followed by a comma, continue parsing expression */
 		if (uc_compiler_parse_match(compiler, TK_COMMA)) {
-			uc_compiler_compile_expression(compiler);
-			uc_compiler_emit_insn(compiler, 0, I_POP);
+			/* Is a continuation of a declaration list... */
+			if (local) {
+				uc_compiler_compile_declexpr(compiler);
+			}
+			/* ... otherwise an unrelated expression */
+			else {
+				uc_compiler_compile_expression(compiler);
+				uc_compiler_emit_insn(compiler, 0, I_POP);
+			}
 		}
 	}
 	/* ... otherwise try parsing an entire expression (which might be absent) */

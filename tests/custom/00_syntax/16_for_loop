@@ -220,10 +220,10 @@ rejected.
 -- Expect stderr --
 Syntax error: Unexpected token
 Expecting ';'
-In line 2, byte 24:
+In line 2, byte 19:
 
  `    for (let x, y, z in {})`
-  Near here ----------------^
+  Near here -----------^
 
 
 -- End --
@@ -241,10 +241,10 @@ Ensure that assignments in for-in loop expressions are rejected.
 -- Expect stderr --
 Syntax error: Unexpected token
 Expecting ';'
-In line 2, byte 25:
+In line 2, byte 20:
 
  `    for (let x = 1, y in {})`
-  Near here -----------------^
+  Near here ------------^
 
 
 -- End --

@@ -1,0 +1,18 @@
+When compiling a for-loop local variable initializer expression, the compiler
+incorrectly treated subsequent declarations as global variable assignments,
+triggering reference error exceptions in strict mode.
+
+-- Expect stdout --
+1
+-- End --
+
+-- Testcase --
+{%
+	"use strict";
+
+	// The initializer expression below was incorrectly interpreted as
+	// `let x = 0; y = 1` instead of the correct `let ..., y = 1`.
+	for (let x = 0, y = 1; x < 1; x++)
+		print(y, "\n");
+%}
+-- End --
