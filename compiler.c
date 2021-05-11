@@ -1153,11 +1153,15 @@ uc_compiler_compile_paren(uc_compiler *compiler, bool assignable)
 	/* First try to parse a complete parameter expression and remember the
 	 * consumed label tokens as we go. */
 	while (true) {
-		if (uc_compiler_parse_match(compiler, TK_LABEL)) {
+		if (uc_compiler_parse_check(compiler, TK_LABEL)) {
 			if (!varnames)
 				varnames = ucv_array_new(NULL);
 
-			ucv_array_push(varnames, ucv_get(compiler->parser->prev.uv));
+			ucv_array_push(varnames, ucv_get(compiler->parser->curr.uv));
+
+			/* A subsequent slash cannot be a regular expression literal */
+			compiler->parser->lex.no_regexp = true;
+			uc_compiler_parse_advance(compiler);
 		}
 		else if (uc_compiler_parse_match(compiler, TK_ELLIP)) {
 			uc_compiler_parse_consume(compiler, TK_LABEL);
@@ -1167,6 +1171,8 @@ uc_compiler_compile_paren(uc_compiler *compiler, bool assignable)
 
 			ucv_array_push(varnames, ucv_get(compiler->parser->prev.uv));
 
+			/* A subsequent slash cannot be a regular expression literal */
+			compiler->parser->lex.no_regexp = true;
 			uc_compiler_parse_consume(compiler, TK_RPAREN);
 
 			maybe_arrowfn = true;

@@ -1,0 +1,19 @@
+When compiling a parenthesized division or division-assignment expression,
+the compiler didn't instruct the lexer to treat a potential subsequent
+slash as operand, leading to an incorrect syntax error exception.
+
+-- Expect stdout --
+0
+0
+0
+0
+-- End --
+
+-- Testcase --
+{%
+	print(a / 1, "\n");		// this was okay
+	print(a /= 1, "\n");	// okay too
+	print((a / 1), "\n");	// this failed
+	print((a /= 1), "\n");	// failed as well
+%}
+-- End --
