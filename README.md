@@ -1119,3 +1119,22 @@ is not truish. When `message` is omitted, the default value is `Assertion failed
 Like `include()` but capture output of included file as string and return it.
 
 See `include()` for details on scoping.
+
+#### 6.58. `regexp(source[, flags])`
+
+Construct a regular expression instance from the given `source` pattern string
+and any flags optionally specified by the `flags` argument.
+
+Throws a type error exception if `flags` is not a string or if the string in
+`flags` contains unrecognized regular expression flag characters.
+
+Throws a syntax error when the pattern in `source` cannot be compiled into a
+valid regular expression by the underlying C runtimes `regcomp(3)` function.
+
+Returns the compiled regular expression value.
+
+```javascript
+regexp('foo.*bar', 'is');   // equivalent to /foo.*bar/is
+regexp('foo.*bar', 'x');    // throws "Type error: Unrecognized flag character 'x'"
+regexp('foo.*(');           // throws "Syntax error: Unmatched ( or \("
+```

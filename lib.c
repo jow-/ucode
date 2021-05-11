@@ -2470,6 +2470,61 @@ uc_assert(uc_vm *vm, size_t nargs)
 	return ucv_get(cond);
 }
 
+static uc_value_t *
+uc_regexp(uc_vm *vm, size_t nargs)
+{
+	bool icase = false, newline = false, global = false, freeable;
+	uc_value_t *source = uc_get_arg(0);
+	uc_value_t *flags = uc_get_arg(1);
+	uc_value_t *regex = NULL;
+	char *p, *err = NULL;
+
+	if (flags) {
+		if (ucv_type(flags) != UC_STRING) {
+			uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Given flags argument is not a string");
+
+			return NULL;
+		}
+
+		for (p = ucv_string_get(flags); *p; p++) {
+			switch (*p) {
+			case 'i':
+				icase = true;
+				break;
+
+			case 's':
+				newline = true;
+				break;
+
+			case 'g':
+				global = true;
+				break;
+
+			default:
+				uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Unrecognized flag character '%c'", *p);
+
+				return NULL;
+			}
+		}
+	}
+
+	p = uc_cast_string(vm, &source, &freeable);
+	regex = ucv_regexp_new(p, icase, newline, global, &err);
+
+	if (freeable)
+		free(p);
+
+	if (err) {
+		uc_vm_raise_exception(vm, EXCEPTION_SYNTAX, "%s", err);
+		ucv_put(regex);
+		free(err);
+
+		return NULL;
+	}
+
+	return regex;
+}
+
 static const uc_cfunction_list functions[] = {
 	{ "chr",		uc_chr },
 	{ "delete",		uc_delete },
@@ -2521,7 +2576,8 @@ static const uc_cfunction_list functions[] = {
 	{ "proto",		uc_proto },
 	{ "sleep",		uc_sleep },
 	{ "assert",		uc_assert },
-	{ "render",		uc_render }
+	{ "render",		uc_render },
+	{ "regexp",		uc_regexp }
 };
 
 
