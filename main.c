@@ -55,10 +55,11 @@ print_usage(const char *app)
 }
 
 static void
-globals_init(uc_vm *vm, uc_value_t *scope)
+globals_init(uc_vm *vm, uc_value_t *scope, int argc, char **argv)
 {
 	uc_value_t *arr = ucv_array_new(vm);
 	const char *p, *last;
+	int i;
 
 	for (p = last = LIB_SEARCH_PATH;; p++) {
 		if (*p == ':' || *p == '\0') {
@@ -72,6 +73,13 @@ globals_init(uc_vm *vm, uc_value_t *scope)
 	}
 
 	ucv_object_add(scope, "REQUIRE_SEARCH_PATH", arr);
+
+	arr = ucv_array_new(vm);
+
+	for (i = 0; i < argc; i++)
+		ucv_array_push(arr, ucv_string_new(argv[i]));
+
+	ucv_object_add(scope, "ARGV", arr);
 }
 
 static void
@@ -94,7 +102,8 @@ register_variable(uc_value_t *scope, const char *key, uc_value_t *val)
 
 static int
 parse(uc_parse_config *config, uc_source *src,
-      bool skip_shebang, uc_value_t *env, uc_value_t *modules)
+      bool skip_shebang, uc_value_t *env, uc_value_t *modules,
+      int argc, char **argv)
 {
 	uc_value_t *globals = NULL;
 	uc_function_t *entry;
@@ -134,7 +143,7 @@ parse(uc_parse_config *config, uc_source *src,
 	globals = ucv_object_new(&vm);
 
 	/* load global variables */
-	globals_init(&vm, globals);
+	globals_init(&vm, globals, argc, argv);
 
 	/* load env variables */
 	if (env) {
@@ -385,7 +394,7 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	rv = parse(&config, source, shebang, env, modules);
+	rv = parse(&config, source, shebang, env, modules, argc, argv);
 
 out:
 	ucv_put(modules);
