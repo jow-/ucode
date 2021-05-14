@@ -102,34 +102,16 @@ register_variable(uc_value_t *scope, const char *key, uc_value_t *val)
 
 static int
 parse(uc_parse_config *config, uc_source *src,
-      bool skip_shebang, uc_value_t *env, uc_value_t *modules,
+      uc_value_t *env, uc_value_t *modules,
       int argc, char **argv)
 {
 	uc_value_t *globals = NULL;
 	uc_function_t *entry;
 	uc_vm vm = { 0 };
-	int c, c2, rc = 0;
+	int rc = 0;
 	char *err;
 
 	uc_vm_init(&vm, config);
-
-	if (skip_shebang) {
-		c = fgetc(src->fp);
-		c2 = fgetc(src->fp);
-
-		if (c == '#' && c2 == '!') {
-			while ((c = fgetc(src->fp)) != EOF) {
-				src->off++;
-
-				if (c == '\n')
-					break;
-			}
-		}
-		else {
-			ungetc(c2, src->fp);
-			ungetc(c, src->fp);
-		}
-	}
 
 	entry = uc_compile(config, src, &err);
 
@@ -243,7 +225,6 @@ main(int argc, char **argv)
 	uc_value_t *env = NULL, *modules = NULL, *o, *p;
 	uc_source *source = NULL, *envfile = NULL;
 	char *stdin = NULL, *c;
-	bool shebang = false;
 	int opt, rv = 0;
 
 	uc_parse_config config = {
@@ -384,8 +365,6 @@ main(int argc, char **argv)
 			rv = 1;
 			goto out;
 		}
-
-		shebang = true;
 	}
 
 	if (!source) {
@@ -394,7 +373,7 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	rv = parse(&config, source, shebang, env, modules, argc, argv);
+	rv = parse(&config, source, env, modules, argc, argv);
 
 out:
 	ucv_put(modules);

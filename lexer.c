@@ -1141,6 +1141,38 @@ lex_step(uc_lexer *lex, FILE *fp)
 	return NULL;
 }
 
+static void
+uc_lexer_skip_shebang(uc_lexer *lex)
+{
+	uc_source *source = lex->source;
+	FILE *fp = source->fp;
+	int c1, c2;
+
+	c1 = fgetc(fp);
+	c2 = fgetc(fp);
+
+	if (c1 == '#' && c2 == '!') {
+		next_lineinfo(lex);
+
+		source->off += 2;
+
+		while ((c1 = fgetc(fp)) != EOF) {
+			source->off++;
+
+			if (c1 == '\n') {
+				update_lineinfo(lex, source->off);
+				next_lineinfo(lex);
+
+				break;
+			}
+		}
+	}
+	else {
+		ungetc(c2, fp);
+		ungetc(c1, fp);
+	}
+}
+
 void
 uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source)
 {
@@ -1171,6 +1203,10 @@ uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source)
 	lex->lead_surrogate = 0;
 
 	lex->lastoff = 0;
+
+	/* Skip any potential interpreter line */
+	if (lex->source->off == 0)
+		uc_lexer_skip_shebang(lex);
 }
 
 void

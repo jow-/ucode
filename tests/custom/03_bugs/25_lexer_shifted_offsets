@@ -1,0 +1,21 @@
+When lexing a source buffer with a non-zero offset, e.g. due to a
+skipped interpreter line, lexical tokens reported a wrong offset
+to the compiler, causing error locations and source context lines
+to be incorrectly shifted.
+
+-- Testcase --
+#!/usr/bin/env ucode
+{%
+	die("Error");
+%}
+-- End --
+
+-- Expect stderr --
+Error
+In line 3, byte 12:
+
+ `    die("Error");`
+  Near here -----^
+
+
+-- End --
