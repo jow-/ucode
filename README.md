@@ -1138,3 +1138,13 @@ regexp('foo.*bar', 'is');   // equivalent to /foo.*bar/is
 regexp('foo.*bar', 'x');    // throws "Type error: Unrecognized flag character 'x'"
 regexp('foo.*(');           // throws "Syntax error: Unmatched ( or \("
 ```
+
+#### 6.59. `wildcard(subject, pattern[, nocase])`
+
+Match the given subject against the supplied wildcard (file glob) pattern.
+
+If a truish value is supplied as 3rd argument, case insensitive matching is
+performed. If a non-string value is supplied as subject, it is converted into
+a string before being matched.
+
+Returns `true` when the subject matches the pattern or `false` when not.
