@@ -974,6 +974,7 @@ uc_compiler_compile_delete(uc_compiler *compiler, bool assignable)
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	enum insn_type type;
 
+#ifndef NO_LEGACY
 	/* If the delete keyword is followed by an opening paren, it might be a
 	 * legacy delete(object, propname) call */
 	if (uc_compiler_parse_match(compiler, TK_LPAREN)) {
@@ -1006,7 +1007,9 @@ uc_compiler_compile_delete(uc_compiler *compiler, bool assignable)
 
 	/* Otherwise compile expression, ensure that it results in a property
 	 * access (I_LVAL) and overwrite it with delete operation. */
-	else {
+	else
+#endif /* NO_LEGACY */
+	{
 		uc_compiler_parse_precedence(compiler, P_UNARY);
 
 		type = chunk->entries[compiler->last_insn];
