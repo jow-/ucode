@@ -90,7 +90,7 @@ uc_compiler_parse_rules[TK_ERROR + 1] = {
 };
 
 static ssize_t
-uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name);
+uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name, bool constant);
 
 static ssize_t
 uc_compiler_initialize_local(uc_compiler *compiler);
@@ -121,7 +121,7 @@ uc_compiler_init(uc_compiler *compiler, const char *name, size_t srcpos, uc_sour
 	fn->strict = strict;
 
 	/* reserve stack slot 0 */
-	uc_compiler_declare_local(compiler, varname);
+	uc_compiler_declare_local(compiler, varname, false);
 	uc_compiler_initialize_local(compiler);
 	ucv_put(varname);
 }
@@ -640,7 +640,7 @@ uc_compiler_is_strict(uc_compiler *compiler)
 }
 
 static ssize_t
-uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name)
+uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name, bool constant)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	uc_locals *locals = &compiler->locals;
@@ -683,6 +683,7 @@ uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name)
 	locals->entries[locals->count].depth = -1;
 	locals->entries[locals->count].captured = false;
 	locals->entries[locals->count].from = chunk->count;
+	locals->entries[locals->count].constant = constant;
 	locals->count++;
 
 	return -1;
@@ -699,7 +700,7 @@ uc_compiler_initialize_local(uc_compiler *compiler)
 }
 
 static ssize_t
-uc_compiler_resolve_local(uc_compiler *compiler, uc_value_t *name)
+uc_compiler_resolve_local(uc_compiler *compiler, uc_value_t *name, bool *constant)
 {
 	uc_locals *locals = &compiler->locals;
 	const char *str1, *str2;
@@ -722,6 +723,8 @@ uc_compiler_resolve_local(uc_compiler *compiler, uc_value_t *name)
 			return -1;
 		}
 
+		*constant = locals->entries[i - 1].constant;
+
 		return i - 1;
 	}
 
@@ -729,7 +732,7 @@ uc_compiler_resolve_local(uc_compiler *compiler, uc_value_t *name)
 }
 
 static ssize_t
-uc_compiler_add_upval(uc_compiler *compiler, size_t idx, bool local, uc_value_t *name)
+uc_compiler_add_upval(uc_compiler *compiler, size_t idx, bool local, uc_value_t *name, bool constant)
 {
 	uc_function_t *function = (uc_function_t *)compiler->function;
 	uc_upvals *upvals = &compiler->upvals;
@@ -752,6 +755,7 @@ uc_compiler_add_upval(uc_compiler *compiler, size_t idx, bool local, uc_value_t 
 	upvals->entries[upvals->count].local = local;
 	upvals->entries[upvals->count].index = idx;
 	upvals->entries[upvals->count].name  = ucv_get(name);
+	upvals->entries[upvals->count].constant = constant;
 
 	function->nupvals++;
 
@@ -759,25 +763,25 @@ uc_compiler_add_upval(uc_compiler *compiler, size_t idx, bool local, uc_value_t 
 }
 
 static ssize_t
-uc_compiler_resolve_upval(uc_compiler *compiler, uc_value_t *name)
+uc_compiler_resolve_upval(uc_compiler *compiler, uc_value_t *name, bool *constant)
 {
 	ssize_t idx;
 
 	if (!compiler->parent)
 		return -1;
 
-	idx = uc_compiler_resolve_local(compiler->parent, name);
+	idx = uc_compiler_resolve_local(compiler->parent, name, constant);
 
 	if (idx > -1) {
 		compiler->parent->locals.entries[idx].captured = true;
 
-		return uc_compiler_add_upval(compiler, idx, true, name);
+		return uc_compiler_add_upval(compiler, idx, true, name, *constant);
 	}
 
-	idx = uc_compiler_resolve_upval(compiler->parent, name);
+	idx = uc_compiler_resolve_upval(compiler->parent, name, constant);
 
 	if (idx > -1)
-		return uc_compiler_add_upval(compiler, idx, false, name);
+		return uc_compiler_add_upval(compiler, idx, false, name, *constant);
 
 	return -1;
 }
@@ -829,6 +833,7 @@ static void
 uc_compiler_emit_inc_dec(uc_compiler *compiler, uc_tokentype_t toktype, bool is_postfix)
 {
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_value_t *varname = NULL;
 	enum insn_type type;
 	uint32_t cidx = 0;
 
@@ -837,6 +842,16 @@ uc_compiler_emit_inc_dec(uc_compiler *compiler, uc_tokentype_t toktype, bool is_
 
 	if (type == I_LVAR || type == I_LLOC || type == I_LUPV) {
 		cidx = uc_compiler_get_u32(compiler, compiler->last_insn + 1);
+
+		if (type == I_LLOC && compiler->locals.entries[cidx].constant)
+			varname = compiler->locals.entries[cidx].name;
+		else if (type == I_LUPV && compiler->upvals.entries[cidx].constant)
+			varname = compiler->upvals.entries[cidx].name;
+
+		if (varname)
+			uc_compiler_syntax_error(compiler, 0,
+				"Invalid increment/decrement of constant '%s'",
+				ucv_string_get(varname));
 
 		uc_chunk_pop(chunk);
 		uc_chunk_pop(chunk);
@@ -1027,6 +1042,7 @@ uc_compiler_emit_variable_rw(uc_compiler *compiler, uc_value_t *varname, uc_toke
 {
 	enum insn_type insn;
 	uint32_t sub_insn;
+	bool constant;
 	ssize_t idx;
 
 	switch (type) {
@@ -1051,15 +1067,23 @@ uc_compiler_emit_variable_rw(uc_compiler *compiler, uc_value_t *varname, uc_toke
 		if (sub_insn)
 			uc_compiler_emit_u8(compiler, compiler->parser->prev.pos, sub_insn);
 	}
-	else if ((idx = uc_compiler_resolve_local(compiler, varname)) > -1) {
+	else if ((idx = uc_compiler_resolve_local(compiler, varname, &constant)) > -1) {
 		insn = sub_insn ? I_ULOC : (type ? I_SLOC : I_LLOC);
+
+		if (insn != I_LLOC && constant)
+			uc_compiler_syntax_error(compiler, 0,
+				"Invalid assignment to constant '%s'", ucv_string_get(varname));
 
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, insn);
 		uc_compiler_emit_u32(compiler, compiler->parser->prev.pos,
 			((sub_insn & 0xff) << 24) | idx);
 	}
-	else if ((idx = uc_compiler_resolve_upval(compiler, varname)) > -1) {
+	else if ((idx = uc_compiler_resolve_upval(compiler, varname, &constant)) > -1) {
 		insn = sub_insn ? I_UUPV : (type ? I_SUPV : I_LUPV);
+
+		if (insn != I_LUPV && constant)
+			uc_compiler_syntax_error(compiler, 0,
+				"Invalid assignment to constant '%s'", ucv_string_get(varname));
 
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, insn);
 		uc_compiler_emit_u32(compiler, compiler->parser->prev.pos,
@@ -1130,7 +1154,7 @@ uc_compiler_compile_arrowfn(uc_compiler *compiler, uc_value_t *args, bool restar
 	/* declare local variables for arguments */
 	for (i = 0; i < fn->nargs; i++) {
 		slot = uc_compiler_declare_local(&fncompiler,
-			array ? ucv_array_get(args, i) : args);
+			array ? ucv_array_get(args, i) : args, false);
 
 		if (slot != -1)
 			uc_compiler_syntax_error(&fncompiler, pos,
@@ -1523,7 +1547,7 @@ uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
 		/* Named functions are syntactic sugar for local variable declaration
 		 * with function value assignment. If a name token was encountered,
 		 * initialize a local variable for it... */
-		slot = uc_compiler_declare_local(compiler, name);
+		slot = uc_compiler_declare_local(compiler, name, false);
 
 		if (slot == -1)
 			uc_compiler_initialize_local(compiler);
@@ -1553,7 +1577,7 @@ uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
 		if (uc_compiler_parse_match(&fncompiler, TK_LABEL)) {
 			fn->nargs++;
 
-			uc_compiler_declare_local(&fncompiler, fncompiler.parser->prev.uv);
+			uc_compiler_declare_local(&fncompiler, fncompiler.parser->prev.uv, false);
 			uc_compiler_initialize_local(&fncompiler);
 
 			if (fn->vararg ||
@@ -1863,7 +1887,7 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 static void
 uc_compiler_declare_local_null(uc_compiler *compiler, size_t srcpos, uc_value_t *varname)
 {
-	ssize_t existing_slot = uc_compiler_declare_local(compiler, varname);
+	ssize_t existing_slot = uc_compiler_declare_local(compiler, varname, false);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_LNULL);
 
@@ -1888,7 +1912,7 @@ uc_compiler_declare_internal(uc_compiler *compiler, size_t srcpos, const char *n
 	n = xjs_new_string(name);
 	strict = compiler->strict_declarations;
 	compiler->strict_declarations = false;
-	existing_slot = uc_compiler_declare_local(compiler, n);
+	existing_slot = uc_compiler_declare_local(compiler, n, false);
 	compiler->strict_declarations = strict;
 
 	uc_compiler_emit_insn(compiler, srcpos, I_LNULL);
@@ -1925,7 +1949,7 @@ uc_compiler_declare_internal(uc_compiler *compiler, size_t srcpos, const char *n
 }
 
 static void
-uc_compiler_compile_declexpr(uc_compiler *compiler)
+uc_compiler_compile_declexpr(uc_compiler *compiler, bool constant)
 {
 	ssize_t slot;
 
@@ -1934,14 +1958,18 @@ uc_compiler_compile_declexpr(uc_compiler *compiler)
 		uc_compiler_parse_consume(compiler, TK_LABEL);
 
 		/* declare local variable */
-		slot = uc_compiler_declare_local(compiler, compiler->parser->prev.uv);
+		slot = uc_compiler_declare_local(compiler, compiler->parser->prev.uv, constant);
 
 		/* if followed by '=', parse initializer expression */
 		if (uc_compiler_parse_match(compiler, TK_ASSIGN))
 			uc_compiler_parse_precedence(compiler, P_ASSIGN);
-		/* otherwise load implicit null */
-		else
+		/* otherwise, for writable variables, load implicit null */
+		else if (!constant)
 			uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LNULL);
+		/* for constant variables, a missing initializer is a syntax error */
+		else
+			uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+				"Expecting initializer expression");
 
 		/* initialize local */
 		if (slot == -1) {
@@ -1960,7 +1988,14 @@ uc_compiler_compile_declexpr(uc_compiler *compiler)
 static void
 uc_compiler_compile_local(uc_compiler *compiler)
 {
-	uc_compiler_compile_declexpr(compiler);
+	uc_compiler_compile_declexpr(compiler, false);
+	uc_compiler_parse_consume(compiler, TK_SCOL);
+}
+
+static void
+uc_compiler_compile_const(uc_compiler *compiler)
+{
+	uc_compiler_compile_declexpr(compiler, true);
 	uc_compiler_parse_consume(compiler, TK_SCOL);
 }
 
@@ -2281,7 +2316,7 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 		if (uc_compiler_parse_match(compiler, TK_COMMA)) {
 			/* Is a continuation of a declaration list... */
 			if (local) {
-				uc_compiler_compile_declexpr(compiler);
+				uc_compiler_compile_declexpr(compiler, false);
 			}
 			/* ... otherwise an unrelated expression */
 			else {
@@ -2631,7 +2666,7 @@ uc_compiler_compile_try(uc_compiler *compiler)
 	if (uc_compiler_parse_match(compiler, TK_LPAREN)) {
 		uc_compiler_parse_consume(compiler, TK_LABEL);
 
-		uc_compiler_declare_local(compiler, compiler->parser->prev.uv);
+		uc_compiler_declare_local(compiler, compiler->parser->prev.uv, false);
 		uc_compiler_initialize_local(compiler);
 
 		uc_compiler_parse_consume(compiler, TK_RPAREN);
@@ -2806,6 +2841,8 @@ uc_compiler_compile_declaration(uc_compiler *compiler)
 {
 	if (uc_compiler_parse_match(compiler, TK_LOCAL))
 		uc_compiler_compile_local(compiler);
+	else if (uc_compiler_parse_match(compiler, TK_CONST))
+		uc_compiler_compile_const(compiler);
 	else
 		uc_compiler_compile_statement(compiler);
 

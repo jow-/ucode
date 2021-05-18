@@ -154,8 +154,13 @@ through numeric operations, or explicitely, e.g. by invoking functions such as
 
 Variable names must start with a letter or an underscore and may only contain
 the characters `A`..`Z`, `a`..`z`, `0`..`9` or `_`. By prefixing a variable
-name with the keyword `let`, it is declared in the local function scope only
+name with the keyword `let`, it is declared in the local block scope only
 and not visible outside anymore.
+
+Variables may also be declared using the `const` keyword. Such variables follow
+the same scoping rules as `let` declared ones but they cannot be modified after
+they have been declared. Any attempt to do so will result in a syntax error
+during compilation.
 
 ```javascript
 {%
@@ -171,6 +176,15 @@ and not visible outside anymore.
 
   print(a, "\n");  // outputs "2"
   print(b, "\n");  // outputs nothing
+
+  const c = 3;
+  print(c, "\n");  // outputs "3"
+
+  c = 4;           // raises syntax error
+  c++;             // raises syntax error
+
+  const d;         // raises syntax error, const variables must
+                   // be initialized at declaration time
 
 %}
 ```
