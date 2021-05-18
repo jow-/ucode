@@ -1918,6 +1918,31 @@ uc_vm_insn_print(uc_vm *vm, enum insn_type insn)
 	ucv_put(v);
 }
 
+static void
+uc_vm_insn_delete(uc_vm *vm, enum insn_type insn)
+{
+	uc_value_t *k = uc_vm_stack_pop(vm);
+	uc_value_t *v = uc_vm_stack_pop(vm);
+	bool rv;
+
+	switch (ucv_type(v)) {
+	case UC_OBJECT:
+		rv = uc_delval(vm, v, k);
+		uc_vm_stack_push(vm, ucv_boolean_new(rv));
+		break;
+
+	default:
+		uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
+		                      "left-hand side expression is %s",
+		                      v ? "not an object" : "null");
+
+		break;
+	}
+
+	ucv_put(k);
+	ucv_put(v);
+}
+
 static uc_value_t *
 uc_vm_callframe_pop(uc_vm *vm)
 {
@@ -2184,6 +2209,10 @@ uc_vm_execute_chunk(uc_vm *vm)
 
 		case I_PRINT:
 			uc_vm_insn_print(vm, insn);
+			break;
+
+		case I_DELETE:
+			uc_vm_insn_delete(vm, insn);
 			break;
 
 		default:

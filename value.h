@@ -48,6 +48,7 @@ uc_type_t uc_cast_number(uc_value_t *v, int64_t *n, double *d);
 
 uc_value_t *uc_getval(uc_vm *, uc_value_t *scope, uc_value_t *key);
 uc_value_t *uc_setval(uc_vm *, uc_value_t *scope, uc_value_t *key, uc_value_t *val);
+bool uc_delval(uc_vm *, uc_value_t *scope, uc_value_t *key);
 
 void uc_vallist_init(uc_value_list *list);
 void uc_vallist_free(uc_value_list *list);

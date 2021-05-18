@@ -87,7 +87,8 @@ __insn(CALL) \
 __insn(MCALL) \
 __insn(PRINT) \
 __insn(NEXTK) \
-__insn(NEXTKV)
+__insn(NEXTKV) \
+__insn(DELETE)
 
 
 #undef __insn

@@ -16,6 +16,8 @@ OPTION(MATH_SUPPORT "Math plugin support" ON)
 OPTION(UBUS_SUPPORT "Ubus plugin support" ON)
 OPTION(UCI_SUPPORT "UCI plugin support" ON)
 
+OPTION(LEGACY_SUPPORT "Support deprecated syntax features" ON)
+
 SET(LIB_SEARCH_PATH "/usr/lib/ucode/*.so:/usr/share/ucode/*.uc:./*.so:./*.uc" CACHE STRING "Default library search path")
 ADD_DEFINITIONS(-DLIB_SEARCH_PATH="${LIB_SEARCH_PATH}")
 
@@ -29,6 +31,10 @@ IF(DEBUG)
   ADD_DEFINITIONS(-DDEBUG -g3 -O0)
 ELSE()
   ADD_DEFINITIONS(-DNDEBUG)
+ENDIF()
+
+IF(NOT LEGACY_SUPPORT)
+  ADD_DEFINITIONS(-DNO_LEGACY)
 ENDIF()
 
 INCLUDE(FindPkgConfig)

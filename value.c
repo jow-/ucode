@@ -248,6 +248,22 @@ uc_setval(uc_vm *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
 }
 
 bool
+uc_delval(uc_vm *vm, uc_value_t *scope, uc_value_t *key)
+{
+	char *s;
+	bool rv;
+
+	if (!key)
+		return NULL;
+
+	s = uc_tostring(vm, key);
+	rv = ucv_object_delete(scope, s ? s : ucv_string_get(key));
+	free(s);
+
+	return rv;
+}
+
+bool
 uc_cmp(int how, uc_value_t *v1, uc_value_t *v2)
 {
 	uc_type_t t1 = ucv_type(v1);

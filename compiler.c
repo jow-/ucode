@@ -24,6 +24,7 @@
 
 static void uc_compiler_compile_unary(uc_compiler *compiler, bool assignable);
 static void uc_compiler_compile_binary(uc_compiler *compiler, bool assignable);
+static void uc_compiler_compile_delete(uc_compiler *compiler, bool assignable);
 static void uc_compiler_compile_paren(uc_compiler *compiler, bool assignable);
 static void uc_compiler_compile_call(uc_compiler *compiler, bool assignable);
 static void uc_compiler_compile_post_inc(uc_compiler *compiler, bool assignable);
@@ -50,6 +51,7 @@ uc_compiler_parse_rules[TK_ERROR + 1] = {
 	[TK_ADD]	= { uc_compiler_compile_unary, uc_compiler_compile_binary, P_ADD },
 	[TK_COMPL]	= { uc_compiler_compile_unary, NULL, P_UNARY },
 	[TK_NOT]	= { uc_compiler_compile_unary, NULL, P_UNARY },
+	[TK_DELETE]	= { uc_compiler_compile_delete, NULL, P_UNARY },
 	[TK_INC]	= { uc_compiler_compile_unary, uc_compiler_compile_post_inc, P_INC },
 	[TK_DEC]	= { uc_compiler_compile_unary, uc_compiler_compile_post_inc, P_INC },
 	[TK_DIV]	= { NULL, uc_compiler_compile_binary, P_MUL },
@@ -963,6 +965,60 @@ uc_compiler_compile_binary(uc_compiler *compiler, bool assignable)
 	case TK_IN:     uc_compiler_emit_insn(compiler, 0, I_IN);     break;
 	default:
 		return;
+	}
+}
+
+static void
+uc_compiler_compile_delete(uc_compiler *compiler, bool assignable)
+{
+	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	enum insn_type type;
+
+#ifndef NO_LEGACY
+	/* If the delete keyword is followed by an opening paren, it might be a
+	 * legacy delete(object, propname) call */
+	if (uc_compiler_parse_match(compiler, TK_LPAREN)) {
+		uc_compiler_parse_precedence(compiler, P_ASSIGN);
+
+		if (uc_compiler_parse_match(compiler, TK_RPAREN)) {
+			type = chunk->entries[compiler->last_insn];
+
+			if (type != I_LVAL)
+				uc_compiler_syntax_error(compiler, 0,
+					"expecting a property access expression");
+
+			chunk->entries[compiler->last_insn] = I_DELETE;
+		}
+		else if (uc_compiler_parse_match(compiler, TK_COMMA)) {
+			if (uc_compiler_is_strict(compiler)) {
+				uc_compiler_syntax_error(compiler, 0,
+					"attempt to apply 'delete' operator on non-property access expression");
+			}
+			else {
+				uc_compiler_parse_precedence(compiler, P_ASSIGN);
+				uc_compiler_emit_insn(compiler, 0, I_DELETE);
+				uc_compiler_parse_consume(compiler, TK_RPAREN);
+			}
+		}
+		else {
+			uc_compiler_syntax_error(compiler, 0, "expecting ')' or ','");
+		}
+	}
+
+	/* Otherwise compile expression, ensure that it results in a property
+	 * access (I_LVAL) and overwrite it with delete operation. */
+	else
+#endif /* NO_LEGACY */
+	{
+		uc_compiler_parse_precedence(compiler, P_UNARY);
+
+		type = chunk->entries[compiler->last_insn];
+
+		if (type != I_LVAL)
+			uc_compiler_syntax_error(compiler, 0,
+				"expecting a property access expression");
+
+		chunk->entries[compiler->last_insn] = I_DELETE;
 	}
 }
 

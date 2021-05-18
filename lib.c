@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <fnmatch.h>
 
 #include "lexer.h"
 #include "compiler.h"
@@ -447,35 +448,6 @@ uc_chr(uc_vm *vm, size_t nargs)
 
 	rv = ucv_string_new_length(str, nargs);
 	free(str);
-
-	return rv;
-}
-
-static uc_value_t *
-uc_delete(uc_vm *vm, size_t nargs)
-{
-	uc_value_t *obj = uc_get_arg(0);
-	uc_value_t *key = NULL;
-	uc_value_t *rv = NULL;
-	bool freeable;
-	size_t i;
-	char *k;
-
-	if (ucv_type(obj) != UC_OBJECT)
-		return NULL;
-
-	for (i = 1; i < nargs; i++) {
-		ucv_put(rv);
-
-		key = uc_get_arg(i);
-		k = uc_cast_string(vm, &key, &freeable);
-		rv = ucv_get(ucv_object_get(obj, k, NULL));
-
-		ucv_object_delete(obj, k);
-
-		if (freeable)
-			free(k);
-	}
 
 	return rv;
 }
@@ -2525,9 +2497,33 @@ uc_regexp(uc_vm *vm, size_t nargs)
 	return regex;
 }
 
+static uc_value_t *
+uc_wildcard(uc_vm *vm, size_t nargs)
+{
+	uc_value_t *subject = uc_get_arg(0);
+	uc_value_t *pattern = uc_get_arg(1);
+	uc_value_t *icase = uc_get_arg(2);
+	int flags = 0, rv;
+	bool freeable;
+	char *s;
+
+	if (!subject || ucv_type(pattern) != UC_STRING)
+		return NULL;
+
+	if (uc_val_is_truish(icase))
+		flags |= FNM_CASEFOLD;
+
+	s = uc_cast_string(vm, &subject, &freeable);
+	rv = fnmatch(ucv_string_get(pattern), s, flags);
+
+	if (freeable)
+		free(s);
+
+	return ucv_boolean_new(rv == 0);
+}
+
 static const uc_cfunction_list functions[] = {
 	{ "chr",		uc_chr },
-	{ "delete",		uc_delete },
 	{ "die",		uc_die },
 	{ "exists",		uc_exists },
 	{ "exit",		uc_exit },
@@ -2577,7 +2573,8 @@ static const uc_cfunction_list functions[] = {
 	{ "sleep",		uc_sleep },
 	{ "assert",		uc_assert },
 	{ "render",		uc_render },
-	{ "regexp",		uc_regexp }
+	{ "regexp",		uc_regexp },
+	{ "wildcard",	uc_wildcard }
 };
 
 

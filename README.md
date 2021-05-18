@@ -510,6 +510,22 @@ The result of assignment expressions is the assigned value.
 %}
 ```
 
+#### 5.6. Miscellaneous operators
+
+Besides the operators described so far, ucode script also supports a `delete`
+operator which removes a property from an object value.
+
+```javascript
+{%
+  a = { test: true };
+
+  delete a.test;         // true
+  delete a.notexisting;  // false
+
+  print(a);              // { }
+%}
+```
+
 ### 6. Functions
 
 Ucode scripts may call a number of builtin functions to manipulate values or
@@ -549,30 +565,25 @@ chr(-1, 300);     // string consisting of an `0x0` and a `0xff` byte
 
 Return the cosine of x, where x is given in radians.
 
-#### 6.5. `delete(obj, key1, ...)`
-
-Delete the given key(s) from the object passed as first argument. Returns the
-corresponding value of the last removed key, if any.
-
-#### 6.6. `die(msg)`
+#### 6.5. `die(msg)`
 
 Raise an exception with the given message and abort execution.
 
-#### 6.7. `exists(obj, key)`
+#### 6.6. `exists(obj, key)`
 
 Return `true` if the given key is present within the object passed as first
 argument, otherwise `false`.
 
-#### 6.8. `exit(n)`
+#### 6.7. `exit(n)`
 
 Terminate the interpreter with the given exit code.
 
-#### 6.9. `exp(n)`
+#### 6.8. `exp(n)`
 
 Return the value of e (the base of natural logarithms) raised to the power
 of n.
 
-#### 6.10. `filter(arr, fn)`
+#### 6.9. `filter(arr, fn)`
 
 Filter the array passed as first argument by invoking the function specified
 in the second argument for each array item.
@@ -598,15 +609,15 @@ a = filter(["foo", 1, true, null, 2.2], function(v) {
 // a = [1, 2.2]
 ```
 
-#### 6.11. `getenv(name)`
+#### 6.10. `getenv(name)`
 
 Return the value of the given environment variable.
 
-#### 6.12. `hex(x)`
+#### 6.11. `hex(x)`
 
 Convert the given hexadecimal string into a number.
 
-#### 6.13. `index(arr_or_str, needle)`
+#### 6.12. `index(arr_or_str, needle)`
 
 Find the given value passed as second argument within the array or string
 specified in the first argument.
@@ -616,28 +627,28 @@ if the value was not found.
 
 Returns `null` if the first argument was neither an array, nor a string.
 
-#### 6.14. `int(x)`
+#### 6.13. `int(x)`
 
 Convert the given value to an integer. Returns `NaN` if the value is not
 convertible.
 
-#### 6.15. `join(sep, arr)`
+#### 6.14. `join(sep, arr)`
 
 Join the array passed as 2nd argument into a string, using the separator passed
 in the first argument as glue. Returns `null` if the second argument is not an
 array.
 
-#### 6.16. `keys(obj)`
+#### 6.15. `keys(obj)`
 
 Return an array of all key names present in the passed object. Returns `null`
 if the given argument is no object.
 
-#### 6.17. `lc(s)`
+#### 6.16. `lc(s)`
 
 Convert the given string to lowercase and return the resulting string.
 Returns `null` if the given argument could not be converted to a string.
 
-#### 6.18. `length(x)`
+#### 6.17. `length(x)`
 
 Return the length of the given object, array or string. Returns `null` if
 the given argument is neither an object, array, nor a string.
@@ -655,11 +666,11 @@ length(true)                               // null
 length(10.0)                               // null
 ```
 
-#### 6.19. `log(x)`
+#### 6.18. `log(x)`
 
 Return the natural logarithm of x.
 
-#### 6.20. `ltrim(s, c)`
+#### 6.19. `ltrim(s, c)`
 
 Trim any of the specified characters in `c` from the start of `str`.
 If the second argument is omitted, trims the characters, ` ` (space), `\t`,
@@ -670,7 +681,7 @@ ltrim("  foo  \n")     // "foo  \n"
 ltrim("--bar--", "-")  // "bar--"
 ```
 
-#### 6.21. `map(arr, fn)`
+#### 6.20. `map(arr, fn)`
 
 Transform the array passed as first argument by invoking the function specified
 in the second argument for each array item.
@@ -694,7 +705,7 @@ a = map(["foo", 1, true, null, 2.2], type);
 // a = ["string", "int", "bool", null, "double"]
 ```
 
-#### 6.22. `ord(s, ...)`
+#### 6.21. `ord(s, ...)`
 
 Without further arguments, this function returns the byte value of the first
 character in the given string.
@@ -713,35 +724,35 @@ ord("Abc", 2, 1, 0);        // [ 99, 98, 65 ]
 ord("Abc", 10, -10, "nan"); // [ null, null, null ]
 ```
 
-#### 6.23. `pop(arr)`
+#### 6.22. `pop(arr)`
 
 Pops the last item from the given array and returns it. Returns `null` if the
 array was empty or if a non-array argument was passed.
 
-#### 6.24. `print(x, ...)`
+#### 6.23. `print(x, ...)`
 
 Print any of the given values to stdout. Arrays and objects are converted to
 their JSON representation.
 
 Returns the amount of bytes printed.
 
-#### 6.25. `push(arr, v1, ...)`
+#### 6.24. `push(arr, v1, ...)`
 
 Push the given argument(s) to the given array. Returns the last pushed value.
 
-#### 6.26. `rand()`
+#### 6.25. `rand()`
 
 Returns a random number. If `srand()` has not been called already, it is
 automatically invoked passing the current time as seed.
 
-#### 6.27. `reverse(arr_or_str)`
+#### 6.26. `reverse(arr_or_str)`
 
 If an array is passed, returns the array in reverse order. If a string is
 passed, returns the string with the sequence of the characters reversed.
 
 Returns `null` if neither an array nor a string were passed.
 
-#### 6.28. `rindex(arr_or_str, needle)`
+#### 6.27. `rindex(arr_or_str, needle)`
 
 Find the given value passed as second argument within the array or string
 specified in the first argument.
@@ -751,7 +762,7 @@ if the value was not found.
 
 Returns `null` if the first argument was neither an array, nor a string.
 
-#### 6.29. `rtrim(str, c)`
+#### 6.28. `rtrim(str, c)`
 
 Trim any of the specified characters in `c` from the end of `str`.
 If the second argument is omitted, trims the characters, ` ` (space), `\t`,
@@ -762,16 +773,16 @@ rtrim("  foo  \n")     // "  foo"
 rtrim("--bar--", "-")  // "--bar"
 ```
 
-#### 6.30. `shift(arr)`
+#### 6.29. `shift(arr)`
 
 Pops the first item from the given array and returns it. Returns `null` if the
 array was empty or if a non-array argument was passed.
 
-#### 6.31. `sin(x)`
+#### 6.30. `sin(x)`
 
 Return the sine of x, where x is given in radians.
 
-#### 6.32. `sort(arr, fn)`
+#### 6.31. `sort(arr, fn)`
 
 Sort the given array according to the given sort function. If no sort
 function is provided, a default ascending sort order is applied.
@@ -783,7 +794,7 @@ sort(["Bean", "Orange", "Apple"], function(a, b) {
 }) // ["Bean", "Apple", "Orange"]
 ```
 
-#### 6.33. `splice(arr, off, len, ...)`
+#### 6.32. `splice(arr, off, len, ...)`
 
 Removes the elements designated by `off` and `len` from  the given an array,
 and replaces them with the additional arguments passed, if any. Returns the
@@ -794,7 +805,7 @@ If `off` is negative then it starts that far from the end of the array. If
 removes the elements from `off` onward except for `-len` elements at the end of
 the array. If both `off` and `len` are omitted, removes everything.
 
-#### 6.34. `split(str, sep)`
+#### 6.33. `split(str, sep)`
 
 Split the given string using the separator passed as second argument and return
 an array containing the resulting pieces.
@@ -807,15 +818,15 @@ split("foobar", "")           // ["f", "o", "o", "b", "a", "r"]
 split("foo,bar,baz", /[ao]/)  // ["f", "", ",b", "r,b", "z"]
 ```
 
-#### 6.35. `sqrt(x)`
+#### 6.34. `sqrt(x)`
 
 Return the nonnegative square root of x.
 
-#### 6.36. `srand(n)`
+#### 6.35. `srand(n)`
 
 Seed the PRNG using the given number.
 
-#### 6.37. `substr(str, off, len)`
+#### 6.36. `substr(str, off, len)`
 
 Extracts a substring out of `str` and returns it. First character is at offset
 zero. If `off` is negative, starts that far back from the end of the string.
@@ -832,7 +843,7 @@ substr(s, -4);        // tree
 substr(s, -4, 2);     // tr
 ```
 
-#### 6.38. `time()`
+#### 6.37. `time()`
 
 Returns the current UNIX epoch.
 
@@ -840,7 +851,7 @@ Returns the current UNIX epoch.
 time();     // 1598043054
 ```
 
-#### 6.39. `trim()`
+#### 6.38. `trim()`
 
 Trim any of the specified characters in `c` from the start and end of `str`.
 If the second argument is omitted, trims the characters, ` ` (space), `\t`,
@@ -851,14 +862,14 @@ ltrim("  foo  \n")     // "foo"
 ltrim("--bar--", "-")  // "bar"
 ```
 
-#### 6.40. `type(x)`
+#### 6.39. `type(x)`
 
 Returns the type of the given value as string which might be one of
 `"function"`, `"object"`, `"array"`, `"double"`, `"int"` or `"bool"`.
 
 Returns `null` when no value or `null` is passed.
 
-#### 6.41. `uchr(n1, ...)`
+#### 6.40. `uchr(n1, ...)`
 
 Converts each given numeric value to an utf8 escape sequence and returns the
 resulting string. Invalid numeric values or values outside the range `0` ..
@@ -869,17 +880,17 @@ uchr(0x2600, 0x26C6, 0x2601);  // "☀⛆☁"
 uchr(-1, 0x20ffff, "foo");     // "���"
 ```
 
-#### 6.42. `uc(str)`
+#### 6.41. `uc(str)`
 
 Converts the given string to uppercase and return the resulting string.
 Returns `null` if the given argument could not be converted to a string.
 
-#### 6.43. `unshift(arr, v1, ...)`
+#### 6.42. `unshift(arr, v1, ...)`
 
 Add the given values to the beginning of the array passed as first argument.
 Returns the last value added to the array.
 
-#### 6.44. `values(obj)`
+#### 6.43. `values(obj)`
 
 Returns an array containing all values of the given object. Returns `null` if
 no object was passed.
@@ -888,7 +899,7 @@ no object was passed.
 values({ foo: true, bar: false });   // [true, false]
 ```
 
-#### 6.45. `printf(fmt, ...)`
+#### 6.44. `printf(fmt, ...)`
 
 Formats the given arguments according to the given format string and outputs the
 result to stdout.
@@ -932,14 +943,14 @@ well.
 %}
 ```
 
-#### 6.46. `sprintf(fmt, ...)`
+#### 6.45. `sprintf(fmt, ...)`
 
 Formats the given arguments according to the given format string and returns the
 resulting string.
 
 See `printf()` for details.
 
-#### 6.47. `match(str, /pattern/)`
+#### 6.46. `match(str, /pattern/)`
 
 Match the given string against the regular expression pattern specified as
 second argument.
@@ -955,7 +966,7 @@ match("foobarbaz", /b.(.)/)   // ["bar", "r"]
 match("foobarbaz", /b.(.)/g)  // [["bar", "r"], ["baz", "z"]]
 ```
 
-#### 6.48. `replace(str, /pattern/, replace)`
+#### 6.47. `replace(str, /pattern/, replace)`
 
 Replace occurences of the specified pattern in the string passed as first
 argument. The pattern value may be either a regular expression or a plain
@@ -988,7 +999,7 @@ replace("barfoobaz", /(.)(.)(.)/g, function(m, c1, c2, c3) {
 })                                                          // raboofzab
 ```
 
-#### 6.49. `json(str)`
+#### 6.48. `json(str)`
 
 Parse the given string as JSON and return the resulting value. Throws an
 exception on parse errors, trailing garbage or premature EOF.
@@ -998,7 +1009,7 @@ json('{"a":true, "b":123}')   // { "a": true, "b": 123 }
 json('[1,2,')                 // Throws exception
 ```
 
-#### 6.50. `include(path[, scope])`
+#### 6.49. `include(path[, scope])`
 
 Evaluate and include the file at the given path and optionally override the
 execution scope with the given scope object.
@@ -1041,14 +1052,14 @@ include("./untrusted.uc", proto({
 }, {}))
 ```
 
-#### 6.51. `warn(x, ...)`
+#### 6.50. `warn(x, ...)`
 
 Print any of the given values to stderr. Arrays and objects are converted to
 their JSON representation.
 
 Returns the amount of bytes printed.
 
-#### 6.52. `system(command, timeout)`
+#### 6.51. `system(command, timeout)`
 
 Executes the given command, waits for completion and returns the resulting
 exit code.
@@ -1078,7 +1089,7 @@ system(["/usr/bin/date", "+%s"]);          // prints the UNIX timestamp to stdou
 system("sleep 3 && echo 'Success'", 1000); // returns -9
 ```
 
-#### 6.53. `trace(level)`
+#### 6.52. `trace(level)`
 
 Enables or disables VM opcode tracing. When invoked with a positive non-zero
 level, opcode tracing is enabled and debug information is printed to stderr
@@ -1091,7 +1102,7 @@ implementation might provide different different verbosity levels or treat
 the level argument as bit mask to enable or disable individual debug
 elements.
 
-#### 6.54. `proto(val[, proto])`
+#### 6.53. `proto(val[, proto])`
 
 Get or set the prototype of the array or object value `val`.
 
@@ -1104,23 +1115,23 @@ set as prototype on the array or object in `val`.
 
 Throws an exception if the given prototype value is not an object.
 
-#### 6.55. `sleep(milliseconds)`
+#### 6.54. `sleep(milliseconds)`
 
 Pause execution for the given amount of milliseconds. Returns `false` if
 an invalid value was passed, otherwise `true`.
 
-#### 6.56. `assert(cond[, message])`
+#### 6.55. `assert(cond[, message])`
 
 Raise an exception with the given `message` parameter if the value in `cond`
 is not truish. When `message` is omitted, the default value is `Assertion failed`.
 
-#### 6.57. `render(path[, scope])`
+#### 6.56. `render(path[, scope])`
 
 Like `include()` but capture output of included file as string and return it.
 
 See `include()` for details on scoping.
 
-#### 6.58. `regexp(source[, flags])`
+#### 6.57. `regexp(source[, flags])`
 
 Construct a regular expression instance from the given `source` pattern string
 and any flags optionally specified by the `flags` argument.
@@ -1138,3 +1149,13 @@ regexp('foo.*bar', 'is');   // equivalent to /foo.*bar/is
 regexp('foo.*bar', 'x');    // throws "Type error: Unrecognized flag character 'x'"
 regexp('foo.*(');           // throws "Syntax error: Unmatched ( or \("
 ```
+
+#### 6.58. `wildcard(subject, pattern[, nocase])`
+
+Match the given subject against the supplied wildcard (file glob) pattern.
+
+If a truish value is supplied as 3rd argument, case insensitive matching is
+performed. If a non-string value is supplied as subject, it is converted into
+a string before being matched.
+
+Returns `true` when the subject matches the pattern or `false` when not.
