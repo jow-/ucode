@@ -22,6 +22,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/sysmacros.h>
+#include <grp.h>
+#include <pwd.h>
+#include <glob.h>
 
 #include "../module.h"
 
@@ -655,6 +658,183 @@ uc_fs_chdir(uc_vm *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+static uc_value_t *
+uc_fs_chmod(uc_vm *vm, size_t nargs)
+{
+	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *mode = uc_get_arg(1);
+
+	if (ucv_type(path) != UC_STRING ||
+	    ucv_type(mode) != UC_INTEGER)
+		err_return(EINVAL);
+
+	if (chmod(ucv_string_get(path), (mode_t)ucv_int64_get(mode)) == -1)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static bool
+uc_fs_resolve_user(uc_value_t *v, uid_t *uid)
+{
+	struct passwd *pw = NULL;
+	int64_t n;
+	char *s;
+
+	*uid = (uid_t)-1;
+
+	switch (ucv_type(v)) {
+	case UC_INTEGER:
+		n = ucv_int64_get(v);
+
+		if (n < -1) {
+			errno = ERANGE;
+
+			return false;
+		}
+
+		*uid = (uid_t)n;
+
+		return true;
+
+	case UC_STRING:
+		s = ucv_string_get(v);
+		pw = getpwnam(s);
+
+		if (!pw) {
+			errno = ENOENT;
+
+			return false;
+		}
+
+		*uid = pw->pw_uid;
+
+		return true;
+
+	case UC_NULL:
+		return true;
+
+	default:
+		errno = EINVAL;
+
+		return false;
+	}
+}
+
+static bool
+uc_fs_resolve_group(uc_value_t *v, gid_t *gid)
+{
+	struct group *gr = NULL;
+	int64_t n;
+	char *s;
+
+	*gid = (gid_t)-1;
+
+	switch (ucv_type(v)) {
+	case UC_INTEGER:
+		n = ucv_int64_get(v);
+
+		if (n < -1) {
+			errno = ERANGE;
+
+			return false;
+		}
+
+		*gid = (gid_t)n;
+
+		return true;
+
+	case UC_STRING:
+		s = ucv_string_get(v);
+		gr = getgrnam(s);
+
+		if (!gr) {
+			errno = ENOENT;
+
+			return false;
+		}
+
+		*gid = gr->gr_gid;
+
+		return true;
+
+	case UC_NULL:
+		return true;
+
+	default:
+		errno = EINVAL;
+
+		return false;
+	}
+}
+
+static uc_value_t *
+uc_fs_chown(uc_vm *vm, size_t nargs)
+{
+	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *user = uc_get_arg(1);
+	uc_value_t *group = uc_get_arg(2);
+	uid_t uid;
+	gid_t gid;
+
+	if (ucv_type(path) != UC_STRING)
+	    err_return(EINVAL);
+
+	if (!uc_fs_resolve_user(user, &uid) ||
+	    !uc_fs_resolve_group(group, &gid))
+		return NULL;
+
+	if (chown(ucv_string_get(path), uid, gid) == -1)
+		return NULL;
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_fs_rename(uc_vm *vm, size_t nargs)
+{
+	uc_value_t *oldpath = uc_get_arg(0);
+	uc_value_t *newpath = uc_get_arg(1);
+
+	if (ucv_type(oldpath) != UC_STRING ||
+	    ucv_type(newpath) != UC_STRING)
+		err_return(EINVAL);
+
+	if (rename(ucv_string_get(oldpath), ucv_string_get(newpath)))
+		return NULL;
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_fs_glob(uc_vm *vm, size_t nargs)
+{
+	uc_value_t *pat, *arr;
+	glob_t gl = { 0 };
+	size_t i;
+
+	for (i = 0; i < nargs; i++) {
+		pat = uc_get_arg(i);
+
+		if (ucv_type(pat) != UC_STRING) {
+			globfree(&gl);
+			err_return(EINVAL);
+		}
+
+		glob(ucv_string_get(pat), i ? GLOB_APPEND : 0, NULL, &gl);
+	}
+
+	arr = ucv_array_new(vm);
+
+	for (i = 0; i < gl.gl_pathc; i++)
+		ucv_array_push(arr, ucv_string_new(gl.gl_pathv[i]));
+
+	globfree(&gl);
+
+	return arr;
+}
+
+
 static const uc_cfunction_list proc_fns[] = {
 	{ "read",		uc_fs_pread },
 	{ "write",		uc_fs_pwrite },
@@ -693,6 +873,10 @@ static const uc_cfunction_list global_fns[] = {
 	{ "unlink",		uc_fs_unlink },
 	{ "getcwd",		uc_fs_getcwd },
 	{ "chdir",		uc_fs_chdir },
+	{ "chmod",		uc_fs_chmod },
+	{ "chown",		uc_fs_chown },
+	{ "rename",		uc_fs_rename },
+	{ "glob",		uc_fs_glob }
 };
 
 
