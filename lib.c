@@ -453,35 +453,6 @@ uc_chr(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_delete(uc_vm *vm, size_t nargs)
-{
-	uc_value_t *obj = uc_get_arg(0);
-	uc_value_t *key = NULL;
-	uc_value_t *rv = NULL;
-	bool freeable;
-	size_t i;
-	char *k;
-
-	if (ucv_type(obj) != UC_OBJECT)
-		return NULL;
-
-	for (i = 1; i < nargs; i++) {
-		ucv_put(rv);
-
-		key = uc_get_arg(i);
-		k = uc_cast_string(vm, &key, &freeable);
-		rv = ucv_get(ucv_object_get(obj, k, NULL));
-
-		ucv_object_delete(obj, k);
-
-		if (freeable)
-			free(k);
-	}
-
-	return rv;
-}
-
-static uc_value_t *
 uc_die(uc_vm *vm, size_t nargs)
 {
 	uc_value_t *msg = uc_get_arg(0);
@@ -2553,7 +2524,6 @@ uc_wildcard(uc_vm *vm, size_t nargs)
 
 static const uc_cfunction_list functions[] = {
 	{ "chr",		uc_chr },
-	{ "delete",		uc_delete },
 	{ "die",		uc_die },
 	{ "exists",		uc_exists },
 	{ "exit",		uc_exit },

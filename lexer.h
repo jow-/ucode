@@ -103,6 +103,7 @@ typedef enum {
 	TK_REGEXP,
 	TK_NULL,
 	TK_THIS,
+	TK_DELETE,
 
 	TK_EOF,
 	TK_ERROR

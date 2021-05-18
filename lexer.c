@@ -141,6 +141,7 @@ static const struct keyword reserved_words[] = {
 	{ TK_ENDWHILE,	"endwhile", 8, { 0 } },
 	{ TK_FUNC,		"function", 8, { 0 } },
 	{ TK_DEFAULT,	"default", 7, { 0 } },
+	{ TK_DELETE,	"delete", 6, { 0 } },
 	{ TK_RETURN,	"return", 6, { 0 } },
 	{ TK_ENDFOR,	"endfor", 6, { 0 } },
 	{ TK_SWITCH,	"switch", 6, { 0 } },
