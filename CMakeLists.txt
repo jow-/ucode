@@ -18,7 +18,7 @@ OPTION(UCI_SUPPORT "UCI plugin support" ON)
 
 OPTION(LEGACY_SUPPORT "Support deprecated syntax features" ON)
 
-SET(LIB_SEARCH_PATH "/usr/lib/ucode/*.so:/usr/share/ucode/*.uc:./*.so:./*.uc" CACHE STRING "Default library search path")
+SET(LIB_SEARCH_PATH "${CMAKE_INSTALL_PREFIX}/lib/ucode/*.so:${CMAKE_INSTALL_PREFIX}/share/ucode/*.uc:./*.so:./*.uc" CACHE STRING "Default library search path")
 ADD_DEFINITIONS(-DLIB_SEARCH_PATH="${LIB_SEARCH_PATH}")
 
 IF(NOT APPLE)
