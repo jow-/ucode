@@ -104,6 +104,7 @@ typedef enum {
 	TK_NULL,
 	TK_THIS,
 	TK_DELETE,
+	TK_CONST,
 
 	TK_EOF,
 	TK_ERROR

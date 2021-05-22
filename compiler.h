@@ -76,12 +76,14 @@ typedef struct {
 	ssize_t depth;
 	size_t from;
 	bool captured;
+	bool constant;
 } uc_local;
 
 typedef struct {
 	uc_value_t *name;
 	size_t index;
 	bool local;
+	bool constant;
 } uc_upval;
 
 uc_declare_vector(uc_locals, uc_local);

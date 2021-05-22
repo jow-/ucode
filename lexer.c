@@ -152,6 +152,7 @@ static const struct keyword reserved_words[] = {
 	{ TK_WHILE,		"while", 5, { 0 } },
 	{ TK_BREAK,		"break", 5, { 0 } },
 	{ TK_CATCH,		"catch", 5, { 0 } },
+	{ TK_CONST,		"const", 5, { 0 } },
 	{ TK_BOOL,		"false", 5, { .b = false } },
 	{ TK_BOOL,		"true",  4, { .b = true } },
 	{ TK_ELIF,		"elif",  4, { 0 } },
