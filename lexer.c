@@ -1047,6 +1047,13 @@ lex_step(uc_lexer *lex, FILE *fp)
 					return NULL;
 				}
 
+				/* in raw code mode, ignore template tag tokens */
+				if (lex->config && lex->config->raw_mode &&
+				    (tok->type == TK_LSTM || tok->type == TK_RSTM ||
+				     tok->type == TK_LEXP || tok->type == TK_REXP)) {
+					continue;
+				}
+
 				/* disallow nesting blocks */
 				if (tok->type == TK_LSTM || tok->type == TK_LEXP) {
 					buf_consume(lex, tok->plen);
@@ -1187,6 +1194,11 @@ uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source)
 	lex->lead_surrogate = 0;
 
 	lex->lastoff = 0;
+
+	if (config && config->raw_mode) {
+		lex->state = UT_LEX_IDENTIFY_TOKEN;
+		lex->block = STATEMENTS;
+	}
 
 	/* Skip any potential interpreter line */
 	if (lex->source->off == 0)

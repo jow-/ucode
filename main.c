@@ -40,7 +40,7 @@ print_usage(const char *app)
 {
 	printf(
 	"== Usage ==\n\n"
-	"  # %s [-d] [-l] [-r] [-S] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
+	"  # %s [-d] [-l] [-r] [-S] [-R] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
 	"  -h, --help	Print this help\n"
 	"  -i file	Specify an ucode script to parse\n"
 	"  -s \"ucode script...\"	Specify an ucode fragment to parse\n"
@@ -48,6 +48,7 @@ print_usage(const char *app)
 	"  -l Do not strip leading block whitespace\n"
 	"  -r Do not trim trailing block newlines\n"
 	"  -S Enable strict mode\n"
+	"  -R Enable raw code mode\n"
 	"  -e Set global variables from given JSON object\n"
 	"  -E Set global variables from given JSON file\n"
 	"  -m Preload given module\n",
@@ -214,7 +215,7 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	while ((opt = getopt(argc, argv, "hlrSe:E:i:s:m:")) != -1)
+	while ((opt = getopt(argc, argv, "hlrSRe:E:i:s:m:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -260,6 +261,10 @@ main(int argc, char **argv)
 
 		case 'S':
 			config.strict_declarations = true;
+			break;
+
+		case 'R':
+			config.raw_mode = true;
 			break;
 
 		case 'e':

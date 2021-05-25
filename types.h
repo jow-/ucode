@@ -205,6 +205,7 @@ typedef struct {
 	bool lstrip_blocks;
 	bool trim_blocks;
 	bool strict_declarations;
+	bool raw_mode;
 } uc_parse_config;
 
 
