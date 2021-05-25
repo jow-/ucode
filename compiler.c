@@ -60,7 +60,8 @@ uc_compiler_parse_rules[TK_ERROR + 1] = {
 	[TK_NUMBER]	= { uc_compiler_compile_constant, NULL, P_NONE },
 	[TK_DOUBLE] = { uc_compiler_compile_constant, NULL, P_NONE },
 	[TK_STRING]	= { uc_compiler_compile_constant, NULL, P_NONE },
-	[TK_BOOL]	= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_TRUE]	= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_FALSE]	= { uc_compiler_compile_constant, NULL, P_NONE },
 	[TK_NULL]	= { uc_compiler_compile_constant, NULL, P_NONE },
 	[TK_THIS]	= { uc_compiler_compile_constant, NULL, P_NONE },
 	[TK_REGEXP]	= { uc_compiler_compile_constant, NULL, P_NONE },
@@ -1455,9 +1456,12 @@ uc_compiler_compile_constant(uc_compiler *compiler, bool assignable)
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LNULL);
 		break;
 
-	case TK_BOOL:
-		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos,
-			ucv_boolean_get(compiler->parser->prev.uv) ? I_LTRUE : I_LFALSE);
+	case TK_TRUE:
+		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LTRUE);
+		break;
+
+	case TK_FALSE:
+		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LFALSE);
 		break;
 
 	case TK_STRING:

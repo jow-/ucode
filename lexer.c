@@ -152,8 +152,8 @@ static const struct keyword reserved_words[] = {
 	{ TK_BREAK,		"break", 5, { 0 } },
 	{ TK_CATCH,		"catch", 5, { 0 } },
 	{ TK_CONST,		"const", 5, { 0 } },
-	{ TK_BOOL,		"false", 5, { .b = false } },
-	{ TK_BOOL,		"true",  4, { .b = true } },
+	{ TK_FALSE,		"false", 5, { 0 } },
+	{ TK_TRUE,		"true",  4, { 0 } },
 	{ TK_ELIF,		"elif",  4, { 0 } },
 	{ TK_ELSE,		"else",  4, { 0 } },
 	{ TK_THIS,		"this",  4, { 0 } },
@@ -726,7 +726,6 @@ parse_label(uc_lexer *lex)
 {
 	const struct token *tok = lex->tok;
 	const struct keyword *word;
-	uc_token *rv;
 	char *ptr;
 	size_t i;
 
@@ -739,16 +738,7 @@ parse_label(uc_lexer *lex)
 				if (lex->lookbehind && lex->lookbehindlen == word->plen && !strncmp(lex->lookbehind, word->pat, word->plen)) {
 					lookbehind_reset(lex);
 
-					switch (word->type) {
-					case TK_BOOL:
-						rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_boolean_new(word->u.b));
-						break;
-
-					default:
-						rv = emit_op(lex, lex->source->off - word->plen, word->type, NULL);
-					}
-
-					return rv;
+					return emit_op(lex, lex->source->off - word->plen, word->type, NULL);
 				}
 			}
 		}
