@@ -35,10 +35,6 @@ struct keyword {
 	unsigned type;
 	const char *pat;
 	unsigned plen;
-	union {
-		double d;
-		bool b;
-	} u;
 };
 
 struct token {
@@ -135,35 +131,35 @@ static const struct token tokens[] = {
 };
 
 static const struct keyword reserved_words[] = {
-	{ TK_ENDFUNC,	"endfunction", 11, { 0 } },
-	{ TK_CONTINUE,	"continue", 8, { 0 } },
-	{ TK_ENDWHILE,	"endwhile", 8, { 0 } },
-	{ TK_FUNC,		"function", 8, { 0 } },
-	{ TK_DEFAULT,	"default", 7, { 0 } },
-	{ TK_DELETE,	"delete", 6, { 0 } },
-	{ TK_RETURN,	"return", 6, { 0 } },
-	{ TK_ENDFOR,	"endfor", 6, { 0 } },
-	{ TK_SWITCH,	"switch", 6, { 0 } },
+	{ TK_ENDFUNC,	"endfunction", 11 },
+	{ TK_CONTINUE,	"continue", 8 },
+	{ TK_ENDWHILE,	"endwhile", 8 },
+	{ TK_FUNC,		"function", 8 },
+	{ TK_DEFAULT,	"default", 7 },
+	{ TK_DELETE,	"delete", 6 },
+	{ TK_RETURN,	"return", 6 },
+	{ TK_ENDFOR,	"endfor", 6 },
+	{ TK_SWITCH,	"switch", 6 },
 #ifndef NO_LEGACY
-	{ TK_LOCAL,		"local", 5, { 0 } },
+	{ TK_LOCAL,		"local", 5 },
 #endif
-	{ TK_ENDIF,		"endif", 5, { 0 } },
-	{ TK_WHILE,		"while", 5, { 0 } },
-	{ TK_BREAK,		"break", 5, { 0 } },
-	{ TK_CATCH,		"catch", 5, { 0 } },
-	{ TK_CONST,		"const", 5, { 0 } },
-	{ TK_FALSE,		"false", 5, { 0 } },
-	{ TK_TRUE,		"true",  4, { 0 } },
-	{ TK_ELIF,		"elif",  4, { 0 } },
-	{ TK_ELSE,		"else",  4, { 0 } },
-	{ TK_THIS,		"this",  4, { 0 } },
-	{ TK_NULL,		"null",  4, { 0 } },
-	{ TK_CASE,		"case",  4, { 0 } },
-	{ TK_TRY,		"try",   3, { 0 } },
-	{ TK_FOR,		"for",   3, { 0 } },
-	{ TK_LOCAL,		"let",   3, { 0 } },
-	{ TK_IF,		"if",    2, { 0 } },
-	{ TK_IN,		"in",    2, { 0 } },
+	{ TK_ENDIF,		"endif", 5 },
+	{ TK_WHILE,		"while", 5 },
+	{ TK_BREAK,		"break", 5 },
+	{ TK_CATCH,		"catch", 5 },
+	{ TK_CONST,		"const", 5 },
+	{ TK_FALSE,		"false", 5 },
+	{ TK_TRUE,		"true",  4 },
+	{ TK_ELIF,		"elif",  4 },
+	{ TK_ELSE,		"else",  4 },
+	{ TK_THIS,		"this",  4 },
+	{ TK_NULL,		"null",  4 },
+	{ TK_CASE,		"case",  4 },
+	{ TK_TRY,		"try",   3 },
+	{ TK_FOR,		"for",   3 },
+	{ TK_LOCAL,		"let",   3 },
+	{ TK_IF,		"if",    2 },
+	{ TK_IN,		"in",    2 },
 };
 
 
