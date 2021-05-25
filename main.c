@@ -55,28 +55,6 @@ print_usage(const char *app)
 }
 
 static void
-globals_init(uc_vm *vm, uc_value_t *scope, int argc, char **argv)
-{
-	const char *path[] = { LIB_SEARCH_PATH };
-	uc_value_t *arr;
-	size_t i;
-
-	arr = ucv_array_new(vm);
-
-	for (i = 0; i < sizeof(path) / sizeof(path[0]); i++)
-		ucv_array_push(arr, ucv_string_new(path[i]));
-
-	ucv_object_add(scope, "REQUIRE_SEARCH_PATH", arr);
-
-	arr = ucv_array_new(vm);
-
-	for (i = 0; i < (size_t)argc; i++)
-		ucv_array_push(arr, ucv_string_new(argv[i]));
-
-	ucv_object_add(scope, "ARGV", arr);
-}
-
-static void
 register_variable(uc_value_t *scope, const char *key, uc_value_t *val)
 {
 	char *name = strdup(key);
@@ -99,10 +77,10 @@ parse(uc_parse_config *config, uc_source *src,
       uc_value_t *env, uc_value_t *modules,
       int argc, char **argv)
 {
-	uc_value_t *globals = NULL;
+	uc_value_t *globals = NULL, *arr;
 	uc_function_t *entry;
 	uc_vm vm = { 0 };
-	int rc = 0;
+	int i, rc = 0;
 	char *err;
 
 	uc_vm_init(&vm, config);
@@ -116,10 +94,16 @@ parse(uc_parse_config *config, uc_source *src,
 		goto out;
 	}
 
-	globals = ucv_object_new(&vm);
+	/* allocate global scope */
+	globals = uc_alloc_global(&vm);
 
-	/* load global variables */
-	globals_init(&vm, globals, argc, argv);
+	/* register ARGV array */
+	arr = ucv_array_new_length(&vm, argc);
+
+	for (i = 0; i < argc; i++)
+		ucv_array_push(arr, ucv_string_new(argv[i]));
+
+	ucv_object_add(globals, "ARGV", arr);
 
 	/* load env variables */
 	if (env) {
@@ -129,9 +113,6 @@ parse(uc_parse_config *config, uc_source *src,
 
 	/* load std functions into global scope */
 	uc_lib_init(globals);
-
-	/* create instance of global scope, set "global" property on it */
-	ucv_object_add(globals, "global", ucv_get(globals));
 
 	rc = uc_vm_execute(&vm, entry, globals, modules);
 
