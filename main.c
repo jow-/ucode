@@ -57,26 +57,20 @@ print_usage(const char *app)
 static void
 globals_init(uc_vm *vm, uc_value_t *scope, int argc, char **argv)
 {
-	uc_value_t *arr = ucv_array_new(vm);
-	const char *p, *last;
-	int i;
+	const char *path[] = { LIB_SEARCH_PATH };
+	uc_value_t *arr;
+	size_t i;
 
-	for (p = last = LIB_SEARCH_PATH;; p++) {
-		if (*p == ':' || *p == '\0') {
-			ucv_array_push(arr, ucv_string_new_length(last, p - last));
+	arr = ucv_array_new(vm);
 
-			if (!*p)
-				break;
-
-			last = p + 1;
-		}
-	}
+	for (i = 0; i < sizeof(path) / sizeof(path[0]); i++)
+		ucv_array_push(arr, ucv_string_new(path[i]));
 
 	ucv_object_add(scope, "REQUIRE_SEARCH_PATH", arr);
 
 	arr = ucv_array_new(vm);
 
-	for (i = 0; i < argc; i++)
+	for (i = 0; i < (size_t)argc; i++)
 		ucv_array_push(arr, ucv_string_new(argv[i]));
 
 	ucv_object_add(scope, "ARGV", arr);
