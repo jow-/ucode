@@ -2601,6 +2601,10 @@ uc_alloc_global(uc_vm *vm)
 
 	ucv_object_add(global, "REQUIRE_SEARCH_PATH", arr);
 
+	/* register global math constants */
+	ucv_object_add(global, "NaN", ucv_double_new(NAN));
+	ucv_object_add(global, "Infinity", ucv_double_new(INFINITY));
+
 	/* register global property */
 	ucv_object_add(global, "global", ucv_get(global));
 

@@ -136,7 +136,6 @@ static const struct token tokens[] = {
 
 static const struct keyword reserved_words[] = {
 	{ TK_ENDFUNC,	"endfunction", 11, { 0 } },
-	{ TK_DOUBLE,	"Infinity", 8, { .d = INFINITY } },
 	{ TK_CONTINUE,	"continue", 8, { 0 } },
 	{ TK_ENDWHILE,	"endwhile", 8, { 0 } },
 	{ TK_FUNC,		"function", 8, { 0 } },
@@ -160,7 +159,6 @@ static const struct keyword reserved_words[] = {
 	{ TK_THIS,		"this",  4, { 0 } },
 	{ TK_NULL,		"null",  4, { 0 } },
 	{ TK_CASE,		"case",  4, { 0 } },
-	{ TK_DOUBLE,	"NaN",   3, { .d = NAN } },
 	{ TK_TRY,		"try",   3, { 0 } },
 	{ TK_FOR,		"for",   3, { 0 } },
 	{ TK_LOCAL,		"let",   3, { 0 } },
@@ -742,10 +740,6 @@ parse_label(uc_lexer *lex)
 					lookbehind_reset(lex);
 
 					switch (word->type) {
-					case TK_DOUBLE:
-						rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_double_new(word->u.d));
-						break;
-
 					case TK_BOOL:
 						rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_boolean_new(word->u.b));
 						break;
