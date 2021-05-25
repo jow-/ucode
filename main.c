@@ -112,7 +112,7 @@ parse(uc_parse_config *config, uc_source *src,
 	}
 
 	/* load std functions into global scope */
-	uc_lib_init(globals);
+	uc_load_stdlib(globals);
 
 	rc = uc_vm_execute(&vm, entry, globals, modules);
 

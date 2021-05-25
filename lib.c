@@ -2579,7 +2579,7 @@ static const uc_cfunction_list functions[] = {
 
 
 void
-uc_lib_init(uc_value_t *scope)
+uc_load_stdlib(uc_value_t *scope)
 {
 	uc_add_proto_functions(scope, functions);
 }
