@@ -25,7 +25,8 @@ typedef struct {
 	uc_cfn_ptr_t func;
 } uc_cfunction_list;
 
-void uc_lib_init(uc_value_t *scope);
+void uc_load_stdlib(uc_value_t *scope);
+uc_value_t *uc_alloc_global(uc_vm *vm);
 
 bool format_source_context(uc_stringbuf_t *buf, uc_source *src, size_t off, bool compact);
 bool format_error_context(uc_stringbuf_t *buf, uc_source *src, uc_value_t *stacktrace, size_t off);

@@ -40,7 +40,7 @@ print_usage(const char *app)
 {
 	printf(
 	"== Usage ==\n\n"
-	"  # %s [-d] [-l] [-r] [-S] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
+	"  # %s [-d] [-l] [-r] [-S] [-R] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
 	"  -h, --help	Print this help\n"
 	"  -i file	Specify an ucode script to parse\n"
 	"  -s \"ucode script...\"	Specify an ucode fragment to parse\n"
@@ -48,38 +48,11 @@ print_usage(const char *app)
 	"  -l Do not strip leading block whitespace\n"
 	"  -r Do not trim trailing block newlines\n"
 	"  -S Enable strict mode\n"
+	"  -R Enable raw code mode\n"
 	"  -e Set global variables from given JSON object\n"
 	"  -E Set global variables from given JSON file\n"
 	"  -m Preload given module\n",
 		basename(app));
-}
-
-static void
-globals_init(uc_vm *vm, uc_value_t *scope, int argc, char **argv)
-{
-	uc_value_t *arr = ucv_array_new(vm);
-	const char *p, *last;
-	int i;
-
-	for (p = last = LIB_SEARCH_PATH;; p++) {
-		if (*p == ':' || *p == '\0') {
-			ucv_array_push(arr, ucv_string_new_length(last, p - last));
-
-			if (!*p)
-				break;
-
-			last = p + 1;
-		}
-	}
-
-	ucv_object_add(scope, "REQUIRE_SEARCH_PATH", arr);
-
-	arr = ucv_array_new(vm);
-
-	for (i = 0; i < argc; i++)
-		ucv_array_push(arr, ucv_string_new(argv[i]));
-
-	ucv_object_add(scope, "ARGV", arr);
 }
 
 static void
@@ -105,10 +78,10 @@ parse(uc_parse_config *config, uc_source *src,
       uc_value_t *env, uc_value_t *modules,
       int argc, char **argv)
 {
-	uc_value_t *globals = NULL;
+	uc_value_t *globals = NULL, *arr;
 	uc_function_t *entry;
 	uc_vm vm = { 0 };
-	int rc = 0;
+	int i, rc = 0;
 	char *err;
 
 	uc_vm_init(&vm, config);
@@ -122,10 +95,16 @@ parse(uc_parse_config *config, uc_source *src,
 		goto out;
 	}
 
-	globals = ucv_object_new(&vm);
+	/* allocate global scope */
+	globals = uc_alloc_global(&vm);
 
-	/* load global variables */
-	globals_init(&vm, globals, argc, argv);
+	/* register ARGV array */
+	arr = ucv_array_new_length(&vm, argc);
+
+	for (i = 0; i < argc; i++)
+		ucv_array_push(arr, ucv_string_new(argv[i]));
+
+	ucv_object_add(globals, "ARGV", arr);
 
 	/* load env variables */
 	if (env) {
@@ -134,10 +113,7 @@ parse(uc_parse_config *config, uc_source *src,
 	}
 
 	/* load std functions into global scope */
-	uc_lib_init(globals);
-
-	/* create instance of global scope, set "global" property on it */
-	ucv_object_add(globals, "global", ucv_get(globals));
+	uc_load_stdlib(globals);
 
 	rc = uc_vm_execute(&vm, entry, globals, modules);
 
@@ -239,7 +215,7 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	while ((opt = getopt(argc, argv, "hlrSe:E:i:s:m:")) != -1)
+	while ((opt = getopt(argc, argv, "hlrSRe:E:i:s:m:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -285,6 +261,10 @@ main(int argc, char **argv)
 
 		case 'S':
 			config.strict_declarations = true;
+			break;
+
+		case 'R':
+			config.raw_mode = true;
 			break;
 
 		case 'e':

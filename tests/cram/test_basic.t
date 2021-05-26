@@ -12,7 +12,7 @@ check that ucode provides exepected help:
   $ ucode | sed 's/ucode-san/ucode/'
   == Usage ==
   
-    # ucode [-d] [-l] [-r] [-S] [-e '[prefix=]{"var": ...}'] [-E [prefix=]env.json] {-i <file> | -s "ucode script..."}
+    # ucode [-d] [-l] [-r] [-S] [-R] [-e '[prefix=]{"var": ...}'] [-E [prefix=]env.json] {-i <file> | -s "ucode script..."}
     -h, --help\tPrint this help (esc)
     -i file\tSpecify an ucode script to parse (esc)
     -s "ucode script..."\tSpecify an ucode fragment to parse (esc)
@@ -20,6 +20,7 @@ check that ucode provides exepected help:
     -l Do not strip leading block whitespace
     -r Do not trim trailing block newlines
     -S Enable strict mode
+    -R Enable raw code mode
     -e Set global variables from given JSON object
     -E Set global variables from given JSON file
     -m Preload given module

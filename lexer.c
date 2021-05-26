@@ -35,10 +35,6 @@ struct keyword {
 	unsigned type;
 	const char *pat;
 	unsigned plen;
-	union {
-		double d;
-		bool b;
-	} u;
 };
 
 struct token {
@@ -135,37 +131,35 @@ static const struct token tokens[] = {
 };
 
 static const struct keyword reserved_words[] = {
-	{ TK_ENDFUNC,	"endfunction", 11, { 0 } },
-	{ TK_DOUBLE,	"Infinity", 8, { .d = INFINITY } },
-	{ TK_CONTINUE,	"continue", 8, { 0 } },
-	{ TK_ENDWHILE,	"endwhile", 8, { 0 } },
-	{ TK_FUNC,		"function", 8, { 0 } },
-	{ TK_DEFAULT,	"default", 7, { 0 } },
-	{ TK_DELETE,	"delete", 6, { 0 } },
-	{ TK_RETURN,	"return", 6, { 0 } },
-	{ TK_ENDFOR,	"endfor", 6, { 0 } },
-	{ TK_SWITCH,	"switch", 6, { 0 } },
+	{ TK_ENDFUNC,	"endfunction", 11 },
+	{ TK_CONTINUE,	"continue", 8 },
+	{ TK_ENDWHILE,	"endwhile", 8 },
+	{ TK_FUNC,		"function", 8 },
+	{ TK_DEFAULT,	"default", 7 },
+	{ TK_DELETE,	"delete", 6 },
+	{ TK_RETURN,	"return", 6 },
+	{ TK_ENDFOR,	"endfor", 6 },
+	{ TK_SWITCH,	"switch", 6 },
 #ifndef NO_LEGACY
-	{ TK_LOCAL,		"local", 5, { 0 } },
+	{ TK_LOCAL,		"local", 5 },
 #endif
-	{ TK_ENDIF,		"endif", 5, { 0 } },
-	{ TK_WHILE,		"while", 5, { 0 } },
-	{ TK_BREAK,		"break", 5, { 0 } },
-	{ TK_CATCH,		"catch", 5, { 0 } },
-	{ TK_CONST,		"const", 5, { 0 } },
-	{ TK_BOOL,		"false", 5, { .b = false } },
-	{ TK_BOOL,		"true",  4, { .b = true } },
-	{ TK_ELIF,		"elif",  4, { 0 } },
-	{ TK_ELSE,		"else",  4, { 0 } },
-	{ TK_THIS,		"this",  4, { 0 } },
-	{ TK_NULL,		"null",  4, { 0 } },
-	{ TK_CASE,		"case",  4, { 0 } },
-	{ TK_DOUBLE,	"NaN",   3, { .d = NAN } },
-	{ TK_TRY,		"try",   3, { 0 } },
-	{ TK_FOR,		"for",   3, { 0 } },
-	{ TK_LOCAL,		"let",   3, { 0 } },
-	{ TK_IF,		"if",    2, { 0 } },
-	{ TK_IN,		"in",    2, { 0 } },
+	{ TK_ENDIF,		"endif", 5 },
+	{ TK_WHILE,		"while", 5 },
+	{ TK_BREAK,		"break", 5 },
+	{ TK_CATCH,		"catch", 5 },
+	{ TK_CONST,		"const", 5 },
+	{ TK_FALSE,		"false", 5 },
+	{ TK_TRUE,		"true",  4 },
+	{ TK_ELIF,		"elif",  4 },
+	{ TK_ELSE,		"else",  4 },
+	{ TK_THIS,		"this",  4 },
+	{ TK_NULL,		"null",  4 },
+	{ TK_CASE,		"case",  4 },
+	{ TK_TRY,		"try",   3 },
+	{ TK_FOR,		"for",   3 },
+	{ TK_LOCAL,		"let",   3 },
+	{ TK_IF,		"if",    2 },
+	{ TK_IN,		"in",    2 },
 };
 
 
@@ -728,7 +722,6 @@ parse_label(uc_lexer *lex)
 {
 	const struct token *tok = lex->tok;
 	const struct keyword *word;
-	uc_token *rv;
 	char *ptr;
 	size_t i;
 
@@ -741,20 +734,7 @@ parse_label(uc_lexer *lex)
 				if (lex->lookbehind && lex->lookbehindlen == word->plen && !strncmp(lex->lookbehind, word->pat, word->plen)) {
 					lookbehind_reset(lex);
 
-					switch (word->type) {
-					case TK_DOUBLE:
-						rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_double_new(word->u.d));
-						break;
-
-					case TK_BOOL:
-						rv = emit_op(lex, lex->source->off - word->plen, word->type, ucv_boolean_new(word->u.b));
-						break;
-
-					default:
-						rv = emit_op(lex, lex->source->off - word->plen, word->type, NULL);
-					}
-
-					return rv;
+					return emit_op(lex, lex->source->off - word->plen, word->type, NULL);
 				}
 			}
 		}
@@ -1067,6 +1047,13 @@ lex_step(uc_lexer *lex, FILE *fp)
 					return NULL;
 				}
 
+				/* in raw code mode, ignore template tag tokens */
+				if (lex->config && lex->config->raw_mode &&
+				    (tok->type == TK_LSTM || tok->type == TK_RSTM ||
+				     tok->type == TK_LEXP || tok->type == TK_REXP)) {
+					continue;
+				}
+
 				/* disallow nesting blocks */
 				if (tok->type == TK_LSTM || tok->type == TK_LEXP) {
 					buf_consume(lex, tok->plen);
@@ -1207,6 +1194,11 @@ uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source)
 	lex->lead_surrogate = 0;
 
 	lex->lastoff = 0;
+
+	if (config && config->raw_mode) {
+		lex->state = UT_LEX_IDENTIFY_TOKEN;
+		lex->block = STATEMENTS;
+	}
 
 	/* Skip any potential interpreter line */
 	if (lex->source->off == 0)
