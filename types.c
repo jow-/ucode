@@ -1046,13 +1046,6 @@ ucv_regexp_new(const char *pattern, bool icase, bool newline, bool global, char 
 		return NULL;
 	}
 
-	/*
-	json_object_object_add(re->header.jso, "source", xjs_new_string(pattern));
-	json_object_object_add(re->header.jso, "i", xjs_new_boolean(icase));
-	json_object_object_add(re->header.jso, "g", xjs_new_boolean(global));
-	json_object_object_add(re->header.jso, "s", xjs_new_boolean(newline));
-	*/
-
 	return &re->header;
 }
 

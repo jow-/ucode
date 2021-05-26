@@ -36,8 +36,6 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #endif
 
-#define JSON_C_TO_STRING_STRICT (1<<31)
-
 
 /* vector macros */
 
@@ -71,16 +69,7 @@
 	(&((vec)->entries[(vec)->count - 1]))
 
 
-/* debug helper */
-
-static inline uint32_t getrefcnt(json_object *v) {
-	struct {
-		enum json_type o_type;
-		uint32_t _ref_count;
-	} *spy = (void *)v;
-
-	return spy ? spy->_ref_count : 0;
-}
+/* "failsafe" utility functions */
 
 static inline void *xalloc(size_t size) {
 	void *ptr = calloc(1, size);
@@ -92,9 +81,6 @@ static inline void *xalloc(size_t size) {
 
 	return ptr;
 }
-
-
-/* "failsafe" utility functions */
 
 static inline void *xrealloc(void *ptr, size_t size) {
 	ptr = realloc(ptr, size);
@@ -117,95 +103,6 @@ static inline char *xstrdup(const char *s) {
 
 	return ptr;
 }
-
-static inline json_object *xjs_new_object(void) {
-	json_object *ptr = json_object_new_object();
-
-	if (!ptr) {
-		fprintf(stderr, "Out of memory\n");
-		abort();
-	}
-
-	return ptr;
-}
-
-static inline json_object *xjs_new_array(void) {
-	json_object *ptr = json_object_new_array();
-
-	if (!ptr) {
-		fprintf(stderr, "Out of memory\n");
-		abort();
-	}
-
-	return ptr;
-}
-
-static inline json_object *xjs_new_array_size(int size) {
-	json_object *ptr = json_object_new_array_ext(size);
-
-	if (!ptr) {
-		fprintf(stderr, "Out of memory\n");
-		abort();
-	}
-
-	return ptr;
-}
-
-static inline json_object *xjs_new_int64(int64_t n) {
-	json_object *ptr = json_object_new_int64(n);
-
-	if (!ptr) {
-		fprintf(stderr, "Out of memory\n");
-		abort();
-	}
-
-	return ptr;
-}
-
-static inline json_object *xjs_new_uint64(uint64_t n) {
-	json_object *ptr = json_object_new_uint64(n);
-
-	if (!ptr) {
-		fprintf(stderr, "Out of memory\n");
-		abort();
-	}
-
-	return ptr;
-}
-
-static inline json_object *xjs_new_string(const char *s) {
-	json_object *ptr = json_object_new_string(s);
-
-	if (!ptr) {
-		fprintf(stderr, "Out of memory\n");
-		abort();
-	}
-
-	return ptr;
-}
-
-static inline json_object *xjs_new_string_len(const char *s, size_t len) {
-	json_object *ptr = json_object_new_string_len(s, len);
-
-	if (!ptr) {
-		fprintf(stderr, "Out of memory\n");
-		abort();
-	}
-
-	return ptr;
-}
-
-static inline json_object *xjs_new_boolean(bool v) {
-	json_object *ptr = json_object_new_boolean(v);
-
-	if (!ptr) {
-		fprintf(stderr, "Out of memory\n");
-		abort();
-	}
-
-	return ptr;
-}
-
 
 static inline struct json_tokener *xjs_new_tokener(void) {
 	struct json_tokener *tok = json_tokener_new();

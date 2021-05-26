@@ -648,9 +648,6 @@ uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name, bool constant
 	const char *str1, *str2;
 	size_t i, len1, len2;
 
-	//if (compiler->scope_depth == 0)
-	//	return;
-
 	if (locals->count >= 0x00FFFFFF) {
 		uc_compiler_syntax_error(compiler, 0, "Too many local variables");
 
@@ -1879,38 +1876,8 @@ uc_compiler_declare_local_null(uc_compiler *compiler, size_t srcpos, uc_value_t 
 static size_t
 uc_compiler_declare_internal(uc_compiler *compiler, size_t srcpos, const char *name)
 {
-#if 0
-	ssize_t existing_slot;
-	json_object *n;
-	bool strict;
-
-	n = xjs_new_string(name);
-	strict = compiler->strict_declarations;
-	compiler->strict_declarations = false;
-	existing_slot = uc_compiler_declare_local(compiler, n, false);
-	compiler->strict_declarations = strict;
-
-	uc_compiler_emit_insn(compiler, srcpos, I_LNULL);
-
-	if (existing_slot == -1) {
-		uc_value_put(n);
-
-		return uc_compiler_initialize_local(compiler);
-	}
-	else {
-		uc_value_put(n);
-
-		uc_compiler_emit_insn(compiler, 0, I_SLOC);
-		uc_compiler_emit_u32(compiler, 0, existing_slot);
-		uc_compiler_emit_insn(compiler, 0, I_POP);
-
-		return existing_slot;
-	}
-#else
 	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
 	uc_locals *locals = &compiler->locals;
-
-	//uc_compiler_emit_insn(compiler, srcpos, I_LNULL);
 
 	uc_vector_grow(locals);
 
@@ -1920,7 +1887,6 @@ uc_compiler_declare_internal(uc_compiler *compiler, size_t srcpos, const char *n
 	locals->entries[locals->count].from = chunk->count;
 
 	return locals->count++;
-#endif
 }
 
 static void
