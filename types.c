@@ -162,9 +162,9 @@ ucv_gc_mark(uc_value_t *uv)
 			ucv_set_mark(uv);
 
 		for (i = 0; i < function->nupvals; i++)
-			ucv_gc_mark((uc_value_t *)closure->upvals[i]);
+			ucv_gc_mark(&closure->upvals[i]->header);
 
-		ucv_gc_mark((uc_value_t *)function);
+		ucv_gc_mark(&function->header);
 
 		break;
 
@@ -238,9 +238,9 @@ ucv_free(uc_value_t *uv, bool retain)
 		ref = &closure->ref;
 
 		for (i = 0; i < function->nupvals; i++)
-			ucv_put_value((uc_value_t *)closure->upvals[i], retain);
+			ucv_put_value(&closure->upvals[i]->header, retain);
 
-		ucv_put_value((uc_value_t *)function, retain);
+		ucv_put_value(&function->header, retain);
 		break;
 
 	case UC_RESSOURCE:

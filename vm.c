@@ -556,7 +556,7 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 	uc_value_t *cnst = NULL;
 	size_t srcpos;
 
-	srcpos = ucv_function_srcpos((uc_value_t *)frame->closure->function, pos - chunk->entries);
+	srcpos = ucv_function_srcpos(&frame->closure->function->header, pos - chunk->entries);
 
 	if (last_srcpos == 0 || last_source != frame->closure->function->source || srcpos != last_srcpos) {
 		buf = xprintbuf_new();
@@ -771,7 +771,7 @@ uc_vm_capture_stacktrace(uc_vm *vm, size_t i)
 			function = frame->closure->function;
 
 			off = (frame->ip - uc_vm_frame_chunk(frame)->entries) - 1;
-			srcpos = ucv_function_srcpos((uc_value_t *)function, off);
+			srcpos = ucv_function_srcpos(&function->header, off);
 
 			ucv_object_add(entry, "filename", ucv_string_new(function->source->filename));
 			ucv_object_add(entry, "line", ucv_int64_new(uc_source_get_line(function->source, &srcpos)));
@@ -826,7 +826,7 @@ uc_vm_get_error_context(uc_vm *vm)
 		return NULL;
 
 	chunk = uc_vm_frame_chunk(frame);
-	offset = ucv_function_srcpos((uc_value_t *)frame->closure->function, (frame->ip - chunk->entries) - 1);
+	offset = ucv_function_srcpos(&frame->closure->function->header, (frame->ip - chunk->entries) - 1);
 	stacktrace = uc_vm_capture_stacktrace(vm, i);
 
 	buf = ucv_stringbuf_new();
@@ -1956,8 +1956,11 @@ uc_vm_callframe_pop(uc_vm *vm)
 		ucv_put(uc_vm_stack_pop(vm));
 
 	/* release function */
-	ucv_put((uc_value_t *)frame->closure);
-	ucv_put((uc_value_t *)frame->cfunction);
+	if (frame->closure)
+		ucv_put(&frame->closure->header);
+
+	if (frame->cfunction)
+		ucv_put(&frame->cfunction->header);
 
 	/* release context */
 	ucv_put(frame->ctx);
