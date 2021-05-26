@@ -58,9 +58,6 @@ ucv_typename(uc_value_t *uv)
 	return "unknown";
 }
 
-static uc_ressource_type_t *
-ucv_ressource_type_get(size_t type);
-
 static void
 ucv_unref(uc_weakref_t *ref)
 {
@@ -248,7 +245,7 @@ ucv_free(uc_value_t *uv, bool retain)
 
 	case UC_RESSOURCE:
 		ressource = (uc_ressource_t *)uv;
-		restype = ucv_ressource_type_get(ressource->type);
+		restype = ressource->type;
 
 		if (restype && restype->free)
 			restype->free(ressource->data);
@@ -945,44 +942,38 @@ ucv_closure_new(uc_vm *vm, uc_function_t *function, bool arrow_fn)
 }
 
 
-static uc_ressource_types_t res_types;
-
 uc_ressource_type_t *
-ucv_ressource_type_add(const char *name, uc_value_t *proto, void (*freefn)(void *))
+ucv_ressource_type_add(uc_vm *vm, const char *name, uc_value_t *proto, void (*freefn)(void *))
 {
-	uc_ressource_type_t *existing;
+	uc_ressource_type_t *type;
 
-	existing = ucv_ressource_type_lookup(name);
+	type = ucv_ressource_type_lookup(vm, name);
 
-	if (existing) {
+	if (type) {
 		ucv_put(proto);
 
-		return existing;
+		return type;
 	}
 
-	uc_vector_grow(&res_types);
+	type = xalloc(sizeof(*type));
+	type->name = name;
+	type->proto = proto;
+	type->free = freefn;
 
-	res_types.entries[res_types.count].name = name;
-	res_types.entries[res_types.count].proto = proto;
-	res_types.entries[res_types.count].free = freefn;
+	uc_vector_grow(&vm->restypes);
+	vm->restypes.entries[vm->restypes.count++] = type;
 
-	return &res_types.entries[res_types.count++];
-}
-
-static uc_ressource_type_t *
-ucv_ressource_type_get(size_t type)
-{
-	return (type > 0 && type <= res_types.count) ? &res_types.entries[type - 1] : NULL;
+	return type;
 }
 
 uc_ressource_type_t *
-ucv_ressource_type_lookup(const char *name)
+ucv_ressource_type_lookup(uc_vm *vm, const char *name)
 {
 	size_t i;
 
-	for (i = 0; i < res_types.count; i++)
-		if (!strcmp(res_types.entries[i].name, name))
-			return &res_types.entries[i];
+	for (i = 0; i < vm->restypes.count; i++)
+		if (!strcmp(vm->restypes.entries[i]->name, name))
+			return vm->restypes.entries[i];
 
 	return NULL;
 }
@@ -996,7 +987,7 @@ ucv_ressource_new(uc_ressource_type_t *type, void *data)
 	res = xalloc(sizeof(*res));
 	res->header.type = UC_RESSOURCE;
 	res->header.refcount = 1;
-	res->type = type ? (type - res_types.entries) + 1 : 0;
+	res->type = type;
 	res->data = data;
 
 	return &res->header;
@@ -1006,15 +997,12 @@ void **
 ucv_ressource_dataptr(uc_value_t *uv, const char *name)
 {
 	uc_ressource_t *res = (uc_ressource_t *)uv;
-	uc_ressource_type_t *type;
 
 	if (ucv_type(uv) != UC_RESSOURCE)
 		return NULL;
 
 	if (name) {
-		type = ucv_ressource_type_lookup(name);
-
-		if (!type || type != ucv_ressource_type_get(res->type))
+		if (!res->type || strcmp(res->type->name, name))
 			return NULL;
 	}
 
@@ -1104,7 +1092,7 @@ ucv_prototype_get(uc_value_t *uv)
 
 	case UC_RESSOURCE:
 		ressource = (uc_ressource_t *)uv;
-		restype = ucv_ressource_type_get(ressource->type);
+		restype = ressource->type;
 
 		return restype ? restype->proto : NULL;
 
@@ -1628,7 +1616,7 @@ ucv_to_stringbuf_formatted(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t
 
 	case UC_RESSOURCE:
 		ressource = (uc_ressource_t *)uv;
-		restype = ucv_ressource_type_get(ressource->type);
+		restype = ressource->type;
 
 		ucv_stringbuf_printf(pb, "%s<%s %p>%s",
 			json ? "\"" : "",
@@ -1813,19 +1801,3 @@ ucv_gc(uc_vm *vm, bool final)
 		}
 	}
 }
-
-
-#ifdef __GNUC__
-
-__attribute__((destructor))
-static void ucv_ressource_types_free(void)
-{
-	size_t i;
-
-	for (i = 0; i < res_types.count; i++)
-		ucv_put(res_types.entries[i].proto);
-
-	uc_vector_clear(&res_types);
-}
-
-#endif

@@ -126,6 +126,7 @@ void uc_vm_init(uc_vm *vm, uc_parse_config *config)
 void uc_vm_free(uc_vm *vm)
 {
 	uc_upvalref_t *ref;
+	size_t i;
 
 	ucv_put(vm->exception.stacktrace);
 	free(vm->exception.message);
@@ -136,6 +137,9 @@ void uc_vm_free(uc_vm *vm)
 		vm->open_upvals = ref;
 	}
 
+	for (i = 0; i < vm->restypes.count; i++)
+		ucv_put(vm->restypes.entries[i]->proto);
+
 	uc_vm_reset_callframes(vm);
 	uc_vm_reset_stack(vm);
 	uc_vector_clear(&vm->stack);
@@ -144,6 +148,11 @@ void uc_vm_free(uc_vm *vm)
 	printbuf_free(vm->strbuf);
 
 	ucv_gc(vm, true);
+
+	for (i = 0; i < vm->restypes.count; i++)
+		free(vm->restypes.entries[i]);
+
+	uc_vector_clear(&vm->restypes);
 }
 
 static uc_chunk *

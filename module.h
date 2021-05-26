@@ -41,13 +41,13 @@
 #define register_ressource(scope, key, res) \
 	json_object_object_add((scope)->header.jso, key, (res)->header.jso)
 
-void uc_module_init(uc_value_t *scope) __attribute__((weak));
+void uc_module_init(uc_vm *vm, uc_value_t *scope) __attribute__((weak));
 
-void uc_module_entry(uc_value_t *scope);
-void uc_module_entry(uc_value_t *scope)
+void uc_module_entry(uc_vm *vm, uc_value_t *scope);
+void uc_module_entry(uc_vm *vm, uc_value_t *scope)
 {
 	if (uc_module_init)
-		uc_module_init(scope);
+		uc_module_init(vm, scope);
 }
 
 #endif /* __MODULE_H_ */

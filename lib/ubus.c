@@ -320,9 +320,9 @@ static void close_connection(void *ud) {
 	free(conn);
 }
 
-void uc_module_init(uc_value_t *scope)
+void uc_module_init(uc_vm *vm, uc_value_t *scope)
 {
 	uc_add_proto_functions(scope, global_fns);
 
-	conn_type = uc_declare_type("ubus.connection", conn_fns, close_connection);
+	conn_type = uc_declare_type(vm, "ubus.connection", conn_fns, close_connection);
 }

@@ -1490,7 +1490,7 @@ uc_printf(uc_vm *vm, size_t nargs)
 static bool
 uc_require_so(uc_vm *vm, const char *path, uc_value_t **res)
 {
-	void (*init)(uc_value_t *);
+	void (*init)(uc_vm *, uc_value_t *);
 	uc_value_t *scope;
 	struct stat st;
 	void *dlh;
@@ -1519,7 +1519,7 @@ uc_require_so(uc_vm *vm, const char *path, uc_value_t **res)
 
 	scope = ucv_object_new(vm);
 
-	init(scope);
+	init(vm, scope);
 
 	*res = scope;
 

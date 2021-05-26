@@ -185,18 +185,18 @@ typedef struct {
 } uc_cfunction_t;
 
 typedef struct {
-	uc_value_t header;
-	size_t type;
-	void *data;
-} uc_ressource_t;
-
-typedef struct {
 	const char *name;
 	uc_value_t *proto;
 	void (*free)(void *);
 } uc_ressource_type_t;
 
-uc_declare_vector(uc_ressource_types_t, uc_ressource_type_t);
+typedef struct {
+	uc_value_t header;
+	uc_ressource_type_t *type;
+	void *data;
+} uc_ressource_t;
+
+uc_declare_vector(uc_ressource_types_t, uc_ressource_type_t *);
 
 
 /* Parser definitions */
@@ -249,6 +249,7 @@ struct uc_vm {
 	uc_value_t *globals;
 	uc_source *sources;
 	uc_weakref_t values;
+	uc_ressource_types_t restypes;
 	union {
 		uint32_t u32;
 		int32_t s32;
@@ -339,8 +340,8 @@ uc_value_t *ucv_cfunction_new(const char *, uc_cfn_ptr_t);
 
 uc_value_t *ucv_closure_new(uc_vm *, uc_function_t *, bool);
 
-uc_ressource_type_t *ucv_ressource_type_add(const char *, uc_value_t *, void (*)(void *));
-uc_ressource_type_t *ucv_ressource_type_lookup(const char *);
+uc_ressource_type_t *ucv_ressource_type_add(uc_vm *, const char *, uc_value_t *, void (*)(void *));
+uc_ressource_type_t *ucv_ressource_type_lookup(uc_vm *, const char *);
 
 uc_value_t *ucv_ressource_new(uc_ressource_type_t *, void *);
 void **ucv_ressource_dataptr(uc_value_t *, const char *);

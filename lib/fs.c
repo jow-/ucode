@@ -904,13 +904,13 @@ static void close_dir(void *ud)
 		closedir(dp);
 }
 
-void uc_module_init(uc_value_t *scope)
+void uc_module_init(uc_vm *vm, uc_value_t *scope)
 {
 	uc_add_proto_functions(scope, global_fns);
 
-	proc_type = uc_declare_type("fs.proc", proc_fns, close_proc);
-	file_type = uc_declare_type("fs.file", file_fns, close_file);
-	dir_type = uc_declare_type("fs.dir", dir_fns, close_dir);
+	proc_type = uc_declare_type(vm, "fs.proc", proc_fns, close_proc);
+	file_type = uc_declare_type(vm, "fs.file", file_fns, close_file);
+	dir_type = uc_declare_type(vm, "fs.dir", dir_fns, close_dir);
 
 	ucv_object_add(scope, "stdin", uc_alloc_ressource(file_type, stdin));
 	ucv_object_add(scope, "stdout", uc_alloc_ressource(file_type, stdout));

@@ -94,7 +94,7 @@ uc_to_int64(uc_value_t *v)
 /* ressource type helper */
 
 static inline uc_ressource_type_t *
-_uc_declare_type(const char *name, const uc_cfunction_list *list, size_t len, void (*freefn)(void *))
+_uc_declare_type(uc_vm *vm, const char *name, const uc_cfunction_list *list, size_t len, void (*freefn)(void *))
 {
 	uc_value_t *proto = ucv_object_new(NULL);
 
@@ -102,11 +102,11 @@ _uc_declare_type(const char *name, const uc_cfunction_list *list, size_t len, vo
 		ucv_object_add(proto, list[len].name,
 			ucv_cfunction_new(list[len].name, list[len].func));
 
-	return ucv_ressource_type_add(name, proto, freefn);
+	return ucv_ressource_type_add(vm, name, proto, freefn);
 }
 
-#define uc_declare_type(name, functions, freefn) \
-	_uc_declare_type(name, functions, ARRAY_SIZE(functions), freefn)
+#define uc_declare_type(vm, name, functions, freefn) \
+	_uc_declare_type(vm, name, functions, ARRAY_SIZE(functions), freefn)
 
 
 /* prototype helper */

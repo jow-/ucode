@@ -158,7 +158,7 @@ static const uc_cfunction_list math_fns[] = {
 	{ "srand",	uc_srand },
 };
 
-void uc_module_init(uc_value_t *scope)
+void uc_module_init(uc_vm *vm, uc_value_t *scope)
 {
 	uc_add_proto_functions(scope, math_fns);
 }
