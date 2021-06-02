@@ -321,14 +321,15 @@ uc_index(uc_vm *vm, size_t nargs, bool right)
 {
 	uc_value_t *stack = uc_get_arg(0);
 	uc_value_t *needle = uc_get_arg(1);
-	size_t arridx, len, ret = -1;
 	const char *sstr, *nstr, *p;
+	size_t arridx, len;
+	ssize_t ret = -1;
 
 	switch (ucv_type(stack)) {
 	case UC_ARRAY:
 		for (arridx = 0, len = ucv_array_length(stack); arridx < len; arridx++) {
 			if (uc_cmp(TK_EQ, ucv_array_get(stack, arridx), needle)) {
-				ret = arridx;
+				ret = (ssize_t)arridx;
 
 				if (!right)
 					break;
@@ -344,7 +345,7 @@ uc_index(uc_vm *vm, size_t nargs, bool right)
 
 		for (p = sstr; *p && len; p++) {
 			if (!strncmp(p, nstr, len)) {
-				ret = p - sstr;
+				ret = (ssize_t)(p - sstr);
 
 				if (!right)
 					break;
