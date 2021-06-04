@@ -2523,6 +2523,49 @@ uc_wildcard(uc_vm *vm, size_t nargs)
 	return ucv_boolean_new(rv == 0);
 }
 
+static uc_value_t *
+uc_sourcepath(uc_vm *vm, size_t nargs)
+{
+	uc_value_t *calldepth = uc_get_arg(0);
+	uc_value_t *dironly = uc_get_arg(1);
+	uc_value_t *rv = NULL;
+	uc_callframe *frame;
+	char *path = NULL;
+	int64_t depth;
+	size_t i;
+
+	depth = uc_cast_int64(calldepth);
+
+	if (errno)
+		depth = 0;
+
+	for (i = vm->callframes.count; i > 0; i--) {
+		frame = &vm->callframes.entries[i - 1];
+
+		if (!frame->closure)
+			continue;
+
+		if (depth > 0) {
+			depth--;
+			continue;
+		}
+
+		path = realpath(frame->closure->function->source->filename, NULL);
+		break;
+	}
+
+	if (path) {
+		if (uc_val_is_truish(dironly))
+			rv = ucv_string_new(dirname(path));
+		else
+			rv = ucv_string_new(path);
+
+		free(path);
+	}
+
+	return rv;
+}
+
 static const uc_cfunction_list functions[] = {
 	{ "chr",		uc_chr },
 	{ "die",		uc_die },
@@ -2575,7 +2618,8 @@ static const uc_cfunction_list functions[] = {
 	{ "assert",		uc_assert },
 	{ "render",		uc_render },
 	{ "regexp",		uc_regexp },
-	{ "wildcard",	uc_wildcard }
+	{ "wildcard",	uc_wildcard },
+	{ "sourcepath",	uc_sourcepath }
 };
 
 

@@ -1173,3 +1173,22 @@ performed. If a non-string value is supplied as subject, it is converted into
 a string before being matched.
 
 Returns `true` when the subject matches the pattern or `false` when not.
+
+#### 6.59. `sourcepath([depth [, dironly]])`
+
+Determine the path of the source file currently being executed by ucode.
+
+The optional `depth` parameter allows walking up the call stack to determine
+the path of the parent sources including or requiring the current source file.
+If unspecified, the `depth` defaults to `0`, that is the currently executed
+file.
+
+If a truish value is passed in `dironly`, only the directory portion of the
+source file path is returned.
+
+If the ucode interpreter executes code from stdin or a code fragment passed
+via `-s` switch, the function returns `null` since there is no associated
+file path.
+
+If `depth` exceeds the size of the call stack, the function returns `null`
+as well.
