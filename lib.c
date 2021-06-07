@@ -266,14 +266,9 @@ static void
 uc_vm_ctx_push(uc_vm *vm)
 {
 	uc_value_t *ctx = NULL;
-	size_t i;
 
-	for (i = vm->callframes.count; i > 0; i--) {
-		if (vm->callframes.entries[i - 1].ctx) {
-			ctx = vm->callframes.entries[i - 1].ctx;
-			break;
-		}
-	}
+	if (vm->callframes.count >= 2)
+		ctx = vm->callframes.entries[vm->callframes.count - 2].ctx;
 
 	uc_vm_stack_push(vm, ucv_get(ctx));
 }
