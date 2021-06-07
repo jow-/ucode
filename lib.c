@@ -2583,6 +2583,37 @@ uc_sourcepath(uc_vm *vm, size_t nargs)
 	return rv;
 }
 
+static uc_value_t *
+uc_min_max(uc_vm *vm, size_t nargs, int cmp)
+{
+	uc_value_t *rv = NULL, *val;
+	bool set = false;
+	size_t i;
+
+	for (i = 0; i < nargs; i++) {
+		val = uc_get_arg(i);
+
+		if (!set || uc_cmp(cmp, val, rv)) {
+			set = true;
+			rv = val;
+		}
+	}
+
+	return ucv_get(rv);
+}
+
+static uc_value_t *
+uc_min(uc_vm *vm, size_t nargs)
+{
+	return uc_min_max(vm, nargs, TK_LT);
+}
+
+static uc_value_t *
+uc_max(uc_vm *vm, size_t nargs)
+{
+	return uc_min_max(vm, nargs, TK_GT);
+}
+
 static const uc_cfunction_list functions[] = {
 	{ "chr",		uc_chr },
 	{ "die",		uc_die },
@@ -2636,7 +2667,9 @@ static const uc_cfunction_list functions[] = {
 	{ "render",		uc_render },
 	{ "regexp",		uc_regexp },
 	{ "wildcard",	uc_wildcard },
-	{ "sourcepath",	uc_sourcepath }
+	{ "sourcepath",	uc_sourcepath },
+	{ "min",		uc_min },
+	{ "max",		uc_max }
 };
 
 

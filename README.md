@@ -1192,3 +1192,37 @@ file path.
 
 If `depth` exceeds the size of the call stack, the function returns `null`
 as well.
+
+#### 6.60. `min([val1 [, val2 [, ...]]])`
+
+Return the smallest value among all parameters passed to the function.
+The function does a `val1 < val2` comparison internally, which means that
+the same value coercion rules as for relational operators apply. If both
+strings and numbers are passed to `min()`, then any string values will be
+effectively ignored since both `1 < "abc"` and `1 > "abc"` comparisons
+yield false results.
+
+```javascript
+min(5, 2.1, 3, "abc", 0.3);   // 0.3
+min(1, "abc");                // 1
+min("1", "abc");              // "1"
+min("def", "abc", "ghi");     // "abc"
+min(true, false);             // false
+```
+
+#### 6.61. `max([val1 [, val2 [, ...]]])`
+
+Return the largest value among all parameters passed to the function.
+The function does a `val1 > val2` comparison internally, which means that
+the same value coercion rules as for relational operators apply. If both
+strings and numbers are passed to `min()`, then any string values will be
+effectively ignored since both `1 < "abc"` and `1 > "abc"` comparisons
+yield false results.
+
+```javascript
+max(5, 2.1, 3, "abc", 0.3);   // 5
+max(1, "abc");                // 1 (!)
+max("1", "abc");              // "abc"
+max("def", "abc", "ghi");     // "ghi"
+max(true, false);             // true
+```
