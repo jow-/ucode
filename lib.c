@@ -262,6 +262,22 @@ uc_cast_int64(uc_value_t *v)
 	return n;
 }
 
+static void
+uc_vm_ctx_push(uc_vm *vm)
+{
+	uc_value_t *ctx = NULL;
+	size_t i;
+
+	for (i = vm->callframes.count; i > 0; i--) {
+		if (vm->callframes.entries[i - 1].ctx) {
+			ctx = vm->callframes.entries[i - 1].ctx;
+			break;
+		}
+	}
+
+	uc_vm_stack_push(vm, ucv_get(ctx));
+}
+
 static uc_value_t *
 uc_print_common(uc_vm *vm, size_t nargs, FILE *fh)
 {
@@ -523,13 +539,13 @@ uc_filter(uc_vm *vm, size_t nargs)
 	arr = ucv_array_new(vm);
 
 	for (arrlen = ucv_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
-		/* XXX: revisit leaks */
+		uc_vm_ctx_push(vm);
 		uc_vm_stack_push(vm, ucv_get(func));
 		uc_vm_stack_push(vm, ucv_get(ucv_array_get(obj, arridx)));
 		uc_vm_stack_push(vm, ucv_int64_new(arridx));
 		uc_vm_stack_push(vm, ucv_get(obj));
 
-		if (uc_vm_call(vm, false, 3)) {
+		if (uc_vm_call(vm, true, 3)) {
 			ucv_put(arr);
 
 			return NULL;
@@ -654,13 +670,13 @@ uc_map(uc_vm *vm, size_t nargs)
 	arr = ucv_array_new(vm);
 
 	for (arrlen = ucv_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
-		/* XXX: revisit leaks */
+		uc_vm_ctx_push(vm);
 		uc_vm_stack_push(vm, ucv_get(func));
 		uc_vm_stack_push(vm, ucv_get(ucv_array_get(obj, arridx)));
 		uc_vm_stack_push(vm, ucv_int64_new(arridx));
 		uc_vm_stack_push(vm, ucv_get(obj));
 
-		if (uc_vm_call(vm, false, 3)) {
+		if (uc_vm_call(vm, true, 3)) {
 			ucv_put(arr);
 
 			return NULL;
@@ -842,11 +858,12 @@ sort_fn(const void *k1, const void *k2)
 	if (sort_ctx.ex)
 		return 0;
 
+	uc_vm_ctx_push(sort_ctx.vm);
 	uc_vm_stack_push(sort_ctx.vm, ucv_get(sort_ctx.fn));
 	uc_vm_stack_push(sort_ctx.vm, ucv_get(*v1));
 	uc_vm_stack_push(sort_ctx.vm, ucv_get(*v2));
 
-	if (uc_vm_call(sort_ctx.vm, false, 2)) {
+	if (uc_vm_call(sort_ctx.vm, true, 2)) {
 		sort_ctx.ex = true;
 
 		return 0;
@@ -1814,7 +1831,7 @@ uc_replace_cb(uc_vm *vm, uc_value_t *func,
 	uc_value_t *rv;
 	size_t i;
 
-	/* XXX: revisit leaks */
+	uc_vm_ctx_push(vm);
 	uc_vm_stack_push(vm, ucv_get(func));
 
 	for (i = 0; i < plen && pmatch[i].rm_so != -1; i++) {
@@ -1823,7 +1840,7 @@ uc_replace_cb(uc_vm *vm, uc_value_t *func,
 			                      pmatch[i].rm_eo - pmatch[i].rm_so));
 	}
 
-	if (uc_vm_call(vm, false, i))
+	if (uc_vm_call(vm, true, i))
 		return NULL;
 
 	rv = uc_vm_stack_pop(vm);
