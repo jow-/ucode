@@ -2609,6 +2609,270 @@ uc_max(uc_vm *vm, size_t nargs)
 	return uc_min_max(vm, nargs, TK_GT);
 }
 
+
+/* -------------------------------------------------------------------------
+ * The following base64 encoding and decoding routines are taken from
+ * https://git.openwrt.org/?p=project/libubox.git;a=blob;f=base64.c
+ * and modified for use in ucode.
+ *
+ * Original copyright and license statements below.
+ */
+
+/*
+ * base64 - libubox base64 functions
+ *
+ * Copyright (C) 2015 Felix Fietkau <nbd@openwrt.org>
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+/*	$OpenBSD: base64.c,v 1.7 2013/12/31 02:32:56 tedu Exp $	*/
+
+/*
+ * Copyright (c) 1996 by Internet Software Consortium.
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM DISCLAIMS
+ * ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL INTERNET SOFTWARE
+ * CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+ * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
+ * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS
+ * ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
+ * SOFTWARE.
+ */
+
+/*
+ * Portions Copyright (c) 1995 by International Business Machines, Inc.
+ *
+ * International Business Machines, Inc. (hereinafter called IBM) grants
+ * permission under its copyrights to use, copy, modify, and distribute this
+ * Software with or without fee, provided that the above copyright notice and
+ * all paragraphs of this notice appear in all copies, and that the name of IBM
+ * not be used in connection with the marketing of any product incorporating
+ * the Software or modifications thereof, without specific, written prior
+ * permission.
+ *
+ * To the extent it has a right to do so, IBM grants an immunity from suit
+ * under its patents, if any, for the use, sale or manufacture of products to
+ * the extent that such products are used for performing Domain Name System
+ * dynamic updates in TCP/IP networks by means of the Software.  No immunity is
+ * granted for any product per se or for any other function of any product.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", AND IBM DISCLAIMS ALL WARRANTIES,
+ * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE.  IN NO EVENT SHALL IBM BE LIABLE FOR ANY SPECIAL,
+ * DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER ARISING
+ * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE, EVEN
+ * IF IBM IS APPRISED OF THE POSSIBILITY OF SUCH DAMAGES.
+ */
+
+/* skips all whitespace anywhere.
+   converts characters, four at a time, starting at (or after)
+   src from base - 64 numbers into three 8 bit bytes in the target area.
+   it returns the number of data bytes stored at the target, or -1 on error.
+ */
+
+static uc_value_t *
+uc_b64dec(uc_vm *vm, size_t nargs)
+{
+	enum { BYTE1, BYTE2, BYTE3, BYTE4 } state;
+	uc_value_t *str = uc_get_arg(0);
+	uc_stringbuf_t *buf;
+	const char *src;
+	unsigned int ch;
+	uint8_t val;
+	size_t off;
+
+	if (ucv_type(str) != UC_STRING)
+		return NULL;
+
+	buf = ucv_stringbuf_new();
+	src = ucv_string_get(str);
+	off = printbuf_length(buf);
+
+	state = BYTE1;
+
+	/* memset the last expected output char to pre-grow the output buffer */
+	printbuf_memset(buf, off + (ucv_string_length(str) / 4) * 3, 0, 1);
+
+	while ((ch = (unsigned char)*src++) != '\0') {
+		if (isspace(ch))	/* Skip whitespace anywhere. */
+			continue;
+
+		if (ch == '=')
+			break;
+
+		if (ch >= 'A' && ch <= 'Z')
+			val = ch - 'A';
+		else if (ch >= 'a' && ch <= 'z')
+			val = ch - 'a' + 26;
+		else if (ch >= '0' && ch <= '9')
+			val = ch - '0' + 52;
+		else if (ch == '+')
+			val = 62;
+		else if (ch == '/')
+			val = 63;
+		else
+			goto err;
+
+		switch (state) {
+		case BYTE1:
+			buf->buf[off] = val << 2;
+			state = BYTE2;
+			break;
+
+		case BYTE2:
+			buf->buf[off++] |= val >> 4;
+			buf->buf[off] = (val & 0x0f) << 4;
+			state = BYTE3;
+			break;
+
+		case BYTE3:
+			buf->buf[off++] |= val >> 2;
+			buf->buf[off] = (val & 0x03) << 6;
+			state = BYTE4;
+			break;
+
+		case BYTE4:
+			buf->buf[off++] |= val;
+			state = BYTE1;
+			break;
+		}
+	}
+
+	/*
+	 * We are done decoding Base-64 chars.  Let's see if we ended
+	 * on a byte boundary, and/or with erroneous trailing characters.
+	 */
+
+	if (ch == '=') {			/* We got a pad char. */
+		ch = (unsigned char)*src++;	/* Skip it, get next. */
+		switch (state) {
+		case BYTE1:		/* Invalid = in first position */
+		case BYTE2:		/* Invalid = in second position */
+			goto err;
+
+		case BYTE3:		/* Valid, means one byte of info */
+			/* Skip any number of spaces. */
+			for (; ch != '\0'; ch = (unsigned char)*src++)
+				if (!isspace(ch))
+					break;
+			/* Make sure there is another trailing = sign. */
+			if (ch != '=')
+				goto err;
+			ch = (unsigned char)*src++;		/* Skip the = */
+			/* Fall through to "single trailing =" case. */
+			/* FALLTHROUGH */
+
+		case BYTE4:		/* Valid, means two bytes of info */
+			/*
+			 * We know this char is an =.  Is there anything but
+			 * whitespace after it?
+			 */
+			for (; ch != '\0'; ch = (unsigned char)*src++)
+				if (!isspace(ch))
+					goto err;
+
+			/*
+			 * Now make sure for cases BYTE3 and BYTE4 that the "extra"
+			 * bits that slopped past the last full byte were
+			 * zeros.  If we don't check them, they become a
+			 * subliminal channel.
+			 */
+			if (buf->buf[off] != 0)
+				goto err;
+		}
+	} else {
+		/*
+		 * We ended by seeing the end of the string.  Make sure we
+		 * have no partial bytes lying around.
+		 */
+		if (state != BYTE1)
+			goto err;
+	}
+
+	/* Truncate buffer length to actual output length */
+	buf->bpos = off;
+
+	return ucv_stringbuf_finish(buf);
+
+err:
+	printbuf_free(buf);
+
+	return NULL;
+}
+
+static const char Base64[] =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static uc_value_t *
+uc_b64enc(uc_vm *vm, size_t nargs)
+{
+	uc_value_t *str = uc_get_arg(0);
+	unsigned char input[3] = {0};
+	uc_stringbuf_t *buf;
+	const char *src;
+	char output[4];
+	size_t len, i;
+
+	if (ucv_type(str) != UC_STRING)
+		return NULL;
+
+	buf = ucv_stringbuf_new();
+	src = ucv_string_get(str);
+	len = ucv_string_length(str);
+
+	while (2 < len) {
+		input[0] = (unsigned char)*src++;
+		input[1] = (unsigned char)*src++;
+		input[2] = (unsigned char)*src++;
+		len -= 3;
+
+		output[0] = Base64[input[0] >> 2];
+		output[1] = Base64[((input[0] & 0x03) << 4) + (input[1] >> 4)];
+		output[2] = Base64[((input[1] & 0x0f) << 2) + (input[2] >> 6)];
+		output[3] = Base64[input[2] & 0x3f];
+
+		ucv_stringbuf_addstr(buf, output, sizeof(output));
+	}
+
+	/* Now we worry about padding. */
+	if (0 != len) {
+		/* Get what's left. */
+		input[0] = input[1] = input[2] = '\0';
+		for (i = 0; i < len; i++)
+			input[i] = *src++;
+
+		output[0] = Base64[input[0] >> 2];
+		output[1] = Base64[((input[0] & 0x03) << 4) + (input[1] >> 4)];
+		output[2] = (len == 1) ? '=' : Base64[((input[1] & 0x0f) << 2) + (input[2] >> 6)];
+		output[3] = '=';
+
+		ucv_stringbuf_addstr(buf, output, sizeof(output));
+	}
+
+	return ucv_stringbuf_finish(buf);
+}
+
+/* End of base64 code.
+ * -------------------------------------------------------------------------
+ */
+
+
 static const uc_cfunction_list functions[] = {
 	{ "chr",		uc_chr },
 	{ "die",		uc_die },
@@ -2664,7 +2928,9 @@ static const uc_cfunction_list functions[] = {
 	{ "wildcard",	uc_wildcard },
 	{ "sourcepath",	uc_sourcepath },
 	{ "min",		uc_min },
-	{ "max",		uc_max }
+	{ "max",		uc_max },
+	{ "b64dec",		uc_b64dec },
+	{ "b64enc",		uc_b64enc }
 };
 
 
