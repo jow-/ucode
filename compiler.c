@@ -952,36 +952,7 @@ uc_compiler_compile_binary(uc_compiler *compiler, bool assignable)
 	uc_tokentype_t type = compiler->parser->prev.type;
 
 	uc_compiler_parse_precedence(compiler, uc_compiler_parse_rule(type)->precedence + 1);
-
-	switch (type) {
-	case TK_ADD:    uc_compiler_emit_insn(compiler, 0, I_ADD);    break;
-	case TK_SUB:    uc_compiler_emit_insn(compiler, 0, I_SUB);    break;
-	case TK_MUL:    uc_compiler_emit_insn(compiler, 0, I_MUL);    break;
-	case TK_DIV:    uc_compiler_emit_insn(compiler, 0, I_DIV);    break;
-	case TK_MOD:    uc_compiler_emit_insn(compiler, 0, I_MOD);    break;
-	case TK_LSHIFT: uc_compiler_emit_insn(compiler, 0, I_LSHIFT); break;
-	case TK_RSHIFT: uc_compiler_emit_insn(compiler, 0, I_RSHIFT); break;
-	case TK_BAND:   uc_compiler_emit_insn(compiler, 0, I_BAND);   break;
-	case TK_BXOR:   uc_compiler_emit_insn(compiler, 0, I_BXOR);   break;
-	case TK_BOR:    uc_compiler_emit_insn(compiler, 0, I_BOR);    break;
-	case TK_LT:     uc_compiler_emit_insn(compiler, 0, I_LT);     break;
-	case TK_LE:
-		uc_compiler_emit_insn(compiler, 0, I_GT);
-		uc_compiler_emit_insn(compiler, 0, I_NOT);
-		break;
-	case TK_GT:     uc_compiler_emit_insn(compiler, 0, I_GT);     break;
-	case TK_GE:
-		uc_compiler_emit_insn(compiler, 0, I_LT);
-		uc_compiler_emit_insn(compiler, 0, I_NOT);
-		break;
-	case TK_EQ:     uc_compiler_emit_insn(compiler, 0, I_EQ);     break;
-	case TK_NE:     uc_compiler_emit_insn(compiler, 0, I_NE);     break;
-	case TK_EQS:    uc_compiler_emit_insn(compiler, 0, I_EQS);    break;
-	case TK_NES:    uc_compiler_emit_insn(compiler, 0, I_NES);    break;
-	case TK_IN:     uc_compiler_emit_insn(compiler, 0, I_IN);     break;
-	default:
-		return;
-	}
+	uc_compiler_emit_insn(compiler, 0, I_BOR + (type - TK_BOR));
 }
 
 static void
