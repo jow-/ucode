@@ -1230,7 +1230,8 @@ uc_vm_value_arith(uc_vm *vm, enum insn_type operation, uc_value_t *value, uc_val
 	int64_t n1, n2;
 	double d1, d2;
 
-	if (operation > I_MOD)
+	if (operation == I_LSHIFT || operation == I_RSHIFT ||
+	    operation == I_BAND || operation == I_BXOR || operation == I_BOR)
 		return uc_vm_value_bitop(vm, operation, value, operand);
 
 	if (operation == I_ADD && (ucv_type(value) == UC_STRING || ucv_type(operand) == UC_STRING)) {
