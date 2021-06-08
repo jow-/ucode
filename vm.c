@@ -2124,7 +2124,9 @@ uc_vm_execute_chunk(uc_vm *vm)
 		case I_EQ:
 		case I_NE:
 		case I_LT:
+		case I_LE:
 		case I_GT:
+		case I_GE:
 			uc_vm_insn_rel(vm, insn);
 			break;
 
