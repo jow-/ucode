@@ -1634,28 +1634,8 @@ uc_vm_insn_rel(uc_vm *vm, enum insn_type insn)
 {
 	uc_value_t *r2 = uc_vm_stack_pop(vm);
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
-	bool res = false;
 
-	switch (insn) {
-	case I_LT:
-		res = uc_cmp(TK_LT, r1, r2);
-		break;
-
-	case I_GT:
-		res = uc_cmp(TK_GT, r1, r2);
-		break;
-
-	case I_EQ:
-		res = uc_cmp(TK_EQ, r1, r2);
-		break;
-
-	case I_NE:
-		res = uc_cmp(TK_NE, r1, r2);
-		break;
-
-	default:
-		break;
-	}
+	bool res = uc_cmp(insn, r1, r2);
 
 	ucv_put(r1);
 	ucv_put(r2);
@@ -1679,7 +1659,7 @@ uc_vm_insn_in(uc_vm *vm, enum insn_type insn)
 		     arridx < arrlen; arridx++) {
 			item = ucv_array_get(r2, arridx);
 
-			if (uc_cmp(TK_EQ, r1, item)) {
+			if (uc_cmp(I_EQ, r1, item)) {
 				found = true;
 				break;
 			}

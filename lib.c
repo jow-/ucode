@@ -339,7 +339,7 @@ uc_index(uc_vm *vm, size_t nargs, bool right)
 	switch (ucv_type(stack)) {
 	case UC_ARRAY:
 		for (arridx = 0, len = ucv_array_length(stack); arridx < len; arridx++) {
-			if (uc_cmp(TK_EQ, ucv_array_get(stack, arridx), needle)) {
+			if (uc_cmp(I_EQ, ucv_array_get(stack, arridx), needle)) {
 				ret = (ssize_t)arridx;
 
 				if (!right)
@@ -2600,13 +2600,13 @@ uc_min_max(uc_vm *vm, size_t nargs, int cmp)
 static uc_value_t *
 uc_min(uc_vm *vm, size_t nargs)
 {
-	return uc_min_max(vm, nargs, TK_LT);
+	return uc_min_max(vm, nargs, I_LT);
 }
 
 static uc_value_t *
 uc_max(uc_vm *vm, size_t nargs)
 {
-	return uc_min_max(vm, nargs, TK_GT);
+	return uc_min_max(vm, nargs, I_GT);
 }
 
 

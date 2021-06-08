@@ -23,7 +23,6 @@
 #include "util.h"
 #include "chunk.h"
 #include "value.h"
-#include "lexer.h" /* TK_* */
 #include "vm.h"
 
 #define TAG_TYPE			uint64_t
@@ -288,7 +287,7 @@ uc_cmp(int how, uc_value_t *v1, uc_value_t *v2)
 
 				/* all comparison results except `!=` involving NaN are false */
 				if (isnan(d1) || isnan(d2))
-					return (how == TK_NE);
+					return (how == I_NE);
 
 				if (d1 == d2)
 					delta = 0;
@@ -304,22 +303,22 @@ uc_cmp(int how, uc_value_t *v1, uc_value_t *v2)
 	}
 
 	switch (how) {
-	case TK_LT:
+	case I_LT:
 		return (delta < 0);
 
-	case TK_LE:
+	case I_LE:
 		return (delta <= 0);
 
-	case TK_GT:
+	case I_GT:
 		return (delta > 0);
 
-	case TK_GE:
+	case I_GE:
 		return (delta >= 0);
 
-	case TK_EQ:
+	case I_EQ:
 		return (delta == 0);
 
-	case TK_NE:
+	case I_NE:
 		return (delta != 0);
 
 	default:
