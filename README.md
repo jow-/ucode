@@ -1226,3 +1226,31 @@ max("1", "abc");              // "abc"
 max("def", "abc", "ghi");     // "ghi"
 max(true, false);             // true
 ```
+
+#### 6.62. `b64dec(str)`
+
+Decodes the given base64 encoded string and returns the decoded result, any
+whitespace in the input string is ignored.
+
+If non-whitespace, non-base64 characters are encountered, if invalid padding
+or trailing garbage is found, the function returns `null`.
+
+If a non-string argument is given, the function returns `null`.
+
+```javascript
+b64dec("VGhpcyBpcyBhIHRlc3Q=");   // "This is a test"
+b64dec(123);                      // null
+b64dec("XXX");                    // null
+```
+
+#### 6.63. `b64enc(str)`
+
+Encodes the given string into base64 and returns the resulting encoded
+string.
+
+If a non-string argument is given, the function returns `null`.
+
+```javascript
+b64enc("This is a test");         // "VGhpcyBpcyBhIHRlc3Q="
+b64enc(123);                      // null
+```
