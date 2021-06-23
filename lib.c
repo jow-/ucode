@@ -2881,7 +2881,7 @@ uc_b64enc(uc_vm *vm, size_t nargs)
  */
 
 
-static const uc_cfunction_list functions[] = {
+const uc_cfunction_list uc_stdlib_functions[] = {
 	{ "chr",		uc_chr },
 	{ "die",		uc_die },
 	{ "exists",		uc_exists },
@@ -2945,7 +2945,7 @@ static const uc_cfunction_list functions[] = {
 void
 uc_load_stdlib(uc_value_t *scope)
 {
-	uc_add_proto_functions(scope, functions);
+	uc_add_proto_functions(scope, uc_stdlib_functions);
 }
 
 uc_value_t *

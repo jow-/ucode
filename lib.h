@@ -25,6 +25,8 @@ typedef struct {
 	uc_cfn_ptr_t func;
 } uc_cfunction_list;
 
+extern const uc_cfunction_list uc_stdlib_functions[];
+
 void uc_load_stdlib(uc_value_t *scope);
 uc_value_t *uc_alloc_global(uc_vm *vm);
 
