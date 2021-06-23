@@ -160,5 +160,5 @@ static const uc_cfunction_list math_fns[] = {
 
 void uc_module_init(uc_vm *vm, uc_value_t *scope)
 {
-	uc_add_proto_functions(scope, math_fns);
+	uc_add_functions(scope, math_fns);
 }

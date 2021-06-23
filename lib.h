@@ -111,17 +111,23 @@ _uc_declare_type(uc_vm *vm, const char *name, const uc_cfunction_list *list, siz
 	_uc_declare_type(vm, name, functions, ARRAY_SIZE(functions), freefn)
 
 
-/* prototype helper */
+/* function helper */
 
-static inline void
-_uc_add_proto_functions(uc_value_t *proto, const uc_cfunction_list *list, size_t len)
+#define uc_add_function(object, name, function) \
+	ucv_object_add(object, name, ucv_cfunction_new(name, function))
+
+static inline bool
+_uc_add_functions(uc_value_t *object, const uc_cfunction_list *list, size_t len)
 {
+	bool rv = true;
+
 	while (len-- > 0)
-		ucv_object_add(proto, list[len].name,
-			ucv_cfunction_new(list[len].name, list[len].func));
+		rv &= uc_add_function(object, list[len].name, list[len].func);
+
+	return rv;
 }
 
-#define uc_add_proto_functions(proto, functions) \
-	_uc_add_proto_functions(proto, functions, ARRAY_SIZE(functions))
+#define uc_add_functions(object, functions) \
+	_uc_add_functions(object, functions, ARRAY_SIZE(functions))
 
 #endif /* __LIB_H_ */

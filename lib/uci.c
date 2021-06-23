@@ -1007,7 +1007,7 @@ static void close_uci(void *ud) {
 
 void uc_module_init(uc_vm *vm, uc_value_t *scope)
 {
-	uc_add_proto_functions(scope, global_fns);
+	uc_add_functions(scope, global_fns);
 
 	cursor_type = uc_declare_type(vm, "uci.cursor", cursor_fns, close_uci);
 }

@@ -906,7 +906,7 @@ static void close_dir(void *ud)
 
 void uc_module_init(uc_vm *vm, uc_value_t *scope)
 {
-	uc_add_proto_functions(scope, global_fns);
+	uc_add_functions(scope, global_fns);
 
 	proc_type = uc_declare_type(vm, "fs.proc", proc_fns, close_proc);
 	file_type = uc_declare_type(vm, "fs.file", file_fns, close_file);

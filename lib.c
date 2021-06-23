@@ -2945,7 +2945,7 @@ const uc_cfunction_list uc_stdlib_functions[] = {
 void
 uc_load_stdlib(uc_value_t *scope)
 {
-	uc_add_proto_functions(scope, uc_stdlib_functions);
+	uc_add_functions(scope, uc_stdlib_functions);
 }
 
 uc_value_t *
