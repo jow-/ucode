@@ -1090,20 +1090,19 @@ lex_step(uc_lexer *lex, FILE *fp)
 			}
 		}
 
+		/* no possible return beyond this point can advance,
+		   mark lex state as eof */
+		lex->state = UT_LEX_EOF;
+
 		/* no token matched and we do have remaining data, junk */
 		if (buf_remaining(lex))
 			return emit_op(lex, lex->source->off, TK_ERROR, ucv_string_new("Unexpected character"));
 
 		/* we're at eof, allow unclosed statement blocks */
-		if (lex->block == STATEMENTS) {
-			lex->state = UT_LEX_EOF;
-
+		if (lex->block == STATEMENTS)
 			return NULL;
-		}
 
 		/* premature EOF */
-		lex->state = UT_LEX_EOF;
-
 		return emit_op(lex, lex->source->off, TK_ERROR, ucv_string_new("Unterminated template block"));
 
 
