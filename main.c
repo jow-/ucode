@@ -125,7 +125,7 @@ parse(uc_parse_config *config, uc_source *src,
 			register_variable(globals, ucv_string_get(name), mod);
 	}
 
-	rc = uc_vm_execute(&vm, entry, NULL);
+	rc = uc_vm_execute(&vm, entry);
 
 	if (rc) {
 		rc = 1;

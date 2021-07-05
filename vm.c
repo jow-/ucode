@@ -2279,47 +2279,12 @@ uc_vm_execute_chunk(uc_vm *vm)
 	return STATUS_OK;
 }
 
-static uc_vm_status_t
-uc_vm_preload(uc_vm *vm, uc_value_t *modules)
-{
-	uc_value_t *requirefn, *module, *name;
-	uc_exception_type_t ex;
-	size_t i;
-
-	if (ucv_type(modules) != UC_ARRAY)
-		return STATUS_OK;
-
-	requirefn = ucv_property_get(vm->globals, "require");
-
-	if (ucv_type(requirefn) != UC_CFUNCTION)
-		return STATUS_OK;
-
-	for (i = 0; i < ucv_array_length(modules); i++) {
-		name = ucv_array_get(modules, i);
-
-		uc_vm_stack_push(vm, ucv_get(requirefn));
-		uc_vm_stack_push(vm, ucv_get(name));
-
-		ex = uc_vm_call(vm, false, 1);
-
-		if (ex)
-			return ERROR_RUNTIME;
-
-		module = uc_vm_stack_pop(vm);
-
-		ucv_put(uc_setval(vm, vm->globals, name, module));
-	}
-
-	return STATUS_OK;
-}
-
 uc_vm_status_t
-uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t *modules)
+uc_vm_execute(uc_vm *vm, uc_function_t *fn)
 {
 	uc_closure_t *closure = (uc_closure_t *)ucv_closure_new(vm, fn, false);
 	uc_callframe *frame;
 	uc_stringbuf_t *buf;
-	uc_vm_status_t rv;
 
 	uc_vector_grow(&vm->callframes);
 
@@ -2343,14 +2308,7 @@ uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t *modules)
 	//uc_vm_stack_push(vm, closure->header.jso);
 	uc_vm_stack_push(vm, NULL);
 
-	rv = uc_vm_preload(vm, modules);
-
-	if (rv != STATUS_OK)
-		uc_vm_output_exception(vm);
-	else
-		rv = uc_vm_execute_chunk(vm);
-
-	return rv;
+	return uc_vm_execute_chunk(vm);
 }
 
 uc_exception_type_t
