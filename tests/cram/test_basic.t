@@ -38,15 +38,13 @@ check that ucode provides proper error messages:
 
   $ ucode -m foo -s ' '
   Runtime error: No module named 'foo' could be found
-  At start of program
   
-  [1]
+  [254]
 
   $ touch moo; ucode -m foo -i moo
   Runtime error: No module named 'foo' could be found
-  At start of program
   
-  [1]
+  [254]
 
 check that ucode can load fs module:
 

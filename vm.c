@@ -2024,7 +2024,7 @@ uc_vm_output_exception(uc_vm *vm)
 }
 
 static uc_vm_status_t
-uc_vm_execute_chunk(uc_vm *vm)
+uc_vm_execute_chunk(uc_vm *vm, uc_value_t **retvalp)
 {
 	uc_callframe *frame = uc_vm_current_frame(vm);
 	uc_chunk *chunk = uc_vm_frame_chunk(frame);
@@ -2227,7 +2227,10 @@ uc_vm_execute_chunk(uc_vm *vm)
 			retval = uc_vm_callframe_pop(vm);
 
 			if (vm->callframes.count == 0) {
-				ucv_put(retval);
+				if (retvalp)
+					*retvalp = retval;
+				else
+					ucv_put(retval);
 
 				return STATUS_OK;
 			}
@@ -2280,7 +2283,7 @@ uc_vm_execute_chunk(uc_vm *vm)
 }
 
 uc_vm_status_t
-uc_vm_execute(uc_vm *vm, uc_function_t *fn)
+uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t **retval)
 {
 	uc_closure_t *closure = (uc_closure_t *)ucv_closure_new(vm, fn, false);
 	uc_callframe *frame;
@@ -2308,7 +2311,10 @@ uc_vm_execute(uc_vm *vm, uc_function_t *fn)
 	//uc_vm_stack_push(vm, closure->header.jso);
 	uc_vm_stack_push(vm, NULL);
 
-	return uc_vm_execute_chunk(vm);
+	if (retval)
+		*retval = NULL;
+
+	return uc_vm_execute_chunk(vm, retval);
 }
 
 uc_exception_type_t
@@ -2319,7 +2325,7 @@ uc_vm_call(uc_vm *vm, bool mcall, size_t nargs)
 
 	if (uc_vm_call_function(vm, ctx, fno, mcall, nargs & 0xffff)) {
 		if (ucv_type(fno) != UC_CFUNCTION)
-			uc_vm_execute_chunk(vm);
+			uc_vm_execute_chunk(vm, NULL);
 	}
 
 	return vm->exception.type;

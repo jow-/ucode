@@ -78,7 +78,7 @@ parse(uc_parse_config *config, uc_source *src,
       uc_value_t *env, uc_value_t *modules,
       int argc, char **argv)
 {
-	uc_value_t *globals = NULL, *arr, *name, *mod;
+	uc_value_t *globals = NULL, *res = NULL, *arr, *name, *mod;
 	uc_function_t *entry;
 	uc_vm vm = { 0 };
 	int i, rc = 0;
@@ -92,7 +92,7 @@ parse(uc_parse_config *config, uc_source *src,
 	if (!entry) {
 		fprintf(stderr, "%s", err);
 		free(err);
-		rc = 2;
+		rc = -1;
 		goto out;
 	}
 
@@ -125,15 +125,25 @@ parse(uc_parse_config *config, uc_source *src,
 			register_variable(globals, ucv_string_get(name), mod);
 	}
 
-	rc = uc_vm_execute(&vm, entry);
+	rc = uc_vm_execute(&vm, entry, &res);
 
-	if (rc) {
-		rc = 1;
-		goto out;
+	switch (rc) {
+	case STATUS_OK:
+		rc = 0;
+		break;
+
+	case ERROR_COMPILE:
+		rc = -1;
+		break;
+
+	case ERROR_RUNTIME:
+		rc = -2;
+		break;
 	}
 
 out:
 	uc_vm_free(&vm);
+	ucv_put(res);
 
 	return rc;
 }
