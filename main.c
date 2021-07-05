@@ -78,10 +78,11 @@ parse(uc_parse_config *config, uc_source *src,
       uc_value_t *env, uc_value_t *modules,
       int argc, char **argv)
 {
-	uc_value_t *globals = NULL, *arr;
+	uc_value_t *globals = NULL, *arr, *name, *mod;
 	uc_function_t *entry;
 	uc_vm vm = { 0 };
 	int i, rc = 0;
+	size_t idx;
 	char *err;
 
 	uc_vm_init(&vm, config);
@@ -115,7 +116,16 @@ parse(uc_parse_config *config, uc_source *src,
 	/* load std functions into global scope */
 	uc_load_stdlib(globals);
 
-	rc = uc_vm_execute(&vm, entry, modules);
+	/* preload modules */
+	for (idx = 0; idx < ucv_array_length(modules); idx++) {
+		name = ucv_array_get(modules, idx);
+		mod = uc_vm_invoke(&vm, "require", 1, name);
+
+		if (mod)
+			register_variable(globals, ucv_string_get(name), mod);
+	}
+
+	rc = uc_vm_execute(&vm, entry, NULL);
 
 	if (rc) {
 		rc = 1;
