@@ -217,7 +217,8 @@ typedef enum {
 	EXCEPTION_RUNTIME,
 	EXCEPTION_TYPE,
 	EXCEPTION_REFERENCE,
-	EXCEPTION_USER
+	EXCEPTION_USER,
+	EXCEPTION_EXIT
 } uc_exception_type_t;
 
 typedef struct {

@@ -502,12 +502,15 @@ uc_exists(uc_vm *vm, size_t nargs)
 	return ucv_boolean_new(found);
 }
 
-__attribute__((noreturn)) static uc_value_t *
+static uc_value_t *
 uc_exit(uc_vm *vm, size_t nargs)
 {
 	int64_t n = uc_cast_int64(uc_get_arg(0));
 
-	exit(n);
+	vm->arg.s32 = (int32_t)n;
+	uc_vm_raise_exception(vm, EXCEPTION_EXIT, "Terminated");
+
+	return NULL;
 }
 
 static uc_value_t *

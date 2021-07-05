@@ -103,6 +103,7 @@ enum insn_type {
 
 typedef enum {
 	STATUS_OK,
+	STATUS_EXIT,
 	ERROR_COMPILE,
 	ERROR_RUNTIME
 } uc_vm_status_t;

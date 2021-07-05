@@ -132,6 +132,10 @@ parse(uc_parse_config *config, uc_source *src,
 		rc = 0;
 		break;
 
+	case STATUS_EXIT:
+		rc = (int)ucv_int64_get(res);
+		break;
+
 	case ERROR_COMPILE:
 		rc = -1;
 		break;

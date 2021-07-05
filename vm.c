@@ -77,6 +77,7 @@ static const char *exception_type_strings[] = {
 	[EXCEPTION_TYPE] = "Type error",
 	[EXCEPTION_REFERENCE] = "Reference error",
 	[EXCEPTION_USER] = "Error",
+	[EXCEPTION_EXIT] = "Exit"
 };
 
 
@@ -2256,6 +2257,16 @@ uc_vm_execute_chunk(uc_vm *vm, uc_value_t **retvalp)
 
 		/* previous instruction raised exception */
 		if (vm->exception.type != EXCEPTION_NONE) {
+			/* VM termination was requested */
+			if (vm->exception.type == EXCEPTION_EXIT) {
+				uc_vm_reset_callframes(vm);
+
+				if (retvalp)
+					*retvalp = ucv_int64_new(vm->arg.s32);
+
+				return STATUS_EXIT;
+			}
+
 			/* walk up callframes until something handles the exception or the root is reached */
 			while (!uc_vm_handle_exception(vm)) {
 				/* no further callframe to pop, report unhandled exception and terminate */
