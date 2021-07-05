@@ -2285,8 +2285,7 @@ uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t *globals, uc_value_t *mod
 	uc_stringbuf_t *buf;
 	uc_vm_status_t rv;
 
-	vm->globals = globals;
-	ucv_get(globals);
+	uc_vm_scope_set(vm, ucv_get(globals));
 
 	uc_vector_grow(&vm->callframes);
 
@@ -2317,8 +2316,7 @@ uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t *globals, uc_value_t *mod
 	else
 		rv = uc_vm_execute_chunk(vm);
 
-	ucv_put(vm->globals);
-	vm->globals = NULL;
+	uc_vm_scope_set(vm, NULL);
 
 	return rv;
 }
@@ -2335,4 +2333,17 @@ uc_vm_call(uc_vm *vm, bool mcall, size_t nargs)
 	}
 
 	return vm->exception.type;
+}
+
+uc_value_t *
+uc_vm_scope_get(uc_vm *vm)
+{
+	return vm->globals;
+}
+
+void
+uc_vm_scope_set(uc_vm *vm, uc_value_t *ctx)
+{
+	ucv_put(vm->globals);
+	vm->globals = ctx;
 }

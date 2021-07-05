@@ -1565,12 +1565,15 @@ uc_require_ucode(uc_vm *vm, const char *path, uc_value_t *scope, uc_value_t **re
 
 	uc_vm_stack_push(vm, closure);
 
-	prev_scope = vm->globals;
-	vm->globals = scope ? scope : prev_scope;
+	if (scope) {
+		prev_scope = ucv_get(uc_vm_scope_get(vm));
+		uc_vm_scope_set(vm, ucv_get(scope));
+	}
 
 	extype = uc_vm_call(vm, false, 0);
 
-	vm->globals = prev_scope;
+	if (scope)
+		uc_vm_scope_set(vm, prev_scope);
 
 	if (extype == EXCEPTION_NONE)
 		*res = uc_vm_stack_pop(vm);
@@ -1588,7 +1591,7 @@ uc_require_path(uc_vm *vm, const char *path_template, const char *name, uc_value
 	uc_value_t *modtable;
 	bool rv;
 
-	modtable = ucv_property_get(vm->globals, "modules");
+	modtable = ucv_property_get(uc_vm_scope_get(vm), "modules");
 	*res = ucv_object_get(modtable, name, &rv);
 
 	if (rv)
@@ -1646,7 +1649,7 @@ uc_require(uc_vm *vm, size_t nargs)
 		return NULL;
 
 	name = ucv_string_get(val);
-	search = ucv_property_get(vm->globals, "REQUIRE_SEARCH_PATH");
+	search = ucv_property_get(uc_vm_scope_get(vm), "REQUIRE_SEARCH_PATH");
 
 	if (ucv_type(search) != UC_ARRAY) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
@@ -2176,10 +2179,10 @@ uc_include(uc_vm *vm, size_t nargs)
 		ucv_object_foreach(scope, key, val)
 			ucv_object_add(sc, key, ucv_get(val));
 
-		ucv_prototype_set(sc, ucv_get(vm->globals));
+		ucv_prototype_set(sc, ucv_get(uc_vm_scope_get(vm)));
 	}
 	else {
-		sc = ucv_get(vm->globals);
+		sc = ucv_get(uc_vm_scope_get(vm));
 	}
 
 	if (uc_require_ucode(vm, p, sc, &rv))

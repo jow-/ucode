@@ -112,6 +112,9 @@ extern uint32_t insns[__I_MAX];
 void uc_vm_init(uc_vm *vm, uc_parse_config *config);
 void uc_vm_free(uc_vm *vm);
 
+uc_value_t *uc_vm_scope_get(uc_vm *vm);
+void uc_vm_scope_set(uc_vm *vm, uc_value_t *ctx);
+
 void uc_vm_stack_push(uc_vm *vm, uc_value_t *value);
 uc_value_t *uc_vm_stack_pop(uc_vm *vm);
 uc_value_t *uc_vm_stack_peek(uc_vm *vm, size_t offset);
