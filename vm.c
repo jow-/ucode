@@ -2017,7 +2017,10 @@ uc_vm_output_exception(uc_vm *vm)
 
 	ctx = ucv_object_get(ucv_array_get(vm->exception.stacktrace, 0), "context", NULL);
 
-	fprintf(stderr, "%s\n\n", ucv_string_get(ctx));
+	if (ctx)
+		fprintf(stderr, "%s\n", ucv_string_get(ctx));
+
+	fprintf(stderr, "\n");
 }
 
 static uc_vm_status_t
