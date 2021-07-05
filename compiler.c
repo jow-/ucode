@@ -1930,7 +1930,12 @@ uc_compiler_compile_declexpr(uc_compiler *compiler, bool constant)
 
 	do {
 		/* parse variable name */
-		uc_compiler_parse_consume(compiler, TK_LABEL);
+		if (!uc_compiler_parse_match(compiler, TK_LABEL)) {
+			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+				"Expecting variable name");
+
+			return;
+		}
 
 		/* declare local variable */
 		slot = uc_compiler_declare_local(compiler, compiler->parser->prev.uv, constant);
