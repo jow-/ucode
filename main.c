@@ -96,7 +96,7 @@ parse(uc_parse_config *config, uc_source *src,
 	}
 
 	/* allocate global scope */
-	globals = uc_alloc_global(&vm);
+	globals = uc_vm_scope_get(&vm);
 
 	/* register ARGV array */
 	arr = ucv_array_new_length(&vm, argc);
@@ -115,7 +115,7 @@ parse(uc_parse_config *config, uc_source *src,
 	/* load std functions into global scope */
 	uc_load_stdlib(globals);
 
-	rc = uc_vm_execute(&vm, entry, globals, modules);
+	rc = uc_vm_execute(&vm, entry, modules);
 
 	if (rc) {
 		rc = 1;

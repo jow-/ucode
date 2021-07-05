@@ -2950,33 +2950,3 @@ uc_load_stdlib(uc_value_t *scope)
 {
 	uc_add_functions(scope, uc_stdlib_functions);
 }
-
-uc_value_t *
-uc_alloc_global(uc_vm *vm)
-{
-	const char *path[] = { LIB_SEARCH_PATH };
-	uc_value_t *global, *arr;
-	size_t i;
-
-	global = ucv_object_new(vm);
-
-	/* build default require() search path */
-	arr = ucv_array_new(vm);
-
-	for (i = 0; i < ARRAY_SIZE(path); i++)
-		ucv_array_push(arr, ucv_string_new(path[i]));
-
-	/* register module related constants */
-	ucv_object_add(global, "REQUIRE_SEARCH_PATH", arr);
-	ucv_object_add(global, "modules", ucv_object_new(vm));
-
-	/* register global math constants */
-	ucv_object_add(global, "NaN", ucv_double_new(NAN));
-	ucv_object_add(global, "Infinity", ucv_double_new(INFINITY));
-
-	/* register global property */
-	ucv_object_add(global, "global", ucv_get(global));
-
-
-	return global;
-}

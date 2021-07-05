@@ -100,6 +100,37 @@ uc_vm_reset_callframes(uc_vm *vm)
 		ucv_put(uc_vm_callframe_pop(vm));
 }
 
+static uc_value_t *
+uc_vm_alloc_global_scope(uc_vm *vm)
+{
+	const char *path[] = { LIB_SEARCH_PATH };
+	uc_value_t *scope, *arr;
+	size_t i;
+
+	scope = ucv_object_new(vm);
+
+	/* build default require() search path */
+	arr = ucv_array_new(vm);
+
+	for (i = 0; i < ARRAY_SIZE(path); i++)
+		ucv_array_push(arr, ucv_string_new(path[i]));
+
+	/* register module related constants */
+	ucv_object_add(scope, "REQUIRE_SEARCH_PATH", arr);
+	ucv_object_add(scope, "modules", ucv_object_new(vm));
+
+	/* register scope math constants */
+	ucv_object_add(scope, "NaN", ucv_double_new(NAN));
+	ucv_object_add(scope, "Infinity", ucv_double_new(INFINITY));
+
+	/* register global property */
+	ucv_object_add(scope, "global", ucv_get(scope));
+
+	uc_vm_scope_set(vm, scope);
+
+	return scope;
+}
+
 void uc_vm_init(uc_vm *vm, uc_parse_config *config)
 {
 	char *s = getenv("TRACE");
@@ -121,6 +152,8 @@ void uc_vm_init(uc_vm *vm, uc_parse_config *config)
 	vm->output = stdout;
 
 	uc_vm_reset_stack(vm);
+
+	uc_vm_alloc_global_scope(vm);
 }
 
 void uc_vm_free(uc_vm *vm)
@@ -2278,14 +2311,12 @@ uc_vm_preload(uc_vm *vm, uc_value_t *modules)
 }
 
 uc_vm_status_t
-uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t *globals, uc_value_t *modules)
+uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t *modules)
 {
 	uc_closure_t *closure = (uc_closure_t *)ucv_closure_new(vm, fn, false);
 	uc_callframe *frame;
 	uc_stringbuf_t *buf;
 	uc_vm_status_t rv;
-
-	uc_vm_scope_set(vm, ucv_get(globals));
 
 	uc_vector_grow(&vm->callframes);
 
@@ -2315,8 +2346,6 @@ uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t *globals, uc_value_t *mod
 		uc_vm_output_exception(vm);
 	else
 		rv = uc_vm_execute_chunk(vm);
-
-	uc_vm_scope_set(vm, NULL);
 
 	return rv;
 }
