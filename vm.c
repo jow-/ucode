@@ -2379,3 +2379,35 @@ uc_vm_scope_set(uc_vm *vm, uc_value_t *ctx)
 	ucv_put(vm->globals);
 	vm->globals = ctx;
 }
+
+uc_value_t *
+uc_vm_invoke(uc_vm *vm, const char *fname, size_t nargs, ...)
+{
+	uc_exception_type_t ex;
+	uc_value_t *fno, *arg;
+	va_list ap;
+	size_t i;
+
+	fno = ucv_property_get(vm->globals, fname);
+
+	if (!ucv_is_callable(fno))
+		return NULL;
+
+	uc_vm_stack_push(vm, ucv_get(fno));
+
+	va_start(ap, nargs);
+
+	for (i = 0; i < nargs; i++) {
+		arg = va_arg(ap, uc_value_t *);
+		uc_vm_stack_push(vm, ucv_get(arg));
+	}
+
+	va_end(ap);
+
+	ex = uc_vm_call(vm, false, nargs);
+
+	if (ex)
+		return NULL;
+
+	return uc_vm_stack_pop(vm);
+}
