@@ -807,7 +807,7 @@ uc_vm_get_error_context(uc_vm *vm)
 	size_t offset, i;
 
 	/* skip to first non-native function call frame */
-	for (i = vm->callframes.count; i > 0; i--)
+	for (i = vm->callframes.count; i > 1; i--)
 		if (vm->callframes.entries[i - 1].closure)
 			break;
 
