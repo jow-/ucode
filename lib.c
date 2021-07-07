@@ -1585,14 +1585,19 @@ uc_require_path(uc_vm *vm, const char *path_template, const char *name, uc_value
 {
 	uc_stringbuf_t *buf = xprintbuf_new();
 	const char *p, *q, *last;
-	bool rv = false;
+	uc_value_t *modtable;
+	bool rv;
 
-	*res = NULL;
+	modtable = ucv_property_get(vm->globals, "modules");
+	*res = ucv_object_get(modtable, name, &rv);
+
+	if (rv)
+		goto out;
 
 	p = strchr(path_template, '*');
 
 	if (!p)
-		goto invalid;
+		goto out;
 
 	ucv_stringbuf_addstr(buf, path_template, p - path_template);
 
@@ -1611,7 +1616,7 @@ uc_require_path(uc_vm *vm, const char *path_template, const char *name, uc_value
 			last = q + 1;
 		}
 		else if (!isalnum(*q) && *q != '_') {
-			goto invalid;
+			goto out;
 		}
 	}
 
@@ -1620,7 +1625,10 @@ uc_require_path(uc_vm *vm, const char *path_template, const char *name, uc_value
 	else if (!strcmp(p + 1, ".uc"))
 		rv = uc_require_ucode(vm, buf->buf, NULL, res);
 
-invalid:
+	if (rv)
+		ucv_object_add(modtable, name, *res);
+
+out:
 	printbuf_free(buf);
 
 	return rv;
@@ -2955,7 +2963,9 @@ uc_alloc_global(uc_vm *vm)
 	for (i = 0; i < ARRAY_SIZE(path); i++)
 		ucv_array_push(arr, ucv_string_new(path[i]));
 
+	/* register module related constants */
 	ucv_object_add(global, "REQUIRE_SEARCH_PATH", arr);
+	ucv_object_add(global, "modules", ucv_object_new(vm));
 
 	/* register global math constants */
 	ucv_object_add(global, "NaN", ucv_double_new(NAN));
@@ -2963,6 +2973,7 @@ uc_alloc_global(uc_vm *vm)
 
 	/* register global property */
 	ucv_object_add(global, "global", ucv_get(global));
+
 
 	return global;
 }
