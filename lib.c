@@ -1626,7 +1626,7 @@ uc_require_path(uc_vm *vm, const char *path_template, const char *name, uc_value
 		rv = uc_require_ucode(vm, buf->buf, NULL, res);
 
 	if (rv)
-		ucv_object_add(modtable, name, *res);
+		ucv_object_add(modtable, name, ucv_get(*res));
 
 out:
 	printbuf_free(buf);
