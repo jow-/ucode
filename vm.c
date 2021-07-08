@@ -730,12 +730,15 @@ uc_vm_exception_new(uc_vm *vm, uc_exception_type_t type, const char *message, uc
 static bool
 uc_vm_handle_exception(uc_vm *vm)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
+	uc_callframe *frame = NULL;
 	uc_chunk *chunk = NULL;
 	uc_value_t *exo;
 	size_t i, pos;
 
-	if (!frame->closure)
+	if (vm->callframes.count)
+		frame = uc_vm_current_frame(vm);
+
+	if (!frame || !frame->closure)
 		return false;
 
 	chunk = uc_vm_frame_chunk(frame);
@@ -2270,7 +2273,7 @@ uc_vm_execute_chunk(uc_vm *vm, uc_value_t **retvalp)
 			/* walk up callframes until something handles the exception or the root is reached */
 			while (!uc_vm_handle_exception(vm)) {
 				/* no further callframe to pop, report unhandled exception and terminate */
-				if (vm->callframes.count == 1) {
+				if (vm->callframes.count <= 1) {
 					uc_vm_output_exception(vm);
 
 					return ERROR_RUNTIME;
