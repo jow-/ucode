@@ -447,7 +447,7 @@ static bool
 uc_vm_call_function(uc_vm *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, size_t argspec)
 {
 	size_t i, j, stackoff, nargs = argspec & 0xffff, nspreads = argspec >> 16;
-	uc_callframe *frame = uc_vm_current_frame(vm);
+	uc_callframe *frame = NULL;
 	uc_value_t *ellip, *arg;
 	uc_function_t *function;
 	uc_closure_t *closure;
@@ -465,6 +465,8 @@ uc_vm_call_function(uc_vm *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, siz
 
 	/* argument list contains spread operations, we need to reshuffle the stack */
 	if (nspreads > 0) {
+		frame = uc_vm_current_frame(vm);
+
 		/* create temporary array */
 		ellip = ucv_array_new_length(vm, nargs);
 
