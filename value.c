@@ -146,7 +146,7 @@ uc_cast_number(uc_value_t *v, int64_t *n, double *d)
 }
 
 static char *
-uc_tostring(uc_vm *vm, uc_value_t *val)
+uc_tostring(uc_vm_t *vm, uc_value_t *val)
 {
 	if (ucv_type(val) != UC_STRING)
 		return ucv_to_string(vm, val);
@@ -189,7 +189,7 @@ uc_toidx(uc_value_t *val)
 }
 
 uc_value_t *
-uc_getval(uc_vm *vm, uc_value_t *scope, uc_value_t *key)
+uc_getval(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 {
 	uc_value_t *o, *v = NULL;
 	int64_t idx;
@@ -221,7 +221,7 @@ uc_getval(uc_vm *vm, uc_value_t *scope, uc_value_t *key)
 }
 
 uc_value_t *
-uc_setval(uc_vm *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
+uc_setval(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
 {
 	int64_t idx;
 	char *s;
@@ -247,7 +247,7 @@ uc_setval(uc_vm *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
 }
 
 bool
-uc_delval(uc_vm *vm, uc_value_t *scope, uc_value_t *key)
+uc_delval(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 {
 	char *s;
 	bool rv;
@@ -327,7 +327,7 @@ uc_cmp(int how, uc_value_t *v1, uc_value_t *v2)
 }
 
 void
-uc_vallist_init(uc_value_list *list)
+uc_vallist_init(uc_value_list_t *list)
 {
 	list->isize = 0;
 	list->dsize = 0;
@@ -336,7 +336,7 @@ uc_vallist_init(uc_value_list *list)
 }
 
 void
-uc_vallist_free(uc_value_list *list)
+uc_vallist_free(uc_value_list_t *list)
 {
 	uc_value_t *o;
 	size_t i;
@@ -355,7 +355,7 @@ uc_vallist_free(uc_value_list *list)
 }
 
 static void
-add_num(uc_value_list *list, int64_t n)
+add_num(uc_value_list_t *list, int64_t n)
 {
 	size_t sz = TAG_ALIGN(sizeof(n));
 
@@ -380,7 +380,7 @@ add_num(uc_value_list *list, int64_t n)
 }
 
 static ssize_t
-find_num(uc_value_list *list, int64_t n)
+find_num(uc_value_list_t *list, int64_t n)
 {
 	TAG_TYPE search;
 	size_t i;
@@ -411,7 +411,7 @@ find_num(uc_value_list *list, int64_t n)
 }
 
 static void
-add_dbl(uc_value_list *list, double d)
+add_dbl(uc_value_list_t *list, double d)
 {
 	size_t sz = TAG_ALIGN(sizeof(d));
 
@@ -430,7 +430,7 @@ add_dbl(uc_value_list *list, double d)
 }
 
 static ssize_t
-find_dbl(uc_value_list *list, double d)
+find_dbl(uc_value_list_t *list, double d)
 {
 	size_t i;
 
@@ -451,7 +451,7 @@ find_dbl(uc_value_list *list, double d)
 }
 
 static void
-add_str(uc_value_list *list, const char *s, size_t slen)
+add_str(uc_value_list_t *list, const char *s, size_t slen)
 {
 	uint32_t sl;
 	size_t sz;
@@ -497,7 +497,7 @@ add_str(uc_value_list *list, const char *s, size_t slen)
 }
 
 static ssize_t
-find_str(uc_value_list *list, const char *s, size_t slen)
+find_str(uc_value_list_t *list, const char *s, size_t slen)
 {
 	TAG_TYPE search;
 	size_t i, len;
@@ -539,7 +539,7 @@ find_str(uc_value_list *list, const char *s, size_t slen)
 }
 
 static void
-add_ptr(uc_value_list *list, void *ptr)
+add_ptr(uc_value_list_t *list, void *ptr)
 {
 	size_t sz = TAG_ALIGN(sizeof(ptr));
 
@@ -558,7 +558,7 @@ add_ptr(uc_value_list *list, void *ptr)
 }
 
 ssize_t
-uc_vallist_add(uc_value_list *list, uc_value_t *value)
+uc_vallist_add(uc_value_list_t *list, uc_value_t *value)
 {
 	ssize_t existing;
 
@@ -615,7 +615,7 @@ uc_vallist_add(uc_value_list *list, uc_value_t *value)
 }
 
 uc_value_type_t
-uc_vallist_type(uc_value_list *list, size_t idx)
+uc_vallist_type(uc_value_list_t *list, size_t idx)
 {
 	if (idx >= list->isize)
 		return TAG_INVAL;
@@ -624,7 +624,7 @@ uc_vallist_type(uc_value_list *list, size_t idx)
 }
 
 uc_value_t *
-uc_vallist_get(uc_value_list *list, size_t idx)
+uc_vallist_get(uc_value_list_t *list, size_t idx)
 {
 	char str[sizeof(TAG_TYPE)];
 	size_t n, len;

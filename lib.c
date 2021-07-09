@@ -94,7 +94,7 @@ format_context_line(uc_stringbuf_t *buf, const char *line, size_t off, bool comp
 }
 
 static char *
-source_filename(uc_source *src, uint32_t line)
+source_filename(uc_source_t *src, uint32_t line)
 {
 	const char *name = src->filename ? basename(src->filename) : "[?]";
 	static char buf[sizeof("xxxxxxxxx.uc:0000000000")];
@@ -109,7 +109,7 @@ source_filename(uc_source *src, uint32_t line)
 }
 
 bool
-format_source_context(uc_stringbuf_t *buf, uc_source *src, size_t off, bool compact)
+format_source_context(uc_stringbuf_t *buf, uc_source_t *src, size_t off, bool compact)
 {
 	size_t len, rlen;
 	bool truncated;
@@ -155,7 +155,7 @@ format_source_context(uc_stringbuf_t *buf, uc_source *src, size_t off, bool comp
 }
 
 bool
-format_error_context(uc_stringbuf_t *buf, uc_source *src, uc_value_t *stacktrace, size_t off)
+format_error_context(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stacktrace, size_t off)
 {
 	uc_value_t *e, *fn, *file, *line, *byte;
 	const char *path;
@@ -204,7 +204,7 @@ format_error_context(uc_stringbuf_t *buf, uc_source *src, uc_value_t *stacktrace
 	return format_source_context(buf, src, off, false);
 }
 
-static char *uc_cast_string(uc_vm *vm, uc_value_t **v, bool *freeable) {
+static char *uc_cast_string(uc_vm_t *vm, uc_value_t **v, bool *freeable) {
 	if (ucv_type(*v) == UC_STRING) {
 		*freeable = false;
 
@@ -263,7 +263,7 @@ uc_cast_int64(uc_value_t *v)
 }
 
 static void
-uc_vm_ctx_push(uc_vm *vm)
+uc_vm_ctx_push(uc_vm_t *vm)
 {
 	uc_value_t *ctx = NULL;
 
@@ -274,7 +274,7 @@ uc_vm_ctx_push(uc_vm *vm)
 }
 
 static uc_value_t *
-uc_print_common(uc_vm *vm, size_t nargs, FILE *fh)
+uc_print_common(uc_vm_t *vm, size_t nargs, FILE *fh)
 {
 	uc_value_t *item;
 	size_t reslen = 0;
@@ -302,13 +302,13 @@ uc_print_common(uc_vm *vm, size_t nargs, FILE *fh)
 
 
 static uc_value_t *
-uc_print(uc_vm *vm, size_t nargs)
+uc_print(uc_vm_t *vm, size_t nargs)
 {
 	return uc_print_common(vm, nargs, vm->output);
 }
 
 static uc_value_t *
-uc_length(uc_vm *vm, size_t nargs)
+uc_length(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arg = uc_get_arg(0);
 
@@ -328,7 +328,7 @@ uc_length(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_index(uc_vm *vm, size_t nargs, bool right)
+uc_index(uc_vm_t *vm, size_t nargs, bool right)
 {
 	uc_value_t *stack = uc_get_arg(0);
 	uc_value_t *needle = uc_get_arg(1);
@@ -371,19 +371,19 @@ uc_index(uc_vm *vm, size_t nargs, bool right)
 }
 
 static uc_value_t *
-uc_lindex(uc_vm *vm, size_t nargs)
+uc_lindex(uc_vm_t *vm, size_t nargs)
 {
 	return uc_index(vm, nargs, false);
 }
 
 static uc_value_t *
-uc_rindex(uc_vm *vm, size_t nargs)
+uc_rindex(uc_vm_t *vm, size_t nargs)
 {
 	return uc_index(vm, nargs, true);
 }
 
 static uc_value_t *
-uc_push(uc_vm *vm, size_t nargs)
+uc_push(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arr = uc_get_arg(0);
 	uc_value_t *item = NULL;
@@ -401,7 +401,7 @@ uc_push(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_pop(uc_vm *vm, size_t nargs)
+uc_pop(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arr = uc_get_arg(0);
 
@@ -409,7 +409,7 @@ uc_pop(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_shift(uc_vm *vm, size_t nargs)
+uc_shift(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arr = uc_get_arg(0);
 
@@ -417,7 +417,7 @@ uc_shift(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_unshift(uc_vm *vm, size_t nargs)
+uc_unshift(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arr = uc_get_arg(0);
 	uc_value_t *item = NULL;
@@ -435,7 +435,7 @@ uc_unshift(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_chr(uc_vm *vm, size_t nargs)
+uc_chr(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *rv = NULL;
 	size_t idx;
@@ -465,7 +465,7 @@ uc_chr(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_die(uc_vm *vm, size_t nargs)
+uc_die(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *msg = uc_get_arg(0);
 	bool freeable = false;
@@ -482,7 +482,7 @@ uc_die(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_exists(uc_vm *vm, size_t nargs)
+uc_exists(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_get_arg(0);
 	uc_value_t *key = uc_get_arg(1);
@@ -503,7 +503,7 @@ uc_exists(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_exit(uc_vm *vm, size_t nargs)
+uc_exit(uc_vm_t *vm, size_t nargs)
 {
 	int64_t n = uc_cast_int64(uc_get_arg(0));
 
@@ -514,7 +514,7 @@ uc_exit(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_getenv(uc_vm *vm, size_t nargs)
+uc_getenv(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *key = uc_get_arg(0);
 	char *k = ucv_string_get(key);
@@ -524,7 +524,7 @@ uc_getenv(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_filter(uc_vm *vm, size_t nargs)
+uc_filter(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_get_arg(0);
 	uc_value_t *func = uc_get_arg(1);
@@ -561,7 +561,7 @@ uc_filter(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_hex(uc_vm *vm, size_t nargs)
+uc_hex(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *val = uc_get_arg(0);
 	char *e, *v;
@@ -581,7 +581,7 @@ uc_hex(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_int(uc_vm *vm, size_t nargs)
+uc_int(uc_vm_t *vm, size_t nargs)
 {
 	int64_t n = uc_cast_int64(uc_get_arg(0));
 
@@ -592,7 +592,7 @@ uc_int(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_join(uc_vm *vm, size_t nargs)
+uc_join(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *sep = uc_get_arg(0);
 	uc_value_t *arr = uc_get_arg(1);
@@ -615,7 +615,7 @@ uc_join(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_keys(uc_vm *vm, size_t nargs)
+uc_keys(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_get_arg(0);
 	uc_value_t *arr = NULL;
@@ -634,7 +634,7 @@ uc_keys(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_lc(uc_vm *vm, size_t nargs)
+uc_lc(uc_vm_t *vm, size_t nargs)
 {
 	char *str = ucv_to_string(vm, uc_get_arg(0));
 	uc_value_t *rv = NULL;
@@ -655,7 +655,7 @@ uc_lc(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_map(uc_vm *vm, size_t nargs)
+uc_map(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_get_arg(0);
 	uc_value_t *func = uc_get_arg(1);
@@ -689,7 +689,7 @@ uc_map(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_ord(uc_vm *vm, size_t nargs)
+uc_ord(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_get_arg(0);
 	uc_value_t *rv, *pos;
@@ -730,7 +730,7 @@ uc_ord(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_type(uc_vm *vm, size_t nargs)
+uc_type(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *v = uc_get_arg(0);
 	uc_type_t t = ucv_type(v);
@@ -756,7 +756,7 @@ uc_type(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_reverse(uc_vm *vm, size_t nargs)
+uc_reverse(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_get_arg(0);
 	uc_value_t *rv = NULL;
@@ -788,7 +788,7 @@ uc_reverse(uc_vm *vm, size_t nargs)
 
 
 static struct {
-	uc_vm *vm;
+	uc_vm_t *vm;
 	bool ex;
 	uc_value_t *fn;
 } sort_ctx;
@@ -891,7 +891,7 @@ sort_fn(const void *k1, const void *k2)
 }
 
 static uc_value_t *
-uc_sort(uc_vm *vm, size_t nargs)
+uc_sort(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arr = uc_get_arg(0);
 	uc_value_t *fn = uc_get_arg(1);
@@ -908,7 +908,7 @@ uc_sort(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_splice(uc_vm *vm, size_t nargs)
+uc_splice(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arr = uc_get_arg(0);
 	int64_t ofs = uc_cast_int64(uc_get_arg(1));
@@ -981,7 +981,7 @@ uc_splice(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_split(uc_vm *vm, size_t nargs)
+uc_split(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *str = uc_get_arg(0);
 	uc_value_t *sep = uc_get_arg(1);
@@ -1040,7 +1040,7 @@ uc_split(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_substr(uc_vm *vm, size_t nargs)
+uc_substr(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *str = uc_get_arg(0);
 	int64_t ofs = uc_cast_int64(uc_get_arg(1));
@@ -1104,7 +1104,7 @@ uc_substr(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_time(uc_vm *vm, size_t nargs)
+uc_time(uc_vm_t *vm, size_t nargs)
 {
 	time_t t = time(NULL);
 
@@ -1112,7 +1112,7 @@ uc_time(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_uc(uc_vm *vm, size_t nargs)
+uc_uc(uc_vm_t *vm, size_t nargs)
 {
 	char *str = ucv_to_string(vm, uc_get_arg(0));
 	uc_value_t *rv = NULL;
@@ -1133,7 +1133,7 @@ uc_uc(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_uchr(uc_vm *vm, size_t nargs)
+uc_uchr(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *rv = NULL;
 	size_t idx, ulen;
@@ -1176,7 +1176,7 @@ uc_uchr(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_values(uc_vm *vm, size_t nargs)
+uc_values(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_get_arg(0);
 	uc_value_t *arr;
@@ -1195,7 +1195,7 @@ uc_values(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_trim_common(uc_vm *vm, size_t nargs, bool start, bool end)
+uc_trim_common(uc_vm_t *vm, size_t nargs, bool start, bool end)
 {
 	uc_value_t *str = uc_get_arg(0);
 	uc_value_t *chr = uc_get_arg(1);
@@ -1235,25 +1235,25 @@ uc_trim_common(uc_vm *vm, size_t nargs, bool start, bool end)
 }
 
 static uc_value_t *
-uc_trim(uc_vm *vm, size_t nargs)
+uc_trim(uc_vm_t *vm, size_t nargs)
 {
 	return uc_trim_common(vm, nargs, true, true);
 }
 
 static uc_value_t *
-uc_ltrim(uc_vm *vm, size_t nargs)
+uc_ltrim(uc_vm_t *vm, size_t nargs)
 {
 	return uc_trim_common(vm, nargs, true, false);
 }
 
 static uc_value_t *
-uc_rtrim(uc_vm *vm, size_t nargs)
+uc_rtrim(uc_vm_t *vm, size_t nargs)
 {
 	return uc_trim_common(vm, nargs, false, true);
 }
 
 static void
-uc_printf_common(uc_vm *vm, size_t nargs, uc_stringbuf_t *buf)
+uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 {
 	uc_value_t *fmt = uc_get_arg(0);
 	char *fp, sfmt[sizeof("%0- 123456789.123456789%")];
@@ -1466,7 +1466,7 @@ next:
 }
 
 static uc_value_t *
-uc_sprintf(uc_vm *vm, size_t nargs)
+uc_sprintf(uc_vm_t *vm, size_t nargs)
 {
 	uc_stringbuf_t *buf = ucv_stringbuf_new();
 
@@ -1476,7 +1476,7 @@ uc_sprintf(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_printf(uc_vm *vm, size_t nargs)
+uc_printf(uc_vm_t *vm, size_t nargs)
 {
 	uc_stringbuf_t *buf = xprintbuf_new();
 	size_t len;
@@ -1491,9 +1491,9 @@ uc_printf(uc_vm *vm, size_t nargs)
 }
 
 static bool
-uc_require_so(uc_vm *vm, const char *path, uc_value_t **res)
+uc_require_so(uc_vm_t *vm, const char *path, uc_value_t **res)
 {
-	void (*init)(uc_vm *, uc_value_t *);
+	void (*init)(uc_vm_t *, uc_value_t *);
 	uc_value_t *scope;
 	struct stat st;
 	void *dlh;
@@ -1530,13 +1530,13 @@ uc_require_so(uc_vm *vm, const char *path, uc_value_t **res)
 }
 
 static bool
-uc_require_ucode(uc_vm *vm, const char *path, uc_value_t *scope, uc_value_t **res)
+uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **res)
 {
 	uc_exception_type_t extype;
 	uc_function_t *function;
 	uc_value_t *prev_scope;
 	uc_value_t *closure;
-	uc_source *source;
+	uc_source_t *source;
 	struct stat st;
 	char *err;
 
@@ -1587,7 +1587,7 @@ uc_require_ucode(uc_vm *vm, const char *path, uc_value_t *scope, uc_value_t **re
 }
 
 static bool
-uc_require_path(uc_vm *vm, const char *path_template, const char *name, uc_value_t **res)
+uc_require_path(uc_vm_t *vm, const char *path_template, const char *name, uc_value_t **res)
 {
 	uc_stringbuf_t *buf = xprintbuf_new();
 	const char *p, *q, *last;
@@ -1641,7 +1641,7 @@ out:
 }
 
 static uc_value_t *
-uc_require(uc_vm *vm, size_t nargs)
+uc_require(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *val = uc_get_arg(0);
 	uc_value_t *search, *se, *res;
@@ -1678,7 +1678,7 @@ uc_require(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_iptoarr(uc_vm *vm, size_t nargs)
+uc_iptoarr(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *ip = uc_get_arg(0);
 	uc_value_t *res;
@@ -1731,7 +1731,7 @@ check_byte(uc_value_t *v)
 }
 
 static uc_value_t *
-uc_arrtoip(uc_vm *vm, size_t nargs)
+uc_arrtoip(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arr = uc_get_arg(0);
 	union {
@@ -1779,7 +1779,7 @@ uc_arrtoip(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_match(uc_vm *vm, size_t nargs)
+uc_match(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *subject = uc_get_arg(0);
 	uc_value_t *pattern = uc_get_arg(1);
@@ -1833,7 +1833,7 @@ uc_match(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_replace_cb(uc_vm *vm, uc_value_t *func,
+uc_replace_cb(uc_vm_t *vm, uc_value_t *func,
               const char *subject, regmatch_t *pmatch, size_t plen,
               uc_stringbuf_t *resbuf)
 {
@@ -1862,7 +1862,7 @@ uc_replace_cb(uc_vm *vm, uc_value_t *func,
 }
 
 static void
-uc_replace_str(uc_vm *vm, uc_value_t *str,
+uc_replace_str(uc_vm_t *vm, uc_value_t *str,
                const char *subject, regmatch_t *pmatch, size_t plen,
                uc_stringbuf_t *resbuf)
 {
@@ -1936,7 +1936,7 @@ uc_replace_str(uc_vm *vm, uc_value_t *str,
 }
 
 static uc_value_t *
-uc_replace(uc_vm *vm, size_t nargs)
+uc_replace(uc_vm_t *vm, size_t nargs)
 {
 	char *sb = NULL, *pt = NULL, *p, *l;
 	uc_value_t *subject = uc_get_arg(0);
@@ -2038,7 +2038,7 @@ uc_replace(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_json(uc_vm *vm, size_t nargs)
+uc_json(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *rv, *src = uc_get_arg(0);
 	struct json_tokener *tok = NULL;
@@ -2130,7 +2130,7 @@ include_path(const char *curpath, const char *incpath)
 }
 
 static uc_value_t *
-uc_include(uc_vm *vm, size_t nargs)
+uc_include(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_get_arg(0);
 	uc_value_t *scope = uc_get_arg(1);
@@ -2198,7 +2198,7 @@ uc_include(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_render(uc_vm *vm, size_t nargs)
+uc_render(uc_vm_t *vm, size_t nargs)
 {
 	uc_string_t *ustr = NULL;
 	FILE *mem, *prev;
@@ -2245,13 +2245,13 @@ out:
 }
 
 static uc_value_t *
-uc_warn(uc_vm *vm, size_t nargs)
+uc_warn(uc_vm_t *vm, size_t nargs)
 {
 	return uc_print_common(vm, nargs, stderr);
 }
 
 static uc_value_t *
-uc_system(uc_vm *vm, size_t nargs)
+uc_system(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *cmdline = uc_get_arg(0);
 	uc_value_t *timeout = uc_get_arg(1);
@@ -2391,7 +2391,7 @@ fail:
 }
 
 static uc_value_t *
-uc_trace(uc_vm *vm, size_t nargs)
+uc_trace(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *level = uc_get_arg(0);
 	uint8_t prev_level;
@@ -2409,7 +2409,7 @@ uc_trace(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_proto(uc_vm *vm, size_t nargs)
+uc_proto(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *val = uc_get_arg(0);
 	uc_value_t *proto = NULL;
@@ -2428,7 +2428,7 @@ uc_proto(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_sleep(uc_vm *vm, size_t nargs)
+uc_sleep(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *duration = uc_get_arg(0);
 	struct timeval tv;
@@ -2448,7 +2448,7 @@ uc_sleep(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_assert(uc_vm *vm, size_t nargs)
+uc_assert(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *cond = uc_get_arg(0);
 	uc_value_t *msg = uc_get_arg(1);
@@ -2470,7 +2470,7 @@ uc_assert(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_regexp(uc_vm *vm, size_t nargs)
+uc_regexp(uc_vm_t *vm, size_t nargs)
 {
 	bool icase = false, newline = false, global = false, freeable;
 	uc_value_t *source = uc_get_arg(0);
@@ -2525,7 +2525,7 @@ uc_regexp(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_wildcard(uc_vm *vm, size_t nargs)
+uc_wildcard(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *subject = uc_get_arg(0);
 	uc_value_t *pattern = uc_get_arg(1);
@@ -2550,12 +2550,12 @@ uc_wildcard(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_sourcepath(uc_vm *vm, size_t nargs)
+uc_sourcepath(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *calldepth = uc_get_arg(0);
 	uc_value_t *dironly = uc_get_arg(1);
 	uc_value_t *rv = NULL;
-	uc_callframe *frame;
+	uc_callframe_t *frame;
 	char *path = NULL;
 	int64_t depth;
 	size_t i;
@@ -2593,7 +2593,7 @@ uc_sourcepath(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_min_max(uc_vm *vm, size_t nargs, int cmp)
+uc_min_max(uc_vm_t *vm, size_t nargs, int cmp)
 {
 	uc_value_t *rv = NULL, *val;
 	bool set = false;
@@ -2612,13 +2612,13 @@ uc_min_max(uc_vm *vm, size_t nargs, int cmp)
 }
 
 static uc_value_t *
-uc_min(uc_vm *vm, size_t nargs)
+uc_min(uc_vm_t *vm, size_t nargs)
 {
 	return uc_min_max(vm, nargs, I_LT);
 }
 
 static uc_value_t *
-uc_max(uc_vm *vm, size_t nargs)
+uc_max(uc_vm_t *vm, size_t nargs)
 {
 	return uc_min_max(vm, nargs, I_GT);
 }
@@ -2701,7 +2701,7 @@ uc_max(uc_vm *vm, size_t nargs)
  */
 
 static uc_value_t *
-uc_b64dec(uc_vm *vm, size_t nargs)
+uc_b64dec(uc_vm_t *vm, size_t nargs)
 {
 	enum { BYTE1, BYTE2, BYTE3, BYTE4 } state;
 	uc_value_t *str = uc_get_arg(0);
@@ -2834,7 +2834,7 @@ static const char Base64[] =
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 static uc_value_t *
-uc_b64enc(uc_vm *vm, size_t nargs)
+uc_b64enc(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *str = uc_get_arg(0);
 	unsigned char input[3] = {0};
@@ -2887,7 +2887,7 @@ uc_b64enc(uc_vm *vm, size_t nargs)
  */
 
 
-const uc_cfunction_list uc_stdlib_functions[] = {
+const uc_cfunction_list_t uc_stdlib_functions[] = {
 	{ "chr",		uc_chr },
 	{ "die",		uc_die },
 	{ "exists",		uc_exists },

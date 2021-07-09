@@ -24,16 +24,16 @@
 #include "util.h"
 #include "types.h"
 
-void uc_chunk_init(uc_chunk *chunk);
-void uc_chunk_free(uc_chunk *chunk);
-size_t uc_chunk_add(uc_chunk *chunk, uint8_t byte, size_t line);
+void uc_chunk_init(uc_chunk_t *chunk);
+void uc_chunk_free(uc_chunk_t *chunk);
+size_t uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t line);
 
-ssize_t uc_chunk_add_constant(uc_chunk *chunk, uc_value_t *value);
-uc_value_t *uc_chunk_get_constant(uc_chunk *chunk, size_t idx);
-void uc_chunk_pop(uc_chunk *chunk);
+ssize_t uc_chunk_add_constant(uc_chunk_t *chunk, uc_value_t *value);
+uc_value_t *uc_chunk_get_constant(uc_chunk_t *chunk, size_t idx);
+void uc_chunk_pop(uc_chunk_t *chunk);
 
-size_t uc_chunk_debug_get_srcpos(uc_chunk *chunk, size_t off);
-void uc_chunk_debug_add_variable(uc_chunk *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name);
-uc_value_t *uc_chunk_debug_get_variable(uc_chunk *chunk, size_t off, size_t slot, bool upval);
+size_t uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t off);
+void uc_chunk_debug_add_variable(uc_chunk_t *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name);
+uc_value_t *uc_chunk_debug_get_variable(uc_chunk_t *chunk, size_t off, size_t slot, bool upval);
 
 #endif /* __CHUNK_H_ */

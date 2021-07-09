@@ -64,12 +64,10 @@ typedef enum {
 	P_PRIMARY	/* (…) */
 } uc_precedence_t;
 
-struct uc_patchlist {
+typedef struct uc_patchlist {
 	struct uc_patchlist *parent;
 	size_t depth, count, *entries;
-};
-
-typedef struct uc_patchlist uc_patchlist;
+} uc_patchlist_t;
 
 typedef struct {
 	uc_value_t *name;
@@ -77,45 +75,43 @@ typedef struct {
 	size_t from;
 	bool captured;
 	bool constant;
-} uc_local;
+} uc_local_t;
 
 typedef struct {
 	uc_value_t *name;
 	size_t index;
 	bool local;
 	bool constant;
-} uc_upval;
+} uc_upval_t;
 
-uc_declare_vector(uc_locals, uc_local);
-uc_declare_vector(uc_upvals, uc_upval);
-uc_declare_vector(uc_jmplist, size_t);
+uc_declare_vector(uc_locals_t, uc_local_t);
+uc_declare_vector(uc_upvals_t, uc_upval_t);
+uc_declare_vector(uc_jmplist_t, size_t);
 
 typedef struct {
-	uc_parse_config *config;
-	uc_lexer lex;
-	uc_token prev, curr;
+	uc_parse_config_t *config;
+	uc_lexer_t lex;
+	uc_token_t prev, curr;
 	bool synchronizing;
 	uc_stringbuf_t *error;
-} uc_parser;
+} uc_parser_t;
 
-struct uc_compiler {
+typedef struct uc_compiler {
 	struct uc_compiler *parent;
-	uc_locals locals;
-	uc_upvals upvals;
-	uc_patchlist *patchlist;
+	uc_locals_t locals;
+	uc_upvals_t upvals;
+	uc_patchlist_t *patchlist;
 	uc_value_t *function;
-	uc_parser *parser;
+	uc_parser_t *parser;
 	size_t scope_depth, current_srcpos, last_insn;
-};
-
-typedef struct uc_compiler uc_compiler;
+} uc_compiler_t;
 
 typedef struct {
-	void (*prefix)(uc_compiler *, bool);
-	void (*infix)(uc_compiler *, bool);
+	void (*prefix)(uc_compiler_t *, bool);
+	void (*infix)(uc_compiler_t *, bool);
 	uc_precedence_t precedence;
-} uc_parse_rule;
+} uc_parse_rule_t;
 
-uc_function_t *uc_compile(uc_parse_config *config, uc_source *source, char **errp);
+uc_function_t *uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp);
 
 #endif /* __COMPILER_H_ */

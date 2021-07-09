@@ -23,20 +23,20 @@
 typedef struct {
 	const char *name;
 	uc_cfn_ptr_t func;
-} uc_cfunction_list;
+} uc_cfunction_list_t;
 
-extern const uc_cfunction_list uc_stdlib_functions[];
+extern const uc_cfunction_list_t uc_stdlib_functions[];
 
 void uc_load_stdlib(uc_value_t *scope);
 
-bool format_source_context(uc_stringbuf_t *buf, uc_source *src, size_t off, bool compact);
-bool format_error_context(uc_stringbuf_t *buf, uc_source *src, uc_value_t *stacktrace, size_t off);
+bool format_source_context(uc_stringbuf_t *buf, uc_source_t *src, size_t off, bool compact);
+bool format_error_context(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stacktrace, size_t off);
 
 
 /* vm helper */
 
 static inline void *
-_uc_get_self(uc_vm *vm, const char *expected_type)
+_uc_get_self(uc_vm_t *vm, const char *expected_type)
 {
 	return ucv_ressource_dataptr(vm->callframes.entries[vm->callframes.count - 1].ctx, expected_type);
 }
@@ -44,7 +44,7 @@ _uc_get_self(uc_vm *vm, const char *expected_type)
 #define uc_get_self(...) _uc_get_self(vm, __VA_ARGS__)
 
 static inline uc_value_t *
-_uc_get_arg(uc_vm *vm, size_t nargs, size_t n)
+_uc_get_arg(uc_vm_t *vm, size_t nargs, size_t n)
 {
 	if (n >= nargs)
 		return NULL;
@@ -95,7 +95,7 @@ uc_to_int64(uc_value_t *v)
 /* ressource type helper */
 
 static inline uc_ressource_type_t *
-_uc_declare_type(uc_vm *vm, const char *name, const uc_cfunction_list *list, size_t len, void (*freefn)(void *))
+_uc_declare_type(uc_vm_t *vm, const char *name, const uc_cfunction_list_t *list, size_t len, void (*freefn)(void *))
 {
 	uc_value_t *proto = ucv_object_new(NULL);
 
@@ -116,7 +116,7 @@ _uc_declare_type(uc_vm *vm, const char *name, const uc_cfunction_list *list, siz
 	ucv_object_add(object, name, ucv_cfunction_new(name, function))
 
 static inline bool
-_uc_add_functions(uc_value_t *object, const uc_cfunction_list *list, size_t len)
+_uc_add_functions(uc_value_t *object, const uc_cfunction_list_t *list, size_t len)
 {
 	bool rv = true;
 

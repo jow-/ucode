@@ -19,11 +19,11 @@
 #include "source.h"
 
 
-uc_source *
+uc_source_t *
 uc_source_new_file(const char *path)
 {
 	FILE *fp = fopen(path, "rb");
-	uc_source *src;
+	uc_source_t *src;
 
 	if (!fp)
 		return NULL;
@@ -41,11 +41,11 @@ uc_source_new_file(const char *path)
 	return src;
 }
 
-uc_source *
+uc_source_t *
 uc_source_new_buffer(const char *name, char *buf, size_t len)
 {
 	FILE *fp = fmemopen(buf, len, "rb");
-	uc_source *src;
+	uc_source_t *src;
 
 	if (!fp)
 		return NULL;
@@ -64,9 +64,9 @@ uc_source_new_buffer(const char *name, char *buf, size_t len)
 }
 
 size_t
-uc_source_get_line(uc_source *source, size_t *offset)
+uc_source_get_line(uc_source_t *source, size_t *offset)
 {
-	uc_lineinfo *lines = &source->lineinfo;
+	uc_lineinfo_t *lines = &source->lineinfo;
 	size_t i, pos = 0, line = 0, lastoff = 0;
 
 	for (i = 0; i < lines->count; i++) {
@@ -88,8 +88,8 @@ uc_source_get_line(uc_source *source, size_t *offset)
 	return 0;
 }
 
-uc_source *
-uc_source_get(uc_source *source)
+uc_source_t *
+uc_source_get(uc_source_t *source)
 {
 	if (!source)
 		return NULL;
@@ -100,7 +100,7 @@ uc_source_get(uc_source *source)
 }
 
 void
-uc_source_put(uc_source *source)
+uc_source_put(uc_source_t *source)
 {
 	if (!source)
 		return;

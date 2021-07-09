@@ -96,10 +96,10 @@ __insn(DELETE)
 #undef __insn
 #define __insn(_name) I_##_name,
 
-enum insn_type {
+typedef enum {
 	__insns
 	__I_MAX
-};
+} uc_vm_insn_t;
 
 typedef enum {
 	STATUS_OK,
@@ -110,28 +110,28 @@ typedef enum {
 
 extern uint32_t insns[__I_MAX];
 
-void uc_vm_init(uc_vm *vm, uc_parse_config *config);
-void uc_vm_free(uc_vm *vm);
+void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config);
+void uc_vm_free(uc_vm_t *vm);
 
-uc_value_t *uc_vm_scope_get(uc_vm *vm);
-void uc_vm_scope_set(uc_vm *vm, uc_value_t *ctx);
+uc_value_t *uc_vm_scope_get(uc_vm_t *vm);
+void uc_vm_scope_set(uc_vm_t *vm, uc_value_t *ctx);
 
-void uc_vm_stack_push(uc_vm *vm, uc_value_t *value);
-uc_value_t *uc_vm_stack_pop(uc_vm *vm);
-uc_value_t *uc_vm_stack_peek(uc_vm *vm, size_t offset);
+void uc_vm_stack_push(uc_vm_t *vm, uc_value_t *value);
+uc_value_t *uc_vm_stack_pop(uc_vm_t *vm);
+uc_value_t *uc_vm_stack_peek(uc_vm_t *vm, size_t offset);
 
-uc_exception_handler_t *uc_vm_exception_handler_get(uc_vm *vm);
-void uc_vm_exception_handler_set(uc_vm *vm, uc_exception_handler_t *exhandler);
+uc_exception_handler_t *uc_vm_exception_handler_get(uc_vm_t *vm);
+void uc_vm_exception_handler_set(uc_vm_t *vm, uc_exception_handler_t *exhandler);
 
-uint32_t uc_vm_trace_get(uc_vm *vm);
-void uc_vm_trace_set(uc_vm *vm, uint32_t level);
+uint32_t uc_vm_trace_get(uc_vm_t *vm);
+void uc_vm_trace_set(uc_vm_t *vm, uint32_t level);
 
-uc_exception_type_t uc_vm_call(uc_vm *vm, bool mcall, size_t nargs);
+uc_exception_type_t uc_vm_call(uc_vm_t *vm, bool mcall, size_t nargs);
 
 void __attribute__((format(printf, 3, 0)))
-uc_vm_raise_exception(uc_vm *vm, uc_exception_type_t type, const char *fmt, ...);
+uc_vm_raise_exception(uc_vm_t *vm, uc_exception_type_t type, const char *fmt, ...);
 
-uc_vm_status_t uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t **retval);
-uc_value_t *uc_vm_invoke(uc_vm *vm, const char *fname, size_t nargs, ...);
+uc_vm_status_t uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval);
+uc_value_t *uc_vm_invoke(uc_vm_t *vm, const char *fname, size_t nargs, ...);
 
 #endif /* __VM_H_ */

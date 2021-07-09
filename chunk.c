@@ -20,7 +20,7 @@
 #include "types.h"
 #include "util.h"
 
-#define OFFSETINFO_BITS (sizeof(((uc_offsetinfo *)NULL)->entries[0]) * 8)
+#define OFFSETINFO_BITS (sizeof(((uc_offsetinfo_t *)NULL)->entries[0]) * 8)
 #define OFFSETINFO_BYTE_BITS 3
 #define OFFSETINFO_INSN_BITS (OFFSETINFO_BITS - OFFSETINFO_BYTE_BITS)
 #define OFFSETINFO_MAX_BYTES ((1 << OFFSETINFO_BYTE_BITS) - 1)
@@ -31,7 +31,7 @@
 
 
 void
-uc_chunk_init(uc_chunk *chunk)
+uc_chunk_init(uc_chunk_t *chunk)
 {
 	chunk->count = 0;
 	chunk->entries = NULL;
@@ -50,7 +50,7 @@ uc_chunk_init(uc_chunk *chunk)
 }
 
 void
-uc_chunk_free(uc_chunk *chunk)
+uc_chunk_free(uc_chunk_t *chunk)
 {
 	uc_vector_clear(chunk);
 	uc_vector_clear(&chunk->ehranges);
@@ -64,9 +64,9 @@ uc_chunk_free(uc_chunk *chunk)
 }
 
 size_t
-uc_chunk_add(uc_chunk *chunk, uint8_t byte, size_t offset)
+uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t offset)
 {
-	uc_offsetinfo *offsets = &chunk->debuginfo.offsets;
+	uc_offsetinfo_t *offsets = &chunk->debuginfo.offsets;
 	size_t i;
 
 	uc_vector_grow(chunk);
@@ -114,9 +114,9 @@ uc_chunk_add(uc_chunk *chunk, uint8_t byte, size_t offset)
 }
 
 void
-uc_chunk_pop(uc_chunk *chunk)
+uc_chunk_pop(uc_chunk_t *chunk)
 {
-	uc_offsetinfo *offsets = &chunk->debuginfo.offsets;
+	uc_offsetinfo_t *offsets = &chunk->debuginfo.offsets;
 	int n_insns;
 
 	assert(chunk->count > 0);
@@ -137,21 +137,21 @@ uc_chunk_pop(uc_chunk *chunk)
 }
 
 uc_value_t *
-uc_chunk_get_constant(uc_chunk *chunk, size_t idx)
+uc_chunk_get_constant(uc_chunk_t *chunk, size_t idx)
 {
 	return uc_vallist_get(&chunk->constants, idx);
 }
 
 ssize_t
-uc_chunk_add_constant(uc_chunk *chunk, uc_value_t *val)
+uc_chunk_add_constant(uc_chunk_t *chunk, uc_value_t *val)
 {
 	return uc_vallist_add(&chunk->constants, val);
 }
 
 size_t
-uc_chunk_debug_get_srcpos(uc_chunk *chunk, size_t off)
+uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t off)
 {
-	uc_offsetinfo *offsets = &chunk->debuginfo.offsets;
+	uc_offsetinfo_t *offsets = &chunk->debuginfo.offsets;
 	size_t i, inum = 0, lnum = 0;
 
 	if (!offsets->count)
@@ -166,10 +166,10 @@ uc_chunk_debug_get_srcpos(uc_chunk *chunk, size_t off)
 }
 
 void
-uc_chunk_debug_add_variable(uc_chunk *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name)
+uc_chunk_debug_add_variable(uc_chunk_t *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name)
 {
-	uc_variables *variables = &chunk->debuginfo.variables;
-	uc_value_list *varnames = &chunk->debuginfo.varnames;
+	uc_variables_t *variables = &chunk->debuginfo.variables;
+	uc_value_list_t *varnames = &chunk->debuginfo.varnames;
 
 	assert(slot <= ((size_t)-1 / 2));
 
@@ -187,10 +187,10 @@ uc_chunk_debug_add_variable(uc_chunk *chunk, size_t from, size_t to, size_t slot
 }
 
 uc_value_t *
-uc_chunk_debug_get_variable(uc_chunk *chunk, size_t off, size_t slot, bool upval)
+uc_chunk_debug_get_variable(uc_chunk_t *chunk, size_t off, size_t slot, bool upval)
 {
-	uc_variables *variables = &chunk->debuginfo.variables;
-	uc_value_list *varnames = &chunk->debuginfo.varnames;
+	uc_variables_t *variables = &chunk->debuginfo.variables;
+	uc_value_list_t *varnames = &chunk->debuginfo.varnames;
 	uc_value_t *name = NULL;
 	size_t i;
 

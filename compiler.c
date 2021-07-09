@@ -22,29 +22,29 @@
 #include "source.h"
 #include "lib.h" /* format_error_context() */
 
-static void uc_compiler_compile_unary(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_binary(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_delete(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_paren(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_call(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_post_inc(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_constant(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_comma(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_labelexpr(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_function(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_and(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_or(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_dot(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_subscript(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_ternary(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_array(uc_compiler *compiler, bool assignable);
-static void uc_compiler_compile_object(uc_compiler *compiler, bool assignable);
+static void uc_compiler_compile_unary(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_binary(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_delete(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_paren(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_call(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_post_inc(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_constant(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_comma(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_labelexpr(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_function(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_and(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_or(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_dot(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_subscript(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_ternary(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_array(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_object(uc_compiler_t *compiler, bool assignable);
 
-static void uc_compiler_compile_declaration(uc_compiler *compiler);
-static void uc_compiler_compile_statement(uc_compiler *compiler);
-static void uc_compiler_compile_expstmt(uc_compiler *compiler);
+static void uc_compiler_compile_declaration(uc_compiler_t *compiler);
+static void uc_compiler_compile_statement(uc_compiler_t *compiler);
+static void uc_compiler_compile_expstmt(uc_compiler_t *compiler);
 
-static uc_parse_rule
+static uc_parse_rule_t
 uc_compiler_parse_rules[TK_ERROR + 1] = {
 	[TK_LPAREN]	= { uc_compiler_compile_paren, uc_compiler_compile_call, P_CALL },
 	[TK_SUB]	= { uc_compiler_compile_unary, uc_compiler_compile_binary, P_ADD },
@@ -91,13 +91,13 @@ uc_compiler_parse_rules[TK_ERROR + 1] = {
 };
 
 static ssize_t
-uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name, bool constant);
+uc_compiler_declare_local(uc_compiler_t *compiler, uc_value_t *name, bool constant);
 
 static ssize_t
-uc_compiler_initialize_local(uc_compiler *compiler);
+uc_compiler_initialize_local(uc_compiler_t *compiler);
 
 static void
-uc_compiler_init(uc_compiler *compiler, const char *name, size_t srcpos, uc_source *source, bool strict)
+uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_source_t *source, bool strict)
 {
 	uc_value_t *varname = ucv_string_new("(callee)");
 	uc_function_t *fn;
@@ -127,16 +127,16 @@ uc_compiler_init(uc_compiler *compiler, const char *name, size_t srcpos, uc_sour
 	ucv_put(varname);
 }
 
-static uc_chunk *
-uc_compiler_current_chunk(uc_compiler *compiler)
+static uc_chunk_t *
+uc_compiler_current_chunk(uc_compiler_t *compiler)
 {
 	uc_function_t *fn = (uc_function_t *)compiler->function;
 
 	return &fn->chunk;
 }
 
-static uc_source *
-uc_compiler_current_source(uc_compiler *compiler)
+static uc_source_t *
+uc_compiler_current_source(uc_compiler_t *compiler)
 {
 	uc_function_t *fn = (uc_function_t *)compiler->function;
 
@@ -144,7 +144,7 @@ uc_compiler_current_source(uc_compiler *compiler)
 }
 
 __attribute__((format(printf, 3, 0))) static void
-uc_compiler_syntax_error(uc_compiler *compiler, size_t off, const char *fmt, ...)
+uc_compiler_syntax_error(uc_compiler_t *compiler, size_t off, const char *fmt, ...)
 {
 	uc_stringbuf_t *buf = compiler->parser->error;
 	size_t line = 0, byte = 0, len = 0;
@@ -186,7 +186,7 @@ uc_compiler_syntax_error(uc_compiler *compiler, size_t off, const char *fmt, ...
 }
 
 static size_t
-uc_compiler_set_srcpos(uc_compiler *compiler, size_t srcpos)
+uc_compiler_set_srcpos(uc_compiler_t *compiler, size_t srcpos)
 {
 	size_t delta;
 
@@ -200,7 +200,7 @@ uc_compiler_set_srcpos(uc_compiler *compiler, size_t srcpos)
 }
 
 static void
-uc_compiler_parse_advance(uc_compiler *compiler)
+uc_compiler_parse_advance(uc_compiler_t *compiler)
 {
 	ucv_put(compiler->parser->prev.uv);
 	compiler->parser->prev = compiler->parser->curr;
@@ -220,7 +220,7 @@ uc_compiler_parse_advance(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_parse_consume(uc_compiler *compiler, uc_tokentype_t type)
+uc_compiler_parse_consume(uc_compiler_t *compiler, uc_tokentype_t type)
 {
 	if (compiler->parser->curr.type == type) {
 		uc_compiler_parse_advance(compiler);
@@ -233,13 +233,13 @@ uc_compiler_parse_consume(uc_compiler *compiler, uc_tokentype_t type)
 }
 
 static bool
-uc_compiler_parse_check(uc_compiler *compiler, uc_tokentype_t type)
+uc_compiler_parse_check(uc_compiler_t *compiler, uc_tokentype_t type)
 {
 	return (compiler->parser->curr.type == type);
 }
 
 static bool
-uc_compiler_parse_match(uc_compiler *compiler, uc_tokentype_t type)
+uc_compiler_parse_match(uc_compiler_t *compiler, uc_tokentype_t type)
 {
 	if (!uc_compiler_parse_check(compiler, type))
 		return false;
@@ -250,7 +250,7 @@ uc_compiler_parse_match(uc_compiler *compiler, uc_tokentype_t type)
 }
 
 static void
-uc_compiler_parse_synchronize(uc_compiler *compiler)
+uc_compiler_parse_synchronize(uc_compiler_t *compiler)
 {
 	compiler->parser->synchronizing = false;
 
@@ -279,14 +279,14 @@ uc_compiler_parse_synchronize(uc_compiler *compiler)
 	}
 }
 
-static uc_parse_rule *
+static uc_parse_rule_t *
 uc_compiler_parse_rule(uc_tokentype_t type)
 {
 	return &uc_compiler_parse_rules[type];
 }
 
 static bool
-uc_compiler_parse_at_assignment_op(uc_compiler *compiler)
+uc_compiler_parse_at_assignment_op(uc_compiler_t *compiler)
 {
 	switch (compiler->parser->curr.type) {
 	case TK_ASBAND:
@@ -308,9 +308,9 @@ uc_compiler_parse_at_assignment_op(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_parse_precedence(uc_compiler *compiler, uc_precedence_t precedence)
+uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence)
 {
-	uc_parse_rule *rule;
+	uc_parse_rule_t *rule;
 	bool assignable;
 
 	rule = uc_compiler_parse_rule(compiler->parser->curr.type);
@@ -355,7 +355,7 @@ uc_compiler_parse_precedence(uc_compiler *compiler, uc_precedence_t precedence)
 }
 
 static size_t
-uc_compiler_reladdr(uc_compiler *compiler, size_t from, size_t to)
+uc_compiler_reladdr(uc_compiler_t *compiler, size_t from, size_t to)
 {
 	ssize_t delta = to - from;
 
@@ -369,9 +369,9 @@ uc_compiler_reladdr(uc_compiler *compiler, size_t from, size_t to)
 }
 
 static size_t
-uc_compiler_emit_insn(uc_compiler *compiler, size_t srcpos, enum insn_type insn)
+uc_compiler_emit_insn(uc_compiler_t *compiler, size_t srcpos, uc_vm_insn_t insn)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t lineoff = uc_compiler_set_srcpos(compiler, srcpos);
 
 	compiler->last_insn = uc_chunk_add(chunk, (uint8_t)insn, lineoff);
@@ -380,7 +380,7 @@ uc_compiler_emit_insn(uc_compiler *compiler, size_t srcpos, enum insn_type insn)
 }
 
 static size_t
-uc_compiler_emit_u8(uc_compiler *compiler, size_t srcpos, uint8_t n)
+uc_compiler_emit_u8(uc_compiler_t *compiler, size_t srcpos, uint8_t n)
 {
 	return uc_chunk_add(
 		uc_compiler_current_chunk(compiler),
@@ -389,7 +389,7 @@ uc_compiler_emit_u8(uc_compiler *compiler, size_t srcpos, uint8_t n)
 }
 
 static size_t
-uc_compiler_emit_s8(uc_compiler *compiler, size_t srcpos, int8_t n)
+uc_compiler_emit_s8(uc_compiler_t *compiler, size_t srcpos, int8_t n)
 {
 	return uc_chunk_add(
 		uc_compiler_current_chunk(compiler),
@@ -398,9 +398,9 @@ uc_compiler_emit_s8(uc_compiler *compiler, size_t srcpos, int8_t n)
 }
 
 static size_t
-uc_compiler_emit_u16(uc_compiler *compiler, size_t srcpos, uint16_t n)
+uc_compiler_emit_u16(uc_compiler_t *compiler, size_t srcpos, uint16_t n)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t lineoff = uc_compiler_set_srcpos(compiler, srcpos);
 
 	uc_chunk_add(chunk, n / 0x100, lineoff);
@@ -410,9 +410,9 @@ uc_compiler_emit_u16(uc_compiler *compiler, size_t srcpos, uint16_t n)
 }
 
 static size_t
-uc_compiler_emit_s16(uc_compiler *compiler, size_t srcpos, int16_t n)
+uc_compiler_emit_s16(uc_compiler_t *compiler, size_t srcpos, int16_t n)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t lineoff = uc_compiler_set_srcpos(compiler, srcpos);
 	uint16_t v = n + 0x7fff;
 
@@ -423,9 +423,9 @@ uc_compiler_emit_s16(uc_compiler *compiler, size_t srcpos, int16_t n)
 }
 
 static size_t
-uc_compiler_emit_u32(uc_compiler *compiler, size_t srcpos, uint32_t n)
+uc_compiler_emit_u32(uc_compiler_t *compiler, size_t srcpos, uint32_t n)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t lineoff = uc_compiler_set_srcpos(compiler, srcpos);
 
 	uc_chunk_add(chunk, n / 0x1000000, lineoff);
@@ -437,9 +437,9 @@ uc_compiler_emit_u32(uc_compiler *compiler, size_t srcpos, uint32_t n)
 }
 
 static size_t
-uc_compiler_emit_s32(uc_compiler *compiler, size_t srcpos, int32_t n)
+uc_compiler_emit_s32(uc_compiler_t *compiler, size_t srcpos, int32_t n)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t lineoff = uc_compiler_set_srcpos(compiler, srcpos);
 	uint32_t v;
 
@@ -457,9 +457,9 @@ uc_compiler_emit_s32(uc_compiler *compiler, size_t srcpos, int32_t n)
 }
 
 static uint32_t
-uc_compiler_get_u32(uc_compiler *compiler, size_t off)
+uc_compiler_get_u32(uc_compiler_t *compiler, size_t off)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 
 	return chunk->entries[off + 0] * 0x1000000 +
 	       chunk->entries[off + 1] * 0x10000 +
@@ -468,9 +468,9 @@ uc_compiler_get_u32(uc_compiler *compiler, size_t off)
 }
 
 static void
-uc_compiler_set_u32(uc_compiler *compiler, size_t off, uint32_t n)
+uc_compiler_set_u32(uc_compiler_t *compiler, size_t off, uint32_t n)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 
 	chunk->entries[off + 0] = n / 0x1000000;
 	chunk->entries[off + 1] = (n / 0x10000) % 0x100;
@@ -479,9 +479,9 @@ uc_compiler_set_u32(uc_compiler *compiler, size_t off, uint32_t n)
 }
 
 static size_t
-uc_compiler_emit_constant(uc_compiler *compiler, size_t srcpos, uc_value_t *val)
+uc_compiler_emit_constant(uc_compiler_t *compiler, size_t srcpos, uc_value_t *val)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t cidx = uc_chunk_add_constant(chunk, val);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_LOAD);
@@ -491,9 +491,9 @@ uc_compiler_emit_constant(uc_compiler *compiler, size_t srcpos, uc_value_t *val)
 }
 
 static size_t
-uc_compiler_emit_regexp(uc_compiler *compiler, size_t srcpos, uc_value_t *val)
+uc_compiler_emit_regexp(uc_compiler_t *compiler, size_t srcpos, uc_value_t *val)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t cidx = uc_chunk_add_constant(chunk, val);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_LREXP);
@@ -503,9 +503,9 @@ uc_compiler_emit_regexp(uc_compiler *compiler, size_t srcpos, uc_value_t *val)
 }
 
 static size_t
-uc_compiler_emit_jmp(uc_compiler *compiler, size_t srcpos, uint32_t dest)
+uc_compiler_emit_jmp(uc_compiler_t *compiler, size_t srcpos, uint32_t dest)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_JMP);
 	uc_compiler_emit_u32(compiler, 0, dest ? uc_compiler_reladdr(compiler, chunk->count - 1, dest) : 0);
@@ -514,9 +514,9 @@ uc_compiler_emit_jmp(uc_compiler *compiler, size_t srcpos, uint32_t dest)
 }
 
 static size_t
-uc_compiler_emit_jmpz(uc_compiler *compiler, size_t srcpos, uint32_t dest)
+uc_compiler_emit_jmpz(uc_compiler_t *compiler, size_t srcpos, uint32_t dest)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_JMPZ);
 	uc_compiler_emit_u32(compiler, 0, dest ? uc_compiler_reladdr(compiler, chunk->count - 1, dest) : 0);
@@ -525,9 +525,9 @@ uc_compiler_emit_jmpz(uc_compiler *compiler, size_t srcpos, uint32_t dest)
 }
 
 static ssize_t
-uc_compiler_get_jmpaddr(uc_compiler *compiler, size_t off)
+uc_compiler_get_jmpaddr(uc_compiler_t *compiler, size_t off)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 
 	assert(chunk->entries[off] == I_JMP || chunk->entries[off] == I_JMPZ);
 	assert(off + 4 < chunk->count);
@@ -541,9 +541,9 @@ uc_compiler_get_jmpaddr(uc_compiler *compiler, size_t off)
 }
 
 static void
-uc_compiler_set_jmpaddr(uc_compiler *compiler, size_t off, uint32_t dest)
+uc_compiler_set_jmpaddr(uc_compiler_t *compiler, size_t off, uint32_t dest)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t addr = uc_compiler_reladdr(compiler, off, dest);
 
 	assert(chunk->entries[off] == I_JMP || chunk->entries[off] == I_JMPZ);
@@ -556,11 +556,11 @@ uc_compiler_set_jmpaddr(uc_compiler *compiler, size_t off, uint32_t dest)
 }
 
 static uc_function_t *
-uc_compiler_finish(uc_compiler *compiler)
+uc_compiler_finish(uc_compiler_t *compiler)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	uc_locals *locals = &compiler->locals;
-	uc_upvals *upvals = &compiler->upvals;
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	uc_locals_t *locals = &compiler->locals;
+	uc_upvals_t *upvals = &compiler->upvals;
 	size_t i;
 
 	uc_compiler_emit_insn(compiler, 0, I_LNULL);
@@ -601,16 +601,16 @@ uc_compiler_finish(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_enter_scope(uc_compiler *compiler)
+uc_compiler_enter_scope(uc_compiler_t *compiler)
 {
 	compiler->scope_depth++;
 }
 
 static void
-uc_compiler_leave_scope(uc_compiler *compiler)
+uc_compiler_leave_scope(uc_compiler_t *compiler)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	uc_locals *locals = &compiler->locals;
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	uc_locals_t *locals = &compiler->locals;
 
 	compiler->scope_depth--;
 
@@ -633,7 +633,7 @@ uc_compiler_leave_scope(uc_compiler *compiler)
 }
 
 static bool
-uc_compiler_is_strict(uc_compiler *compiler)
+uc_compiler_is_strict(uc_compiler_t *compiler)
 {
 	uc_function_t *fn = (uc_function_t *)compiler->function;
 
@@ -641,10 +641,10 @@ uc_compiler_is_strict(uc_compiler *compiler)
 }
 
 static ssize_t
-uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name, bool constant)
+uc_compiler_declare_local(uc_compiler_t *compiler, uc_value_t *name, bool constant)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	uc_locals *locals = &compiler->locals;
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	uc_locals_t *locals = &compiler->locals;
 	const char *str1, *str2;
 	size_t i, len1, len2;
 
@@ -688,9 +688,9 @@ uc_compiler_declare_local(uc_compiler *compiler, uc_value_t *name, bool constant
 }
 
 static ssize_t
-uc_compiler_initialize_local(uc_compiler *compiler)
+uc_compiler_initialize_local(uc_compiler_t *compiler)
 {
-	uc_locals *locals = &compiler->locals;
+	uc_locals_t *locals = &compiler->locals;
 
 	locals->entries[locals->count - 1].depth = compiler->scope_depth;
 
@@ -698,9 +698,9 @@ uc_compiler_initialize_local(uc_compiler *compiler)
 }
 
 static ssize_t
-uc_compiler_resolve_local(uc_compiler *compiler, uc_value_t *name, bool *constant)
+uc_compiler_resolve_local(uc_compiler_t *compiler, uc_value_t *name, bool *constant)
 {
-	uc_locals *locals = &compiler->locals;
+	uc_locals_t *locals = &compiler->locals;
 	const char *str1, *str2;
 	size_t i, len1, len2;
 
@@ -730,11 +730,11 @@ uc_compiler_resolve_local(uc_compiler *compiler, uc_value_t *name, bool *constan
 }
 
 static ssize_t
-uc_compiler_add_upval(uc_compiler *compiler, size_t idx, bool local, uc_value_t *name, bool constant)
+uc_compiler_add_upval(uc_compiler_t *compiler, size_t idx, bool local, uc_value_t *name, bool constant)
 {
 	uc_function_t *function = (uc_function_t *)compiler->function;
-	uc_upvals *upvals = &compiler->upvals;
-	uc_upval *uv;
+	uc_upvals_t *upvals = &compiler->upvals;
+	uc_upval_t *uv;
 	size_t i;
 
 	for (i = 0, uv = upvals->entries; i < upvals->count; i++, uv = upvals->entries + i)
@@ -761,7 +761,7 @@ uc_compiler_add_upval(uc_compiler *compiler, size_t idx, bool local, uc_value_t 
 }
 
 static ssize_t
-uc_compiler_resolve_upval(uc_compiler *compiler, uc_value_t *name, bool *constant)
+uc_compiler_resolve_upval(uc_compiler_t *compiler, uc_value_t *name, bool *constant)
 {
 	ssize_t idx;
 
@@ -785,10 +785,10 @@ uc_compiler_resolve_upval(uc_compiler *compiler, uc_value_t *name, bool *constan
 }
 
 static void
-uc_compiler_backpatch(uc_compiler *compiler, size_t break_addr, size_t next_addr)
+uc_compiler_backpatch(uc_compiler_t *compiler, size_t break_addr, size_t next_addr)
 {
-	uc_patchlist *pl = compiler->patchlist;
-	uc_patchlist *pp = pl->parent;
+	uc_patchlist_t *pl = compiler->patchlist;
+	uc_patchlist_t *pp = pl->parent;
 	volatile ssize_t jmpaddr;
 	size_t i;
 
@@ -828,11 +828,11 @@ uc_compiler_backpatch(uc_compiler *compiler, size_t break_addr, size_t next_addr
 }
 
 static void
-uc_compiler_emit_inc_dec(uc_compiler *compiler, uc_tokentype_t toktype, bool is_postfix)
+uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool is_postfix)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	uc_value_t *varname = NULL;
-	enum insn_type type;
+	uc_vm_insn_t type;
 	uint32_t cidx = 0;
 
 	/* determine kind of emitted load instruction and operand value (if any) */
@@ -910,7 +910,7 @@ uc_compiler_emit_inc_dec(uc_compiler *compiler, uc_tokentype_t toktype, bool is_
 
 
 static void
-uc_compiler_compile_unary(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_unary(uc_compiler_t *compiler, bool assignable)
 {
 	uc_tokentype_t type = compiler->parser->prev.type;
 
@@ -944,7 +944,7 @@ uc_compiler_compile_unary(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_binary(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_binary(uc_compiler_t *compiler, bool assignable)
 {
 	uc_tokentype_t type = compiler->parser->prev.type;
 
@@ -953,10 +953,10 @@ uc_compiler_compile_binary(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_delete(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_delete(uc_compiler_t *compiler, bool assignable)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	enum insn_type type;
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	uc_vm_insn_t type;
 
 #ifndef NO_LEGACY
 	/* If the delete keyword is followed by an opening paren, it might be a
@@ -1006,10 +1006,10 @@ uc_compiler_compile_delete(uc_compiler *compiler, bool assignable)
 	}
 }
 
-static enum insn_type
-uc_compiler_emit_variable_rw(uc_compiler *compiler, uc_value_t *varname, uc_tokentype_t type)
+static uc_vm_insn_t
+uc_compiler_emit_variable_rw(uc_compiler_t *compiler, uc_value_t *varname, uc_tokentype_t type)
 {
-	enum insn_type insn;
+	uc_vm_insn_t insn;
 	uint32_t sub_insn;
 	bool constant;
 	ssize_t idx;
@@ -1071,13 +1071,13 @@ uc_compiler_emit_variable_rw(uc_compiler *compiler, uc_value_t *varname, uc_toke
 }
 
 static void
-uc_compiler_compile_expression(uc_compiler *compiler)
+uc_compiler_compile_expression(uc_compiler_t *compiler)
 {
 	uc_compiler_parse_precedence(compiler, P_COMMA);
 }
 
 static bool
-uc_compiler_compile_assignment(uc_compiler *compiler, uc_value_t *var)
+uc_compiler_compile_assignment(uc_compiler_t *compiler, uc_value_t *var)
 {
 	uc_tokentype_t type = compiler->parser->curr.type;
 
@@ -1093,10 +1093,10 @@ uc_compiler_compile_assignment(uc_compiler *compiler, uc_value_t *var)
 }
 
 static bool
-uc_compiler_compile_arrowfn(uc_compiler *compiler, uc_value_t *args, bool restarg)
+uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool restarg)
 {
 	bool array = (ucv_type(args) == UC_ARRAY);
-	uc_compiler fncompiler = { 0 };
+	uc_compiler_t fncompiler = { 0 };
 	size_t i, pos, load_off;
 	uc_function_t *fn;
 	ssize_t slot;
@@ -1174,7 +1174,7 @@ uc_compiler_compile_arrowfn(uc_compiler *compiler, uc_value_t *args, bool restar
 }
 
 static uc_tokentype_t
-uc_compiler_compile_var_or_arrowfn(uc_compiler *compiler, bool assignable, uc_value_t *name)
+uc_compiler_compile_var_or_arrowfn(uc_compiler_t *compiler, bool assignable, uc_value_t *name)
 {
 	uc_tokentype_t rv;
 
@@ -1193,7 +1193,7 @@ uc_compiler_compile_var_or_arrowfn(uc_compiler *compiler, bool assignable, uc_va
 }
 
 static void
-uc_compiler_compile_paren(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_paren(uc_compiler_t *compiler, bool assignable)
 {
 	uc_value_t *varnames = NULL, *varname;
 	bool maybe_arrowfn = false;
@@ -1332,11 +1332,11 @@ out:
 }
 
 static void
-uc_compiler_compile_call(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_call(uc_compiler_t *compiler, bool assignable)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	uc_jmplist spreads = { 0 };
-	enum insn_type type;
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	uc_jmplist_t spreads = { 0 };
+	uc_vm_insn_t type;
 	size_t i, nargs = 0;
 
 	/* determine the kind of the lhs */
@@ -1388,13 +1388,13 @@ uc_compiler_compile_call(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_post_inc(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_post_inc(uc_compiler_t *compiler, bool assignable)
 {
 	uc_compiler_emit_inc_dec(compiler, compiler->parser->prev.type, true);
 }
 
 static bool
-uc_compiler_is_use_strict_pragma(uc_compiler *compiler)
+uc_compiler_is_use_strict_pragma(uc_compiler_t *compiler)
 {
 	uc_value_t *v;
 
@@ -1410,7 +1410,7 @@ uc_compiler_is_use_strict_pragma(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_constant(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_constant(uc_compiler_t *compiler, bool assignable)
 {
 	uc_function_t *fn;
 	int64_t n;
@@ -1475,14 +1475,14 @@ uc_compiler_compile_constant(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_comma(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_comma(uc_compiler_t *compiler, bool assignable)
 {
 	uc_compiler_emit_insn(compiler, 0, I_POP);
 	uc_compiler_parse_precedence(compiler, P_ASSIGN);
 }
 
 static void
-uc_compiler_compile_labelexpr(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_labelexpr(uc_compiler_t *compiler, bool assignable)
 {
 	uc_value_t *label = ucv_get(compiler->parser->prev.uv);
 
@@ -1491,7 +1491,7 @@ uc_compiler_compile_labelexpr(uc_compiler *compiler, bool assignable)
 }
 
 static bool
-uc_compiler_compile_delimitted_block(uc_compiler *compiler, uc_tokentype_t endtype)
+uc_compiler_compile_delimitted_block(uc_compiler_t *compiler, uc_tokentype_t endtype)
 {
 	while (!uc_compiler_parse_check(compiler, endtype) &&
 	       !uc_compiler_parse_check(compiler, TK_EOF))
@@ -1501,9 +1501,9 @@ uc_compiler_compile_delimitted_block(uc_compiler *compiler, uc_tokentype_t endty
 }
 
 static void
-uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_function(uc_compiler_t *compiler, bool assignable)
 {
-	uc_compiler fncompiler = { 0 };
+	uc_compiler_t fncompiler = { 0 };
 	uc_value_t *name = NULL;
 	ssize_t slot = -1, pos;
 	uc_tokentype_t type;
@@ -1609,9 +1609,9 @@ uc_compiler_compile_function(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_and(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_and(uc_compiler_t *compiler, bool assignable)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off;
 
 	uc_compiler_emit_insn(compiler, 0, I_COPY);
@@ -1623,9 +1623,9 @@ uc_compiler_compile_and(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_or(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_or(uc_compiler_t *compiler, bool assignable)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off, jmp_off;
 
 	uc_compiler_emit_insn(compiler, 0, I_COPY);
@@ -1639,7 +1639,7 @@ uc_compiler_compile_or(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_dot(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_dot(uc_compiler_t *compiler, bool assignable)
 {
 	/* no regexp literal possible after property access */
 	compiler->parser->lex.no_regexp = true;
@@ -1654,7 +1654,7 @@ uc_compiler_compile_dot(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_subscript(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_subscript(uc_compiler_t *compiler, bool assignable)
 {
 	/* compile lhs */
 	uc_compiler_compile_expression(compiler);
@@ -1669,9 +1669,9 @@ uc_compiler_compile_subscript(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_ternary(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_ternary(uc_compiler_t *compiler, bool assignable)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off, jmp_off;
 
 	/* jump to false branch */
@@ -1692,7 +1692,7 @@ uc_compiler_compile_ternary(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_array(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_array(uc_compiler_t *compiler, bool assignable)
 {
 	size_t hint_off, hint_count = 0, len = 0;
 
@@ -1751,7 +1751,7 @@ uc_compiler_compile_array(uc_compiler *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
+uc_compiler_compile_object(uc_compiler_t *compiler, bool assignable)
 {
 	size_t hint_off, hint_count = 0, len = 0;
 
@@ -1857,7 +1857,7 @@ uc_compiler_compile_object(uc_compiler *compiler, bool assignable)
 
 
 static void
-uc_compiler_declare_local_null(uc_compiler *compiler, size_t srcpos, uc_value_t *varname)
+uc_compiler_declare_local_null(uc_compiler_t *compiler, size_t srcpos, uc_value_t *varname)
 {
 	ssize_t existing_slot = uc_compiler_declare_local(compiler, varname, false);
 
@@ -1874,10 +1874,10 @@ uc_compiler_declare_local_null(uc_compiler *compiler, size_t srcpos, uc_value_t 
 }
 
 static size_t
-uc_compiler_declare_internal(uc_compiler *compiler, size_t srcpos, const char *name)
+uc_compiler_declare_internal(uc_compiler_t *compiler, size_t srcpos, const char *name)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	uc_locals *locals = &compiler->locals;
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	uc_locals_t *locals = &compiler->locals;
 
 	uc_vector_grow(locals);
 
@@ -1890,7 +1890,7 @@ uc_compiler_declare_internal(uc_compiler *compiler, size_t srcpos, const char *n
 }
 
 static void
-uc_compiler_compile_declexpr(uc_compiler *compiler, bool constant)
+uc_compiler_compile_declexpr(uc_compiler_t *compiler, bool constant)
 {
 	ssize_t slot;
 
@@ -1932,21 +1932,21 @@ uc_compiler_compile_declexpr(uc_compiler *compiler, bool constant)
 }
 
 static void
-uc_compiler_compile_local(uc_compiler *compiler)
+uc_compiler_compile_local(uc_compiler_t *compiler)
 {
 	uc_compiler_compile_declexpr(compiler, false);
 	uc_compiler_parse_consume(compiler, TK_SCOL);
 }
 
 static void
-uc_compiler_compile_const(uc_compiler *compiler)
+uc_compiler_compile_const(uc_compiler_t *compiler)
 {
 	uc_compiler_compile_declexpr(compiler, true);
 	uc_compiler_parse_consume(compiler, TK_SCOL);
 }
 
 static uc_tokentype_t
-uc_compiler_compile_altifblock(uc_compiler *compiler)
+uc_compiler_compile_altifblock(uc_compiler_t *compiler)
 {
 	uc_compiler_enter_scope(compiler);
 
@@ -1970,12 +1970,12 @@ uc_compiler_compile_altifblock(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_if(uc_compiler *compiler)
+uc_compiler_compile_if(uc_compiler_t *compiler)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off, jmp_off, i;
 	bool expect_endif = false;
-	uc_jmplist elifs = { 0 };
+	uc_jmplist_t elifs = { 0 };
 	uc_tokentype_t type;
 
 	/* parse & compile condition expression */
@@ -2076,10 +2076,10 @@ uc_compiler_compile_if(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_while(uc_compiler *compiler)
+uc_compiler_compile_while(uc_compiler_t *compiler)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	uc_patchlist p = { .depth = compiler->scope_depth };
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	uc_patchlist_t p = { .depth = compiler->scope_depth };
 	size_t cond_off, jmpz_off, end_off;
 
 	p.parent = compiler->patchlist;
@@ -2124,10 +2124,10 @@ uc_compiler_compile_while(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_for_in(uc_compiler *compiler, bool local, uc_token *kvar, uc_token *vvar)
+uc_compiler_compile_for_in(uc_compiler_t *compiler, bool local, uc_token_t *kvar, uc_token_t *vvar)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	uc_patchlist p = { .depth = compiler->scope_depth + 1 };
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	uc_patchlist_t p = { .depth = compiler->scope_depth + 1 };
 	size_t skip_jmp, test_jmp, key_slot, val_slot;
 
 	p.parent = compiler->patchlist;
@@ -2234,11 +2234,11 @@ uc_compiler_compile_for_in(uc_compiler *compiler, bool local, uc_token *kvar, uc
 }
 
 static void
-uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
+uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *var)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t test_off = 0, incr_off, skip_off, cond_off = 0;
-	uc_patchlist p = { .depth = compiler->scope_depth + 1 };
+	uc_patchlist_t p = { .depth = compiler->scope_depth + 1 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2343,9 +2343,9 @@ uc_compiler_compile_for_count(uc_compiler *compiler, bool local, uc_token *var)
 }
 
 static void
-uc_compiler_compile_for(uc_compiler *compiler)
+uc_compiler_compile_for(uc_compiler_t *compiler)
 {
-	uc_token keyvar = { 0 }, valvar = { 0 };
+	uc_token_t keyvar = { 0 }, valvar = { 0 };
 	bool local;
 
 	uc_compiler_parse_consume(compiler, TK_LPAREN);
@@ -2395,13 +2395,13 @@ out:
 }
 
 static void
-uc_compiler_compile_switch(uc_compiler *compiler)
+uc_compiler_compile_switch(uc_compiler_t *compiler)
 {
 	size_t i, test_jmp, skip_jmp, next_jmp, value_slot, default_off = 0;
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
-	uc_patchlist p = { .depth = compiler->scope_depth };
-	uc_locals *locals = &compiler->locals;
-	uc_jmplist cases = { 0 };
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	uc_patchlist_t p = { .depth = compiler->scope_depth };
+	uc_locals_t *locals = &compiler->locals;
+	uc_jmplist_t cases = { 0 };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2566,11 +2566,11 @@ uc_compiler_compile_switch(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_try(uc_compiler *compiler)
+uc_compiler_compile_try(uc_compiler_t *compiler)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t try_from = 0, try_to = 0, jmp_off = 0, ehvar_slot = 0;
-	uc_ehranges *ranges = &chunk->ehranges;
+	uc_ehranges_t *ranges = &chunk->ehranges;
 
 	try_from = chunk->count;
 	ehvar_slot = compiler->locals.count;
@@ -2636,12 +2636,12 @@ uc_compiler_compile_try(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_control(uc_compiler *compiler)
+uc_compiler_compile_control(uc_compiler_t *compiler)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	uc_tokentype_t type = compiler->parser->prev.type;
-	uc_patchlist *p = compiler->patchlist;
-	uc_locals *locals = &compiler->locals;
+	uc_patchlist_t *p = compiler->patchlist;
+	uc_locals_t *locals = &compiler->locals;
 	size_t i, pos = compiler->parser->prev.pos;
 
 	if (!p) {
@@ -2666,9 +2666,9 @@ uc_compiler_compile_control(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_return(uc_compiler *compiler)
+uc_compiler_compile_return(uc_compiler_t *compiler)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t off = chunk->count;
 
 	uc_compiler_compile_expstmt(compiler);
@@ -2684,9 +2684,9 @@ uc_compiler_compile_return(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_tplexp(uc_compiler *compiler)
+uc_compiler_compile_tplexp(uc_compiler_t *compiler)
 {
-	uc_chunk *chunk = uc_compiler_current_chunk(compiler);
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t off = chunk->count;
 
 	uc_compiler_compile_expression(compiler);
@@ -2701,14 +2701,14 @@ uc_compiler_compile_tplexp(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_text(uc_compiler *compiler)
+uc_compiler_compile_text(uc_compiler_t *compiler)
 {
 	uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
 	uc_compiler_emit_insn(compiler, 0, I_PRINT);
 }
 
 static void
-uc_compiler_compile_block(uc_compiler *compiler)
+uc_compiler_compile_block(uc_compiler_t *compiler)
 {
 	uc_compiler_enter_scope(compiler);
 
@@ -2722,7 +2722,7 @@ uc_compiler_compile_block(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_expstmt(uc_compiler *compiler)
+uc_compiler_compile_expstmt(uc_compiler_t *compiler)
 {
 	/* empty statement */
 	if (uc_compiler_parse_match(compiler, TK_SCOL))
@@ -2752,7 +2752,7 @@ uc_compiler_compile_expstmt(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_statement(uc_compiler *compiler)
+uc_compiler_compile_statement(uc_compiler_t *compiler)
 {
 	if (uc_compiler_parse_match(compiler, TK_IF))
 		uc_compiler_compile_if(compiler);
@@ -2783,7 +2783,7 @@ uc_compiler_compile_statement(uc_compiler *compiler)
 }
 
 static void
-uc_compiler_compile_declaration(uc_compiler *compiler)
+uc_compiler_compile_declaration(uc_compiler_t *compiler)
 {
 	if (uc_compiler_parse_match(compiler, TK_LOCAL))
 		uc_compiler_compile_local(compiler);
@@ -2797,10 +2797,10 @@ uc_compiler_compile_declaration(uc_compiler *compiler)
 }
 
 uc_function_t *
-uc_compile(uc_parse_config *config, uc_source *source, char **errp)
+uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
 {
-	uc_parser parser = { .config = config };
-	uc_compiler compiler = { .parser = &parser };
+	uc_parser_t parser = { .config = config };
+	uc_compiler_t compiler = { .parser = &parser };
 	uc_function_t *fn;
 
 	uc_lexer_init(&parser.lex, config, source);

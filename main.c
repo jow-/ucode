@@ -74,13 +74,13 @@ register_variable(uc_value_t *scope, const char *key, uc_value_t *val)
 
 
 static int
-parse(uc_parse_config *config, uc_source *src,
+parse(uc_parse_config_t *config, uc_source_t *src,
       uc_value_t *env, uc_value_t *modules,
       int argc, char **argv, int trace)
 {
 	uc_value_t *globals = NULL, *res = NULL, *arr, *name, *mod;
 	uc_function_t *entry;
-	uc_vm vm = { 0 };
+	uc_vm_t vm = { 0 };
 	int i, rc = 0;
 	size_t idx;
 	char *err;
@@ -154,7 +154,7 @@ out:
 	return rc;
 }
 
-static uc_source *
+static uc_source_t *
 read_stdin(char **ptr)
 {
 	size_t rlen = 0, tlen = 0;
@@ -225,11 +225,11 @@ int
 main(int argc, char **argv)
 {
 	uc_value_t *env = NULL, *modules = NULL, *o, *p;
-	uc_source *source = NULL, *envfile = NULL;
+	uc_source_t *source = NULL, *envfile = NULL;
 	int opt, rv = 0, trace = 0;
 	char *stdin = NULL, *c;
 
-	uc_parse_config config = {
+	uc_parse_config_t config = {
 		.strict_declarations = false,
 		.lstrip_blocks = true,
 		.trim_blocks = true

@@ -117,7 +117,7 @@ ucv_gc_mark(uc_value_t *uv)
 {
 	uc_function_t *function;
 	uc_closure_t *closure;
-	uc_upvalref_t *upval;
+	uc_upval_tref_t *upval;
 	uc_object_t *object;
 	uc_array_t *array;
 	struct lh_entry *entry;
@@ -169,7 +169,7 @@ ucv_gc_mark(uc_value_t *uv)
 		break;
 
 	case UC_UPVALUE:
-		upval = (uc_upvalref_t *)uv;
+		upval = (uc_upval_tref_t *)uv;
 		ucv_gc_mark(upval->value);
 		break;
 
@@ -185,7 +185,7 @@ ucv_free(uc_value_t *uv, bool retain)
 	uc_ressource_t *ressource;
 	uc_function_t *function;
 	uc_closure_t *closure;
-	uc_upvalref_t *upval;
+	uc_upval_tref_t *upval;
 	uc_regexp_t *regexp;
 	uc_object_t *object;
 	uc_array_t *array;
@@ -253,7 +253,7 @@ ucv_free(uc_value_t *uv, bool retain)
 		break;
 
 	case UC_UPVALUE:
-		upval = (uc_upvalref_t *)uv;
+		upval = (uc_upval_tref_t *)uv;
 		ucv_put_value(upval->value, retain);
 		break;
 	}
@@ -560,13 +560,13 @@ ucv_double_get(uc_value_t *uv)
 
 
 uc_value_t *
-ucv_array_new(uc_vm *vm)
+ucv_array_new(uc_vm_t *vm)
 {
 	return ucv_array_new_length(vm, 0);
 }
 
 uc_value_t *
-ucv_array_new_length(uc_vm *vm, size_t length)
+ucv_array_new_length(uc_vm_t *vm, size_t length)
 {
 	uc_array_t *array;
 
@@ -755,7 +755,7 @@ ucv_free_object_entry(struct lh_entry *entry)
 }
 
 uc_value_t *
-ucv_object_new(uc_vm *vm)
+ucv_object_new(uc_vm_t *vm)
 {
 	struct lh_table *table;
 	uc_object_t *object;
@@ -860,7 +860,7 @@ ucv_object_length(uc_value_t *uv)
 
 
 uc_value_t *
-ucv_function_new(const char *name, size_t srcpos, uc_source *source)
+ucv_function_new(const char *name, size_t srcpos, uc_source_t *source)
 {
 	size_t namelen = 0;
 	uc_function_t *fn;
@@ -924,16 +924,16 @@ ucv_cfunction_new(const char *name, uc_cfn_ptr_t fptr)
 
 
 uc_value_t *
-ucv_closure_new(uc_vm *vm, uc_function_t *function, bool arrow_fn)
+ucv_closure_new(uc_vm_t *vm, uc_function_t *function, bool arrow_fn)
 {
 	uc_closure_t *closure;
 
-	closure = xalloc(sizeof(*closure) + (sizeof(uc_upvalref_t *) * function->nupvals));
+	closure = xalloc(sizeof(*closure) + (sizeof(uc_upval_tref_t *) * function->nupvals));
 	closure->header.type = UC_CLOSURE;
 	closure->header.refcount = 1;
 	closure->function = function;
 	closure->is_arrow = arrow_fn;
-	closure->upvals = function->nupvals ? (uc_upvalref_t **)((uintptr_t)closure + ALIGN(sizeof(*closure))) : NULL;
+	closure->upvals = function->nupvals ? (uc_upval_tref_t **)((uintptr_t)closure + ALIGN(sizeof(*closure))) : NULL;
 
 	if (vm)
 		ucv_ref(&vm->values, &closure->ref);
@@ -943,7 +943,7 @@ ucv_closure_new(uc_vm *vm, uc_function_t *function, bool arrow_fn)
 
 
 uc_ressource_type_t *
-ucv_ressource_type_add(uc_vm *vm, const char *name, uc_value_t *proto, void (*freefn)(void *))
+ucv_ressource_type_add(uc_vm_t *vm, const char *name, uc_value_t *proto, void (*freefn)(void *))
 {
 	uc_ressource_type_t *type;
 
@@ -967,7 +967,7 @@ ucv_ressource_type_add(uc_vm *vm, const char *name, uc_value_t *proto, void (*fr
 }
 
 uc_ressource_type_t *
-ucv_ressource_type_lookup(uc_vm *vm, const char *name)
+ucv_ressource_type_lookup(uc_vm_t *vm, const char *name)
 {
 	size_t i;
 
@@ -1053,7 +1053,7 @@ ucv_regexp_new(const char *pattern, bool icase, bool newline, bool global, char 
 uc_value_t *
 ucv_upvalref_new(size_t slot)
 {
-	uc_upvalref_t *up;
+	uc_upval_tref_t *up;
 
 	up = xalloc(sizeof(*up));
 	up->header.type = UC_UPVALUE;
@@ -1139,7 +1139,7 @@ ucv_property_get(uc_value_t *uv, const char *key)
 
 
 uc_value_t *
-ucv_from_json(uc_vm *vm, json_object *jso)
+ucv_from_json(uc_vm_t *vm, json_object *jso)
 {
 	//uc_array_t *arr;
 	uc_value_t *uv, *item;
@@ -1347,7 +1347,7 @@ ucv_to_string_json_encoded(uc_stringbuf_t *pb, const char *s, size_t len, bool r
 }
 
 static bool
-ucv_call_tostring(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
+ucv_call_tostring(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 {
 	uc_value_t *proto = ucv_prototype_get(uv);
 	uc_value_t *tostr = ucv_object_get(proto, "tostring", NULL);
@@ -1403,7 +1403,7 @@ ucv_to_stringbuf_add_padding(uc_stringbuf_t *pb, char pad_char, size_t pad_size)
 }
 
 void
-ucv_to_stringbuf_formatted(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t depth, char pad_char, size_t pad_size)
+ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t depth, char pad_char, size_t pad_size)
 {
 	bool json = (pad_char != '\0');
 	uc_ressource_type_t *restype;
@@ -1632,7 +1632,7 @@ ucv_to_stringbuf_formatted(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t
 }
 
 static char *
-ucv_to_string_any(uc_vm *vm, uc_value_t *uv, char pad_char, size_t pad_size)
+ucv_to_string_any(uc_vm_t *vm, uc_value_t *uv, char pad_char, size_t pad_size)
 {
 	uc_stringbuf_t *pb = xprintbuf_new();
 	char *rv;
@@ -1647,13 +1647,13 @@ ucv_to_string_any(uc_vm *vm, uc_value_t *uv, char pad_char, size_t pad_size)
 }
 
 char *
-ucv_to_string(uc_vm *vm, uc_value_t *uv)
+ucv_to_string(uc_vm_t *vm, uc_value_t *uv)
 {
 	return ucv_to_string_any(vm, uv, '\0', 0);
 }
 
 char *
-ucv_to_jsonstring_formatted(uc_vm *vm, uc_value_t *uv, char pad_char, size_t pad_size)
+ucv_to_jsonstring_formatted(uc_vm_t *vm, uc_value_t *uv, char pad_char, size_t pad_size)
 {
 	return ucv_to_string_any(vm, uv, pad_char ? pad_char : '\1', pad_size);
 }
@@ -1757,7 +1757,7 @@ ucv_equal(uc_value_t *uv1, uc_value_t *uv2)
 }
 
 void
-ucv_gc(uc_vm *vm, bool final)
+ucv_gc(uc_vm_t *vm, bool final)
 {
 	uc_weakref_t *ref, *tmp;
 	uc_value_t *val;

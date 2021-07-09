@@ -81,7 +81,7 @@ static const char *exception_type_strings[] = {
 
 
 static void
-uc_vm_reset_stack(uc_vm *vm)
+uc_vm_reset_stack(uc_vm_t *vm)
 {
 	while (vm->stack.count > 0) {
 		vm->stack.count--;
@@ -91,17 +91,17 @@ uc_vm_reset_stack(uc_vm *vm)
 }
 
 static uc_value_t *
-uc_vm_callframe_pop(uc_vm *vm);
+uc_vm_callframe_pop(uc_vm_t *vm);
 
 static void
-uc_vm_reset_callframes(uc_vm *vm)
+uc_vm_reset_callframes(uc_vm_t *vm)
 {
 	while (vm->callframes.count > 0)
 		ucv_put(uc_vm_callframe_pop(vm));
 }
 
 static uc_value_t *
-uc_vm_alloc_global_scope(uc_vm *vm)
+uc_vm_alloc_global_scope(uc_vm_t *vm)
 {
 	const char *path[] = { LIB_SEARCH_PATH };
 	uc_value_t *scope, *arr;
@@ -132,9 +132,9 @@ uc_vm_alloc_global_scope(uc_vm *vm)
 }
 
 static void
-uc_vm_output_exception(uc_vm *vm, uc_exception *ex);
+uc_vm_output_exception(uc_vm_t *vm, uc_exception_t *ex);
 
-void uc_vm_init(uc_vm *vm, uc_parse_config *config)
+void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 {
 	vm->exception.type = EXCEPTION_NONE;
 	vm->exception.message = NULL;
@@ -159,9 +159,9 @@ void uc_vm_init(uc_vm *vm, uc_parse_config *config)
 	uc_vm_trace_set(vm, 0);
 }
 
-void uc_vm_free(uc_vm *vm)
+void uc_vm_free(uc_vm_t *vm)
 {
-	uc_upvalref_t *ref;
+	uc_upval_tref_t *ref;
 	size_t i;
 
 	ucv_put(vm->exception.stacktrace);
@@ -191,34 +191,34 @@ void uc_vm_free(uc_vm *vm)
 	uc_vector_clear(&vm->restypes);
 }
 
-static uc_chunk *
-uc_vm_frame_chunk(uc_callframe *frame)
+static uc_chunk_t *
+uc_vm_frame_chunk(uc_callframe_t *frame)
 {
 	return frame->closure ? &frame->closure->function->chunk : NULL;
 }
 
-static uc_callframe *
-uc_vm_current_frame(uc_vm *vm)
+static uc_callframe_t *
+uc_vm_current_frame(uc_vm_t *vm)
 {
 	return uc_vector_last(&vm->callframes);
 }
 
-static uc_chunk *
-uc_vm_current_chunk(uc_vm *vm)
+static uc_chunk_t *
+uc_vm_current_chunk(uc_vm_t *vm)
 {
 	return uc_vm_frame_chunk(uc_vm_current_frame(vm));
 }
 
 static bool
-uc_vm_is_strict(uc_vm *vm)
+uc_vm_is_strict(uc_vm_t *vm)
 {
 	return uc_vm_current_frame(vm)->strict;
 }
 
-static enum insn_type
-uc_vm_decode_insn(uc_vm *vm, uc_callframe *frame, uc_chunk *chunk)
+static uc_vm_insn_t
+uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 {
-	enum insn_type insn;
+	uc_vm_insn_t insn;
 
 #ifndef NDEBUG
 	uint8_t *end = chunk->entries + chunk->count;
@@ -283,7 +283,7 @@ uc_vm_decode_insn(uc_vm *vm, uc_callframe *frame, uc_chunk *chunk)
 
 
 static char *
-uc_vm_format_val(uc_vm *vm, uc_value_t *val)
+uc_vm_format_val(uc_vm_t *vm, uc_value_t *val)
 {
 	if (!vm->strbuf)
 		vm->strbuf = xprintbuf_new();
@@ -301,12 +301,12 @@ uc_vm_format_val(uc_vm *vm, uc_value_t *val)
 }
 
 static void
-uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
+uc_vm_frame_dump(uc_vm_t *vm, uc_callframe_t *frame)
 {
-	uc_chunk *chunk = uc_vm_frame_chunk(frame);
+	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
 	uc_function_t *function;
 	uc_closure_t *closure;
-	uc_upvalref_t *ref;
+	uc_upval_tref_t *ref;
 	uc_value_t *v;
 	size_t i;
 
@@ -361,7 +361,7 @@ uc_vm_frame_dump(uc_vm *vm, uc_callframe *frame)
 }
 
 void
-uc_vm_stack_push(uc_vm *vm, uc_value_t *value)
+uc_vm_stack_push(uc_vm_t *vm, uc_value_t *value)
 {
 	uc_vector_grow(&vm->stack);
 
@@ -378,7 +378,7 @@ uc_vm_stack_push(uc_vm *vm, uc_value_t *value)
 }
 
 uc_value_t *
-uc_vm_stack_pop(uc_vm *vm)
+uc_vm_stack_pop(uc_vm_t *vm)
 {
 	uc_value_t *rv;
 
@@ -396,13 +396,13 @@ uc_vm_stack_pop(uc_vm *vm)
 }
 
 uc_value_t *
-uc_vm_stack_peek(uc_vm *vm, size_t offset)
+uc_vm_stack_peek(uc_vm_t *vm, size_t offset)
 {
 	return vm->stack.entries[vm->stack.count + (-1 - offset)];
 }
 
 static void
-uc_vm_stack_set(uc_vm *vm, size_t offset, uc_value_t *value)
+uc_vm_stack_set(uc_vm_t *vm, size_t offset, uc_value_t *value)
 {
 	if (vm->trace) {
 		fprintf(stderr, "  [!%zu] %s\n",
@@ -415,10 +415,10 @@ uc_vm_stack_set(uc_vm *vm, size_t offset, uc_value_t *value)
 }
 
 static void
-uc_vm_call_native(uc_vm *vm, uc_value_t *ctx, uc_cfunction_t *fptr, bool mcall, size_t nargs)
+uc_vm_call_native(uc_vm_t *vm, uc_value_t *ctx, uc_cfunction_t *fptr, bool mcall, size_t nargs)
 {
 	uc_value_t *res = NULL;
-	uc_callframe *frame;
+	uc_callframe_t *frame;
 
 	/* add new callframe */
 	uc_vector_grow(&vm->callframes);
@@ -446,10 +446,10 @@ uc_vm_call_native(uc_vm *vm, uc_value_t *ctx, uc_cfunction_t *fptr, bool mcall, 
 }
 
 static bool
-uc_vm_call_function(uc_vm *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, size_t argspec)
+uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, size_t argspec)
 {
 	size_t i, j, stackoff, nargs = argspec & 0xffff, nspreads = argspec >> 16;
-	uc_callframe *frame = NULL;
+	uc_callframe_t *frame = NULL;
 	uc_value_t *ellip, *arg;
 	uc_function_t *function;
 	uc_closure_t *closure;
@@ -582,14 +582,14 @@ uc_vm_call_function(uc_vm *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, siz
 	return true;
 }
 
-static uc_source *last_source = NULL;
+static uc_source_t *last_source = NULL;
 static size_t last_srcpos = 0;
 
 static void
-uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
+uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
-	uc_chunk *chunk = uc_vm_frame_chunk(frame);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
 	uc_stringbuf_t *buf = NULL;
 	uc_value_t *cnst = NULL;
 	size_t srcpos;
@@ -698,9 +698,9 @@ uc_dump_insn(uc_vm *vm, uint8_t *pos, enum insn_type insn)
 }
 
 static uc_value_t *
-uc_vm_exception_tostring(uc_vm *vm, size_t nargs)
+uc_vm_exception_tostring(uc_vm_t *vm, size_t nargs)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
 	uc_value_t *message = ucv_object_get(frame->ctx, "message", NULL);
 
 	return message ? ucv_get(message) : ucv_string_new("Exception");
@@ -709,7 +709,7 @@ uc_vm_exception_tostring(uc_vm *vm, size_t nargs)
 static uc_value_t *exception_prototype = NULL;
 
 static uc_value_t *
-uc_vm_exception_new(uc_vm *vm, uc_exception_type_t type, const char *message, uc_value_t *stacktrace)
+uc_vm_exception_new(uc_vm_t *vm, uc_exception_type_t type, const char *message, uc_value_t *stacktrace)
 {
 	uc_value_t *exo;
 
@@ -732,10 +732,10 @@ uc_vm_exception_new(uc_vm *vm, uc_exception_type_t type, const char *message, uc
 }
 
 static bool
-uc_vm_handle_exception(uc_vm *vm)
+uc_vm_handle_exception(uc_vm_t *vm)
 {
-	uc_callframe *frame = NULL;
-	uc_chunk *chunk = NULL;
+	uc_callframe_t *frame = NULL;
+	uc_chunk_t *chunk = NULL;
 	uc_value_t *exo;
 	size_t i, pos;
 
@@ -794,11 +794,11 @@ uc_vm_handle_exception(uc_vm *vm)
 }
 
 static uc_value_t *
-uc_vm_capture_stacktrace(uc_vm *vm, size_t i)
+uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 {
 	uc_value_t *stacktrace, *entry, *last = NULL;
 	uc_function_t *function;
-	uc_callframe *frame;
+	uc_callframe_t *frame;
 	size_t off, srcpos;
 	char *name;
 
@@ -848,12 +848,12 @@ uc_vm_capture_stacktrace(uc_vm *vm, size_t i)
 }
 
 static uc_value_t *
-uc_vm_get_error_context(uc_vm *vm)
+uc_vm_get_error_context(uc_vm_t *vm)
 {
 	uc_value_t *stacktrace;
-	uc_callframe *frame;
+	uc_callframe_t *frame;
 	uc_stringbuf_t *buf;
-	uc_chunk *chunk;
+	uc_chunk_t *chunk;
 	size_t offset, i;
 
 	/* skip to first non-native function call frame */
@@ -885,7 +885,7 @@ uc_vm_get_error_context(uc_vm *vm)
 }
 
 void __attribute__((format(printf, 3, 0)))
-uc_vm_raise_exception(uc_vm *vm, uc_exception_type_t type, const char *fmt, ...)
+uc_vm_raise_exception(uc_vm_t *vm, uc_exception_type_t type, const char *fmt, ...)
 {
 	va_list ap;
 
@@ -903,7 +903,7 @@ uc_vm_raise_exception(uc_vm *vm, uc_exception_type_t type, const char *fmt, ...)
 
 
 static void
-uc_vm_insn_load(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_load(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	switch (insn) {
 	case I_LOAD:
@@ -928,7 +928,7 @@ uc_vm_insn_load(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_load_regexp(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_load_regexp(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *re, *jstr = uc_chunk_get_constant(uc_vm_current_chunk(vm), vm->arg.u32);
 	bool icase = false, newline = false, global = false;
@@ -960,19 +960,19 @@ uc_vm_insn_load_regexp(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_load_null(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_load_null(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_vm_stack_push(vm, NULL);
 }
 
 static void
-uc_vm_insn_load_bool(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_load_bool(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_vm_stack_push(vm, ucv_boolean_new(insn == I_LTRUE));
 }
 
 static void
-uc_vm_insn_load_var(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_load_var(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *name, *val = NULL;
 	uc_value_t *scope, *next;
@@ -1008,7 +1008,7 @@ uc_vm_insn_load_var(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_load_val(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_load_val(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *k = uc_vm_stack_pop(vm);
 	uc_value_t *v = uc_vm_stack_pop(vm);
@@ -1032,10 +1032,10 @@ uc_vm_insn_load_val(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_load_upval(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_load_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
-	uc_upvalref_t *ref = frame->closure->upvals[vm->arg.u32];
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_upval_tref_t *ref = frame->closure->upvals[vm->arg.u32];
 
 	if (ref->closed)
 		uc_vm_stack_push(vm, ucv_get(ref->value));
@@ -1044,19 +1044,19 @@ uc_vm_insn_load_upval(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_load_local(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_load_local(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
 
 	uc_vm_stack_push(vm, ucv_get(vm->stack.entries[frame->stackframe + vm->arg.u32]));
 }
 
-static uc_upvalref_t *
-uc_vm_capture_upval(uc_vm *vm, size_t slot)
+static uc_upval_tref_t *
+uc_vm_capture_upval(uc_vm_t *vm, size_t slot)
 {
-	uc_upvalref_t *curr = vm->open_upvals;
-	uc_upvalref_t *prev = NULL;
-	uc_upvalref_t *created;
+	uc_upval_tref_t *curr = vm->open_upvals;
+	uc_upval_tref_t *prev = NULL;
+	uc_upval_tref_t *created;
 	char *s;
 
 	while (curr && curr->slot > slot) {
@@ -1074,7 +1074,7 @@ uc_vm_capture_upval(uc_vm *vm, size_t slot)
 		return curr;
 	}
 
-	created = (uc_upvalref_t *)ucv_upvalref_new(slot);
+	created = (uc_upval_tref_t *)ucv_upvalref_new(slot);
 	created->next = curr;
 
 	if (vm->trace) {
@@ -1092,9 +1092,9 @@ uc_vm_capture_upval(uc_vm *vm, size_t slot)
 }
 
 static void
-uc_vm_close_upvals(uc_vm *vm, size_t slot)
+uc_vm_close_upvals(uc_vm_t *vm, size_t slot)
 {
-	uc_upvalref_t *ref;
+	uc_upval_tref_t *ref;
 
 	while (vm->open_upvals && vm->open_upvals->slot >= slot) {
 		ref = vm->open_upvals;
@@ -1113,9 +1113,9 @@ uc_vm_close_upvals(uc_vm *vm, size_t slot)
 }
 
 static void
-uc_vm_insn_load_closure(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_load_closure(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
 	uc_value_t *fno = uc_chunk_get_constant(uc_vm_current_chunk(vm), vm->arg.u32);
 	uc_function_t *function = (uc_function_t *)fno;
 	uc_closure_t *closure = (uc_closure_t *)ucv_closure_new(vm, function, insn == I_ARFN);
@@ -1144,7 +1144,7 @@ uc_vm_insn_load_closure(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_store_var(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_store_var(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *name, *v = uc_vm_stack_pop(vm);
 	uc_value_t *scope, *next;
@@ -1182,7 +1182,7 @@ uc_vm_insn_store_var(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_store_val(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *v = uc_vm_stack_pop(vm);
 	uc_value_t *k = uc_vm_stack_pop(vm);
@@ -1205,10 +1205,10 @@ uc_vm_insn_store_val(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_store_upval(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_store_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
-	uc_upvalref_t *ref = frame->closure->upvals[vm->arg.u32];
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_upval_tref_t *ref = frame->closure->upvals[vm->arg.u32];
 	uc_value_t *val = ucv_get(uc_vm_stack_peek(vm, 0));
 
 	if (ref->closed) {
@@ -1221,16 +1221,16 @@ uc_vm_insn_store_upval(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_store_local(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_store_local(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
 	uc_value_t *val = ucv_get(uc_vm_stack_peek(vm, 0));
 
 	uc_vm_stack_set(vm, frame->stackframe + vm->arg.u32, val);
 }
 
 static uc_value_t *
-uc_vm_value_bitop(uc_vm *vm, enum insn_type operation, uc_value_t *value, uc_value_t *operand)
+uc_vm_value_bitop(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_value_t *operand)
 {
 	uc_value_t *rv = NULL;
 	int64_t n1, n2;
@@ -1271,7 +1271,7 @@ uc_vm_value_bitop(uc_vm *vm, enum insn_type operation, uc_value_t *value, uc_val
 }
 
 static uc_value_t *
-uc_vm_value_arith(uc_vm *vm, enum insn_type operation, uc_value_t *value, uc_value_t *operand)
+uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_value_t *operand)
 {
 	uc_value_t *rv = NULL;
 	uc_type_t t1, t2;
@@ -1386,7 +1386,7 @@ uc_vm_value_arith(uc_vm *vm, enum insn_type operation, uc_value_t *value, uc_val
 }
 
 static void
-uc_vm_insn_update_var(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_update_var(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *name, *val, *inc = uc_vm_stack_pop(vm);
 	uc_value_t *scope, *next;
@@ -1428,7 +1428,7 @@ uc_vm_insn_update_var(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_update_val(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *inc = uc_vm_stack_pop(vm);
 	uc_value_t *k = uc_vm_stack_pop(vm);
@@ -1457,11 +1457,11 @@ uc_vm_insn_update_val(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_update_upval(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_update_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
 	size_t slot = vm->arg.u32 & 0x00FFFFFF;
-	uc_upvalref_t *ref = frame->closure->upvals[slot];
+	uc_upval_tref_t *ref = frame->closure->upvals[slot];
 	uc_value_t *inc = uc_vm_stack_pop(vm);
 	uc_value_t *val;
 
@@ -1486,9 +1486,9 @@ uc_vm_insn_update_upval(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_update_local(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_update_local(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
 	size_t slot = vm->arg.u32 & 0x00FFFFFF;
 	uc_value_t *inc = uc_vm_stack_pop(vm);
 	uc_value_t *val;
@@ -1503,7 +1503,7 @@ uc_vm_insn_update_local(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_narr(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_narr(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *arr = ucv_array_new_length(vm, vm->arg.u32);
 
@@ -1511,7 +1511,7 @@ uc_vm_insn_narr(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_parr(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_parr(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *arr = uc_vm_stack_peek(vm, vm->arg.u32);
 	size_t idx;
@@ -1526,7 +1526,7 @@ uc_vm_insn_parr(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_marr(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_marr(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *src = uc_vm_stack_pop(vm);
 	uc_value_t *dst = uc_vm_stack_peek(vm, 0);
@@ -1549,7 +1549,7 @@ uc_vm_insn_marr(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_nobj(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_nobj(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *obj = ucv_object_new(vm);
 
@@ -1557,7 +1557,7 @@ uc_vm_insn_nobj(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_sobj(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_sobj(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *obj = uc_vm_stack_peek(vm, vm->arg.u32);
 	uc_value_t *val;
@@ -1575,7 +1575,7 @@ uc_vm_insn_sobj(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_mobj(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_mobj(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *src = uc_vm_stack_pop(vm);
 	uc_value_t *dst = uc_vm_stack_peek(vm, 0);
@@ -1611,7 +1611,7 @@ uc_vm_insn_mobj(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_arith(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_arith(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *r2 = uc_vm_stack_pop(vm);
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
@@ -1626,7 +1626,7 @@ uc_vm_insn_arith(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_plus_minus(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_plus_minus(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *v = uc_vm_stack_pop(vm);
 	bool is_sub = (insn == I_MINUS);
@@ -1650,7 +1650,7 @@ uc_vm_insn_plus_minus(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_bitop(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_bitop(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *r2 = uc_vm_stack_pop(vm);
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
@@ -1665,7 +1665,7 @@ uc_vm_insn_bitop(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_complement(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_complement(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *v = uc_vm_stack_pop(vm);
 	int64_t n;
@@ -1680,7 +1680,7 @@ uc_vm_insn_complement(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_rel(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_rel(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *r2 = uc_vm_stack_pop(vm);
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
@@ -1694,7 +1694,7 @@ uc_vm_insn_rel(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_in(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_in(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *r2 = uc_vm_stack_pop(vm);
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
@@ -1740,7 +1740,7 @@ uc_vm_insn_in(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_equality(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_equality(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *r2 = uc_vm_stack_pop(vm);
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
@@ -1758,7 +1758,7 @@ uc_vm_insn_equality(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_not(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_not(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
 
@@ -1767,10 +1767,10 @@ uc_vm_insn_not(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_jmp(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_jmp(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
-	uc_chunk *chunk = uc_vm_frame_chunk(frame);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
 	int32_t addr = vm->arg.s32;
 
 	/* ip already has been incremented */
@@ -1786,10 +1786,10 @@ uc_vm_insn_jmp(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_jmpz(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_jmpz(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
-	uc_chunk *chunk = uc_vm_frame_chunk(frame);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
 	uc_value_t *v = uc_vm_stack_pop(vm);
 	int32_t addr = vm->arg.s32;
 
@@ -1809,7 +1809,7 @@ uc_vm_insn_jmpz(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_next(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_next(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *k = uc_vm_stack_pop(vm);
 	uc_value_t *v = uc_vm_stack_pop(vm);
@@ -1882,14 +1882,14 @@ uc_vm_insn_next(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_close_upval(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_close_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_vm_close_upvals(vm, vm->stack.count - 1);
 	ucv_put(uc_vm_stack_pop(vm));
 }
 
 static void
-uc_vm_insn_call(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_call(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *fno = ucv_get(uc_vm_stack_peek(vm, vm->arg.u32 & 0xffff));
 	uc_value_t *ctx = NULL;
@@ -1903,7 +1903,7 @@ uc_vm_insn_call(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_mcall(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_mcall(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	size_t key_slot = vm->stack.count - (vm->arg.u32 & 0xffff) - 1;
 	uc_value_t *ctx = vm->stack.entries[key_slot - 1];
@@ -1920,7 +1920,7 @@ uc_vm_insn_mcall(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_print(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_print(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *v = uc_vm_stack_pop(vm);
 	char *p;
@@ -1950,7 +1950,7 @@ uc_vm_insn_print(uc_vm *vm, enum insn_type insn)
 }
 
 static void
-uc_vm_insn_delete(uc_vm *vm, enum insn_type insn)
+uc_vm_insn_delete(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *k = uc_vm_stack_pop(vm);
 	uc_value_t *v = uc_vm_stack_pop(vm);
@@ -1975,9 +1975,9 @@ uc_vm_insn_delete(uc_vm *vm, enum insn_type insn)
 }
 
 static uc_value_t *
-uc_vm_callframe_pop(uc_vm *vm)
+uc_vm_callframe_pop(uc_vm_t *vm)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
 	uc_value_t *retval;
 
 	/* close upvalues */
@@ -2012,7 +2012,7 @@ uc_vm_callframe_pop(uc_vm *vm)
 }
 
 static void
-uc_vm_output_exception(uc_vm *vm, uc_exception *ex)
+uc_vm_output_exception(uc_vm_t *vm, uc_exception_t *ex)
 {
 	uc_value_t *ctx;
 
@@ -2032,12 +2032,12 @@ uc_vm_output_exception(uc_vm *vm, uc_exception *ex)
 }
 
 static uc_vm_status_t
-uc_vm_execute_chunk(uc_vm *vm, uc_value_t **retvalp)
+uc_vm_execute_chunk(uc_vm_t *vm, uc_value_t **retvalp)
 {
-	uc_callframe *frame = uc_vm_current_frame(vm);
-	uc_chunk *chunk = uc_vm_frame_chunk(frame);
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
 	uc_value_t *retval;
-	enum insn_type insn;
+	uc_vm_insn_t insn;
 
 	while (chunk) {
 		if (vm->trace)
@@ -2302,10 +2302,10 @@ uc_vm_execute_chunk(uc_vm *vm, uc_value_t **retvalp)
 }
 
 uc_vm_status_t
-uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t **retval)
+uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval)
 {
 	uc_closure_t *closure = (uc_closure_t *)ucv_closure_new(vm, fn, false);
-	uc_callframe *frame;
+	uc_callframe_t *frame;
 	uc_stringbuf_t *buf;
 
 	uc_vector_grow(&vm->callframes);
@@ -2337,7 +2337,7 @@ uc_vm_execute(uc_vm *vm, uc_function_t *fn, uc_value_t **retval)
 }
 
 uc_exception_type_t
-uc_vm_call(uc_vm *vm, bool mcall, size_t nargs)
+uc_vm_call(uc_vm_t *vm, bool mcall, size_t nargs)
 {
 	uc_value_t *ctx = mcall ? ucv_get(uc_vm_stack_peek(vm, nargs + 1)) : NULL;
 	uc_value_t *fno = ucv_get(uc_vm_stack_peek(vm, nargs));
@@ -2351,20 +2351,20 @@ uc_vm_call(uc_vm *vm, bool mcall, size_t nargs)
 }
 
 uc_value_t *
-uc_vm_scope_get(uc_vm *vm)
+uc_vm_scope_get(uc_vm_t *vm)
 {
 	return vm->globals;
 }
 
 void
-uc_vm_scope_set(uc_vm *vm, uc_value_t *ctx)
+uc_vm_scope_set(uc_vm_t *vm, uc_value_t *ctx)
 {
 	ucv_put(vm->globals);
 	vm->globals = ctx;
 }
 
 uc_value_t *
-uc_vm_invoke(uc_vm *vm, const char *fname, size_t nargs, ...)
+uc_vm_invoke(uc_vm_t *vm, const char *fname, size_t nargs, ...)
 {
 	uc_exception_type_t ex;
 	uc_value_t *fno, *arg;
@@ -2396,25 +2396,25 @@ uc_vm_invoke(uc_vm *vm, const char *fname, size_t nargs, ...)
 }
 
 uc_exception_handler_t *
-uc_vm_exception_handler_get(uc_vm *vm)
+uc_vm_exception_handler_get(uc_vm_t *vm)
 {
 	return vm->exhandler;
 }
 
 void
-uc_vm_exception_handler_set(uc_vm *vm, uc_exception_handler_t *exhandler)
+uc_vm_exception_handler_set(uc_vm_t *vm, uc_exception_handler_t *exhandler)
 {
 	vm->exhandler = exhandler;
 }
 
 uint32_t
-uc_vm_trace_get(uc_vm *vm)
+uc_vm_trace_get(uc_vm_t *vm)
 {
 	return vm->trace;
 }
 
 void
-uc_vm_trace_set(uc_vm *vm, uint32_t level)
+uc_vm_trace_set(uc_vm_t *vm, uint32_t level)
 {
 	vm->trace = level;
 }

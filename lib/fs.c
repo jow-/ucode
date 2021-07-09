@@ -36,7 +36,7 @@ static uc_ressource_type_t *file_type, *proc_type, *dir_type;
 static int last_error = 0;
 
 static uc_value_t *
-uc_fs_error(uc_vm *vm, size_t nargs)
+uc_fs_error(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *errmsg;
 
@@ -50,7 +50,7 @@ uc_fs_error(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_read_common(uc_vm *vm, size_t nargs, const char *type)
+uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 {
 	uc_value_t *limit = uc_get_arg(0);
 	uc_value_t *rv = NULL;
@@ -142,7 +142,7 @@ uc_fs_read_common(uc_vm *vm, size_t nargs, const char *type)
 }
 
 static uc_value_t *
-uc_fs_write_common(uc_vm *vm, size_t nargs, const char *type)
+uc_fs_write_common(uc_vm_t *vm, size_t nargs, const char *type)
 {
 	uc_value_t *data = uc_get_arg(0);
 	size_t len, wsize;
@@ -172,7 +172,7 @@ uc_fs_write_common(uc_vm *vm, size_t nargs, const char *type)
 
 
 static uc_value_t *
-uc_fs_pclose(uc_vm *vm, size_t nargs)
+uc_fs_pclose(uc_vm_t *vm, size_t nargs)
 {
 	FILE **fp = uc_get_self("fs.proc");
 	int rc;
@@ -196,19 +196,19 @@ uc_fs_pclose(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_pread(uc_vm *vm, size_t nargs)
+uc_fs_pread(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_read_common(vm, nargs, "fs.proc");
 }
 
 static uc_value_t *
-uc_fs_pwrite(uc_vm *vm, size_t nargs)
+uc_fs_pwrite(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_write_common(vm, nargs, "fs.proc");
 }
 
 static uc_value_t *
-uc_fs_popen(uc_vm *vm, size_t nargs)
+uc_fs_popen(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *comm = uc_get_arg(0);
 	uc_value_t *mode = uc_get_arg(1);
@@ -228,7 +228,7 @@ uc_fs_popen(uc_vm *vm, size_t nargs)
 
 
 static uc_value_t *
-uc_fs_close(uc_vm *vm, size_t nargs)
+uc_fs_close(uc_vm_t *vm, size_t nargs)
 {
 	FILE **fp = uc_get_self("fs.file");
 
@@ -242,19 +242,19 @@ uc_fs_close(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_read(uc_vm *vm, size_t nargs)
+uc_fs_read(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_read_common(vm, nargs, "fs.file");
 }
 
 static uc_value_t *
-uc_fs_write(uc_vm *vm, size_t nargs)
+uc_fs_write(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_write_common(vm, nargs, "fs.file");
 }
 
 static uc_value_t *
-uc_fs_seek(uc_vm *vm, size_t nargs)
+uc_fs_seek(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *ofs = uc_get_arg(0);
 	uc_value_t *how = uc_get_arg(1);
@@ -289,7 +289,7 @@ uc_fs_seek(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_tell(uc_vm *vm, size_t nargs)
+uc_fs_tell(uc_vm_t *vm, size_t nargs)
 {
 	long offset;
 
@@ -307,7 +307,7 @@ uc_fs_tell(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_open(uc_vm *vm, size_t nargs)
+uc_fs_open(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_get_arg(0);
 	uc_value_t *mode = uc_get_arg(1);
@@ -327,7 +327,7 @@ uc_fs_open(uc_vm *vm, size_t nargs)
 
 
 static uc_value_t *
-uc_fs_readdir(uc_vm *vm, size_t nargs)
+uc_fs_readdir(uc_vm_t *vm, size_t nargs)
 {
 	DIR **dp = uc_get_self("fs.dir");
 	struct dirent *e;
@@ -345,7 +345,7 @@ uc_fs_readdir(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_telldir(uc_vm *vm, size_t nargs)
+uc_fs_telldir(uc_vm_t *vm, size_t nargs)
 {
 	DIR **dp = uc_get_self("fs.dir");
 	long position;
@@ -362,7 +362,7 @@ uc_fs_telldir(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_seekdir(uc_vm *vm, size_t nargs)
+uc_fs_seekdir(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *ofs = uc_get_arg(0);
 	DIR **dp = uc_get_self("fs.dir");
@@ -382,7 +382,7 @@ uc_fs_seekdir(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_closedir(uc_vm *vm, size_t nargs)
+uc_fs_closedir(uc_vm_t *vm, size_t nargs)
 {
 	DIR **dp = uc_get_self("fs.dir");
 
@@ -396,7 +396,7 @@ uc_fs_closedir(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_opendir(uc_vm *vm, size_t nargs)
+uc_fs_opendir(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_get_arg(0);
 	DIR *dp;
@@ -413,7 +413,7 @@ uc_fs_opendir(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_readlink(uc_vm *vm, size_t nargs)
+uc_fs_readlink(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_get_arg(0);
 	uc_value_t *res;
@@ -453,7 +453,7 @@ uc_fs_readlink(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_stat_common(uc_vm *vm, size_t nargs, bool use_lstat)
+uc_fs_stat_common(uc_vm_t *vm, size_t nargs, bool use_lstat)
 {
 	uc_value_t *path = uc_get_arg(0);
 	uc_value_t *res, *o;
@@ -537,19 +537,19 @@ uc_fs_stat_common(uc_vm *vm, size_t nargs, bool use_lstat)
 }
 
 static uc_value_t *
-uc_fs_stat(uc_vm *vm, size_t nargs)
+uc_fs_stat(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_stat_common(vm, nargs, false);
 }
 
 static uc_value_t *
-uc_fs_lstat(uc_vm *vm, size_t nargs)
+uc_fs_lstat(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_stat_common(vm, nargs, true);
 }
 
 static uc_value_t *
-uc_fs_mkdir(uc_vm *vm, size_t nargs)
+uc_fs_mkdir(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_get_arg(0);
 	uc_value_t *mode = uc_get_arg(1);
@@ -565,7 +565,7 @@ uc_fs_mkdir(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_rmdir(uc_vm *vm, size_t nargs)
+uc_fs_rmdir(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_get_arg(0);
 
@@ -579,7 +579,7 @@ uc_fs_rmdir(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_symlink(uc_vm *vm, size_t nargs)
+uc_fs_symlink(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *dest = uc_get_arg(0);
 	uc_value_t *path = uc_get_arg(1);
@@ -595,7 +595,7 @@ uc_fs_symlink(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_unlink(uc_vm *vm, size_t nargs)
+uc_fs_unlink(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_get_arg(0);
 
@@ -609,7 +609,7 @@ uc_fs_unlink(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_getcwd(uc_vm *vm, size_t nargs)
+uc_fs_getcwd(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *res;
 	char *buf = NULL, *tmp;
@@ -645,7 +645,7 @@ uc_fs_getcwd(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_chdir(uc_vm *vm, size_t nargs)
+uc_fs_chdir(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_get_arg(0);
 
@@ -659,7 +659,7 @@ uc_fs_chdir(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_chmod(uc_vm *vm, size_t nargs)
+uc_fs_chmod(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_get_arg(0);
 	uc_value_t *mode = uc_get_arg(1);
@@ -769,7 +769,7 @@ uc_fs_resolve_group(uc_value_t *v, gid_t *gid)
 }
 
 static uc_value_t *
-uc_fs_chown(uc_vm *vm, size_t nargs)
+uc_fs_chown(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_get_arg(0);
 	uc_value_t *user = uc_get_arg(1);
@@ -791,7 +791,7 @@ uc_fs_chown(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_rename(uc_vm *vm, size_t nargs)
+uc_fs_rename(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *oldpath = uc_get_arg(0);
 	uc_value_t *newpath = uc_get_arg(1);
@@ -807,7 +807,7 @@ uc_fs_rename(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_glob(uc_vm *vm, size_t nargs)
+uc_fs_glob(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *pat, *arr;
 	glob_t gl = { 0 };
@@ -835,14 +835,14 @@ uc_fs_glob(uc_vm *vm, size_t nargs)
 }
 
 
-static const uc_cfunction_list proc_fns[] = {
+static const uc_cfunction_list_t proc_fns[] = {
 	{ "read",		uc_fs_pread },
 	{ "write",		uc_fs_pwrite },
 	{ "close",		uc_fs_pclose },
 	{ "error",		uc_fs_error },
 };
 
-static const uc_cfunction_list file_fns[] = {
+static const uc_cfunction_list_t file_fns[] = {
 	{ "read",		uc_fs_read },
 	{ "write",		uc_fs_write },
 	{ "seek",		uc_fs_seek },
@@ -851,7 +851,7 @@ static const uc_cfunction_list file_fns[] = {
 	{ "error",		uc_fs_error },
 };
 
-static const uc_cfunction_list dir_fns[] = {
+static const uc_cfunction_list_t dir_fns[] = {
 	{ "read",		uc_fs_readdir },
 	{ "seek",		uc_fs_seekdir },
 	{ "tell",		uc_fs_telldir },
@@ -859,7 +859,7 @@ static const uc_cfunction_list dir_fns[] = {
 	{ "error",		uc_fs_error },
 };
 
-static const uc_cfunction_list global_fns[] = {
+static const uc_cfunction_list_t global_fns[] = {
 	{ "error",		uc_fs_error },
 	{ "open",		uc_fs_open },
 	{ "opendir",	uc_fs_opendir },
@@ -904,7 +904,7 @@ static void close_dir(void *ud)
 		closedir(dp);
 }
 
-void uc_module_init(uc_vm *vm, uc_value_t *scope)
+void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_add_functions(scope, global_fns);
 

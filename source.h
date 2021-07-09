@@ -25,12 +25,12 @@
 #include "types.h"
 
 
-uc_source *uc_source_new_file(const char *path);
-uc_source *uc_source_new_buffer(const char *name, char *buf, size_t len);
+uc_source_t *uc_source_new_file(const char *path);
+uc_source_t *uc_source_new_buffer(const char *name, char *buf, size_t len);
 
-size_t uc_source_get_line(uc_source *source, size_t *offset);
+size_t uc_source_get_line(uc_source_t *source, size_t *offset);
 
-uc_source *uc_source_get(uc_source *source);
-void uc_source_put(uc_source *source);
+uc_source_t *uc_source_get(uc_source_t *source);
+void uc_source_put(uc_source_t *source);
 
 #endif /* __SOURCE_H_ */

@@ -22,7 +22,7 @@
 static bool srand_called = false;
 
 static uc_value_t *
-uc_abs(uc_vm *vm, size_t nargs)
+uc_abs(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *v = uc_get_arg(0);
 	uc_type_t t;
@@ -41,7 +41,7 @@ uc_abs(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_atan2(uc_vm *vm, size_t nargs)
+uc_atan2(uc_vm_t *vm, size_t nargs)
 {
 	double d1 = uc_to_double(uc_get_arg(0));
 	double d2 = uc_to_double(uc_get_arg(1));
@@ -53,7 +53,7 @@ uc_atan2(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_cos(uc_vm *vm, size_t nargs)
+uc_cos(uc_vm_t *vm, size_t nargs)
 {
 	double d = uc_to_double(uc_get_arg(0));
 
@@ -64,7 +64,7 @@ uc_cos(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_exp(uc_vm *vm, size_t nargs)
+uc_exp(uc_vm_t *vm, size_t nargs)
 {
 	double d = uc_to_double(uc_get_arg(0));
 
@@ -75,7 +75,7 @@ uc_exp(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_log(uc_vm *vm, size_t nargs)
+uc_log(uc_vm_t *vm, size_t nargs)
 {
 	double d = uc_to_double(uc_get_arg(0));
 
@@ -86,7 +86,7 @@ uc_log(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_sin(uc_vm *vm, size_t nargs)
+uc_sin(uc_vm_t *vm, size_t nargs)
 {
 	double d = uc_to_double(uc_get_arg(0));
 
@@ -97,7 +97,7 @@ uc_sin(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_sqrt(uc_vm *vm, size_t nargs)
+uc_sqrt(uc_vm_t *vm, size_t nargs)
 {
 	double d = uc_to_double(uc_get_arg(0));
 
@@ -108,7 +108,7 @@ uc_sqrt(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_pow(uc_vm *vm, size_t nargs)
+uc_pow(uc_vm_t *vm, size_t nargs)
 {
 	double x = uc_to_double(uc_get_arg(0));
 	double y = uc_to_double(uc_get_arg(1));
@@ -120,7 +120,7 @@ uc_pow(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_rand(uc_vm *vm, size_t nargs)
+uc_rand(uc_vm_t *vm, size_t nargs)
 {
 	struct timeval tv;
 
@@ -135,7 +135,7 @@ uc_rand(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_srand(uc_vm *vm, size_t nargs)
+uc_srand(uc_vm_t *vm, size_t nargs)
 {
 	int64_t n = uc_to_int64(uc_get_arg(0));
 
@@ -145,7 +145,7 @@ uc_srand(uc_vm *vm, size_t nargs)
 	return NULL;
 }
 
-static const uc_cfunction_list math_fns[] = {
+static const uc_cfunction_list_t math_fns[] = {
 	{ "abs",	uc_abs },
 	{ "atan2",	uc_atan2 },
 	{ "cos",	uc_cos },
@@ -158,7 +158,7 @@ static const uc_cfunction_list math_fns[] = {
 	{ "srand",	uc_srand },
 };
 
-void uc_module_init(uc_vm *vm, uc_value_t *scope)
+void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_add_functions(scope, math_fns);
 }
