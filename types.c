@@ -103,7 +103,7 @@ ucv_put_value(uc_value_t *uv, bool retain)
 	if (uv == NULL || (uintptr_t)uv & 3)
 		return;
 
-	assert(uv->refcount > 0);
+	assert(uv->type == UC_NULL || uv->refcount > 0);
 
 	if (uv->refcount > 0)
 		uv->refcount--;
