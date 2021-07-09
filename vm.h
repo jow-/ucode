@@ -120,6 +120,9 @@ void uc_vm_stack_push(uc_vm *vm, uc_value_t *value);
 uc_value_t *uc_vm_stack_pop(uc_vm *vm);
 uc_value_t *uc_vm_stack_peek(uc_vm *vm, size_t offset);
 
+uc_exception_handler_t *uc_vm_exception_handler_get(uc_vm *vm);
+void uc_vm_exception_handler_set(uc_vm *vm, uc_exception_handler_t *exhandler);
+
 uc_exception_type_t uc_vm_call(uc_vm *vm, bool mcall, size_t nargs);
 
 void __attribute__((format(printf, 3, 0)))

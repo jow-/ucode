@@ -241,6 +241,8 @@ uc_declare_vector(uc_stack, uc_value_t *);
 
 typedef struct printbuf uc_stringbuf_t;
 
+typedef void (uc_exception_handler_t)(uc_vm *, uc_exception *);
+
 struct uc_vm {
 	uc_stack stack;
 	uc_exception exception;
@@ -262,6 +264,7 @@ struct uc_vm {
 	size_t spread_values;
 	uint8_t trace;
 	uc_stringbuf_t *strbuf;
+	uc_exception_handler_t *exhandler;
 	FILE *output;
 };
 

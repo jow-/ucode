@@ -132,6 +132,9 @@ uc_vm_alloc_global_scope(uc_vm *vm)
 	return scope;
 }
 
+static void
+uc_vm_output_exception(uc_vm *vm, uc_exception *ex);
+
 void uc_vm_init(uc_vm *vm, uc_parse_config *config)
 {
 	char *s = getenv("TRACE");
@@ -155,6 +158,8 @@ void uc_vm_init(uc_vm *vm, uc_parse_config *config)
 	uc_vm_reset_stack(vm);
 
 	uc_vm_alloc_global_scope(vm);
+
+	uc_vm_exception_handler_set(vm, uc_vm_output_exception);
 }
 
 void uc_vm_free(uc_vm *vm)
@@ -2010,18 +2015,18 @@ uc_vm_callframe_pop(uc_vm *vm)
 }
 
 static void
-uc_vm_output_exception(uc_vm *vm)
+uc_vm_output_exception(uc_vm *vm, uc_exception *ex)
 {
 	uc_value_t *ctx;
 
-	if (vm->exception.type == EXCEPTION_USER)
-		fprintf(stderr, "%s\n", vm->exception.message);
+	if (ex->type == EXCEPTION_USER)
+		fprintf(stderr, "%s\n", ex->message);
 	else
 		fprintf(stderr, "%s: %s\n",
-			    exception_type_strings[vm->exception.type] ? exception_type_strings[vm->exception.type] : "Error",
-			    vm->exception.message);
+			    exception_type_strings[ex->type] ? exception_type_strings[ex->type] : "Error",
+			    ex->message);
 
-	ctx = ucv_object_get(ucv_array_get(vm->exception.stacktrace, 0), "context", NULL);
+	ctx = ucv_object_get(ucv_array_get(ex->stacktrace, 0), "context", NULL);
 
 	if (ctx)
 		fprintf(stderr, "%s\n", ucv_string_get(ctx));
@@ -2276,7 +2281,8 @@ uc_vm_execute_chunk(uc_vm *vm, uc_value_t **retvalp)
 			while (!uc_vm_handle_exception(vm)) {
 				/* no further callframe to pop, report unhandled exception and terminate */
 				if (vm->callframes.count <= 1) {
-					uc_vm_output_exception(vm);
+					if (vm->exhandler)
+						vm->exhandler(vm, &vm->exception);
 
 					return ERROR_RUNTIME;
 				}
@@ -2390,4 +2396,16 @@ uc_vm_invoke(uc_vm *vm, const char *fname, size_t nargs, ...)
 		return NULL;
 
 	return uc_vm_stack_pop(vm);
+}
+
+uc_exception_handler_t *
+uc_vm_exception_handler_get(uc_vm *vm)
+{
+	return vm->exhandler;
+}
+
+void
+uc_vm_exception_handler_set(uc_vm *vm, uc_exception_handler_t *exhandler)
+{
+	vm->exhandler = exhandler;
 }
