@@ -1763,6 +1763,10 @@ ucv_gc(uc_vm_t *vm, bool final)
 	uc_value_t *val;
 	size_t i;
 
+	/* back out early if value list is uninitialized */
+	if (!vm->values.prev || !vm->values.next)
+		return;
+
 	if (!final) {
 		/* mark reachable objects */
 		ucv_gc_mark(vm->globals);
