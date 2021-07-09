@@ -218,7 +218,7 @@ utf8enc(char **out, int *rem, int code)
 }
 
 /* length of the longest token in our lookup table */
-#define UT_LEX_MAX_TOKEN_LEN 3
+#define UC_LEX_MAX_TOKEN_LEN 3
 
 static uc_token *
 emit_op(uc_lexer *lex, uint32_t pos, int type, uc_value_t *uv)
@@ -377,7 +377,7 @@ parse_comment(uc_lexer *lex)
 	buf_consume(lex, ptr - lex->bufstart);
 
 	if (lex->eof) {
-		lex->state = UT_LEX_EOF;
+		lex->state = UC_LEX_EOF;
 
 		if (elen == 2)
 			return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated comment"));
@@ -614,16 +614,16 @@ parse_string(uc_lexer *lex)
  * characters from the given buffer.
  *
  * Error values:
- *  -UT_ERROR_UNTERMINATED_STRING	Unterminated regexp
- *  -UT_ERROR_INVALID_ESCAPE		Invalid escape sequence
- *  -UT_ERROR_OVERLONG_STRING		Regexp literal too long
- *  -UT_ERROR_INVALID_REGEXP        Could not compile regexp
+ *  -UC_ERROR_UNTERMINATED_STRING	Unterminated regexp
+ *  -UC_ERROR_INVALID_ESCAPE		Invalid escape sequence
+ *  -UC_ERROR_OVERLONG_STRING		Regexp literal too long
+ *  -UC_ERROR_INVALID_REGEXP        Could not compile regexp
  */
 
 enum {
-	UT_LEX_PARSE_REGEX_INIT,
-	UT_LEX_PARSE_REGEX_PATTERN,
-	UT_LEX_PARSE_REGEX_FLAGS
+	UC_LEX_PARSE_REGEX_INIT,
+	UC_LEX_PARSE_REGEX_PATTERN,
+	UC_LEX_PARSE_REGEX_FLAGS
 };
 
 static uc_token *
@@ -635,7 +635,7 @@ parse_regexp(uc_lexer *lex)
 	char *s;
 
 	switch (lex->esc[0]) {
-	case UT_LEX_PARSE_REGEX_INIT:
+	case UC_LEX_PARSE_REGEX_INIT:
 		if (lex->no_regexp) {
 			if (buf_startswith(lex, "=")) {
 				buf_consume(lex, 1);
@@ -646,10 +646,10 @@ parse_regexp(uc_lexer *lex)
 			return emit_op(lex, lex->source->off, TK_DIV, NULL);
 		}
 
-		lex->esc[0] = UT_LEX_PARSE_REGEX_PATTERN;
+		lex->esc[0] = UC_LEX_PARSE_REGEX_PATTERN;
 		break;
 
-	case UT_LEX_PARSE_REGEX_PATTERN:
+	case UC_LEX_PARSE_REGEX_PATTERN:
 		rv = parse_string(lex);
 
 		if (rv && rv->type == TK_ERROR)
@@ -657,12 +657,12 @@ parse_regexp(uc_lexer *lex)
 
 		if (rv != NULL && rv != UC_LEX_CONTINUE_PARSING) {
 			lex->lookbehind = (char *)rv;
-			lex->esc[0] = UT_LEX_PARSE_REGEX_FLAGS;
+			lex->esc[0] = UC_LEX_PARSE_REGEX_FLAGS;
 		}
 
 		break;
 
-	case UT_LEX_PARSE_REGEX_FLAGS:
+	case UC_LEX_PARSE_REGEX_FLAGS:
 		rv = (uc_token *)lex->lookbehind;
 
 		while (lex->bufstart < lex->bufend || lex->eof) {
@@ -714,7 +714,7 @@ parse_regexp(uc_lexer *lex)
  * characters from the given buffer.
  *
  * Error values:
- *  -UT_ERROR_OVERLONG_STRING	Label too long
+ *  -UC_ERROR_OVERLONG_STRING	Label too long
  */
 
 static uc_token *
@@ -759,7 +759,7 @@ parse_label(uc_lexer *lex)
  * characters from the given buffer.
  *
  * Error values:
- *  -UT_ERROR_INVALID_ESCAPE	Invalid number character
+ *  -UC_ERROR_INVALID_ESCAPE	Invalid number character
  */
 
 static inline bool
@@ -837,9 +837,9 @@ lex_step(uc_lexer *lex, FILE *fp)
 	uc_token *rv;
 	size_t i;
 
-	/* only less than UT_LEX_MAX_TOKEN_LEN unread buffer chars remaining,
+	/* only less than UC_LEX_MAX_TOKEN_LEN unread buffer chars remaining,
 	 * move the remaining bytes to the beginning and read more data */
-	if (buf_remaining(lex) < UT_LEX_MAX_TOKEN_LEN) {
+	if (buf_remaining(lex) < UC_LEX_MAX_TOKEN_LEN) {
 		if (!lex->buf) {
 			lex->buflen = 128;
 			lex->buf = xalloc(lex->buflen);
@@ -860,7 +860,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 	}
 
 	switch (lex->state) {
-	case UT_LEX_IDENTIFY_BLOCK:
+	case UC_LEX_IDENTIFY_BLOCK:
 		/* previous block had strip trailing whitespace flag, skip leading whitespace */
 		if (lex->modifier == MINUS) {
 			while (buf_remaining(lex) && isspace(lex->bufstart[0]))
@@ -884,7 +884,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 				lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
 				buf_consume(lex, (ptr + 2) - lex->bufstart);
 				lex->lastoff = lex->source->off - 2;
-				lex->state = UT_LEX_BLOCK_COMMENT_START;
+				lex->state = UC_LEX_BLOCK_COMMENT_START;
 
 				return NULL;
 			}
@@ -894,7 +894,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 				lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
 				buf_consume(lex, (ptr + 2) - lex->bufstart);
 				lex->lastoff = lex->source->off - 2;
-				lex->state = UT_LEX_BLOCK_EXPRESSION_START;
+				lex->state = UC_LEX_BLOCK_EXPRESSION_START;
 
 				return NULL;
 			}
@@ -904,7 +904,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 				lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
 				buf_consume(lex, (ptr + 2) - lex->bufstart);
 				lex->lastoff = lex->source->off - 2;
-				lex->state = UT_LEX_BLOCK_STATEMENT_START;
+				lex->state = UC_LEX_BLOCK_STATEMENT_START;
 
 				return NULL;
 			}
@@ -913,7 +913,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 		/* we're at eof */
 		if (lex->eof) {
 			lookbehind_append(lex, ptr, lex->bufend - ptr);
-			lex->state = UT_LEX_EOF;
+			lex->state = UC_LEX_EOF;
 
 			return lookbehind_to_text(lex, lex->lastoff, TK_TEXT, NULL);
 		}
@@ -923,9 +923,9 @@ lex_step(uc_lexer *lex, FILE *fp)
 		break;
 
 
-	case UT_LEX_BLOCK_COMMENT_START:
-	case UT_LEX_BLOCK_EXPRESSION_START:
-	case UT_LEX_BLOCK_STATEMENT_START:
+	case UC_LEX_BLOCK_COMMENT_START:
+	case UC_LEX_BLOCK_EXPRESSION_START:
+	case UC_LEX_BLOCK_STATEMENT_START:
 		rv = NULL;
 		lex->modifier = UNSPEC;
 
@@ -936,7 +936,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 		}
 
 		/* disable lstrip flag (only valid for statement blocks) */
-		else if (lex->state == UT_LEX_BLOCK_STATEMENT_START) {
+		else if (lex->state == UC_LEX_BLOCK_STATEMENT_START) {
 			/* disable lstrip flag */
 			if (buf_startswith(lex, "+")) {
 				rv = lookbehind_to_text(lex, lex->source->off, TK_TEXT, NULL);
@@ -953,18 +953,18 @@ lex_step(uc_lexer *lex, FILE *fp)
 		}
 
 		switch (lex->state) {
-		case UT_LEX_BLOCK_COMMENT_START:
-			lex->state = UT_LEX_BLOCK_COMMENT;
+		case UC_LEX_BLOCK_COMMENT_START:
+			lex->state = UC_LEX_BLOCK_COMMENT;
 			lex->block = COMMENT;
 			break;
 
-		case UT_LEX_BLOCK_STATEMENT_START:
-			lex->state = UT_LEX_IDENTIFY_TOKEN;
+		case UC_LEX_BLOCK_STATEMENT_START:
+			lex->state = UC_LEX_IDENTIFY_TOKEN;
 			lex->block = STATEMENTS;
 			break;
 
-		case UT_LEX_BLOCK_EXPRESSION_START:
-			lex->state = UT_LEX_BLOCK_EXPRESSION_EMIT_TAG;
+		case UC_LEX_BLOCK_EXPRESSION_START:
+			lex->state = UC_LEX_BLOCK_EXPRESSION_EMIT_TAG;
 			break;
 
 		default:
@@ -974,18 +974,18 @@ lex_step(uc_lexer *lex, FILE *fp)
 		return rv;
 
 
-	case UT_LEX_BLOCK_COMMENT:
+	case UC_LEX_BLOCK_COMMENT:
 		/* scan forward through buffer to identify end token */
 		while (lex->bufstart < lex->bufend - 2) {
 			if (buf_startswith(lex, "-#}")) {
-				lex->state = UT_LEX_IDENTIFY_BLOCK;
+				lex->state = UC_LEX_IDENTIFY_BLOCK;
 				lex->modifier = MINUS;
 				buf_consume(lex, 3);
 				lex->lastoff = lex->source->off;
 				break;
 			}
 			else if (buf_startswith(lex, "#}")) {
-				lex->state = UT_LEX_IDENTIFY_BLOCK;
+				lex->state = UC_LEX_IDENTIFY_BLOCK;
 				buf_consume(lex, 2);
 				lex->lastoff = lex->source->off;
 				break;
@@ -996,7 +996,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 
 		/* we're at eof */
 		if (lex->eof) {
-			lex->state = UT_LEX_EOF;
+			lex->state = UC_LEX_EOF;
 
 			buf_consume(lex, lex->bufend - lex->bufstart);
 
@@ -1006,21 +1006,21 @@ lex_step(uc_lexer *lex, FILE *fp)
 		break;
 
 
-	case UT_LEX_BLOCK_EXPRESSION_EMIT_TAG:
-		lex->state = UT_LEX_IDENTIFY_TOKEN;
+	case UC_LEX_BLOCK_EXPRESSION_EMIT_TAG:
+		lex->state = UC_LEX_IDENTIFY_TOKEN;
 		lex->block = EXPRESSION;
 
 		return emit_op(lex, lex->source->off, TK_LEXP, NULL);
 
 
-	case UT_LEX_IDENTIFY_TOKEN:
+	case UC_LEX_IDENTIFY_TOKEN:
 		/* skip leading whitespace */
 		for (i = 0; i < buf_remaining(lex) && isspace(lex->bufstart[i]); i++)
 			;
 
 		buf_consume(lex, i);
 
-		if (i > 0 && buf_remaining(lex) < UT_LEX_MAX_TOKEN_LEN)
+		if (i > 0 && buf_remaining(lex) < UC_LEX_MAX_TOKEN_LEN)
 			return NULL;
 
 		for (i = 0; i < sizeof(search.str); i++)
@@ -1040,7 +1040,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 				/* token has a parse method, switch state */
 				if (tok->parse) {
 					lex->tok = tok;
-					lex->state = UT_LEX_PARSE_TOKEN;
+					lex->state = UC_LEX_PARSE_TOKEN;
 
 					buf_consume(lex, tok->plen);
 
@@ -1073,7 +1073,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 					         lex->config && lex->config->trim_blocks)
 						lex->modifier = NEWLINE;
 
-					lex->state = UT_LEX_IDENTIFY_BLOCK;
+					lex->state = UC_LEX_IDENTIFY_BLOCK;
 					lex->block = NONE;
 				}
 
@@ -1092,7 +1092,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 
 		/* no possible return beyond this point can advance,
 		   mark lex state as eof */
-		lex->state = UT_LEX_EOF;
+		lex->state = UC_LEX_EOF;
 
 		/* no token matched and we do have remaining data, junk */
 		if (buf_remaining(lex))
@@ -1106,13 +1106,13 @@ lex_step(uc_lexer *lex, FILE *fp)
 		return emit_op(lex, lex->source->off, TK_ERROR, ucv_string_new("Unterminated template block"));
 
 
-	case UT_LEX_PARSE_TOKEN:
+	case UC_LEX_PARSE_TOKEN:
 		tok = lex->tok;
 		rv = tok->parse(lex);
 
 		if (rv) {
 			memset(lex->esc, 0, sizeof(lex->esc));
-			lex->state = UT_LEX_IDENTIFY_TOKEN;
+			lex->state = UC_LEX_IDENTIFY_TOKEN;
 			lex->tok = NULL;
 
 			if (rv == UC_LEX_CONTINUE_PARSING)
@@ -1124,7 +1124,7 @@ lex_step(uc_lexer *lex, FILE *fp)
 		break;
 
 
-	case UT_LEX_EOF:
+	case UC_LEX_EOF:
 		break;
 	}
 
@@ -1166,7 +1166,7 @@ uc_lexer_skip_shebang(uc_lexer *lex)
 void
 uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source)
 {
-	lex->state = UT_LEX_IDENTIFY_BLOCK;
+	lex->state = UC_LEX_IDENTIFY_BLOCK;
 
 	lex->config = config;
 	lex->source = uc_source_get(source);
@@ -1195,7 +1195,7 @@ uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source)
 	lex->lastoff = 0;
 
 	if (config && config->raw_mode) {
-		lex->state = UT_LEX_IDENTIFY_TOKEN;
+		lex->state = UC_LEX_IDENTIFY_TOKEN;
 		lex->block = STATEMENTS;
 	}
 
@@ -1218,7 +1218,7 @@ uc_lexer_next_token(uc_lexer *lex)
 {
 	uc_token *rv = NULL;
 
-	while (lex->state != UT_LEX_EOF) {
+	while (lex->state != UC_LEX_EOF) {
 		rv = lex_step(lex, lex->source->fp);
 
 		if (rv != NULL)
