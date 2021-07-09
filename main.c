@@ -39,11 +39,11 @@ static void
 print_usage(const char *app)
 {
 	printf(
-	"== Usage ==\n\n"
+	"Usage\n\n"
 	"  # %s [-t] [-l] [-r] [-S] [-R] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
 	"  -h, --help	Print this help\n"
-	"  -i file	Specify an ucode script to parse\n"
-	"  -s \"ucode script...\"	Specify an ucode fragment to parse\n"
+	"  -i file	Execute the given ucode script file\n"
+	"  -s \"ucode script...\"	Execute the given string as ucode script\n"
 	"  -t Enable VM execution tracing\n"
 	"  -l Do not strip leading block whitespace\n"
 	"  -r Do not trim trailing block newlines\n"
@@ -74,22 +74,14 @@ register_variable(uc_value_t *scope, const char *key, uc_value_t *val)
 
 
 static int
-parse(uc_parse_config_t *config, uc_source_t *src,
-      uc_value_t *env, uc_value_t *modules,
-      int argc, char **argv, int trace)
+compile(uc_vm_t *vm, uc_source_t *src)
 {
-	uc_value_t *globals = NULL, *res = NULL, *arr, *name, *mod;
+	uc_value_t *res = NULL;
 	uc_function_t *entry;
-	uc_vm_t vm = { 0 };
-	int i, rc = 0;
-	size_t idx;
+	int rc = 0;
 	char *err;
 
-	uc_vm_init(&vm, config);
-
-	uc_vm_trace_set(&vm, trace);
-
-	entry = uc_compile(config, src, &err);
+	entry = uc_compile(vm->config, src, &err);
 
 	if (!entry) {
 		fprintf(stderr, "%s", err);
@@ -98,36 +90,7 @@ parse(uc_parse_config_t *config, uc_source_t *src,
 		goto out;
 	}
 
-	/* allocate global scope */
-	globals = uc_vm_scope_get(&vm);
-
-	/* register ARGV array */
-	arr = ucv_array_new_length(&vm, argc);
-
-	for (i = 0; i < argc; i++)
-		ucv_array_push(arr, ucv_string_new(argv[i]));
-
-	ucv_object_add(globals, "ARGV", arr);
-
-	/* load env variables */
-	if (env) {
-		ucv_object_foreach(env, key, val)
-			register_variable(globals, key, ucv_get(val));
-	}
-
-	/* load std functions into global scope */
-	uc_load_stdlib(globals);
-
-	/* preload modules */
-	for (idx = 0; idx < ucv_array_length(modules); idx++) {
-		name = ucv_array_get(modules, idx);
-		mod = uc_vm_invoke(&vm, "require", 1, name);
-
-		if (mod)
-			register_variable(globals, ucv_string_get(name), mod);
-	}
-
-	rc = uc_vm_execute(&vm, entry, &res);
+	rc = uc_vm_execute(vm, entry, &res);
 
 	switch (rc) {
 	case STATUS_OK:
@@ -148,7 +111,6 @@ parse(uc_parse_config_t *config, uc_source_t *src,
 	}
 
 out:
-	uc_vm_free(&vm);
 	ucv_put(res);
 
 	return rc;
@@ -224,10 +186,11 @@ parse_envfile(FILE *fp)
 int
 main(int argc, char **argv)
 {
-	uc_value_t *env = NULL, *modules = NULL, *o, *p;
 	uc_source_t *source = NULL, *envfile = NULL;
-	int opt, rv = 0, trace = 0;
 	char *stdin = NULL, *c;
+	uc_vm_t vm = { 0 };
+	uc_value_t *o, *p;
+	int opt, rv = 0;
 
 	uc_parse_config_t config = {
 		.strict_declarations = false,
@@ -241,6 +204,20 @@ main(int argc, char **argv)
 		goto out;
 	}
 
+	uc_vm_init(&vm, &config);
+
+	/* load std functions into global scope */
+	uc_load_stdlib(uc_vm_scope_get(&vm));
+
+	/* register ARGV array */
+	o = ucv_array_new_length(&vm, argc);
+
+	for (opt = 0; opt < argc; opt++)
+		ucv_array_push(o, ucv_string_new(argv[opt]));
+
+	ucv_object_add(uc_vm_scope_get(&vm), "ARGV", o);
+
+	/* parse options */
 	while ((opt = getopt(argc, argv, "hlrtSRe:E:i:s:m:")) != -1)
 	{
 		switch (opt) {
@@ -337,32 +314,31 @@ main(int argc, char **argv)
 				goto out;
 			}
 
-			env = env ? env : ucv_object_new(NULL);
-
 			if (c > optarg && optarg[0]) {
-				p = ucv_object_new(NULL);
-				ucv_object_add(env, optarg, p);
+				p = ucv_object_new(&vm);
+				ucv_object_add(uc_vm_scope_get(&vm), optarg, p);
 			}
 			else {
-				p = env;
+				p = uc_vm_scope_get(&vm);
 			}
 
 			ucv_object_foreach(o, key, val)
-				ucv_object_add(p, key, ucv_get(val));
+				register_variable(p, key, ucv_get(val));
 
 			ucv_put(o);
 
 			break;
 
 		case 'm':
-			modules = modules ? modules : ucv_array_new(NULL);
+			o = uc_vm_invoke(&vm, "require", 1, ucv_string_new(optarg));
 
-			ucv_array_push(modules, ucv_string_new(optarg));
+			if (o)
+				register_variable(uc_vm_scope_get(&vm), optarg, o);
 
 			break;
 
 		case 't':
-			trace = 1;
+			uc_vm_trace_set(&vm, 1);
 			break;
 		}
 	}
@@ -383,13 +359,12 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	rv = parse(&config, source, env, modules, argc, argv, trace);
+	rv = compile(&vm, source);
 
 out:
-	ucv_put(modules);
-	ucv_put(env);
-
 	uc_source_put(source);
+
+	uc_vm_free(&vm);
 
 	return rv;
 }

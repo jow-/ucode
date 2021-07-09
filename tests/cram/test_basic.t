@@ -10,12 +10,12 @@ setup common environment:
 check that ucode provides exepected help:
 
   $ ucode | sed 's/ucode-san/ucode/'
-  == Usage ==
+  Usage
   
     # ucode [-t] [-l] [-r] [-S] [-R] [-e '[prefix=]{"var": ...}'] [-E [prefix=]env.json] {-i <file> | -s "ucode script..."}
     -h, --help\tPrint this help (esc)
-    -i file\tSpecify an ucode script to parse (esc)
-    -s "ucode script..."\tSpecify an ucode fragment to parse (esc)
+    -i file\tExecute the given ucode script file (esc)
+    -s "ucode script..."\tExecute the given string as ucode script (esc)
     -t Enable VM execution tracing
     -l Do not strip leading block whitespace
     -r Do not trim trailing block newlines
