@@ -40,11 +40,11 @@ print_usage(const char *app)
 {
 	printf(
 	"== Usage ==\n\n"
-	"  # %s [-d] [-l] [-r] [-S] [-R] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
+	"  # %s [-t] [-l] [-r] [-S] [-R] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
 	"  -h, --help	Print this help\n"
 	"  -i file	Specify an ucode script to parse\n"
 	"  -s \"ucode script...\"	Specify an ucode fragment to parse\n"
-	"  -d Instead of executing the script, dump the resulting AST as dot\n"
+	"  -t Enable VM execution tracing\n"
 	"  -l Do not strip leading block whitespace\n"
 	"  -r Do not trim trailing block newlines\n"
 	"  -S Enable strict mode\n"
@@ -76,7 +76,7 @@ register_variable(uc_value_t *scope, const char *key, uc_value_t *val)
 static int
 parse(uc_parse_config *config, uc_source *src,
       uc_value_t *env, uc_value_t *modules,
-      int argc, char **argv)
+      int argc, char **argv, int trace)
 {
 	uc_value_t *globals = NULL, *res = NULL, *arr, *name, *mod;
 	uc_function_t *entry;
@@ -86,6 +86,8 @@ parse(uc_parse_config *config, uc_source *src,
 	char *err;
 
 	uc_vm_init(&vm, config);
+
+	uc_vm_trace_set(&vm, trace);
 
 	entry = uc_compile(config, src, &err);
 
@@ -224,8 +226,8 @@ main(int argc, char **argv)
 {
 	uc_value_t *env = NULL, *modules = NULL, *o, *p;
 	uc_source *source = NULL, *envfile = NULL;
+	int opt, rv = 0, trace = 0;
 	char *stdin = NULL, *c;
-	int opt, rv = 0;
 
 	uc_parse_config config = {
 		.strict_declarations = false,
@@ -239,7 +241,7 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	while ((opt = getopt(argc, argv, "hlrSRe:E:i:s:m:")) != -1)
+	while ((opt = getopt(argc, argv, "hlrtSRe:E:i:s:m:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -358,6 +360,10 @@ main(int argc, char **argv)
 			ucv_array_push(modules, ucv_string_new(optarg));
 
 			break;
+
+		case 't':
+			trace = 1;
+			break;
 		}
 	}
 
@@ -377,7 +383,7 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	rv = parse(&config, source, env, modules, argc, argv);
+	rv = parse(&config, source, env, modules, argc, argv, trace);
 
 out:
 	ucv_put(modules);

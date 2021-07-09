@@ -14,7 +14,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
 #include <assert.h>
@@ -137,12 +136,8 @@ uc_vm_output_exception(uc_vm *vm, uc_exception *ex);
 
 void uc_vm_init(uc_vm *vm, uc_parse_config *config)
 {
-	char *s = getenv("TRACE");
-
 	vm->exception.type = EXCEPTION_NONE;
 	vm->exception.message = NULL;
-
-	vm->trace = s ? strtoul(s, NULL, 0) : 0;
 
 	vm->config = config;
 
@@ -160,6 +155,8 @@ void uc_vm_init(uc_vm *vm, uc_parse_config *config)
 	uc_vm_alloc_global_scope(vm);
 
 	uc_vm_exception_handler_set(vm, uc_vm_output_exception);
+
+	uc_vm_trace_set(vm, 0);
 }
 
 void uc_vm_free(uc_vm *vm)
@@ -2408,4 +2405,16 @@ void
 uc_vm_exception_handler_set(uc_vm *vm, uc_exception_handler_t *exhandler)
 {
 	vm->exhandler = exhandler;
+}
+
+uint32_t
+uc_vm_trace_get(uc_vm *vm)
+{
+	return vm->trace;
+}
+
+void
+uc_vm_trace_set(uc_vm *vm, uint32_t level)
+{
+	vm->trace = level;
 }
