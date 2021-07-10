@@ -130,3 +130,6 @@ ENDIF()
 INSTALL(TARGETS ucode RUNTIME DESTINATION bin)
 INSTALL(TARGETS libucode LIBRARY DESTINATION lib)
 INSTALL(TARGETS ${LIBRARIES} LIBRARY DESTINATION lib/ucode)
+
+SET(UCODE_HEADERS chunk.h compiler.h lexer.h lib.h module.h source.h types.h util.h value.h vm.h)
+INSTALL(FILES ${UCODE_HEADERS} DESTINATION include/ucode)
