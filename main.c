@@ -28,11 +28,11 @@
 	#include <json-c/json.h>
 #endif
 
-#include "compiler.h"
-#include "lexer.h"
-#include "lib.h"
-#include "vm.h"
-#include "source.h"
+#include "ucode/compiler.h"
+#include "ucode/lexer.h"
+#include "ucode/lib.h"
+#include "ucode/vm.h"
+#include "ucode/source.h"
 
 
 static void

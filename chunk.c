@@ -16,9 +16,9 @@
 
 #include <assert.h>
 
-#include "chunk.h"
-#include "types.h"
-#include "util.h"
+#include "ucode/chunk.h"
+#include "ucode/types.h"
+#include "ucode/util.h"
 
 #define OFFSETINFO_BITS (sizeof(((uc_offsetinfo_t *)NULL)->entries[0]) * 8)
 #define OFFSETINFO_BYTE_BITS 3

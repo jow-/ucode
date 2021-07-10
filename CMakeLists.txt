@@ -11,6 +11,8 @@ IF(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
 ENDIF()
 ADD_DEFINITIONS(-Wmissing-declarations -Wno-error=unused-variable -Wno-unused-parameter)
 
+INCLUDE_DIRECTORIES(include)
+
 OPTION(FS_SUPPORT "Filesystem plugin support" ON)
 OPTION(MATH_SUPPORT "Math plugin support" ON)
 OPTION(UBUS_SUPPORT "Ubus plugin support" ON)
@@ -131,5 +133,5 @@ INSTALL(TARGETS ucode RUNTIME DESTINATION bin)
 INSTALL(TARGETS libucode LIBRARY DESTINATION lib)
 INSTALL(TARGETS ${LIBRARIES} LIBRARY DESTINATION lib/ucode)
 
-SET(UCODE_HEADERS chunk.h compiler.h lexer.h lib.h module.h source.h types.h util.h value.h vm.h)
+FILE(GLOB UCODE_HEADERS "include/ucode/*.h")
 INSTALL(FILES ${UCODE_HEADERS} DESTINATION include/ucode)

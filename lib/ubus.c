@@ -19,7 +19,7 @@
 #include <libubox/blobmsg.h>
 #include <libubox/blobmsg_json.h>
 
-#include "../module.h"
+#include "ucode/module.h"
 
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 

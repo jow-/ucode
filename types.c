@@ -21,9 +21,9 @@
 #include <errno.h>
 #include <math.h>
 
-#include "types.h"
-#include "util.h"
-#include "vm.h"
+#include "ucode/types.h"
+#include "ucode/util.h"
+#include "ucode/vm.h"
 
 uc_type_t
 ucv_type(uc_value_t *uv)

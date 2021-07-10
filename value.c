@@ -20,10 +20,10 @@
 #include <ctype.h> /* isspace(), isdigit(), isxdigit() */
 #include <errno.h>
 
-#include "util.h"
-#include "chunk.h"
-#include "value.h"
-#include "vm.h"
+#include "ucode/util.h"
+#include "ucode/chunk.h"
+#include "ucode/value.h"
+#include "ucode/vm.h"
 
 #define TAG_TYPE			uint64_t
 #define TAG_BITS			3

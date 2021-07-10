@@ -25,9 +25,9 @@
 #include <errno.h>
 #include <endian.h>
 
-#include "vm.h"
-#include "lib.h"
-#include "lexer.h"
+#include "ucode/vm.h"
+#include "ucode/lib.h"
+#include "ucode/lexer.h"
 
 #define UC_LEX_CONTINUE_PARSING (void *)1
 

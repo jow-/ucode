@@ -32,11 +32,11 @@
 #include <sys/wait.h>
 #include <fnmatch.h>
 
-#include "lexer.h"
-#include "compiler.h"
-#include "vm.h"
-#include "lib.h"
-#include "source.h"
+#include "ucode/lexer.h"
+#include "ucode/compiler.h"
+#include "ucode/vm.h"
+#include "ucode/lib.h"
+#include "ucode/source.h"
 
 static void
 format_context_line(uc_stringbuf_t *buf, const char *line, size_t off, bool compact)

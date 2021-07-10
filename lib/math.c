@@ -17,7 +17,7 @@
 #include <math.h>
 #include <sys/time.h>
 
-#include "../module.h"
+#include "ucode/module.h"
 
 static bool srand_called = false;
 

@@ -20,9 +20,9 @@
 #include <ctype.h>
 #include <math.h>
 
-#include "vm.h"
-#include "compiler.h"
-#include "lib.h" /* format_error_context() */
+#include "ucode/vm.h"
+#include "ucode/compiler.h"
+#include "ucode/lib.h" /* format_error_context() */
 
 #undef __insn
 #define __insn(_name) #_name,

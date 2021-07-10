@@ -16,11 +16,11 @@
 
 #include <assert.h>
 
-#include "compiler.h"
-#include "chunk.h"
-#include "vm.h" /* I_* */
-#include "source.h"
-#include "lib.h" /* format_error_context() */
+#include "ucode/compiler.h"
+#include "ucode/chunk.h"
+#include "ucode/vm.h" /* I_* */
+#include "ucode/source.h"
+#include "ucode/lib.h" /* format_error_context() */
 
 static void uc_compiler_compile_unary(uc_compiler_t *compiler, bool assignable);
 static void uc_compiler_compile_binary(uc_compiler_t *compiler, bool assignable);

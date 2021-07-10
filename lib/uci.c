@@ -17,7 +17,7 @@
 #include <string.h>
 #include <uci.h>
 
-#include "../module.h"
+#include "ucode/module.h"
 
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
