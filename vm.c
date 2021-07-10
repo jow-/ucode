@@ -183,7 +183,7 @@ void uc_vm_free(uc_vm_t *vm)
 
 	printbuf_free(vm->strbuf);
 
-	ucv_gc(vm, true);
+	ucv_freeall(vm);
 
 	for (i = 0; i < vm->restypes.count; i++)
 		free(vm->restypes.entries[i]);

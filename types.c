@@ -1756,8 +1756,8 @@ ucv_equal(uc_value_t *uv1, uc_value_t *uv2)
 	}
 }
 
-void
-ucv_gc(uc_vm_t *vm, bool final)
+static void
+ucv_gc_common(uc_vm_t *vm, bool final)
 {
 	uc_weakref_t *ref, *tmp;
 	uc_value_t *val;
@@ -1797,4 +1797,16 @@ ucv_gc(uc_vm_t *vm, bool final)
 			free(val);
 		}
 	}
+}
+
+void
+ucv_gc(uc_vm_t *vm)
+{
+	ucv_gc_common(vm, false);
+}
+
+void
+ucv_freeall(uc_vm_t *vm)
+{
+	ucv_gc_common(vm, true);
 }

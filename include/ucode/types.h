@@ -434,6 +434,8 @@ ucv_clear_mark(uc_value_t *uv)
 
 bool ucv_equal(uc_value_t *, uc_value_t *);
 
-void ucv_gc(uc_vm_t *, bool);
+void ucv_gc(uc_vm_t *);
+
+void ucv_freeall(uc_vm_t *);
 
 #endif /* __TYPES_H_ */
