@@ -12,7 +12,7 @@ check that ucode provides exepected help:
   $ ucode | sed 's/ucode-san/ucode/'
   Usage
   
-    # ucode [-t] [-l] [-r] [-S] [-R] [-e '[prefix=]{"var": ...}'] [-E [prefix=]env.json] {-i <file> | -s "ucode script..."}
+    # ucode [-t] [-l] [-r] [-S] [-R] [-x function [-x ...]] [-e '[prefix=]{"var": ...}'] [-E [prefix=]env.json] {-i <file> | -s "ucode script..."}
     -h, --help\tPrint this help (esc)
     -i file\tExecute the given ucode script file (esc)
     -s "ucode script..."\tExecute the given string as ucode script (esc)
@@ -23,6 +23,7 @@ check that ucode provides exepected help:
     -R Enable raw code mode
     -e Set global variables from given JSON object
     -E Set global variables from given JSON file
+    -x Disable given function
     -m Preload given module
 
 check that ucode prints greetings:

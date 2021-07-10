@@ -40,7 +40,7 @@ print_usage(const char *app)
 {
 	printf(
 	"Usage\n\n"
-	"  # %s [-t] [-l] [-r] [-S] [-R] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
+	"  # %s [-t] [-l] [-r] [-S] [-R] [-x function [-x ...]] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
 	"  -h, --help	Print this help\n"
 	"  -i file	Execute the given ucode script file\n"
 	"  -s \"ucode script...\"	Execute the given string as ucode script\n"
@@ -51,6 +51,7 @@ print_usage(const char *app)
 	"  -R Enable raw code mode\n"
 	"  -e Set global variables from given JSON object\n"
 	"  -E Set global variables from given JSON file\n"
+	"  -x Disable given function\n"
 	"  -m Preload given module\n",
 		basename(app));
 }
@@ -218,7 +219,7 @@ main(int argc, char **argv)
 	ucv_object_add(uc_vm_scope_get(&vm), "ARGV", o);
 
 	/* parse options */
-	while ((opt = getopt(argc, argv, "hlrtSRe:E:i:s:m:")) != -1)
+	while ((opt = getopt(argc, argv, "hlrtSRe:E:i:s:m:x:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -339,6 +340,16 @@ main(int argc, char **argv)
 
 		case 't':
 			uc_vm_trace_set(&vm, 1);
+			break;
+
+		case 'x':
+			o = ucv_object_get(uc_vm_scope_get(&vm), optarg, NULL);
+
+			if (ucv_is_callable(o))
+				ucv_object_delete(uc_vm_scope_get(&vm), optarg);
+			else
+				fprintf(stderr, "Unknown function %s specified\n", optarg);
+
 			break;
 		}
 	}
