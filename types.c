@@ -126,30 +126,34 @@ ucv_gc_mark(uc_value_t *uv)
 	struct lh_entry *entry;
 	size_t i;
 
+	if (ucv_is_marked(uv))
+		return;
+
 	switch (ucv_type(uv)) {
 	case UC_ARRAY:
 		array = (uc_array_t *)uv;
+
+		if (array->ref.next)
+			ucv_set_mark(uv);
 
 		ucv_gc_mark(array->proto);
 
 		for (i = 0; i < array->count; i++)
 			ucv_gc_mark(array->entries[i]);
 
-		if (array->ref.next)
-			ucv_set_mark(uv);
-
 		break;
 
 	case UC_OBJECT:
 		object = (uc_object_t *)uv;
+
+		if (object->ref.next)
+			ucv_set_mark(uv);
 
 		ucv_gc_mark(object->proto);
 
 		lh_foreach(object->table, entry)
 			ucv_gc_mark((uc_value_t *)lh_entry_v(entry));
 
-		if (object->ref.next)
-			ucv_set_mark(uv);
 
 		break;
 
@@ -157,13 +161,13 @@ ucv_gc_mark(uc_value_t *uv)
 		closure = (uc_closure_t *)uv;
 		function = closure->function;
 
+		if (closure->ref.next)
+			ucv_set_mark(uv);
+
 		for (i = 0; i < function->nupvals; i++)
 			ucv_gc_mark((uc_value_t *)closure->upvals[i]);
 
 		ucv_gc_mark((uc_value_t *)function);
-
-		if (closure->ref.next)
-			ucv_set_mark(uv);
 
 		break;
 
