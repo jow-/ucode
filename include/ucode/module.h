@@ -20,26 +20,6 @@
 #include "lib.h"
 #include "vm.h"
 
-#define register_functions(scope, functions) \
-	if (scope) \
-		for (int i = 0; i < ARRAY_SIZE(functions); i++) \
-			json_object_object_add(scope->header.jso, functions[i].name, \
-				ops->value.cfunc(functions[i].name, functions[i].func))
-
-#define alloc_prototype(functions) ({ \
-	uc_prototype *__proto = uc_object_as_prototype(ops->value.proto(NULL)); \
-	register_functions(__proto, functions); \
-	__proto; \
-})
-
-#define declare_type(name, proto, freefn) \
-	ucv_ressource_type_add(name, proto, freefn)
-
-#define alloc_ressource(data, type) \
-	ucv_ressource_new(ucv_object_new(NULL), type, data)
-
-#define register_ressource(scope, key, res) \
-	json_object_object_add((scope)->header.jso, key, (res)->header.jso)
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope) __attribute__((weak));
 
