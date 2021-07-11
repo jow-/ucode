@@ -1236,7 +1236,7 @@ uc_lexer_next_token(uc_lexer_t *lex)
 }
 
 const char *
-uc_get_tokenname(unsigned type)
+uc_tokenname(unsigned type)
 {
 	static char buf[sizeof("'endfunction'")];
 	size_t i;

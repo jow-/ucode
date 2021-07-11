@@ -133,8 +133,8 @@ uc_blob_to_json(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **na
 static uc_value_t *
 uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *socket = uc_get_arg(0);
-	uc_value_t *timeout = uc_get_arg(1);
+	uc_value_t *socket = uc_fn_arg(0);
+	uc_value_t *timeout = uc_fn_arg(1);
 	uc_value_t *co;
 	ubus_connection *c;
 
@@ -168,7 +168,7 @@ uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 
 	ubus_add_uloop(c->ctx);
 
-	return uc_alloc_ressource(conn_type, c);
+	return uc_ressource_new(conn_type, c);
 }
 
 static void
@@ -201,8 +201,8 @@ uc_ubus_objects_cb(struct ubus_context *c, struct ubus_object_data *o, void *p)
 static uc_value_t *
 uc_ubus_list(uc_vm_t *vm, size_t nargs)
 {
-	ubus_connection **c = uc_get_self("ubus.connection");
-	uc_value_t *objname = uc_get_arg(0);
+	ubus_connection **c = uc_fn_this("ubus.connection");
+	uc_value_t *objname = uc_fn_arg(0);
 	uc_value_t *res = NULL;
 	enum ubus_msg_status rv;
 
@@ -239,10 +239,10 @@ uc_ubus_call_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 static uc_value_t *
 uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
-	ubus_connection **c = uc_get_self("ubus.connection");
-	uc_value_t *objname = uc_get_arg(0);
-	uc_value_t *funname = uc_get_arg(1);
-	uc_value_t *funargs = uc_get_arg(2);
+	ubus_connection **c = uc_fn_this("ubus.connection");
+	uc_value_t *objname = uc_fn_arg(0);
+	uc_value_t *funname = uc_fn_arg(1);
+	uc_value_t *funargs = uc_fn_arg(2);
 	uc_value_t *res = NULL;
 	json_object *o;
 	enum ubus_msg_status rv;
@@ -284,7 +284,7 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
 {
-	ubus_connection **c = uc_get_self("ubus.connection");
+	ubus_connection **c = uc_fn_this("ubus.connection");
 
 	if (!c || !*c || !(*c)->ctx)
 		err_return(UBUS_STATUS_CONNECTION_FAILED);
@@ -296,12 +296,12 @@ uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
 }
 
 
-static const uc_cfunction_list_t global_fns[] = {
+static const uc_function_list_t global_fns[] = {
 	{ "error",		uc_ubus_error },
 	{ "connect",	uc_ubus_connect },
 };
 
-static const uc_cfunction_list_t conn_fns[] = {
+static const uc_function_list_t conn_fns[] = {
 	{ "list",		uc_ubus_list },
 	{ "call",		uc_ubus_call },
 	{ "error",		uc_ubus_error },
@@ -322,7 +322,7 @@ static void close_connection(void *ud) {
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
-	uc_add_functions(scope, global_fns);
+	uc_function_list_register(scope, global_fns);
 
-	conn_type = uc_declare_type(vm, "ubus.connection", conn_fns, close_connection);
+	conn_type = uc_type_declare(vm, "ubus.connection", conn_fns, close_connection);
 }

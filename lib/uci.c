@@ -66,8 +66,8 @@ uc_uci_error(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *cdir = uc_get_arg(0);
-	uc_value_t *sdir = uc_get_arg(1);
+	uc_value_t *cdir = uc_fn_arg(0);
+	uc_value_t *sdir = uc_fn_arg(1);
 	struct uci_context *c;
 	int rv;
 
@@ -94,15 +94,15 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 			err_return(rv);
 	}
 
-	return uc_alloc_ressource(cursor_type, c);
+	return uc_ressource_new(cursor_type, c);
 }
 
 
 static uc_value_t *
 uc_uci_load(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
 	struct uci_element *e;
 	char *s;
 
@@ -130,8 +130,8 @@ uc_uci_load(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uci_unload(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
 	struct uci_element *e;
 
 	if (!c || !*c)
@@ -251,10 +251,10 @@ package_to_uval(uc_vm_t *vm, struct uci_package *p)
 static uc_value_t *
 uc_uci_get_any(uc_vm_t *vm, size_t nargs, bool all)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
-	uc_value_t *sect = uc_get_arg(1);
-	uc_value_t *opt = uc_get_arg(2);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
+	uc_value_t *opt = uc_fn_arg(2);
 	struct uci_ptr ptr = { 0 };
 	int rv;
 
@@ -323,10 +323,10 @@ uc_uci_get_all(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uci_get_first(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
-	uc_value_t *type = uc_get_arg(1);
-	uc_value_t *opt = uc_get_arg(2);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *type = uc_fn_arg(1);
+	uc_value_t *opt = uc_fn_arg(2);
 	struct uci_package *p = NULL;
 	struct uci_section *sc;
 	struct uci_element *e;
@@ -381,9 +381,9 @@ uc_uci_get_first(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uci_add(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
-	uc_value_t *type = uc_get_arg(1);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *type = uc_fn_arg(1);
 	struct uci_element *e = NULL;
 	struct uci_package *p = NULL;
 	struct uci_section *sc = NULL;
@@ -461,9 +461,9 @@ uval_to_uci(uc_vm_t *vm, uc_value_t *val, const char **p, bool *is_list)
 static uc_value_t *
 uc_uci_set(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
-	uc_value_t *sect = uc_get_arg(1);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
 	uc_value_t *opt = NULL, *val = NULL;
 	struct uci_ptr ptr = { 0 };
 	bool is_list = false;
@@ -477,8 +477,8 @@ uc_uci_set(uc_vm_t *vm, size_t nargs)
 	switch (nargs) {
 	/* conf, sect, opt, val */
 	case 4:
-		opt = uc_get_arg(2);
-		val = uc_get_arg(3);
+		opt = uc_fn_arg(2);
+		val = uc_fn_arg(3);
 
 		if (ucv_type(opt) != UC_STRING)
 			err_return(UCI_ERR_INVAL);
@@ -487,7 +487,7 @@ uc_uci_set(uc_vm_t *vm, size_t nargs)
 
 	/* conf, sect, type */
 	case 3:
-		val = uc_get_arg(2);
+		val = uc_fn_arg(2);
 
 		if (ucv_type(val) != UC_STRING)
 			err_return(UCI_ERR_INVAL);
@@ -566,10 +566,10 @@ uc_uci_set(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uci_delete(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
-	uc_value_t *sect = uc_get_arg(1);
-	uc_value_t *opt = uc_get_arg(2);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
+	uc_value_t *opt = uc_fn_arg(2);
 	struct uci_ptr ptr = { 0 };
 	int rv;
 
@@ -601,9 +601,9 @@ uc_uci_delete(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uci_rename(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
-	uc_value_t *sect = uc_get_arg(1);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
 	uc_value_t *opt = NULL, *val = NULL;
 	struct uci_ptr ptr = { 0 };
 	int rv;
@@ -615,8 +615,8 @@ uc_uci_rename(uc_vm_t *vm, size_t nargs)
 	switch (nargs) {
 	/* conf, sect, opt, val */
 	case 4:
-		opt = uc_get_arg(2);
-		val = uc_get_arg(3);
+		opt = uc_fn_arg(2);
+		val = uc_fn_arg(3);
 
 		if (ucv_type(opt) != UC_STRING ||
 		    ucv_type(val) != UC_STRING)
@@ -626,7 +626,7 @@ uc_uci_rename(uc_vm_t *vm, size_t nargs)
 
 	/* conf, sect, type */
 	case 3:
-		val = uc_get_arg(2);
+		val = uc_fn_arg(2);
 
 		if (ucv_type(val) != UC_STRING)
 			err_return(UCI_ERR_INVAL);
@@ -661,10 +661,10 @@ uc_uci_rename(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uci_reorder(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
-	uc_value_t *sect = uc_get_arg(1);
-	uc_value_t *val = uc_get_arg(2);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
+	uc_value_t *val = uc_fn_arg(2);
 	struct uci_ptr ptr = { 0 };
 	int64_t n;
 	int rv;
@@ -701,8 +701,8 @@ uc_uci_reorder(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uci_pkg_command(uc_vm_t *vm, size_t nargs, enum pkg_cmd cmd)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
 	struct uci_element *e, *tmp;
 	struct uci_package *p;
 	struct uci_ptr ptr = { 0 };
@@ -858,8 +858,8 @@ changes_to_uval(uc_vm_t *vm, struct uci_context *ctx, const char *package)
 static uc_value_t *
 uc_uci_changes(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
 	uc_value_t *res, *chg;
 	char **configs;
 	int rv, i;
@@ -892,10 +892,10 @@ uc_uci_changes(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uci_foreach(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
-	uc_value_t *conf = uc_get_arg(0);
-	uc_value_t *type = uc_get_arg(1);
-	uc_value_t *func = uc_get_arg(2);
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *type = uc_fn_arg(1);
+	uc_value_t *func = uc_fn_arg(2);
 	uc_value_t *rv = NULL;
 	struct uci_package *p = NULL;
 	struct uci_element *e, *tmp;
@@ -927,8 +927,8 @@ uc_uci_foreach(uc_vm_t *vm, size_t nargs)
 		if (type && strcmp(sc->type, ucv_string_get(type)))
 			continue;
 
-		uc_push_val(ucv_get(func));
-		uc_push_val(section_to_uval(vm, sc, i - 1));
+		uc_value_push(ucv_get(func));
+		uc_value_push(section_to_uval(vm, sc, i - 1));
 
 		ex = uc_call(1);
 
@@ -937,7 +937,7 @@ uc_uci_foreach(uc_vm_t *vm, size_t nargs)
 			break;
 
 		ret = true;
-		rv = uc_pop_val();
+		rv = uc_value_pop();
 		stop = (ucv_type(rv) == UC_BOOLEAN && !ucv_boolean_get(rv));
 
 		ucv_put(rv);
@@ -954,7 +954,7 @@ uc_uci_foreach(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uci_configs(uc_vm_t *vm, size_t nargs)
 {
-	struct uci_context **c = uc_get_self("uci.cursor");
+	struct uci_context **c = uc_fn_this("uci.cursor");
 	uc_value_t *a;
 	char **configs;
 	int i, rv;
@@ -975,7 +975,7 @@ uc_uci_configs(uc_vm_t *vm, size_t nargs)
 }
 
 
-static const uc_cfunction_list_t cursor_fns[] = {
+static const uc_function_list_t cursor_fns[] = {
 	{ "load",		uc_uci_load },
 	{ "unload",		uc_uci_unload },
 	{ "get",		uc_uci_get },
@@ -995,7 +995,7 @@ static const uc_cfunction_list_t cursor_fns[] = {
 	{ "error",		uc_uci_error },
 };
 
-static const uc_cfunction_list_t global_fns[] = {
+static const uc_function_list_t global_fns[] = {
 	{ "error",		uc_uci_error },
 	{ "cursor",		uc_uci_cursor },
 };
@@ -1007,7 +1007,7 @@ static void close_uci(void *ud) {
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
-	uc_add_functions(scope, global_fns);
+	uc_function_list_register(scope, global_fns);
 
-	cursor_type = uc_declare_type(vm, "uci.cursor", cursor_fns, close_uci);
+	cursor_type = uc_type_declare(vm, "uci.cursor", cursor_fns, close_uci);
 }

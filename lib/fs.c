@@ -52,14 +52,14 @@ uc_fs_error(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 {
-	uc_value_t *limit = uc_get_arg(0);
+	uc_value_t *limit = uc_fn_arg(0);
 	uc_value_t *rv = NULL;
 	char buf[128], *p = NULL, *tmp;
 	size_t rlen, len = 0;
 	const char *lstr;
 	int64_t lsize;
 
-	FILE **fp = uc_get_self(type);
+	FILE **fp = uc_fn_this(type);
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -144,11 +144,11 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 static uc_value_t *
 uc_fs_write_common(uc_vm_t *vm, size_t nargs, const char *type)
 {
-	uc_value_t *data = uc_get_arg(0);
+	uc_value_t *data = uc_fn_arg(0);
 	size_t len, wsize;
 	char *str;
 
-	FILE **fp = uc_get_self(type);
+	FILE **fp = uc_fn_this(type);
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -174,7 +174,7 @@ uc_fs_write_common(uc_vm_t *vm, size_t nargs, const char *type)
 static uc_value_t *
 uc_fs_pclose(uc_vm_t *vm, size_t nargs)
 {
-	FILE **fp = uc_get_self("fs.proc");
+	FILE **fp = uc_fn_this("fs.proc");
 	int rc;
 
 	if (!fp || !*fp)
@@ -210,8 +210,8 @@ uc_fs_pwrite(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_popen(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *comm = uc_get_arg(0);
-	uc_value_t *mode = uc_get_arg(1);
+	uc_value_t *comm = uc_fn_arg(0);
+	uc_value_t *mode = uc_fn_arg(1);
 	FILE *fp;
 
 	if (ucv_type(comm) != UC_STRING)
@@ -223,14 +223,14 @@ uc_fs_popen(uc_vm_t *vm, size_t nargs)
 	if (!fp)
 		err_return(errno);
 
-	return uc_alloc_ressource(proc_type, fp);
+	return uc_ressource_new(proc_type, fp);
 }
 
 
 static uc_value_t *
 uc_fs_close(uc_vm_t *vm, size_t nargs)
 {
-	FILE **fp = uc_get_self("fs.file");
+	FILE **fp = uc_fn_this("fs.file");
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -256,12 +256,12 @@ uc_fs_write(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_seek(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *ofs = uc_get_arg(0);
-	uc_value_t *how = uc_get_arg(1);
+	uc_value_t *ofs = uc_fn_arg(0);
+	uc_value_t *how = uc_fn_arg(1);
 	int whence, res;
 	long offset;
 
-	FILE **fp = uc_get_self("fs.file");
+	FILE **fp = uc_fn_this("fs.file");
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -293,7 +293,7 @@ uc_fs_tell(uc_vm_t *vm, size_t nargs)
 {
 	long offset;
 
-	FILE **fp = uc_get_self("fs.file");
+	FILE **fp = uc_fn_this("fs.file");
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -309,8 +309,8 @@ uc_fs_tell(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_open(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *path = uc_get_arg(0);
-	uc_value_t *mode = uc_get_arg(1);
+	uc_value_t *path = uc_fn_arg(0);
+	uc_value_t *mode = uc_fn_arg(1);
 	FILE *fp;
 
 	if (ucv_type(path) != UC_STRING)
@@ -322,14 +322,14 @@ uc_fs_open(uc_vm_t *vm, size_t nargs)
 	if (!fp)
 		err_return(errno);
 
-	return uc_alloc_ressource(file_type, fp);
+	return uc_ressource_new(file_type, fp);
 }
 
 
 static uc_value_t *
 uc_fs_readdir(uc_vm_t *vm, size_t nargs)
 {
-	DIR **dp = uc_get_self("fs.dir");
+	DIR **dp = uc_fn_this("fs.dir");
 	struct dirent *e;
 
 	if (!dp || !*dp)
@@ -347,7 +347,7 @@ uc_fs_readdir(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_telldir(uc_vm_t *vm, size_t nargs)
 {
-	DIR **dp = uc_get_self("fs.dir");
+	DIR **dp = uc_fn_this("fs.dir");
 	long position;
 
 	if (!dp || !*dp)
@@ -364,8 +364,8 @@ uc_fs_telldir(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_seekdir(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *ofs = uc_get_arg(0);
-	DIR **dp = uc_get_self("fs.dir");
+	uc_value_t *ofs = uc_fn_arg(0);
+	DIR **dp = uc_fn_this("fs.dir");
 	long position;
 
 	if (ucv_type(ofs) != UC_INTEGER)
@@ -384,7 +384,7 @@ uc_fs_seekdir(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_closedir(uc_vm_t *vm, size_t nargs)
 {
-	DIR **dp = uc_get_self("fs.dir");
+	DIR **dp = uc_fn_this("fs.dir");
 
 	if (!dp || !*dp)
 		err_return(EBADF);
@@ -398,7 +398,7 @@ uc_fs_closedir(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_opendir(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *path = uc_fn_arg(0);
 	DIR *dp;
 
 	if (ucv_type(path) != UC_STRING)
@@ -409,13 +409,13 @@ uc_fs_opendir(uc_vm_t *vm, size_t nargs)
 	if (!dp)
 		err_return(errno);
 
-	return uc_alloc_ressource(dir_type, dp);
+	return uc_ressource_new(dir_type, dp);
 }
 
 static uc_value_t *
 uc_fs_readlink(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *path = uc_fn_arg(0);
 	uc_value_t *res;
 	ssize_t buflen = 0, rv;
 	char *buf = NULL, *tmp;
@@ -455,7 +455,7 @@ uc_fs_readlink(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_stat_common(uc_vm_t *vm, size_t nargs, bool use_lstat)
 {
-	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *path = uc_fn_arg(0);
 	uc_value_t *res, *o;
 	struct stat st;
 	int rv;
@@ -551,8 +551,8 @@ uc_fs_lstat(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_mkdir(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *path = uc_get_arg(0);
-	uc_value_t *mode = uc_get_arg(1);
+	uc_value_t *path = uc_fn_arg(0);
+	uc_value_t *mode = uc_fn_arg(1);
 
 	if (ucv_type(path) != UC_STRING ||
 	    (mode && ucv_type(mode) != UC_INTEGER))
@@ -567,7 +567,7 @@ uc_fs_mkdir(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_rmdir(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *path = uc_fn_arg(0);
 
 	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
@@ -581,8 +581,8 @@ uc_fs_rmdir(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_symlink(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *dest = uc_get_arg(0);
-	uc_value_t *path = uc_get_arg(1);
+	uc_value_t *dest = uc_fn_arg(0);
+	uc_value_t *path = uc_fn_arg(1);
 
 	if (ucv_type(dest) != UC_STRING ||
 	    ucv_type(path) != UC_STRING)
@@ -597,7 +597,7 @@ uc_fs_symlink(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_unlink(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *path = uc_fn_arg(0);
 
 	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
@@ -647,7 +647,7 @@ uc_fs_getcwd(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_chdir(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *path = uc_get_arg(0);
+	uc_value_t *path = uc_fn_arg(0);
 
 	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
@@ -661,8 +661,8 @@ uc_fs_chdir(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_chmod(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *path = uc_get_arg(0);
-	uc_value_t *mode = uc_get_arg(1);
+	uc_value_t *path = uc_fn_arg(0);
+	uc_value_t *mode = uc_fn_arg(1);
 
 	if (ucv_type(path) != UC_STRING ||
 	    ucv_type(mode) != UC_INTEGER)
@@ -771,9 +771,9 @@ uc_fs_resolve_group(uc_value_t *v, gid_t *gid)
 static uc_value_t *
 uc_fs_chown(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *path = uc_get_arg(0);
-	uc_value_t *user = uc_get_arg(1);
-	uc_value_t *group = uc_get_arg(2);
+	uc_value_t *path = uc_fn_arg(0);
+	uc_value_t *user = uc_fn_arg(1);
+	uc_value_t *group = uc_fn_arg(2);
 	uid_t uid;
 	gid_t gid;
 
@@ -793,8 +793,8 @@ uc_fs_chown(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_rename(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *oldpath = uc_get_arg(0);
-	uc_value_t *newpath = uc_get_arg(1);
+	uc_value_t *oldpath = uc_fn_arg(0);
+	uc_value_t *newpath = uc_fn_arg(1);
 
 	if (ucv_type(oldpath) != UC_STRING ||
 	    ucv_type(newpath) != UC_STRING)
@@ -814,7 +814,7 @@ uc_fs_glob(uc_vm_t *vm, size_t nargs)
 	size_t i;
 
 	for (i = 0; i < nargs; i++) {
-		pat = uc_get_arg(i);
+		pat = uc_fn_arg(i);
 
 		if (ucv_type(pat) != UC_STRING) {
 			globfree(&gl);
@@ -835,14 +835,14 @@ uc_fs_glob(uc_vm_t *vm, size_t nargs)
 }
 
 
-static const uc_cfunction_list_t proc_fns[] = {
+static const uc_function_list_t proc_fns[] = {
 	{ "read",		uc_fs_pread },
 	{ "write",		uc_fs_pwrite },
 	{ "close",		uc_fs_pclose },
 	{ "error",		uc_fs_error },
 };
 
-static const uc_cfunction_list_t file_fns[] = {
+static const uc_function_list_t file_fns[] = {
 	{ "read",		uc_fs_read },
 	{ "write",		uc_fs_write },
 	{ "seek",		uc_fs_seek },
@@ -851,7 +851,7 @@ static const uc_cfunction_list_t file_fns[] = {
 	{ "error",		uc_fs_error },
 };
 
-static const uc_cfunction_list_t dir_fns[] = {
+static const uc_function_list_t dir_fns[] = {
 	{ "read",		uc_fs_readdir },
 	{ "seek",		uc_fs_seekdir },
 	{ "tell",		uc_fs_telldir },
@@ -859,7 +859,7 @@ static const uc_cfunction_list_t dir_fns[] = {
 	{ "error",		uc_fs_error },
 };
 
-static const uc_cfunction_list_t global_fns[] = {
+static const uc_function_list_t global_fns[] = {
 	{ "error",		uc_fs_error },
 	{ "open",		uc_fs_open },
 	{ "opendir",	uc_fs_opendir },
@@ -906,13 +906,13 @@ static void close_dir(void *ud)
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
-	uc_add_functions(scope, global_fns);
+	uc_function_list_register(scope, global_fns);
 
-	proc_type = uc_declare_type(vm, "fs.proc", proc_fns, close_proc);
-	file_type = uc_declare_type(vm, "fs.file", file_fns, close_file);
-	dir_type = uc_declare_type(vm, "fs.dir", dir_fns, close_dir);
+	proc_type = uc_type_declare(vm, "fs.proc", proc_fns, close_proc);
+	file_type = uc_type_declare(vm, "fs.file", file_fns, close_file);
+	dir_type = uc_type_declare(vm, "fs.dir", dir_fns, close_dir);
 
-	ucv_object_add(scope, "stdin", uc_alloc_ressource(file_type, stdin));
-	ucv_object_add(scope, "stdout", uc_alloc_ressource(file_type, stdout));
-	ucv_object_add(scope, "stderr", uc_alloc_ressource(file_type, stderr));
+	ucv_object_add(scope, "stdin", uc_ressource_new(file_type, stdin));
+	ucv_object_add(scope, "stdout", uc_ressource_new(file_type, stdout));
+	ucv_object_add(scope, "stderr", uc_ressource_new(file_type, stderr));
 }

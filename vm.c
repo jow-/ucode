@@ -22,7 +22,7 @@
 
 #include "ucode/vm.h"
 #include "ucode/compiler.h"
-#include "ucode/lib.h" /* format_error_context() */
+#include "ucode/lib.h" /* uc_error_context_format() */
 
 #undef __insn
 #define __insn(_name) #_name,
@@ -599,7 +599,7 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 	if (last_srcpos == 0 || last_source != frame->closure->function->source || srcpos != last_srcpos) {
 		buf = xprintbuf_new();
 
-		format_source_context(buf, frame->closure->function->source, srcpos, true);
+		uc_source_context_format(buf, frame->closure->function->source, srcpos, true);
 		fwrite(buf->buf, 1, printbuf_length(buf), stderr);
 		printbuf_free(buf);
 
@@ -835,7 +835,7 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 			ucv_object_add(entry, "function", ucv_string_new(name));
 		}
 
-		if (!ucv_equal(last, entry)) {
+		if (!ucv_is_equal(last, entry)) {
 			ucv_array_push(stacktrace, entry);
 			last = entry;
 		}
@@ -873,7 +873,7 @@ uc_vm_get_error_context(uc_vm_t *vm)
 	buf = ucv_stringbuf_new();
 
 	if (offset)
-		format_error_context(buf, frame->closure->function->source, stacktrace, offset);
+		uc_error_context_format(buf, frame->closure->function->source, stacktrace, offset);
 	else if (frame->ip != chunk->entries)
 		ucv_stringbuf_printf(buf, "At instruction %zu", (frame->ip - chunk->entries) - 1);
 	else
@@ -1016,7 +1016,7 @@ uc_vm_insn_load_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
-		uc_vm_stack_push(vm, uc_getval(vm, v, k));
+		uc_vm_stack_push(vm, ucv_key_get(vm, v, k));
 		break;
 
 	default:
@@ -1191,7 +1191,7 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(o)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
-		uc_vm_stack_push(vm, uc_setval(vm, o, k, v));
+		uc_vm_stack_push(vm, ucv_key_set(vm, o, k, v));
 		break;
 
 	default:
@@ -1236,10 +1236,10 @@ uc_vm_value_bitop(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 	int64_t n1, n2;
 	double d;
 
-	if (uc_cast_number(value, &n1, &d) == UC_DOUBLE)
+	if (ucv_cast_number(value, &n1, &d) == UC_DOUBLE)
 		n1 = isnan(d) ? 0 : (int64_t)d;
 
-	if (uc_cast_number(operand, &n2, &d) == UC_DOUBLE)
+	if (ucv_cast_number(operand, &n2, &d) == UC_DOUBLE)
 		n2 = isnan(d) ? 0 : (int64_t)d;
 
 	switch (operation) {
@@ -1303,8 +1303,8 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 		return rv;
 	}
 
-	t1 = uc_cast_number(value, &n1, &d1);
-	t2 = uc_cast_number(operand, &n2, &d2);
+	t1 = ucv_cast_number(value, &n1, &d1);
+	t2 = ucv_cast_number(operand, &n2, &d2);
 
 	if (t1 == UC_DOUBLE || t2 == UC_DOUBLE) {
 		d1 = (t1 == UC_DOUBLE) ? d1 : (double)n1;
@@ -1438,8 +1438,8 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
-		val = uc_getval(vm, v, k);
-		uc_vm_stack_push(vm, uc_setval(vm, v, k, uc_vm_value_arith(vm, vm->arg.u8, val, inc)));
+		val = ucv_key_get(vm, v, k);
+		uc_vm_stack_push(vm, ucv_key_set(vm, v, k, uc_vm_value_arith(vm, vm->arg.u8, val, inc)));
 		break;
 
 	default:
@@ -1634,7 +1634,7 @@ uc_vm_insn_plus_minus(uc_vm_t *vm, uc_vm_insn_t insn)
 	int64_t n;
 	double d;
 
-	t = uc_cast_number(v, &n, &d);
+	t = ucv_cast_number(v, &n, &d);
 
 	ucv_put(v);
 
@@ -1671,7 +1671,7 @@ uc_vm_insn_complement(uc_vm_t *vm, uc_vm_insn_t insn)
 	int64_t n;
 	double d;
 
-	if (uc_cast_number(v, &n, &d) == UC_DOUBLE)
+	if (ucv_cast_number(v, &n, &d) == UC_DOUBLE)
 		n = isnan(d) ? 0 : (int64_t)d;
 
 	ucv_put(v);
@@ -1685,7 +1685,7 @@ uc_vm_insn_rel(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *r2 = uc_vm_stack_pop(vm);
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
 
-	bool res = uc_cmp(insn, r1, r2);
+	bool res = ucv_compare(insn, r1, r2);
 
 	ucv_put(r1);
 	ucv_put(r2);
@@ -1709,7 +1709,7 @@ uc_vm_insn_in(uc_vm_t *vm, uc_vm_insn_t insn)
 		     arridx < arrlen; arridx++) {
 			item = ucv_array_get(r2, arridx);
 
-			if (uc_cmp(I_EQ, r1, item)) {
+			if (ucv_compare(I_EQ, r1, item)) {
 				found = true;
 				break;
 			}
@@ -1747,7 +1747,7 @@ uc_vm_insn_equality(uc_vm_t *vm, uc_vm_insn_t insn)
 	bool equal;
 
 	if (ucv_is_scalar(r1) && ucv_is_scalar(r2))
-		equal = ucv_equal(r1, r2);
+		equal = ucv_is_equal(r1, r2);
 	else
 		equal = (r1 == r2);
 
@@ -1762,7 +1762,7 @@ uc_vm_insn_not(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
 
-	uc_vm_stack_push(vm, ucv_boolean_new(!uc_val_is_truish(r1)));
+	uc_vm_stack_push(vm, ucv_boolean_new(!ucv_is_truish(r1)));
 	ucv_put(r1);
 }
 
@@ -1802,7 +1802,7 @@ uc_vm_insn_jmpz(uc_vm_t *vm, uc_vm_insn_t insn)
 		return;
 	}
 
-	if (!uc_val_is_truish(v))
+	if (!ucv_is_truish(v))
 		frame->ip += addr;
 
 	ucv_put(v);
@@ -1908,7 +1908,7 @@ uc_vm_insn_mcall(uc_vm_t *vm, uc_vm_insn_t insn)
 	size_t key_slot = vm->stack.count - (vm->arg.u32 & 0xffff) - 1;
 	uc_value_t *ctx = vm->stack.entries[key_slot - 1];
 	uc_value_t *key = vm->stack.entries[key_slot];
-	uc_value_t *fno = uc_getval(vm, ctx, key);
+	uc_value_t *fno = ucv_key_get(vm, ctx, key);
 
 	uc_vm_stack_set(vm, key_slot, fno);
 
@@ -1958,7 +1958,7 @@ uc_vm_insn_delete(uc_vm_t *vm, uc_vm_insn_t insn)
 
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
-		rv = uc_delval(vm, v, k);
+		rv = ucv_key_delete(vm, v, k);
 		uc_vm_stack_push(vm, ucv_boolean_new(rv));
 		break;
 
@@ -2319,7 +2319,7 @@ uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval)
 	if (vm->trace) {
 		buf = xprintbuf_new();
 
-		format_source_context(buf, fn->source, 0, true);
+		uc_source_context_format(buf, fn->source, 0, true);
 
 		fwrite(buf->buf, 1, printbuf_length(buf), stderr);
 		printbuf_free(buf);

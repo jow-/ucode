@@ -39,8 +39,8 @@ static uc_parse_config_t config = {
 static uc_value_t *
 multiply_two_numbers(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *x = uc_get_arg(0);
-	uc_value_t *y = uc_get_arg(1);
+	uc_value_t *x = uc_fn_arg(0);
+	uc_value_t *y = uc_fn_arg(1);
 
 	return ucv_double_new(ucv_to_double(x) * ucv_to_double(y));
 }
@@ -51,7 +51,7 @@ add_all_numbers(uc_vm_t *vm, size_t nargs)
 	double res = 0.0;
 
 	for (size_t n = 0; n < nargs; n++)
-		res += ucv_to_double(uc_get_arg(n));
+		res += ucv_to_double(uc_fn_arg(n));
 
 	return ucv_double_new(res);
 }
@@ -82,11 +82,11 @@ int main(int argc, char **argv)
 	uc_vm_init(&vm, &config);
 
 	/* load standard library into global VM scope */
-	uc_load_stdlib(uc_vm_scope_get(&vm));
+	uc_stdlib_load(uc_vm_scope_get(&vm));
 
 	/* register our native functions as "add" and "multiply" */
-	uc_add_function(uc_vm_scope_get(&vm), "add", add_all_numbers);
-	uc_add_function(uc_vm_scope_get(&vm), "multiply", multiply_two_numbers);
+	uc_function_register(uc_vm_scope_get(&vm), "add", add_all_numbers);
+	uc_function_register(uc_vm_scope_get(&vm), "multiply", multiply_two_numbers);
 
 	/* execute program function */
 	int return_code = uc_vm_execute(&vm, progfunc, NULL);

@@ -79,7 +79,7 @@ int main(int argc, char **argv)
 	uc_vm_init(&vm, &config);
 
 	/* load standard library into global VM scope */
-	uc_load_stdlib(uc_vm_scope_get(&vm));
+	uc_stdlib_load(uc_vm_scope_get(&vm));
 
 	/* register custom exception handler */
 	uc_vm_exception_handler_set(&vm, log_exception);

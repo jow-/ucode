@@ -66,7 +66,7 @@ int main(int argc, char **argv)
 	uc_vm_init(&vm, &config);
 
 	/* load standard library into global VM scope */
-	uc_load_stdlib(uc_vm_scope_get(&vm));
+	uc_stdlib_load(uc_vm_scope_get(&vm));
 
 	/* add global variables x and y to VM scope */
 	ucv_object_add(uc_vm_scope_get(&vm), "x", ucv_int64_new(123));

@@ -41,15 +41,6 @@ typedef enum {
 	TAG_PTR = 6
 } uc_value_type_t;
 
-bool uc_cmp(int how, uc_value_t *v1, uc_value_t *v2);
-bool uc_val_is_truish(uc_value_t *val);
-
-uc_type_t uc_cast_number(uc_value_t *v, int64_t *n, double *d);
-
-uc_value_t *uc_getval(uc_vm_t *, uc_value_t *scope, uc_value_t *key);
-uc_value_t *uc_setval(uc_vm_t *, uc_value_t *scope, uc_value_t *key, uc_value_t *val);
-bool uc_delval(uc_vm_t *, uc_value_t *scope, uc_value_t *key);
-
 void uc_vallist_init(uc_value_list_t *list);
 void uc_vallist_free(uc_value_list_t *list);
 

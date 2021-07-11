@@ -170,6 +170,6 @@ uc_token_t *uc_lexer_next_token(uc_lexer_t *lex);
 bool utf8enc(char **out, int *rem, int code);
 
 const char *
-uc_get_tokenname(unsigned type);
+uc_tokenname(unsigned type);
 
 #endif /* __LEXER_H_ */

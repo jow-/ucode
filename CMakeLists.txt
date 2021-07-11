@@ -47,7 +47,7 @@ IF(JSONC_FOUND)
   INCLUDE_DIRECTORIES(${JSONC_INCLUDE_DIRS})
 ENDIF()
 
-SET(UCODE_SOURCES lexer.c lib.c vm.c chunk.c value.c compiler.c source.c types.c)
+SET(UCODE_SOURCES lexer.c lib.c vm.c chunk.c vallist.c compiler.c source.c types.c)
 ADD_LIBRARY(libucode SHARED ${UCODE_SOURCES})
 SET(SOVERSION 0 CACHE STRING "Override ucode library version")
 SET_TARGET_PROPERTIES(libucode PROPERTIES OUTPUT_NAME ucode SOVERSION ${SOVERSION})

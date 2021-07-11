@@ -208,7 +208,7 @@ main(int argc, char **argv)
 	uc_vm_init(&vm, &config);
 
 	/* load std functions into global scope */
-	uc_load_stdlib(uc_vm_scope_get(&vm));
+	uc_stdlib_load(uc_vm_scope_get(&vm));
 
 	/* register ARGV array */
 	o = ucv_array_new_length(&vm, argc);

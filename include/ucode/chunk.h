@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "value.h"
+#include "vallist.h"
 #include "util.h"
 #include "types.h"
 

@@ -20,7 +20,7 @@
 #include "ucode/chunk.h"
 #include "ucode/vm.h" /* I_* */
 #include "ucode/source.h"
-#include "ucode/lib.h" /* format_error_context() */
+#include "ucode/lib.h" /* uc_error_context_format() */
 
 static void uc_compiler_compile_unary(uc_compiler_t *compiler, bool assignable);
 static void uc_compiler_compile_binary(uc_compiler_t *compiler, bool assignable);
@@ -181,7 +181,7 @@ uc_compiler_syntax_error(uc_compiler_t *compiler, size_t off, const char *fmt, .
 	if (line)
 		ucv_stringbuf_printf(buf, "In line %zu, byte %zu:\n", line, byte);
 
-	if (format_error_context(buf, uc_compiler_current_source(compiler), NULL, off))
+	if (uc_error_context_format(buf, uc_compiler_current_source(compiler), NULL, off))
 		ucv_stringbuf_append(buf, "\n\n");
 }
 
@@ -229,7 +229,7 @@ uc_compiler_parse_consume(uc_compiler_t *compiler, uc_tokentype_t type)
 	}
 
 	uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
-		"Unexpected token\nExpecting %s", uc_get_tokenname(type));
+		"Unexpected token\nExpecting %s", uc_tokenname(type));
 }
 
 static bool

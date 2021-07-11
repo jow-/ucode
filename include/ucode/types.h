@@ -369,6 +369,27 @@ void ucv_to_stringbuf_formatted(uc_vm_t *, uc_stringbuf_t *, uc_value_t *, size_
 #define ucv_to_jsonstring(vm, val) ucv_to_jsonstring_formatted(vm, val, '\1', 0)
 #define ucv_to_stringbuf(vm, buf, val, json) ucv_to_stringbuf_formatted(vm, buf, val, 0, json ? '\1' : '\0', 0)
 
+uc_type_t ucv_cast_number(uc_value_t *, int64_t *, double *);
+
+static inline double
+ucv_to_double(uc_value_t *v)
+{
+	int64_t n;
+	double d;
+
+	return (ucv_cast_number(v, &n, &d) == UC_DOUBLE) ? d : (double)n;
+}
+
+static inline int64_t
+ucv_to_integer(uc_value_t *v)
+{
+	int64_t n;
+	double d;
+
+	return (ucv_cast_number(v, &n, &d) == UC_DOUBLE) ? (int64_t)d : n;
+}
+
+
 static inline bool
 ucv_is_callable(uc_value_t *uv)
 {
@@ -412,6 +433,16 @@ ucv_is_scalar(uc_value_t *uv)
 	}
 }
 
+bool ucv_is_equal(uc_value_t *, uc_value_t *);
+bool ucv_is_truish(uc_value_t *);
+
+bool ucv_compare(int, uc_value_t *, uc_value_t *);
+
+uc_value_t *ucv_key_get(uc_vm_t *, uc_value_t *, uc_value_t *);
+uc_value_t *ucv_key_set(uc_vm_t *, uc_value_t *, uc_value_t *, uc_value_t *);
+bool ucv_key_delete(uc_vm_t *, uc_value_t *, uc_value_t *);
+
+
 static inline bool
 ucv_is_marked(uc_value_t *uv)
 {
@@ -431,8 +462,6 @@ ucv_clear_mark(uc_value_t *uv)
 	if (((uintptr_t)uv & 3) == 0 && uv != NULL)
 		uv->mark = false;
 }
-
-bool ucv_equal(uc_value_t *, uc_value_t *);
 
 void ucv_gc(uc_vm_t *);
 
