@@ -20,10 +20,10 @@
 #include <ctype.h> /* isspace(), isdigit(), isxdigit() */
 #include <errno.h>
 
-#include "util.h"
-#include "chunk.h"
-#include "value.h"
-#include "vm.h"
+#include "ucode/util.h"
+#include "ucode/chunk.h"
+#include "ucode/vallist.h"
+#include "ucode/vm.h"
 
 #define TAG_TYPE			uint64_t
 #define TAG_BITS			3
@@ -43,291 +43,8 @@
 #define UC_VALLIST_CHUNK_SIZE	8
 
 
-bool
-uc_val_is_truish(uc_value_t *val)
-{
-	double d;
-
-	switch (ucv_type(val)) {
-	case UC_INTEGER:
-		if (ucv_is_u64(val))
-			return (ucv_uint64_get(val) != 0);
-
-		return (ucv_int64_get(val) != 0);
-
-	case UC_DOUBLE:
-		d = ucv_double_get(val);
-
-		return (d != 0 && !isnan(d));
-
-	case UC_BOOLEAN:
-		return ucv_boolean_get(val);
-
-	case UC_STRING:
-		return (ucv_string_length(val) > 0);
-
-	case UC_NULL:
-		return false;
-
-	default:
-		return true;
-	}
-}
-
-uc_type_t
-uc_cast_number(uc_value_t *v, int64_t *n, double *d)
-{
-	bool is_double = false;
-	const char *s;
-	char *e;
-
-	*d = 0.0;
-	*n = 0;
-
-	switch (ucv_type(v)) {
-	case UC_INTEGER:
-		*n = ucv_int64_get(v);
-
-		return UC_INTEGER;
-
-	case UC_DOUBLE:
-		*d = ucv_double_get(v);
-
-		return UC_DOUBLE;
-
-	case UC_NULL:
-		return UC_INTEGER;
-
-	case UC_BOOLEAN:
-		*n = ucv_boolean_get(v);
-
-		return UC_INTEGER;
-
-	case UC_STRING:
-		s = ucv_string_get(v);
-
-		while (isspace(*s))
-			s++;
-
-		if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X') && isxdigit(s[2])) {
-			*n = strtoll(s, &e, 16);
-		}
-		else if (s[0] == '0' && isdigit(s[2])) {
-			*n = strtoll(s, &e, 8);
-		}
-		else {
-			*n = strtoll(s, &e, 10);
-
-			if (*e == '.') {
-				*d = strtod(s, &e);
-				is_double = (e > s);
-			}
-		}
-
-		while (isspace(*e))
-			e++;
-
-		if (*e) {
-			*d = NAN;
-
-			return UC_DOUBLE;
-		}
-
-		if (is_double)
-			return UC_DOUBLE;
-
-		return UC_INTEGER;
-
-	default:
-		*d = NAN;
-
-		return UC_DOUBLE;
-	}
-}
-
-static char *
-uc_tostring(uc_vm *vm, uc_value_t *val)
-{
-	if (ucv_type(val) != UC_STRING)
-		return ucv_to_string(vm, val);
-
-	return NULL;
-}
-
-static int64_t
-uc_toidx(uc_value_t *val)
-{
-	const char *k;
-	int64_t idx;
-	double d;
-	char *e;
-
-	/* only consider doubles with integer values as array keys */
-	if (ucv_type(val) == UC_DOUBLE) {
-		d = ucv_double_get(val);
-
-		if ((double)(int64_t)(d) != d)
-			return -1;
-
-		return (int64_t)d;
-	}
-	else if (ucv_type(val) == UC_INTEGER) {
-		return ucv_int64_get(val);
-	}
-	else if (ucv_type(val) == UC_STRING) {
-		errno = 0;
-		k = ucv_string_get(val);
-		idx = strtoll(k, &e, 0);
-
-		if (errno != 0 || e == k || *e != 0)
-			return -1;
-
-		return idx;
-	}
-
-	return -1;
-}
-
-uc_value_t *
-uc_getval(uc_vm *vm, uc_value_t *scope, uc_value_t *key)
-{
-	uc_value_t *o, *v = NULL;
-	int64_t idx;
-	bool found;
-	char *k;
-
-	if (ucv_type(scope) == UC_ARRAY) {
-		idx = uc_toidx(key);
-
-		if (idx >= 0 && (uint64_t)idx < ucv_array_length(scope))
-			return ucv_get(ucv_array_get(scope, idx));
-	}
-
-	k = uc_tostring(vm, key);
-
-	for (o = scope; o; o = ucv_prototype_get(o)) {
-		if (ucv_type(o) != UC_OBJECT)
-			continue;
-
-		v = ucv_object_get(o, k ? k : ucv_string_get(key), &found);
-
-		if (found)
-			break;
-	}
-
-	free(k);
-
-	return ucv_get(v);
-}
-
-uc_value_t *
-uc_setval(uc_vm *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
-{
-	int64_t idx;
-	char *s;
-	bool rv;
-
-	if (!key)
-		return NULL;
-
-	if (ucv_type(scope) == UC_ARRAY) {
-		idx = uc_toidx(key);
-
-		if (idx < 0 || !ucv_array_set(scope, idx, val))
-			return NULL;
-
-		return ucv_get(val);
-	}
-
-	s = uc_tostring(vm, key);
-	rv = ucv_object_add(scope, s ? s : ucv_string_get(key), val);
-	free(s);
-
-	return rv ? ucv_get(val) : NULL;
-}
-
-bool
-uc_delval(uc_vm *vm, uc_value_t *scope, uc_value_t *key)
-{
-	char *s;
-	bool rv;
-
-	if (!key)
-		return NULL;
-
-	s = uc_tostring(vm, key);
-	rv = ucv_object_delete(scope, s ? s : ucv_string_get(key));
-	free(s);
-
-	return rv;
-}
-
-bool
-uc_cmp(int how, uc_value_t *v1, uc_value_t *v2)
-{
-	uc_type_t t1 = ucv_type(v1);
-	uc_type_t t2 = ucv_type(v2);
-	int64_t n1, n2, delta;
-	double d1, d2;
-
-	if (t1 == UC_STRING && t2 == UC_STRING) {
-		delta = strcmp(ucv_string_get(v1), ucv_string_get(v2));
-	}
-	else {
-		if (t1 == t2 && !ucv_is_scalar(v1)) {
-			delta = (intptr_t)v1 - (intptr_t)v2;
-		}
-		else {
-			t1 = uc_cast_number(v1, &n1, &d1);
-			t2 = uc_cast_number(v2, &n2, &d2);
-
-			if (t1 == UC_DOUBLE || t2 == UC_DOUBLE) {
-				d1 = (t1 == UC_DOUBLE) ? d1 : (double)n1;
-				d2 = (t2 == UC_DOUBLE) ? d2 : (double)n2;
-
-				/* all comparison results except `!=` involving NaN are false */
-				if (isnan(d1) || isnan(d2))
-					return (how == I_NE);
-
-				if (d1 == d2)
-					delta = 0;
-				else if (d1 < d2)
-					delta = -1;
-				else
-					delta = 1;
-			}
-			else {
-				delta = n1 - n2;
-			}
-		}
-	}
-
-	switch (how) {
-	case I_LT:
-		return (delta < 0);
-
-	case I_LE:
-		return (delta <= 0);
-
-	case I_GT:
-		return (delta > 0);
-
-	case I_GE:
-		return (delta >= 0);
-
-	case I_EQ:
-		return (delta == 0);
-
-	case I_NE:
-		return (delta != 0);
-
-	default:
-		return false;
-	}
-}
-
 void
-uc_vallist_init(uc_value_list *list)
+uc_vallist_init(uc_value_list_t *list)
 {
 	list->isize = 0;
 	list->dsize = 0;
@@ -336,7 +53,7 @@ uc_vallist_init(uc_value_list *list)
 }
 
 void
-uc_vallist_free(uc_value_list *list)
+uc_vallist_free(uc_value_list_t *list)
 {
 	uc_value_t *o;
 	size_t i;
@@ -355,7 +72,7 @@ uc_vallist_free(uc_value_list *list)
 }
 
 static void
-add_num(uc_value_list *list, int64_t n)
+add_num(uc_value_list_t *list, int64_t n)
 {
 	size_t sz = TAG_ALIGN(sizeof(n));
 
@@ -380,7 +97,7 @@ add_num(uc_value_list *list, int64_t n)
 }
 
 static ssize_t
-find_num(uc_value_list *list, int64_t n)
+find_num(uc_value_list_t *list, int64_t n)
 {
 	TAG_TYPE search;
 	size_t i;
@@ -411,7 +128,7 @@ find_num(uc_value_list *list, int64_t n)
 }
 
 static void
-add_dbl(uc_value_list *list, double d)
+add_dbl(uc_value_list_t *list, double d)
 {
 	size_t sz = TAG_ALIGN(sizeof(d));
 
@@ -430,7 +147,7 @@ add_dbl(uc_value_list *list, double d)
 }
 
 static ssize_t
-find_dbl(uc_value_list *list, double d)
+find_dbl(uc_value_list_t *list, double d)
 {
 	size_t i;
 
@@ -451,7 +168,7 @@ find_dbl(uc_value_list *list, double d)
 }
 
 static void
-add_str(uc_value_list *list, const char *s, size_t slen)
+add_str(uc_value_list_t *list, const char *s, size_t slen)
 {
 	uint32_t sl;
 	size_t sz;
@@ -497,7 +214,7 @@ add_str(uc_value_list *list, const char *s, size_t slen)
 }
 
 static ssize_t
-find_str(uc_value_list *list, const char *s, size_t slen)
+find_str(uc_value_list_t *list, const char *s, size_t slen)
 {
 	TAG_TYPE search;
 	size_t i, len;
@@ -539,7 +256,7 @@ find_str(uc_value_list *list, const char *s, size_t slen)
 }
 
 static void
-add_ptr(uc_value_list *list, void *ptr)
+add_ptr(uc_value_list_t *list, void *ptr)
 {
 	size_t sz = TAG_ALIGN(sizeof(ptr));
 
@@ -558,7 +275,7 @@ add_ptr(uc_value_list *list, void *ptr)
 }
 
 ssize_t
-uc_vallist_add(uc_value_list *list, uc_value_t *value)
+uc_vallist_add(uc_value_list_t *list, uc_value_t *value)
 {
 	ssize_t existing;
 
@@ -615,7 +332,7 @@ uc_vallist_add(uc_value_list *list, uc_value_t *value)
 }
 
 uc_value_type_t
-uc_vallist_type(uc_value_list *list, size_t idx)
+uc_vallist_type(uc_value_list_t *list, size_t idx)
 {
 	if (idx >= list->isize)
 		return TAG_INVAL;
@@ -624,7 +341,7 @@ uc_vallist_type(uc_value_list *list, size_t idx)
 }
 
 uc_value_t *
-uc_vallist_get(uc_value_list *list, size_t idx)
+uc_vallist_get(uc_value_list_t *list, size_t idx)
 {
 	char str[sizeof(TAG_TYPE)];
 	size_t n, len;

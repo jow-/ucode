@@ -19,7 +19,7 @@
 #include <libubox/blobmsg.h>
 #include <libubox/blobmsg_json.h>
 
-#include "../module.h"
+#include "ucode/module.h"
 
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
@@ -33,7 +33,7 @@ typedef struct {
 } ubus_connection;
 
 static uc_value_t *
-uc_ubus_error(uc_vm *vm, size_t nargs)
+uc_ubus_error(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *errmsg;
 
@@ -47,10 +47,10 @@ uc_ubus_error(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_blob_to_json(uc_vm *vm, struct blob_attr *attr, bool table, const char **name);
+uc_blob_to_json(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **name);
 
 static uc_value_t *
-uc_blob_array_to_json(uc_vm *vm, struct blob_attr *attr, size_t len, bool table)
+uc_blob_array_to_json(uc_vm_t *vm, struct blob_attr *attr, size_t len, bool table)
 {
 	uc_value_t *o = table ? ucv_object_new(vm) : ucv_array_new(vm);
 	uc_value_t *v;
@@ -77,7 +77,7 @@ uc_blob_array_to_json(uc_vm *vm, struct blob_attr *attr, size_t len, bool table)
 }
 
 static uc_value_t *
-uc_blob_to_json(uc_vm *vm, struct blob_attr *attr, bool table, const char **name)
+uc_blob_to_json(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **name)
 {
 	void *data;
 	int len;
@@ -131,10 +131,10 @@ uc_blob_to_json(uc_vm *vm, struct blob_attr *attr, bool table, const char **name
 
 
 static uc_value_t *
-uc_ubus_connect(uc_vm *vm, size_t nargs)
+uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *socket = uc_get_arg(0);
-	uc_value_t *timeout = uc_get_arg(1);
+	uc_value_t *socket = uc_fn_arg(0);
+	uc_value_t *timeout = uc_fn_arg(1);
 	uc_value_t *co;
 	ubus_connection *c;
 
@@ -168,7 +168,7 @@ uc_ubus_connect(uc_vm *vm, size_t nargs)
 
 	ubus_add_uloop(c->ctx);
 
-	return uc_alloc_ressource(conn_type, c);
+	return uc_ressource_new(conn_type, c);
 }
 
 static void
@@ -199,10 +199,10 @@ uc_ubus_objects_cb(struct ubus_context *c, struct ubus_object_data *o, void *p)
 }
 
 static uc_value_t *
-uc_ubus_list(uc_vm *vm, size_t nargs)
+uc_ubus_list(uc_vm_t *vm, size_t nargs)
 {
-	ubus_connection **c = uc_get_self("ubus.connection");
-	uc_value_t *objname = uc_get_arg(0);
+	ubus_connection **c = uc_fn_this("ubus.connection");
+	uc_value_t *objname = uc_fn_arg(0);
 	uc_value_t *res = NULL;
 	enum ubus_msg_status rv;
 
@@ -237,12 +237,12 @@ uc_ubus_call_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 }
 
 static uc_value_t *
-uc_ubus_call(uc_vm *vm, size_t nargs)
+uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
-	ubus_connection **c = uc_get_self("ubus.connection");
-	uc_value_t *objname = uc_get_arg(0);
-	uc_value_t *funname = uc_get_arg(1);
-	uc_value_t *funargs = uc_get_arg(2);
+	ubus_connection **c = uc_fn_this("ubus.connection");
+	uc_value_t *objname = uc_fn_arg(0);
+	uc_value_t *funname = uc_fn_arg(1);
+	uc_value_t *funargs = uc_fn_arg(2);
 	uc_value_t *res = NULL;
 	json_object *o;
 	enum ubus_msg_status rv;
@@ -282,9 +282,9 @@ uc_ubus_call(uc_vm *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_ubus_disconnect(uc_vm *vm, size_t nargs)
+uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
 {
-	ubus_connection **c = uc_get_self("ubus.connection");
+	ubus_connection **c = uc_fn_this("ubus.connection");
 
 	if (!c || !*c || !(*c)->ctx)
 		err_return(UBUS_STATUS_CONNECTION_FAILED);
@@ -296,12 +296,12 @@ uc_ubus_disconnect(uc_vm *vm, size_t nargs)
 }
 
 
-static const uc_cfunction_list global_fns[] = {
+static const uc_function_list_t global_fns[] = {
 	{ "error",		uc_ubus_error },
 	{ "connect",	uc_ubus_connect },
 };
 
-static const uc_cfunction_list conn_fns[] = {
+static const uc_function_list_t conn_fns[] = {
 	{ "list",		uc_ubus_list },
 	{ "call",		uc_ubus_call },
 	{ "error",		uc_ubus_error },
@@ -320,9 +320,9 @@ static void close_connection(void *ud) {
 	free(conn);
 }
 
-void uc_module_init(uc_value_t *scope)
+void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
-	uc_add_proto_functions(scope, global_fns);
+	uc_function_list_register(scope, global_fns);
 
-	conn_type = uc_declare_type("ubus.connection", conn_fns, close_connection);
+	conn_type = uc_type_declare(vm, "ubus.connection", conn_fns, close_connection);
 }

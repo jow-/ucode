@@ -27,7 +27,7 @@
 
 /* Value types and generic value header */
 
-typedef enum uc_type_t {
+typedef enum uc_type {
 	UC_NULL,
 	UC_INTEGER,
 	UC_BOOLEAN,
@@ -43,7 +43,7 @@ typedef enum uc_type_t {
 	UC_RESSOURCE
 } uc_type_t;
 
-typedef struct uc_value_t {
+typedef struct uc_value {
 	uint32_t type:4;
 	uint32_t mark:1;
 	uint32_t u64:1;
@@ -58,53 +58,53 @@ typedef struct {
 	size_t dsize;
 	uint64_t *index;
 	char *data;
-} uc_value_list;
+} uc_value_list_t;
 
 
 /* Source buffer defintions */
 
-uc_declare_vector(uc_lineinfo, uint8_t);
+uc_declare_vector(uc_lineinfo_t, uint8_t);
 
 typedef struct {
 	char *filename, *buffer;
 	FILE *fp;
 	size_t usecount, off;
-	uc_lineinfo lineinfo;
-} uc_source;
+	uc_lineinfo_t lineinfo;
+} uc_source_t;
 
 
 /* Bytecode chunk defintions */
 
 typedef struct {
 	size_t from, to, target, slot;
-} uc_ehrange;
+} uc_ehrange_t;
 
 typedef struct {
 	size_t from, to, slot, nameidx;
-} uc_varrange;
+} uc_varrange_t;
 
-uc_declare_vector(uc_ehranges, uc_ehrange);
-uc_declare_vector(uc_variables, uc_varrange);
-uc_declare_vector(uc_offsetinfo, uint8_t);
+uc_declare_vector(uc_ehranges_t, uc_ehrange_t);
+uc_declare_vector(uc_variables_t, uc_varrange_t);
+uc_declare_vector(uc_offsetinfo_t, uint8_t);
 
 typedef struct {
 	size_t count;
 	uint8_t *entries;
-	uc_value_list constants;
-	uc_ehranges ehranges;
+	uc_value_list_t constants;
+	uc_ehranges_t ehranges;
 	struct {
-		uc_variables variables;
-		uc_value_list varnames;
-		uc_offsetinfo offsets;
+		uc_variables_t variables;
+		uc_value_list_t varnames;
+		uc_offsetinfo_t offsets;
 	} debuginfo;
-} uc_chunk;
+} uc_chunk_t;
 
 
 /* Value type structures */
 
-typedef struct uc_weakref_t {
-	struct uc_weakref_t *prev;
-	struct uc_weakref_t *next;
+typedef struct uc_weakref {
+	struct uc_weakref *prev;
+	struct uc_weakref *next;
 } uc_weakref_t;
 
 typedef struct {
@@ -154,29 +154,29 @@ typedef struct {
 	size_t nargs;
 	size_t nupvals;
 	size_t srcpos;
-	uc_chunk chunk;
-	uc_source *source;
+	uc_chunk_t chunk;
+	uc_source_t *source;
 	char name[];
 } uc_function_t;
 
-typedef struct uc_upvalref_t {
+typedef struct uc_upval_tref {
 	uc_value_t header;
 	size_t slot;
 	bool closed;
 	uc_value_t *value;
-	struct uc_upvalref_t *next;
-} uc_upvalref_t;
+	struct uc_upval_tref *next;
+} uc_upval_tref_t;
 
 typedef struct {
 	uc_value_t header;
 	uc_weakref_t ref;
 	bool is_arrow;
 	uc_function_t *function;
-	uc_upvalref_t **upvals;
+	uc_upval_tref_t **upvals;
 } uc_closure_t;
 
-typedef struct uc_vm uc_vm;
-typedef uc_value_t *(*uc_cfn_ptr_t)(uc_vm *, size_t);
+typedef struct uc_vm uc_vm_t;
+typedef uc_value_t *(*uc_cfn_ptr_t)(uc_vm_t *, size_t);
 
 typedef struct {
 	uc_value_t header;
@@ -185,18 +185,18 @@ typedef struct {
 } uc_cfunction_t;
 
 typedef struct {
-	uc_value_t header;
-	size_t type;
-	void *data;
-} uc_ressource_t;
-
-typedef struct {
 	const char *name;
 	uc_value_t *proto;
 	void (*free)(void *);
 } uc_ressource_type_t;
 
-uc_declare_vector(uc_ressource_types_t, uc_ressource_type_t);
+typedef struct {
+	uc_value_t header;
+	uc_ressource_type_t *type;
+	void *data;
+} uc_ressource_t;
+
+uc_declare_vector(uc_ressource_types_t, uc_ressource_type_t *);
 
 
 /* Parser definitions */
@@ -206,7 +206,7 @@ typedef struct {
 	bool trim_blocks;
 	bool strict_declarations;
 	bool raw_mode;
-} uc_parse_config;
+} uc_parse_config_t;
 
 
 /* VM definitions */
@@ -217,14 +217,15 @@ typedef enum {
 	EXCEPTION_RUNTIME,
 	EXCEPTION_TYPE,
 	EXCEPTION_REFERENCE,
-	EXCEPTION_USER
+	EXCEPTION_USER,
+	EXCEPTION_EXIT
 } uc_exception_type_t;
 
 typedef struct {
 	uc_exception_type_t type;
 	uc_value_t *stacktrace;
 	char *message;
-} uc_exception;
+} uc_exception_t;
 
 typedef struct {
 	uint8_t *ip;
@@ -233,22 +234,25 @@ typedef struct {
 	size_t stackframe;
 	uc_value_t *ctx;
 	bool mcall, strict;
-} uc_callframe;
+} uc_callframe_t;
 
-uc_declare_vector(uc_callframes, uc_callframe);
-uc_declare_vector(uc_stack, uc_value_t *);
+uc_declare_vector(uc_callframes_t, uc_callframe_t);
+uc_declare_vector(uc_stack_t, uc_value_t *);
 
 typedef struct printbuf uc_stringbuf_t;
 
+typedef void (uc_exception_handler_t)(uc_vm_t *, uc_exception_t *);
+
 struct uc_vm {
-	uc_stack stack;
-	uc_exception exception;
-	uc_callframes callframes;
-	uc_upvalref_t *open_upvals;
-	uc_parse_config *config;
+	uc_stack_t stack;
+	uc_exception_t exception;
+	uc_callframes_t callframes;
+	uc_upval_tref_t *open_upvals;
+	uc_parse_config_t *config;
 	uc_value_t *globals;
-	uc_source *sources;
+	uc_source_t *sources;
 	uc_weakref_t values;
+	uc_ressource_types_t restypes;
 	union {
 		uint32_t u32;
 		int32_t s32;
@@ -260,6 +264,7 @@ struct uc_vm {
 	size_t spread_values;
 	uint8_t trace;
 	uc_stringbuf_t *strbuf;
+	uc_exception_handler_t *exhandler;
 	FILE *output;
 };
 
@@ -302,8 +307,8 @@ uint64_t ucv_uint64_get(uc_value_t *);
 uc_value_t *ucv_double_new(double);
 double ucv_double_get(uc_value_t *);
 
-uc_value_t *ucv_array_new(uc_vm *);
-uc_value_t *ucv_array_new_length(uc_vm *, size_t);
+uc_value_t *ucv_array_new(uc_vm_t *);
+uc_value_t *ucv_array_new_length(uc_vm_t *, size_t);
 uc_value_t *ucv_array_get(uc_value_t *, size_t);
 uc_value_t *ucv_array_pop(uc_value_t *);
 uc_value_t *ucv_array_push(uc_value_t *, uc_value_t *);
@@ -314,7 +319,7 @@ bool ucv_array_delete(uc_value_t *, size_t, size_t);
 bool ucv_array_set(uc_value_t *, size_t, uc_value_t *);
 size_t ucv_array_length(uc_value_t *);
 
-uc_value_t *ucv_object_new(uc_vm *);
+uc_value_t *ucv_object_new(uc_vm_t *);
 uc_value_t *ucv_object_get(uc_value_t *, const char *, bool *);
 bool ucv_object_add(uc_value_t *, const char *, uc_value_t *);
 bool ucv_object_delete(uc_value_t *, const char *);
@@ -332,15 +337,15 @@ size_t ucv_object_length(uc_value_t *);
 	                 : 0);																		\
 	     entry##key = entry_next##key)
 
-uc_value_t *ucv_function_new(const char *, size_t, uc_source *);
+uc_value_t *ucv_function_new(const char *, size_t, uc_source_t *);
 size_t ucv_function_srcpos(uc_value_t *, size_t);
 
 uc_value_t *ucv_cfunction_new(const char *, uc_cfn_ptr_t);
 
-uc_value_t *ucv_closure_new(uc_vm *, uc_function_t *, bool);
+uc_value_t *ucv_closure_new(uc_vm_t *, uc_function_t *, bool);
 
-uc_ressource_type_t *ucv_ressource_type_add(const char *, uc_value_t *, void (*)(void *));
-uc_ressource_type_t *ucv_ressource_type_lookup(const char *);
+uc_ressource_type_t *ucv_ressource_type_add(uc_vm_t *, const char *, uc_value_t *, void (*)(void *));
+uc_ressource_type_t *ucv_ressource_type_lookup(uc_vm_t *, const char *);
 
 uc_value_t *ucv_ressource_new(uc_ressource_type_t *, void *);
 void **ucv_ressource_dataptr(uc_value_t *, const char *);
@@ -354,15 +359,36 @@ bool ucv_prototype_set(uc_value_t *, uc_value_t *);
 
 uc_value_t *ucv_property_get(uc_value_t *, const char *);
 
-uc_value_t *ucv_from_json(uc_vm *, json_object *);
+uc_value_t *ucv_from_json(uc_vm_t *, json_object *);
 json_object *ucv_to_json(uc_value_t *);
 
-char *ucv_to_string(uc_vm *, uc_value_t *);
-char *ucv_to_jsonstring_formatted(uc_vm *, uc_value_t *, char, size_t);
-void ucv_to_stringbuf_formatted(uc_vm *, uc_stringbuf_t *, uc_value_t *, size_t, char, size_t);
+char *ucv_to_string(uc_vm_t *, uc_value_t *);
+char *ucv_to_jsonstring_formatted(uc_vm_t *, uc_value_t *, char, size_t);
+void ucv_to_stringbuf_formatted(uc_vm_t *, uc_stringbuf_t *, uc_value_t *, size_t, char, size_t);
 
 #define ucv_to_jsonstring(vm, val) ucv_to_jsonstring_formatted(vm, val, '\1', 0)
 #define ucv_to_stringbuf(vm, buf, val, json) ucv_to_stringbuf_formatted(vm, buf, val, 0, json ? '\1' : '\0', 0)
+
+uc_type_t ucv_cast_number(uc_value_t *, int64_t *, double *);
+
+static inline double
+ucv_to_double(uc_value_t *v)
+{
+	int64_t n;
+	double d;
+
+	return (ucv_cast_number(v, &n, &d) == UC_DOUBLE) ? d : (double)n;
+}
+
+static inline int64_t
+ucv_to_integer(uc_value_t *v)
+{
+	int64_t n;
+	double d;
+
+	return (ucv_cast_number(v, &n, &d) == UC_DOUBLE) ? (int64_t)d : n;
+}
+
 
 static inline bool
 ucv_is_callable(uc_value_t *uv)
@@ -407,6 +433,16 @@ ucv_is_scalar(uc_value_t *uv)
 	}
 }
 
+bool ucv_is_equal(uc_value_t *, uc_value_t *);
+bool ucv_is_truish(uc_value_t *);
+
+bool ucv_compare(int, uc_value_t *, uc_value_t *);
+
+uc_value_t *ucv_key_get(uc_vm_t *, uc_value_t *, uc_value_t *);
+uc_value_t *ucv_key_set(uc_vm_t *, uc_value_t *, uc_value_t *, uc_value_t *);
+bool ucv_key_delete(uc_vm_t *, uc_value_t *, uc_value_t *);
+
+
 static inline bool
 ucv_is_marked(uc_value_t *uv)
 {
@@ -427,8 +463,8 @@ ucv_clear_mark(uc_value_t *uv)
 		uv->mark = false;
 }
 
-bool ucv_equal(uc_value_t *, uc_value_t *);
+void ucv_gc(uc_vm_t *);
 
-void ucv_gc(uc_vm *, bool);
+void ucv_freeall(uc_vm_t *);
 
 #endif /* __TYPES_H_ */

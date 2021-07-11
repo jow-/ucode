@@ -20,10 +20,11 @@
 #include <endian.h>
 #include <errno.h>
 #include <math.h>
+#include <ctype.h>
 
-#include "types.h"
-#include "util.h"
-#include "vm.h"
+#include "ucode/types.h"
+#include "ucode/util.h"
+#include "ucode/vm.h"
 
 uc_type_t
 ucv_type(uc_value_t *uv)
@@ -57,9 +58,6 @@ ucv_typename(uc_value_t *uv)
 
 	return "unknown";
 }
-
-static uc_ressource_type_t *
-ucv_ressource_type_get(size_t type);
 
 static void
 ucv_unref(uc_weakref_t *ref)
@@ -120,7 +118,7 @@ ucv_gc_mark(uc_value_t *uv)
 {
 	uc_function_t *function;
 	uc_closure_t *closure;
-	uc_upvalref_t *upval;
+	uc_upval_tref_t *upval;
 	uc_object_t *object;
 	uc_array_t *array;
 	struct lh_entry *entry;
@@ -165,14 +163,14 @@ ucv_gc_mark(uc_value_t *uv)
 			ucv_set_mark(uv);
 
 		for (i = 0; i < function->nupvals; i++)
-			ucv_gc_mark((uc_value_t *)closure->upvals[i]);
+			ucv_gc_mark(&closure->upvals[i]->header);
 
-		ucv_gc_mark((uc_value_t *)function);
+		ucv_gc_mark(&function->header);
 
 		break;
 
 	case UC_UPVALUE:
-		upval = (uc_upvalref_t *)uv;
+		upval = (uc_upval_tref_t *)uv;
 		ucv_gc_mark(upval->value);
 		break;
 
@@ -188,7 +186,7 @@ ucv_free(uc_value_t *uv, bool retain)
 	uc_ressource_t *ressource;
 	uc_function_t *function;
 	uc_closure_t *closure;
-	uc_upvalref_t *upval;
+	uc_upval_tref_t *upval;
 	uc_regexp_t *regexp;
 	uc_object_t *object;
 	uc_array_t *array;
@@ -241,14 +239,14 @@ ucv_free(uc_value_t *uv, bool retain)
 		ref = &closure->ref;
 
 		for (i = 0; i < function->nupvals; i++)
-			ucv_put_value((uc_value_t *)closure->upvals[i], retain);
+			ucv_put_value(&closure->upvals[i]->header, retain);
 
-		ucv_put_value((uc_value_t *)function, retain);
+		ucv_put_value(&function->header, retain);
 		break;
 
 	case UC_RESSOURCE:
 		ressource = (uc_ressource_t *)uv;
-		restype = ucv_ressource_type_get(ressource->type);
+		restype = ressource->type;
 
 		if (restype && restype->free)
 			restype->free(ressource->data);
@@ -256,7 +254,7 @@ ucv_free(uc_value_t *uv, bool retain)
 		break;
 
 	case UC_UPVALUE:
-		upval = (uc_upvalref_t *)uv;
+		upval = (uc_upval_tref_t *)uv;
 		ucv_put_value(upval->value, retain);
 		break;
 	}
@@ -563,13 +561,13 @@ ucv_double_get(uc_value_t *uv)
 
 
 uc_value_t *
-ucv_array_new(uc_vm *vm)
+ucv_array_new(uc_vm_t *vm)
 {
 	return ucv_array_new_length(vm, 0);
 }
 
 uc_value_t *
-ucv_array_new_length(uc_vm *vm, size_t length)
+ucv_array_new_length(uc_vm_t *vm, size_t length)
 {
 	uc_array_t *array;
 
@@ -758,7 +756,7 @@ ucv_free_object_entry(struct lh_entry *entry)
 }
 
 uc_value_t *
-ucv_object_new(uc_vm *vm)
+ucv_object_new(uc_vm_t *vm)
 {
 	struct lh_table *table;
 	uc_object_t *object;
@@ -863,7 +861,7 @@ ucv_object_length(uc_value_t *uv)
 
 
 uc_value_t *
-ucv_function_new(const char *name, size_t srcpos, uc_source *source)
+ucv_function_new(const char *name, size_t srcpos, uc_source_t *source)
 {
 	size_t namelen = 0;
 	uc_function_t *fn;
@@ -927,16 +925,16 @@ ucv_cfunction_new(const char *name, uc_cfn_ptr_t fptr)
 
 
 uc_value_t *
-ucv_closure_new(uc_vm *vm, uc_function_t *function, bool arrow_fn)
+ucv_closure_new(uc_vm_t *vm, uc_function_t *function, bool arrow_fn)
 {
 	uc_closure_t *closure;
 
-	closure = xalloc(sizeof(*closure) + (sizeof(uc_upvalref_t *) * function->nupvals));
+	closure = xalloc(sizeof(*closure) + (sizeof(uc_upval_tref_t *) * function->nupvals));
 	closure->header.type = UC_CLOSURE;
 	closure->header.refcount = 1;
 	closure->function = function;
 	closure->is_arrow = arrow_fn;
-	closure->upvals = function->nupvals ? (uc_upvalref_t **)((uintptr_t)closure + ALIGN(sizeof(*closure))) : NULL;
+	closure->upvals = function->nupvals ? (uc_upval_tref_t **)((uintptr_t)closure + ALIGN(sizeof(*closure))) : NULL;
 
 	if (vm)
 		ucv_ref(&vm->values, &closure->ref);
@@ -945,44 +943,38 @@ ucv_closure_new(uc_vm *vm, uc_function_t *function, bool arrow_fn)
 }
 
 
-static uc_ressource_types_t res_types;
-
 uc_ressource_type_t *
-ucv_ressource_type_add(const char *name, uc_value_t *proto, void (*freefn)(void *))
+ucv_ressource_type_add(uc_vm_t *vm, const char *name, uc_value_t *proto, void (*freefn)(void *))
 {
-	uc_ressource_type_t *existing;
+	uc_ressource_type_t *type;
 
-	existing = ucv_ressource_type_lookup(name);
+	type = ucv_ressource_type_lookup(vm, name);
 
-	if (existing) {
+	if (type) {
 		ucv_put(proto);
 
-		return existing;
+		return type;
 	}
 
-	uc_vector_grow(&res_types);
+	type = xalloc(sizeof(*type));
+	type->name = name;
+	type->proto = proto;
+	type->free = freefn;
 
-	res_types.entries[res_types.count].name = name;
-	res_types.entries[res_types.count].proto = proto;
-	res_types.entries[res_types.count].free = freefn;
+	uc_vector_grow(&vm->restypes);
+	vm->restypes.entries[vm->restypes.count++] = type;
 
-	return &res_types.entries[res_types.count++];
-}
-
-static uc_ressource_type_t *
-ucv_ressource_type_get(size_t type)
-{
-	return (type > 0 && type <= res_types.count) ? &res_types.entries[type - 1] : NULL;
+	return type;
 }
 
 uc_ressource_type_t *
-ucv_ressource_type_lookup(const char *name)
+ucv_ressource_type_lookup(uc_vm_t *vm, const char *name)
 {
 	size_t i;
 
-	for (i = 0; i < res_types.count; i++)
-		if (!strcmp(res_types.entries[i].name, name))
-			return &res_types.entries[i];
+	for (i = 0; i < vm->restypes.count; i++)
+		if (!strcmp(vm->restypes.entries[i]->name, name))
+			return vm->restypes.entries[i];
 
 	return NULL;
 }
@@ -996,7 +988,7 @@ ucv_ressource_new(uc_ressource_type_t *type, void *data)
 	res = xalloc(sizeof(*res));
 	res->header.type = UC_RESSOURCE;
 	res->header.refcount = 1;
-	res->type = type ? (type - res_types.entries) + 1 : 0;
+	res->type = type;
 	res->data = data;
 
 	return &res->header;
@@ -1006,15 +998,12 @@ void **
 ucv_ressource_dataptr(uc_value_t *uv, const char *name)
 {
 	uc_ressource_t *res = (uc_ressource_t *)uv;
-	uc_ressource_type_t *type;
 
 	if (ucv_type(uv) != UC_RESSOURCE)
 		return NULL;
 
 	if (name) {
-		type = ucv_ressource_type_lookup(name);
-
-		if (!type || type != ucv_ressource_type_get(res->type))
+		if (!res->type || strcmp(res->type->name, name))
 			return NULL;
 	}
 
@@ -1058,13 +1047,6 @@ ucv_regexp_new(const char *pattern, bool icase, bool newline, bool global, char 
 		return NULL;
 	}
 
-	/*
-	json_object_object_add(re->header.jso, "source", xjs_new_string(pattern));
-	json_object_object_add(re->header.jso, "i", xjs_new_boolean(icase));
-	json_object_object_add(re->header.jso, "g", xjs_new_boolean(global));
-	json_object_object_add(re->header.jso, "s", xjs_new_boolean(newline));
-	*/
-
 	return &re->header;
 }
 
@@ -1072,7 +1054,7 @@ ucv_regexp_new(const char *pattern, bool icase, bool newline, bool global, char 
 uc_value_t *
 ucv_upvalref_new(size_t slot)
 {
-	uc_upvalref_t *up;
+	uc_upval_tref_t *up;
 
 	up = xalloc(sizeof(*up));
 	up->header.type = UC_UPVALUE;
@@ -1104,7 +1086,7 @@ ucv_prototype_get(uc_value_t *uv)
 
 	case UC_RESSOURCE:
 		ressource = (uc_ressource_t *)uv;
-		restype = ucv_ressource_type_get(ressource->type);
+		restype = ressource->type;
 
 		return restype ? restype->proto : NULL;
 
@@ -1158,7 +1140,7 @@ ucv_property_get(uc_value_t *uv, const char *key)
 
 
 uc_value_t *
-ucv_from_json(uc_vm *vm, json_object *jso)
+ucv_from_json(uc_vm_t *vm, json_object *jso)
 {
 	//uc_array_t *arr;
 	uc_value_t *uv, *item;
@@ -1366,7 +1348,7 @@ ucv_to_string_json_encoded(uc_stringbuf_t *pb, const char *s, size_t len, bool r
 }
 
 static bool
-ucv_call_tostring(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
+ucv_call_tostring(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 {
 	uc_value_t *proto = ucv_prototype_get(uv);
 	uc_value_t *tostr = ucv_object_get(proto, "tostring", NULL);
@@ -1422,7 +1404,7 @@ ucv_to_stringbuf_add_padding(uc_stringbuf_t *pb, char pad_char, size_t pad_size)
 }
 
 void
-ucv_to_stringbuf_formatted(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t depth, char pad_char, size_t pad_size)
+ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t depth, char pad_char, size_t pad_size)
 {
 	bool json = (pad_char != '\0');
 	uc_ressource_type_t *restype;
@@ -1628,7 +1610,7 @@ ucv_to_stringbuf_formatted(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t
 
 	case UC_RESSOURCE:
 		ressource = (uc_ressource_t *)uv;
-		restype = ucv_ressource_type_get(ressource->type);
+		restype = ressource->type;
 
 		ucv_stringbuf_printf(pb, "%s<%s %p>%s",
 			json ? "\"" : "",
@@ -1651,7 +1633,7 @@ ucv_to_stringbuf_formatted(uc_vm *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t
 }
 
 static char *
-ucv_to_string_any(uc_vm *vm, uc_value_t *uv, char pad_char, size_t pad_size)
+ucv_to_string_any(uc_vm_t *vm, uc_value_t *uv, char pad_char, size_t pad_size)
 {
 	uc_stringbuf_t *pb = xprintbuf_new();
 	char *rv;
@@ -1666,19 +1648,91 @@ ucv_to_string_any(uc_vm *vm, uc_value_t *uv, char pad_char, size_t pad_size)
 }
 
 char *
-ucv_to_string(uc_vm *vm, uc_value_t *uv)
+ucv_to_string(uc_vm_t *vm, uc_value_t *uv)
 {
 	return ucv_to_string_any(vm, uv, '\0', 0);
 }
 
 char *
-ucv_to_jsonstring_formatted(uc_vm *vm, uc_value_t *uv, char pad_char, size_t pad_size)
+ucv_to_jsonstring_formatted(uc_vm_t *vm, uc_value_t *uv, char pad_char, size_t pad_size)
 {
 	return ucv_to_string_any(vm, uv, pad_char ? pad_char : '\1', pad_size);
 }
 
+uc_type_t
+ucv_cast_number(uc_value_t *v, int64_t *n, double *d)
+{
+	bool is_double = false;
+	const char *s;
+	char *e;
+
+	*d = 0.0;
+	*n = 0;
+
+	switch (ucv_type(v)) {
+	case UC_INTEGER:
+		*n = ucv_int64_get(v);
+
+		return UC_INTEGER;
+
+	case UC_DOUBLE:
+		*d = ucv_double_get(v);
+
+		return UC_DOUBLE;
+
+	case UC_NULL:
+		return UC_INTEGER;
+
+	case UC_BOOLEAN:
+		*n = ucv_boolean_get(v);
+
+		return UC_INTEGER;
+
+	case UC_STRING:
+		s = ucv_string_get(v);
+
+		while (isspace(*s))
+			s++;
+
+		if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X') && isxdigit(s[2])) {
+			*n = strtoll(s, &e, 16);
+		}
+		else if (s[0] == '0' && isdigit(s[2])) {
+			*n = strtoll(s, &e, 8);
+		}
+		else {
+			*n = strtoll(s, &e, 10);
+
+			if (*e == '.') {
+				*d = strtod(s, &e);
+				is_double = (e > s);
+			}
+		}
+
+		while (isspace(*e))
+			e++;
+
+		if (*e) {
+			*d = NAN;
+
+			return UC_DOUBLE;
+		}
+
+		if (is_double)
+			return UC_DOUBLE;
+
+		return UC_INTEGER;
+
+	default:
+		*d = NAN;
+
+		return UC_DOUBLE;
+	}
+}
+
+
 bool
-ucv_equal(uc_value_t *uv1, uc_value_t *uv2)
+ucv_is_equal(uc_value_t *uv1, uc_value_t *uv2)
 {
 	uc_type_t t1 = ucv_type(uv1);
 	uc_type_t t2 = ucv_type(uv2);
@@ -1743,7 +1797,7 @@ ucv_equal(uc_value_t *uv1, uc_value_t *uv2)
 			return false;
 
 		for (u1 = 0; u1 < u2; u1++)
-			if (!ucv_equal(ucv_array_get(uv1, u1), ucv_array_get(uv2, u1)))
+			if (!ucv_is_equal(ucv_array_get(uv1, u1), ucv_array_get(uv2, u1)))
 				return false;
 
 		return true;
@@ -1756,7 +1810,7 @@ ucv_equal(uc_value_t *uv1, uc_value_t *uv2)
 			return false;
 
 		ucv_object_foreach(uv1, key, val) {
-			if (!ucv_equal(val, ucv_object_get(uv2, key, NULL)))
+			if (!ucv_is_equal(val, ucv_object_get(uv2, key, NULL)))
 				return false;
 		}
 
@@ -1775,12 +1829,231 @@ ucv_equal(uc_value_t *uv1, uc_value_t *uv2)
 	}
 }
 
-void
-ucv_gc(uc_vm *vm, bool final)
+bool
+ucv_is_truish(uc_value_t *val)
+{
+	double d;
+
+	switch (ucv_type(val)) {
+	case UC_INTEGER:
+		if (ucv_is_u64(val))
+			return (ucv_uint64_get(val) != 0);
+
+		return (ucv_int64_get(val) != 0);
+
+	case UC_DOUBLE:
+		d = ucv_double_get(val);
+
+		return (d != 0 && !isnan(d));
+
+	case UC_BOOLEAN:
+		return ucv_boolean_get(val);
+
+	case UC_STRING:
+		return (ucv_string_length(val) > 0);
+
+	case UC_NULL:
+		return false;
+
+	default:
+		return true;
+	}
+}
+
+
+bool
+ucv_compare(int how, uc_value_t *v1, uc_value_t *v2)
+{
+	uc_type_t t1 = ucv_type(v1);
+	uc_type_t t2 = ucv_type(v2);
+	int64_t n1, n2, delta;
+	double d1, d2;
+
+	if (t1 == UC_STRING && t2 == UC_STRING) {
+		delta = strcmp(ucv_string_get(v1), ucv_string_get(v2));
+	}
+	else {
+		if (t1 == t2 && !ucv_is_scalar(v1)) {
+			delta = (intptr_t)v1 - (intptr_t)v2;
+		}
+		else {
+			t1 = ucv_cast_number(v1, &n1, &d1);
+			t2 = ucv_cast_number(v2, &n2, &d2);
+
+			if (t1 == UC_DOUBLE || t2 == UC_DOUBLE) {
+				d1 = (t1 == UC_DOUBLE) ? d1 : (double)n1;
+				d2 = (t2 == UC_DOUBLE) ? d2 : (double)n2;
+
+				/* all comparison results except `!=` involving NaN are false */
+				if (isnan(d1) || isnan(d2))
+					return (how == I_NE);
+
+				if (d1 == d2)
+					delta = 0;
+				else if (d1 < d2)
+					delta = -1;
+				else
+					delta = 1;
+			}
+			else {
+				delta = n1 - n2;
+			}
+		}
+	}
+
+	switch (how) {
+	case I_LT:
+		return (delta < 0);
+
+	case I_LE:
+		return (delta <= 0);
+
+	case I_GT:
+		return (delta > 0);
+
+	case I_GE:
+		return (delta >= 0);
+
+	case I_EQ:
+		return (delta == 0);
+
+	case I_NE:
+		return (delta != 0);
+
+	default:
+		return false;
+	}
+}
+
+
+static char *
+ucv_key_to_string(uc_vm_t *vm, uc_value_t *val)
+{
+	if (ucv_type(val) != UC_STRING)
+		return ucv_to_string(vm, val);
+
+	return NULL;
+}
+
+static int64_t
+ucv_key_to_index(uc_value_t *val)
+{
+	const char *k;
+	int64_t idx;
+	double d;
+	char *e;
+
+	/* only consider doubles with integer values as array keys */
+	if (ucv_type(val) == UC_DOUBLE) {
+		d = ucv_double_get(val);
+
+		if ((double)(int64_t)(d) != d)
+			return -1;
+
+		return (int64_t)d;
+	}
+	else if (ucv_type(val) == UC_INTEGER) {
+		return ucv_int64_get(val);
+	}
+	else if (ucv_type(val) == UC_STRING) {
+		errno = 0;
+		k = ucv_string_get(val);
+		idx = strtoll(k, &e, 0);
+
+		if (errno != 0 || e == k || *e != 0)
+			return -1;
+
+		return idx;
+	}
+
+	return -1;
+}
+
+uc_value_t *
+ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
+{
+	uc_value_t *o, *v = NULL;
+	int64_t idx;
+	bool found;
+	char *k;
+
+	if (ucv_type(scope) == UC_ARRAY) {
+		idx = ucv_key_to_index(key);
+
+		if (idx >= 0 && (uint64_t)idx < ucv_array_length(scope))
+			return ucv_get(ucv_array_get(scope, idx));
+	}
+
+	k = ucv_key_to_string(vm, key);
+
+	for (o = scope; o; o = ucv_prototype_get(o)) {
+		if (ucv_type(o) != UC_OBJECT)
+			continue;
+
+		v = ucv_object_get(o, k ? k : ucv_string_get(key), &found);
+
+		if (found)
+			break;
+	}
+
+	free(k);
+
+	return ucv_get(v);
+}
+
+uc_value_t *
+ucv_key_set(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
+{
+	int64_t idx;
+	char *s;
+	bool rv;
+
+	if (!key)
+		return NULL;
+
+	if (ucv_type(scope) == UC_ARRAY) {
+		idx = ucv_key_to_index(key);
+
+		if (idx < 0 || !ucv_array_set(scope, idx, val))
+			return NULL;
+
+		return ucv_get(val);
+	}
+
+	s = ucv_key_to_string(vm, key);
+	rv = ucv_object_add(scope, s ? s : ucv_string_get(key), val);
+	free(s);
+
+	return rv ? ucv_get(val) : NULL;
+}
+
+bool
+ucv_key_delete(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
+{
+	char *s;
+	bool rv;
+
+	if (!key)
+		return NULL;
+
+	s = ucv_key_to_string(vm, key);
+	rv = ucv_object_delete(scope, s ? s : ucv_string_get(key));
+	free(s);
+
+	return rv;
+}
+
+
+static void
+ucv_gc_common(uc_vm_t *vm, bool final)
 {
 	uc_weakref_t *ref, *tmp;
 	uc_value_t *val;
 	size_t i;
+
+	/* back out early if value list is uninitialized */
+	if (!vm->values.prev || !vm->values.next)
+		return;
 
 	if (!final) {
 		/* mark reachable objects */
@@ -1814,18 +2087,14 @@ ucv_gc(uc_vm *vm, bool final)
 	}
 }
 
-
-#ifdef __GNUC__
-
-__attribute__((destructor))
-static void ucv_ressource_types_free(void)
+void
+ucv_gc(uc_vm_t *vm)
 {
-	size_t i;
-
-	for (i = 0; i < res_types.count; i++)
-		ucv_put(res_types.entries[i].proto);
-
-	uc_vector_clear(&res_types);
+	ucv_gc_common(vm, false);
 }
 
-#endif
+void
+ucv_freeall(uc_vm_t *vm)
+{
+	ucv_gc_common(vm, true);
+}

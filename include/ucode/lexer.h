@@ -127,12 +127,12 @@ typedef struct {
 	uc_tokentype_t type;
 	uc_value_t *uv;
 	size_t pos;
-} uc_token;
+} uc_token_t;
 
 typedef struct {
 	uc_lex_state_t state;
-	uc_parse_config *config;
-	uc_source *source;
+	uc_parse_config_t *config;
+	uc_source_t *source;
 	uint8_t eof:1;
 	uint8_t is_escape:1;
 	uint8_t no_regexp:1;
@@ -142,7 +142,7 @@ typedef struct {
 	size_t lookbehindlen;
 	char *lookbehind;
 	const void *tok;
-	uc_token curr;
+	uc_token_t curr;
 	char esc[5];
 	uint8_t esclen;
 	int lead_surrogate;
@@ -159,17 +159,17 @@ typedef struct {
 		STATEMENTS = '%',
 		COMMENT = '#'
 	} block;
-} uc_lexer;
+} uc_lexer_t;
 
 
-void uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source);
-void uc_lexer_free(uc_lexer *lex);
+void uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source);
+void uc_lexer_free(uc_lexer_t *lex);
 
-uc_token *uc_lexer_next_token(uc_lexer *lex);
+uc_token_t *uc_lexer_next_token(uc_lexer_t *lex);
 
 bool utf8enc(char **out, int *rem, int code);
 
 const char *
-uc_get_tokenname(unsigned type);
+uc_tokenname(unsigned type);
 
 #endif /* __LEXER_H_ */

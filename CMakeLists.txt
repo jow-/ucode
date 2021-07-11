@@ -11,6 +11,8 @@ IF(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
 ENDIF()
 ADD_DEFINITIONS(-Wmissing-declarations -Wno-error=unused-variable -Wno-unused-parameter)
 
+INCLUDE_DIRECTORIES(include)
+
 OPTION(FS_SUPPORT "Filesystem plugin support" ON)
 OPTION(MATH_SUPPORT "Math plugin support" ON)
 OPTION(UBUS_SUPPORT "Ubus plugin support" ON)
@@ -45,14 +47,19 @@ IF(JSONC_FOUND)
   INCLUDE_DIRECTORIES(${JSONC_INCLUDE_DIRS})
 ENDIF()
 
-SET(UCODE_SOURCES main.c lexer.c lib.c vm.c chunk.c value.c compiler.c source.c types.c)
-ADD_EXECUTABLE(ucode ${UCODE_SOURCES})
-SET_PROPERTY(TARGET ucode PROPERTY ENABLE_EXPORTS 1)
-TARGET_LINK_LIBRARIES(ucode ${json})
+SET(UCODE_SOURCES lexer.c lib.c vm.c chunk.c vallist.c compiler.c source.c types.c)
+ADD_LIBRARY(libucode SHARED ${UCODE_SOURCES})
+SET(SOVERSION 0 CACHE STRING "Override ucode library version")
+SET_TARGET_PROPERTIES(libucode PROPERTIES OUTPUT_NAME ucode SOVERSION ${SOVERSION})
+TARGET_LINK_LIBRARIES(libucode ${json})
+
+SET(CLI_SOURCES main.c)
+ADD_EXECUTABLE(ucode ${CLI_SOURCES})
+TARGET_LINK_LIBRARIES(ucode libucode ${json})
 
 CHECK_FUNCTION_EXISTS(dlopen DLOPEN_FUNCTION_EXISTS)
 IF (NOT DLOPEN_FUNCTION_EXISTS)
-  TARGET_LINK_LIBRARIES(ucode dl)
+  TARGET_LINK_LIBRARIES(libucode dl)
 ENDIF()
 
 SET(CMAKE_REQUIRED_LIBRARIES json-c)
@@ -114,7 +121,7 @@ IF(UNIT_TESTING)
   LIST(APPEND CMAKE_CTEST_ARGUMENTS "--output-on-failure")
 
   IF(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    ADD_EXECUTABLE(ucode-san ${UCODE_SOURCES})
+    ADD_EXECUTABLE(ucode-san ${CLI_SOURCES} ${UCODE_SOURCES})
     SET_PROPERTY(TARGET ucode-san PROPERTY ENABLE_EXPORTS 1)
     TARGET_LINK_LIBRARIES(ucode-san ${json})
     TARGET_COMPILE_OPTIONS(ucode-san PRIVATE -g -fno-omit-frame-pointer -fsanitize=undefined,address,leak -fno-sanitize-recover=all)
@@ -123,4 +130,10 @@ IF(UNIT_TESTING)
 ENDIF()
 
 INSTALL(TARGETS ucode RUNTIME DESTINATION bin)
+INSTALL(TARGETS libucode LIBRARY DESTINATION lib)
 INSTALL(TARGETS ${LIBRARIES} LIBRARY DESTINATION lib/ucode)
+
+FILE(GLOB UCODE_HEADERS "include/ucode/*.h")
+INSTALL(FILES ${UCODE_HEADERS} DESTINATION include/ucode)
+
+ADD_SUBDIRECTORY(examples)

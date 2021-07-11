@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 Jo-Philipp Wich <jo@mein.io>
+ * Copyright (C) 2020-2021 Jo-Philipp Wich <jo@mein.io>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,23 +14,20 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __SOURCE_H_
-#define __SOURCE_H_
+#ifndef __MODULE_H_
+#define __MODULE_H_
 
-#include <stdint.h>
-#include <stddef.h>
-#include <stdio.h>
-
-#include "util.h"
-#include "types.h"
+#include "lib.h"
+#include "vm.h"
 
 
-uc_source *uc_source_new_file(const char *path);
-uc_source *uc_source_new_buffer(const char *name, char *buf, size_t len);
+void uc_module_init(uc_vm_t *vm, uc_value_t *scope) __attribute__((weak));
 
-size_t uc_source_get_line(uc_source *source, size_t *offset);
+void uc_module_entry(uc_vm_t *vm, uc_value_t *scope);
+void uc_module_entry(uc_vm_t *vm, uc_value_t *scope)
+{
+	if (uc_module_init)
+		uc_module_init(vm, scope);
+}
 
-uc_source *uc_source_get(uc_source *source);
-void uc_source_put(uc_source *source);
-
-#endif /* __SOURCE_H_ */
+#endif /* __MODULE_H_ */

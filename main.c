@@ -28,29 +28,30 @@
 	#include <json-c/json.h>
 #endif
 
-#include "compiler.h"
-#include "lexer.h"
-#include "lib.h"
-#include "vm.h"
-#include "source.h"
+#include "ucode/compiler.h"
+#include "ucode/lexer.h"
+#include "ucode/lib.h"
+#include "ucode/vm.h"
+#include "ucode/source.h"
 
 
 static void
 print_usage(const char *app)
 {
 	printf(
-	"== Usage ==\n\n"
-	"  # %s [-d] [-l] [-r] [-S] [-R] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
+	"Usage\n\n"
+	"  # %s [-t] [-l] [-r] [-S] [-R] [-x function [-x ...]] [-e '[prefix=]{\"var\": ...}'] [-E [prefix=]env.json] {-i <file> | -s \"ucode script...\"}\n"
 	"  -h, --help	Print this help\n"
-	"  -i file	Specify an ucode script to parse\n"
-	"  -s \"ucode script...\"	Specify an ucode fragment to parse\n"
-	"  -d Instead of executing the script, dump the resulting AST as dot\n"
+	"  -i file	Execute the given ucode script file\n"
+	"  -s \"ucode script...\"	Execute the given string as ucode script\n"
+	"  -t Enable VM execution tracing\n"
 	"  -l Do not strip leading block whitespace\n"
 	"  -r Do not trim trailing block newlines\n"
 	"  -S Enable strict mode\n"
 	"  -R Enable raw code mode\n"
 	"  -e Set global variables from given JSON object\n"
 	"  -E Set global variables from given JSON file\n"
+	"  -x Disable given function\n"
 	"  -m Preload given module\n",
 		basename(app));
 }
@@ -74,61 +75,49 @@ register_variable(uc_value_t *scope, const char *key, uc_value_t *val)
 
 
 static int
-parse(uc_parse_config *config, uc_source *src,
-      uc_value_t *env, uc_value_t *modules,
-      int argc, char **argv)
+compile(uc_vm_t *vm, uc_source_t *src)
 {
-	uc_value_t *globals = NULL, *arr;
+	uc_value_t *res = NULL;
 	uc_function_t *entry;
-	uc_vm vm = { 0 };
-	int i, rc = 0;
+	int rc = 0;
 	char *err;
 
-	uc_vm_init(&vm, config);
-
-	entry = uc_compile(config, src, &err);
+	entry = uc_compile(vm->config, src, &err);
 
 	if (!entry) {
 		fprintf(stderr, "%s", err);
 		free(err);
-		rc = 2;
+		rc = -1;
 		goto out;
 	}
 
-	/* allocate global scope */
-	globals = uc_alloc_global(&vm);
+	rc = uc_vm_execute(vm, entry, &res);
 
-	/* register ARGV array */
-	arr = ucv_array_new_length(&vm, argc);
+	switch (rc) {
+	case STATUS_OK:
+		rc = 0;
+		break;
 
-	for (i = 0; i < argc; i++)
-		ucv_array_push(arr, ucv_string_new(argv[i]));
+	case STATUS_EXIT:
+		rc = (int)ucv_int64_get(res);
+		break;
 
-	ucv_object_add(globals, "ARGV", arr);
+	case ERROR_COMPILE:
+		rc = -1;
+		break;
 
-	/* load env variables */
-	if (env) {
-		ucv_object_foreach(env, key, val)
-			register_variable(globals, key, ucv_get(val));
-	}
-
-	/* load std functions into global scope */
-	uc_load_stdlib(globals);
-
-	rc = uc_vm_execute(&vm, entry, globals, modules);
-
-	if (rc) {
-		rc = 1;
-		goto out;
+	case ERROR_RUNTIME:
+		rc = -2;
+		break;
 	}
 
 out:
-	uc_vm_free(&vm);
+	ucv_put(res);
 
 	return rc;
 }
 
-static uc_source *
+static uc_source_t *
 read_stdin(char **ptr)
 {
 	size_t rlen = 0, tlen = 0;
@@ -198,12 +187,13 @@ parse_envfile(FILE *fp)
 int
 main(int argc, char **argv)
 {
-	uc_value_t *env = NULL, *modules = NULL, *o, *p;
-	uc_source *source = NULL, *envfile = NULL;
+	uc_source_t *source = NULL, *envfile = NULL;
 	char *stdin = NULL, *c;
+	uc_vm_t vm = { 0 };
+	uc_value_t *o, *p;
 	int opt, rv = 0;
 
-	uc_parse_config config = {
+	uc_parse_config_t config = {
 		.strict_declarations = false,
 		.lstrip_blocks = true,
 		.trim_blocks = true
@@ -215,7 +205,21 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	while ((opt = getopt(argc, argv, "hlrSRe:E:i:s:m:")) != -1)
+	uc_vm_init(&vm, &config);
+
+	/* load std functions into global scope */
+	uc_stdlib_load(uc_vm_scope_get(&vm));
+
+	/* register ARGV array */
+	o = ucv_array_new_length(&vm, argc);
+
+	for (opt = 0; opt < argc; opt++)
+		ucv_array_push(o, ucv_string_new(argv[opt]));
+
+	ucv_object_add(uc_vm_scope_get(&vm), "ARGV", o);
+
+	/* parse options */
+	while ((opt = getopt(argc, argv, "hlrtSRe:E:i:s:m:x:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -311,27 +315,40 @@ main(int argc, char **argv)
 				goto out;
 			}
 
-			env = env ? env : ucv_object_new(NULL);
-
 			if (c > optarg && optarg[0]) {
-				p = ucv_object_new(NULL);
-				ucv_object_add(env, optarg, p);
+				p = ucv_object_new(&vm);
+				ucv_object_add(uc_vm_scope_get(&vm), optarg, p);
 			}
 			else {
-				p = env;
+				p = uc_vm_scope_get(&vm);
 			}
 
 			ucv_object_foreach(o, key, val)
-				ucv_object_add(p, key, ucv_get(val));
+				register_variable(p, key, ucv_get(val));
 
 			ucv_put(o);
 
 			break;
 
 		case 'm':
-			modules = modules ? modules : ucv_array_new(NULL);
+			o = uc_vm_invoke(&vm, "require", 1, ucv_string_new(optarg));
 
-			ucv_array_push(modules, ucv_string_new(optarg));
+			if (o)
+				register_variable(uc_vm_scope_get(&vm), optarg, o);
+
+			break;
+
+		case 't':
+			uc_vm_trace_set(&vm, 1);
+			break;
+
+		case 'x':
+			o = ucv_object_get(uc_vm_scope_get(&vm), optarg, NULL);
+
+			if (ucv_is_callable(o))
+				ucv_object_delete(uc_vm_scope_get(&vm), optarg);
+			else
+				fprintf(stderr, "Unknown function %s specified\n", optarg);
 
 			break;
 		}
@@ -353,13 +370,12 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	rv = parse(&config, source, env, modules, argc, argv);
+	rv = compile(&vm, source);
 
 out:
-	ucv_put(modules);
-	ucv_put(env);
-
 	uc_source_put(source);
+
+	uc_vm_free(&vm);
 
 	return rv;
 }

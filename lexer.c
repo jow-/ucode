@@ -25,9 +25,9 @@
 #include <errno.h>
 #include <endian.h>
 
-#include "vm.h"
-#include "lib.h"
-#include "lexer.h"
+#include "ucode/vm.h"
+#include "ucode/lib.h"
+#include "ucode/lexer.h"
 
 #define UC_LEX_CONTINUE_PARSING (void *)1
 
@@ -44,7 +44,7 @@ struct token {
 		char pat[4];
 	} u;
 	unsigned plen;
-	uc_token *(*parse)(uc_lexer *);
+	uc_token_t *(*parse)(uc_lexer_t *);
 };
 
 #define dec(o) \
@@ -54,11 +54,11 @@ struct token {
 	(((x) >= 'a') ? (10 + (x) - 'a') : \
 		(((x) >= 'A') ? (10 + (x) - 'A') : dec(x)))
 
-static uc_token *parse_comment(uc_lexer *);
-static uc_token *parse_string(uc_lexer *);
-static uc_token *parse_regexp(uc_lexer *);
-static uc_token *parse_number(uc_lexer *);
-static uc_token *parse_label(uc_lexer *);
+static uc_token_t *parse_comment(uc_lexer_t *);
+static uc_token_t *parse_string(uc_lexer_t *);
+static uc_token_t *parse_regexp(uc_lexer_t *);
+static uc_token_t *parse_number(uc_lexer_t *);
+static uc_token_t *parse_label(uc_lexer_t *);
 
 static const struct token tokens[] = {
 	{ TK_ASLEFT,	{ .pat = "<<=" },   3, NULL },
@@ -220,8 +220,8 @@ utf8enc(char **out, int *rem, int code)
 /* length of the longest token in our lookup table */
 #define UC_LEX_MAX_TOKEN_LEN 3
 
-static uc_token *
-emit_op(uc_lexer *lex, uint32_t pos, int type, uc_value_t *uv)
+static uc_token_t *
+emit_op(uc_lexer_t *lex, uint32_t pos, int type, uc_value_t *uv)
 {
 	lex->curr.type = type;
 	lex->curr.uv = uv;
@@ -230,7 +230,7 @@ emit_op(uc_lexer *lex, uint32_t pos, int type, uc_value_t *uv)
 	return &lex->curr;
 }
 
-static void lookbehind_append(uc_lexer *lex, const char *data, size_t len)
+static void lookbehind_append(uc_lexer_t *lex, const char *data, size_t len)
 {
 	if (len) {
 		lex->lookbehind = xrealloc(lex->lookbehind, lex->lookbehindlen + len);
@@ -239,15 +239,15 @@ static void lookbehind_append(uc_lexer *lex, const char *data, size_t len)
 	}
 }
 
-static void lookbehind_reset(uc_lexer *lex) {
+static void lookbehind_reset(uc_lexer_t *lex) {
 	free(lex->lookbehind);
 	lex->lookbehind = NULL;
 	lex->lookbehindlen = 0;
 }
 
-static uc_token *
-lookbehind_to_text(uc_lexer *lex, uint32_t pos, int type, const char *strip_trailing_chars) {
-	uc_token *rv = NULL;
+static uc_token_t *
+lookbehind_to_text(uc_lexer_t *lex, uint32_t pos, int type, const char *strip_trailing_chars) {
+	uc_token_t *rv = NULL;
 
 	if (lex->lookbehind) {
 		if (strip_trailing_chars) {
@@ -264,12 +264,12 @@ lookbehind_to_text(uc_lexer *lex, uint32_t pos, int type, const char *strip_trai
 }
 
 static inline size_t
-buf_remaining(uc_lexer *lex) {
+buf_remaining(uc_lexer_t *lex) {
 	return (lex->bufend - lex->bufstart);
 }
 
 static inline bool
-_buf_startswith(uc_lexer *lex, const char *str, size_t len) {
+_buf_startswith(uc_lexer_t *lex, const char *str, size_t len) {
 	return (buf_remaining(lex) >= len && !strncmp(lex->bufstart, str, len));
 }
 
@@ -290,18 +290,18 @@ _buf_startswith(uc_lexer *lex, const char *str, size_t len) {
  */
 
 static void
-next_lineinfo(uc_lexer *lex)
+next_lineinfo(uc_lexer_t *lex)
 {
-	uc_lineinfo *lines = &lex->source->lineinfo;
+	uc_lineinfo_t *lines = &lex->source->lineinfo;
 
 	uc_vector_grow(lines);
 	lines->entries[lines->count++] = 0x80;
 }
 
 static void
-update_lineinfo(uc_lexer *lex, size_t off)
+update_lineinfo(uc_lexer_t *lex, size_t off)
 {
-	uc_lineinfo *lines = &lex->source->lineinfo;
+	uc_lineinfo_t *lines = &lex->source->lineinfo;
 	uint8_t *entry, n;
 
 	entry = uc_vector_last(lines);
@@ -325,7 +325,7 @@ update_lineinfo(uc_lexer *lex, size_t off)
 }
 
 static void
-buf_consume(uc_lexer *lex, size_t len) {
+buf_consume(uc_lexer_t *lex, size_t len) {
 	size_t i, linelen;
 
 	if (!lex->source->lineinfo.count)
@@ -350,8 +350,8 @@ buf_consume(uc_lexer *lex, size_t len) {
 	lex->source->off += len;
 }
 
-static uc_token *
-parse_comment(uc_lexer *lex)
+static uc_token_t *
+parse_comment(uc_lexer_t *lex)
 {
 	const struct token *tok = lex->tok;
 	const char *ptr, *end;
@@ -387,7 +387,7 @@ parse_comment(uc_lexer *lex)
 }
 
 static void
-append_utf8(uc_lexer *lex, int code) {
+append_utf8(uc_lexer_t *lex, int code) {
 	char ustr[8], *up;
 	int rem;
 
@@ -398,13 +398,13 @@ append_utf8(uc_lexer *lex, int code) {
 		lookbehind_append(lex, ustr, up - ustr);
 }
 
-static uc_token *
-parse_string(uc_lexer *lex)
+static uc_token_t *
+parse_string(uc_lexer_t *lex)
 {
 	const struct token *tok = lex->tok;
 	char q = tok->u.pat[0];
 	char *ptr, *c;
-	uc_token *rv;
+	uc_token_t *rv;
 	int code;
 
 	if (!buf_remaining(lex))
@@ -626,11 +626,11 @@ enum {
 	UC_LEX_PARSE_REGEX_FLAGS
 };
 
-static uc_token *
-parse_regexp(uc_lexer *lex)
+static uc_token_t *
+parse_regexp(uc_lexer_t *lex)
 {
 	bool is_reg_global = false, is_reg_icase = false, is_reg_newline = false;
-	uc_token *rv;
+	uc_token_t *rv;
 	size_t len;
 	char *s;
 
@@ -663,7 +663,7 @@ parse_regexp(uc_lexer *lex)
 		break;
 
 	case UC_LEX_PARSE_REGEX_FLAGS:
-		rv = (uc_token *)lex->lookbehind;
+		rv = (uc_token_t *)lex->lookbehind;
 
 		while (lex->bufstart < lex->bufend || lex->eof) {
 			switch (lex->eof ? EOF : lex->bufstart[0]) {
@@ -717,8 +717,8 @@ parse_regexp(uc_lexer *lex)
  *  -UC_ERROR_OVERLONG_STRING	Label too long
  */
 
-static uc_token *
-parse_label(uc_lexer *lex)
+static uc_token_t *
+parse_label(uc_lexer_t *lex)
 {
 	const struct token *tok = lex->tok;
 	const struct keyword *word;
@@ -763,7 +763,7 @@ parse_label(uc_lexer *lex)
  */
 
 static inline bool
-is_numeric_char(uc_lexer *lex, char c)
+is_numeric_char(uc_lexer_t *lex, char c)
 {
 	char prev = lex->lookbehindlen ? lex->lookbehind[lex->lookbehindlen-1] : 0;
 
@@ -773,11 +773,11 @@ is_numeric_char(uc_lexer *lex, char c)
 	return prev ? (isxdigit(c) || c == 'x' || c == 'X' || c == '.') : (isdigit(c) || c == '.');
 }
 
-static uc_token *
-parse_number(uc_lexer *lex)
+static uc_token_t *
+parse_number(uc_lexer_t *lex)
 {
 	const struct token *tok = lex->tok;
-	uc_token *rv = NULL;
+	uc_token_t *rv = NULL;
 	long long int n;
 	char *ptr, *e;
 	double d;
@@ -826,15 +826,15 @@ parse_number(uc_lexer *lex)
 	return NULL;
 }
 
-static uc_token *
-lex_step(uc_lexer *lex, FILE *fp)
+static uc_token_t *
+lex_step(uc_lexer_t *lex, FILE *fp)
 {
 	uint32_t masks[] = { 0, le32toh(0x000000ff), le32toh(0x0000ffff), le32toh(0x00ffffff), le32toh(0xffffffff) };
 	union { uint32_t n; char str[4]; } search;
 	const struct token *tok;
 	size_t rlen, rem;
 	char *ptr, c;
-	uc_token *rv;
+	uc_token_t *rv;
 	size_t i;
 
 	/* only less than UC_LEX_MAX_TOKEN_LEN unread buffer chars remaining,
@@ -1132,9 +1132,9 @@ lex_step(uc_lexer *lex, FILE *fp)
 }
 
 static void
-uc_lexer_skip_shebang(uc_lexer *lex)
+uc_lexer_skip_shebang(uc_lexer_t *lex)
 {
-	uc_source *source = lex->source;
+	uc_source_t *source = lex->source;
 	FILE *fp = source->fp;
 	int c1, c2;
 
@@ -1164,7 +1164,7 @@ uc_lexer_skip_shebang(uc_lexer *lex)
 }
 
 void
-uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source)
+uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source)
 {
 	lex->state = UC_LEX_IDENTIFY_BLOCK;
 
@@ -1205,7 +1205,7 @@ uc_lexer_init(uc_lexer *lex, uc_parse_config *config, uc_source *source)
 }
 
 void
-uc_lexer_free(uc_lexer *lex)
+uc_lexer_free(uc_lexer_t *lex)
 {
 	uc_source_put(lex->source);
 
@@ -1213,10 +1213,10 @@ uc_lexer_free(uc_lexer *lex)
 	free(lex->buf);
 }
 
-uc_token *
-uc_lexer_next_token(uc_lexer *lex)
+uc_token_t *
+uc_lexer_next_token(uc_lexer_t *lex)
 {
-	uc_token *rv = NULL;
+	uc_token_t *rv = NULL;
 
 	while (lex->state != UC_LEX_EOF) {
 		rv = lex_step(lex, lex->source->fp);
@@ -1236,7 +1236,7 @@ uc_lexer_next_token(uc_lexer *lex)
 }
 
 const char *
-uc_get_tokenname(unsigned type)
+uc_tokenname(unsigned type)
 {
 	static char buf[sizeof("'endfunction'")];
 	size_t i;

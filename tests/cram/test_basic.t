@@ -10,19 +10,20 @@ setup common environment:
 check that ucode provides exepected help:
 
   $ ucode | sed 's/ucode-san/ucode/'
-  == Usage ==
+  Usage
   
-    # ucode [-d] [-l] [-r] [-S] [-R] [-e '[prefix=]{"var": ...}'] [-E [prefix=]env.json] {-i <file> | -s "ucode script..."}
+    # ucode [-t] [-l] [-r] [-S] [-R] [-x function [-x ...]] [-e '[prefix=]{"var": ...}'] [-E [prefix=]env.json] {-i <file> | -s "ucode script..."}
     -h, --help\tPrint this help (esc)
-    -i file\tSpecify an ucode script to parse (esc)
-    -s "ucode script..."\tSpecify an ucode fragment to parse (esc)
-    -d Instead of executing the script, dump the resulting AST as dot
+    -i file\tExecute the given ucode script file (esc)
+    -s "ucode script..."\tExecute the given string as ucode script (esc)
+    -t Enable VM execution tracing
     -l Do not strip leading block whitespace
     -r Do not trim trailing block newlines
     -S Enable strict mode
     -R Enable raw code mode
     -e Set global variables from given JSON object
     -E Set global variables from given JSON file
+    -x Disable given function
     -m Preload given module
 
 check that ucode prints greetings:
@@ -38,15 +39,13 @@ check that ucode provides proper error messages:
 
   $ ucode -m foo -s ' '
   Runtime error: No module named 'foo' could be found
-  At start of program
   
-  [1]
+  [254]
 
   $ touch moo; ucode -m foo -i moo
   Runtime error: No module named 'foo' could be found
-  At start of program
   
-  [1]
+  [254]
 
 check that ucode can load fs module:
 
