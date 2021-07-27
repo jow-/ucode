@@ -1980,7 +1980,7 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 	if (ucv_type(scope) == UC_ARRAY) {
 		idx = ucv_key_to_index(key);
 
-		if (idx < 0 && idx > INT64_MIN && llabs(idx) <= ucv_array_length(scope))
+		if (idx < 0 && idx > INT64_MIN && (uint64_t)llabs(idx) <= ucv_array_length(scope))
 			idx += ucv_array_length(scope);
 
 		if (idx >= 0 && (uint64_t)idx < ucv_array_length(scope))
@@ -2017,7 +2017,7 @@ ucv_key_set(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
 	if (ucv_type(scope) == UC_ARRAY) {
 		idx = ucv_key_to_index(key);
 
-		if (idx < 0 && idx > INT64_MIN && llabs(idx) <= ucv_array_length(scope))
+		if (idx < 0 && idx > INT64_MIN && (uint64_t)llabs(idx) <= ucv_array_length(scope))
 			idx += ucv_array_length(scope);
 
 		if (idx < 0 || !ucv_array_set(scope, idx, val))
