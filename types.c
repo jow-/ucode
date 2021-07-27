@@ -1980,6 +1980,9 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 	if (ucv_type(scope) == UC_ARRAY) {
 		idx = ucv_key_to_index(key);
 
+		if (idx < 0 && idx >= -INT64_MAX && llabs(idx) <= ucv_array_length(scope))
+			idx += ucv_array_length(scope);
+
 		if (idx >= 0 && (uint64_t)idx < ucv_array_length(scope))
 			return ucv_get(ucv_array_get(scope, idx));
 	}
