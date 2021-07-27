@@ -2064,9 +2064,17 @@ ucv_gc_common(uc_vm_t *vm, bool final)
 	if (!final) {
 		/* mark reachable objects */
 		ucv_gc_mark(vm->globals);
+		ucv_gc_mark(vm->exception.stacktrace);
 
-		for (i = 0; i < vm->callframes.count; i++)
+		for (i = 0; i < vm->callframes.count; i++) {
 			ucv_gc_mark(vm->callframes.entries[i].ctx);
+
+			if (vm->callframes.entries[i].closure)
+				ucv_gc_mark(&vm->callframes.entries[i].closure->header);
+
+			if (vm->callframes.entries[i].cfunction)
+				ucv_gc_mark(&vm->callframes.entries[i].cfunction->header);
+		}
 
 		for (i = 0; i < vm->stack.count; i++)
 			ucv_gc_mark(vm->stack.entries[i]);
