@@ -782,10 +782,10 @@ uc_fs_chown(uc_vm_t *vm, size_t nargs)
 
 	if (!uc_fs_resolve_user(user, &uid) ||
 	    !uc_fs_resolve_group(group, &gid))
-		return NULL;
+		err_return(errno);
 
 	if (chown(ucv_string_get(path), uid, gid) == -1)
-		return NULL;
+		err_return(errno);
 
 	return ucv_boolean_new(true);
 }
@@ -801,7 +801,7 @@ uc_fs_rename(uc_vm_t *vm, size_t nargs)
 		err_return(EINVAL);
 
 	if (rename(ucv_string_get(oldpath), ucv_string_get(newpath)))
-		return NULL;
+		err_return(errno);
 
 	return ucv_boolean_new(true);
 }
