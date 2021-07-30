@@ -2032,7 +2032,7 @@ uc_vm_output_exception(uc_vm_t *vm, uc_exception_t *ex)
 }
 
 static uc_vm_status_t
-uc_vm_execute_chunk(uc_vm_t *vm, uc_value_t **retvalp)
+uc_vm_execute_chunk(uc_vm_t *vm)
 {
 	uc_callframe_t *frame = uc_vm_current_frame(vm);
 	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
@@ -2234,16 +2234,10 @@ uc_vm_execute_chunk(uc_vm_t *vm, uc_value_t **retvalp)
 		case I_RETURN:
 			retval = uc_vm_callframe_pop(vm);
 
-			if (vm->callframes.count == 0) {
-				if (retvalp)
-					*retvalp = retval;
-				else
-					ucv_put(retval);
-
-				return STATUS_OK;
-			}
-
 			uc_vm_stack_push(vm, retval);
+
+			if (vm->callframes.count == 0)
+				return STATUS_OK;
 
 			frame = uc_vector_last(&vm->callframes);
 			chunk = uc_vm_frame_chunk(frame);
@@ -2267,9 +2261,6 @@ uc_vm_execute_chunk(uc_vm_t *vm, uc_value_t **retvalp)
 			/* VM termination was requested */
 			if (vm->exception.type == EXCEPTION_EXIT) {
 				uc_vm_reset_callframes(vm);
-
-				if (retvalp)
-					*retvalp = ucv_int64_new(vm->arg.s32);
 
 				return STATUS_EXIT;
 			}
@@ -2305,8 +2296,10 @@ uc_vm_status_t
 uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval)
 {
 	uc_closure_t *closure = (uc_closure_t *)ucv_closure_new(vm, fn, false);
+	uc_vm_status_t status;
 	uc_callframe_t *frame;
 	uc_stringbuf_t *buf;
+	uc_value_t *val;
 
 	uc_vector_grow(&vm->callframes);
 
@@ -2330,10 +2323,33 @@ uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval)
 	//uc_vm_stack_push(vm, closure->header.jso);
 	uc_vm_stack_push(vm, NULL);
 
-	if (retval)
-		*retval = NULL;
+	status = uc_vm_execute_chunk(vm);
 
-	return uc_vm_execute_chunk(vm, retval);
+	switch (status) {
+	case STATUS_OK:
+		val = uc_vm_stack_pop(vm);
+
+		if (retval)
+			*retval = val;
+		else
+			ucv_put(val);
+
+		break;
+
+	case STATUS_EXIT:
+		if (retval)
+			*retval = ucv_int64_new(vm->arg.s32);
+
+		break;
+
+	default:
+		if (retval)
+			*retval = NULL;
+
+		break;
+	}
+
+	return status;
 }
 
 uc_exception_type_t
@@ -2344,7 +2360,7 @@ uc_vm_call(uc_vm_t *vm, bool mcall, size_t nargs)
 
 	if (uc_vm_call_function(vm, ctx, fno, mcall, nargs & 0xffff)) {
 		if (ucv_type(fno) != UC_CFUNCTION)
-			uc_vm_execute_chunk(vm, NULL);
+			uc_vm_execute_chunk(vm);
 	}
 
 	return vm->exception.type;
