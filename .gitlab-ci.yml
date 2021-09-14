@@ -1,6 +1,6 @@
 variables:
   CI_ENABLE_UNIT_TESTING: 1
-  CI_TARGET_BUILD_DEPENDS: ubus uci
+  CI_TARGET_BUILD_DEPENDS: libnl-tiny ubus uci
 
 include:
   - remote: https://gitlab.com/ynezz/openwrt-ci/raw/master/openwrt-ci/gitlab/main.yml
