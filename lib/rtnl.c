@@ -47,6 +47,7 @@ limitations under the License.
 #include <linux/if_addrlabel.h>
 #include <linux/if_bridge.h>
 #include <linux/netconf.h>
+#include <linux/ipv6.h>
 
 #include "ucode/module.h"
 
@@ -589,11 +590,124 @@ static const uc_nl_attr_spec_t route_encap_seg6_attrs[] = {
 	{ SEG6_IPTUNNEL_SRH, "srh", DT_SRH, 0, NULL },
 };
 
-static const uc_nl_nested_spec_t link_attrs_af_spec_inet6_rta = {
+#define IPV4_DEVCONF_ENTRY(name) ((void *)((IPV4_DEVCONF_##name - 1) * sizeof(uint32_t)))
+
+static const uc_nl_nested_spec_t link_attrs_af_spec_inet_devconf_rta = {
+	.headsize = NLA_ALIGN(IPV4_DEVCONF_MAX * sizeof(uint32_t)),
+	.nattrs = 32,
+	.attrs = {
+		{ 0, "forwarding", DT_U32, 0, IPV4_DEVCONF_ENTRY(FORWARDING) },
+		{ 0, "mc_forwarding", DT_U32, 0, IPV4_DEVCONF_ENTRY(MC_FORWARDING) },
+		{ 0, "proxy_arp", DT_U32, 0, IPV4_DEVCONF_ENTRY(PROXY_ARP) },
+		{ 0, "accept_redirects", DT_U32, 0, IPV4_DEVCONF_ENTRY(ACCEPT_REDIRECTS) },
+		{ 0, "secure_redirects", DT_U32, 0, IPV4_DEVCONF_ENTRY(SECURE_REDIRECTS) },
+		{ 0, "send_redirects", DT_U32, 0, IPV4_DEVCONF_ENTRY(SEND_REDIRECTS) },
+		{ 0, "shared_media", DT_U32, 0, IPV4_DEVCONF_ENTRY(SHARED_MEDIA) },
+		{ 0, "rp_filter", DT_U32, 0, IPV4_DEVCONF_ENTRY(RP_FILTER) },
+		{ 0, "accept_source_route", DT_U32, 0, IPV4_DEVCONF_ENTRY(ACCEPT_SOURCE_ROUTE) },
+		{ 0, "bootp_relay", DT_U32, 0, IPV4_DEVCONF_ENTRY(BOOTP_RELAY) },
+		{ 0, "log_martians", DT_U32, 0, IPV4_DEVCONF_ENTRY(LOG_MARTIANS) },
+		{ 0, "tag", DT_U32, 0, IPV4_DEVCONF_ENTRY(TAG) },
+		{ 0, "arpfilter", DT_U32, 0, IPV4_DEVCONF_ENTRY(ARPFILTER) },
+		{ 0, "medium_id", DT_U32, 0, IPV4_DEVCONF_ENTRY(MEDIUM_ID) },
+		{ 0, "noxfrm", DT_U32, 0, IPV4_DEVCONF_ENTRY(NOXFRM) },
+		{ 0, "nopolicy", DT_U32, 0, IPV4_DEVCONF_ENTRY(NOPOLICY) },
+		{ 0, "force_igmp_version", DT_U32, 0, IPV4_DEVCONF_ENTRY(FORCE_IGMP_VERSION) },
+		{ 0, "arp_announce", DT_U32, 0, IPV4_DEVCONF_ENTRY(ARP_ANNOUNCE) },
+		{ 0, "arp_ignore", DT_U32, 0, IPV4_DEVCONF_ENTRY(ARP_IGNORE) },
+		{ 0, "promote_secondaries", DT_U32, 0, IPV4_DEVCONF_ENTRY(PROMOTE_SECONDARIES) },
+		{ 0, "arp_accept", DT_U32, 0, IPV4_DEVCONF_ENTRY(ARP_ACCEPT) },
+		{ 0, "arp_notify", DT_U32, 0, IPV4_DEVCONF_ENTRY(ARP_NOTIFY) },
+		{ 0, "accept_local", DT_U32, 0, IPV4_DEVCONF_ENTRY(ACCEPT_LOCAL) },
+		{ 0, "src_vmark", DT_U32, 0, IPV4_DEVCONF_ENTRY(SRC_VMARK) },
+		{ 0, "proxy_arp_pvlan", DT_U32, 0, IPV4_DEVCONF_ENTRY(PROXY_ARP_PVLAN) },
+		{ 0, "route_localnet", DT_U32, 0, IPV4_DEVCONF_ENTRY(ROUTE_LOCALNET) },
+		{ 0, "igmpv2_unsolicited_report_interval", DT_U32, 0, IPV4_DEVCONF_ENTRY(IGMPV2_UNSOLICITED_REPORT_INTERVAL) },
+		{ 0, "igmpv3_unsolicited_report_interval", DT_U32, 0, IPV4_DEVCONF_ENTRY(IGMPV3_UNSOLICITED_REPORT_INTERVAL) },
+		{ 0, "ignore_routes_with_linkdown", DT_U32, 0, IPV4_DEVCONF_ENTRY(IGNORE_ROUTES_WITH_LINKDOWN) },
+		{ 0, "drop_unicast_in_l2_multicast", DT_U32, 0, IPV4_DEVCONF_ENTRY(DROP_UNICAST_IN_L2_MULTICAST) },
+		{ 0, "drop_gratuitous_arp", DT_U32, 0, IPV4_DEVCONF_ENTRY(DROP_GRATUITOUS_ARP) },
+		{ 0, "bc_forwarding", DT_U32, 0, IPV4_DEVCONF_ENTRY(BC_FORWARDING) },
+	}
+};
+
+static const uc_nl_nested_spec_t link_attrs_af_spec_inet_rta = {
 	.headsize = 0,
 	.nattrs = 1,
 	.attrs = {
+		{ IFLA_INET_CONF, "conf", DT_NESTED, 0, &link_attrs_af_spec_inet_devconf_rta },
+	}
+};
+
+#define IPV6_DEVCONF_ENTRY(name) ((void *)(DEVCONF_##name * sizeof(uint32_t)))
+
+static const uc_nl_nested_spec_t link_attrs_af_spec_inet6_devconf_rta = {
+	.headsize = NLA_ALIGN(DEVCONF_MAX * sizeof(uint32_t)),
+	.nattrs = 53,
+	.attrs = {
+		{ 0, "forwarding", DT_S32, 0, IPV6_DEVCONF_ENTRY(FORWARDING) },
+		{ 0, "hoplimit", DT_S32, 0, IPV6_DEVCONF_ENTRY(HOPLIMIT) },
+		{ 0, "mtu6", DT_S32, 0, IPV6_DEVCONF_ENTRY(MTU6) },
+		{ 0, "accept_ra", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_RA) },
+		{ 0, "accept_redirects", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_REDIRECTS) },
+		{ 0, "autoconf", DT_S32, 0, IPV6_DEVCONF_ENTRY(AUTOCONF) },
+		{ 0, "dad_transmits", DT_S32, 0, IPV6_DEVCONF_ENTRY(DAD_TRANSMITS) },
+		{ 0, "rtr_solicits", DT_S32, 0, IPV6_DEVCONF_ENTRY(RTR_SOLICITS) },
+		{ 0, "rtr_solicit_interval", DT_S32, 0, IPV6_DEVCONF_ENTRY(RTR_SOLICIT_INTERVAL) },
+		{ 0, "rtr_solicit_delay", DT_S32, 0, IPV6_DEVCONF_ENTRY(RTR_SOLICIT_DELAY) },
+		{ 0, "use_tempaddr", DT_S32, 0, IPV6_DEVCONF_ENTRY(USE_TEMPADDR) },
+		{ 0, "temp_valid_lft", DT_S32, 0, IPV6_DEVCONF_ENTRY(TEMP_VALID_LFT) },
+		{ 0, "temp_prefered_lft", DT_S32, 0, IPV6_DEVCONF_ENTRY(TEMP_PREFERED_LFT) },
+		{ 0, "regen_max_retry", DT_S32, 0, IPV6_DEVCONF_ENTRY(REGEN_MAX_RETRY) },
+		{ 0, "max_desync_factor", DT_S32, 0, IPV6_DEVCONF_ENTRY(MAX_DESYNC_FACTOR) },
+		{ 0, "max_addresses", DT_S32, 0, IPV6_DEVCONF_ENTRY(MAX_ADDRESSES) },
+		{ 0, "force_mld_version", DT_S32, 0, IPV6_DEVCONF_ENTRY(FORCE_MLD_VERSION) },
+		{ 0, "accept_ra_defrtr", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_RA_DEFRTR) },
+		{ 0, "accept_ra_pinfo", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_RA_PINFO) },
+		{ 0, "accept_ra_rtr_pref", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_RA_RTR_PREF) },
+		{ 0, "rtr_probe_interval", DT_S32, 0, IPV6_DEVCONF_ENTRY(RTR_PROBE_INTERVAL) },
+		{ 0, "accept_ra_rt_info_max_plen", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_RA_RT_INFO_MAX_PLEN) },
+		{ 0, "proxy_ndp", DT_S32, 0, IPV6_DEVCONF_ENTRY(PROXY_NDP) },
+		{ 0, "optimistic_dad", DT_S32, 0, IPV6_DEVCONF_ENTRY(OPTIMISTIC_DAD) },
+		{ 0, "accept_source_route", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_SOURCE_ROUTE) },
+		{ 0, "mc_forwarding", DT_S32, 0, IPV6_DEVCONF_ENTRY(MC_FORWARDING) },
+		{ 0, "disable_ipv6", DT_S32, 0, IPV6_DEVCONF_ENTRY(DISABLE_IPV6) },
+		{ 0, "accept_dad", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_DAD) },
+		{ 0, "force_tllao", DT_S32, 0, IPV6_DEVCONF_ENTRY(FORCE_TLLAO) },
+		{ 0, "ndisc_notify", DT_S32, 0, IPV6_DEVCONF_ENTRY(NDISC_NOTIFY) },
+		{ 0, "mldv1_unsolicited_report_interval", DT_S32, 0, IPV6_DEVCONF_ENTRY(MLDV1_UNSOLICITED_REPORT_INTERVAL) },
+		{ 0, "mldv2_unsolicited_report_interval", DT_S32, 0, IPV6_DEVCONF_ENTRY(MLDV2_UNSOLICITED_REPORT_INTERVAL) },
+		{ 0, "suppress_frag_ndisc", DT_S32, 0, IPV6_DEVCONF_ENTRY(SUPPRESS_FRAG_NDISC) },
+		{ 0, "accept_ra_from_local", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_RA_FROM_LOCAL) },
+		{ 0, "use_optimistic", DT_S32, 0, IPV6_DEVCONF_ENTRY(USE_OPTIMISTIC) },
+		{ 0, "accept_ra_mtu", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_RA_MTU) },
+		{ 0, "stable_secret", DT_S32, 0, IPV6_DEVCONF_ENTRY(STABLE_SECRET) },
+		{ 0, "use_oif_addrs_only", DT_S32, 0, IPV6_DEVCONF_ENTRY(USE_OIF_ADDRS_ONLY) },
+		{ 0, "accept_ra_min_hop_limit", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_RA_MIN_HOP_LIMIT) },
+		{ 0, "ignore_routes_with_linkdown", DT_S32, 0, IPV6_DEVCONF_ENTRY(IGNORE_ROUTES_WITH_LINKDOWN) },
+		{ 0, "drop_unicast_in_l2_multicast", DT_S32, 0, IPV6_DEVCONF_ENTRY(DROP_UNICAST_IN_L2_MULTICAST) },
+		{ 0, "drop_unsolicited_na", DT_S32, 0, IPV6_DEVCONF_ENTRY(DROP_UNSOLICITED_NA) },
+		{ 0, "keep_addr_on_down", DT_S32, 0, IPV6_DEVCONF_ENTRY(KEEP_ADDR_ON_DOWN) },
+		{ 0, "rtr_solicit_max_interval", DT_S32, 0, IPV6_DEVCONF_ENTRY(RTR_SOLICIT_MAX_INTERVAL) },
+		{ 0, "seg6_enabled", DT_S32, 0, IPV6_DEVCONF_ENTRY(SEG6_ENABLED) },
+		{ 0, "seg6_require_hmac", DT_S32, 0, IPV6_DEVCONF_ENTRY(SEG6_REQUIRE_HMAC) },
+		{ 0, "enhanced_dad", DT_S32, 0, IPV6_DEVCONF_ENTRY(ENHANCED_DAD) },
+		{ 0, "addr_gen_mode", DT_S32, 0, IPV6_DEVCONF_ENTRY(ADDR_GEN_MODE) },
+		{ 0, "disable_policy", DT_S32, 0, IPV6_DEVCONF_ENTRY(DISABLE_POLICY) },
+		{ 0, "accept_ra_rt_info_min_plen", DT_S32, 0, IPV6_DEVCONF_ENTRY(ACCEPT_RA_RT_INFO_MIN_PLEN) },
+		{ 0, "ndisc_tclass", DT_S32, 0, IPV6_DEVCONF_ENTRY(NDISC_TCLASS) },
+		{ 0, "rpl_seg_enabled", DT_S32, 0, IPV6_DEVCONF_ENTRY(RPL_SEG_ENABLED) },
+		{ 0, "ra_defrtr_metric", DT_S32, 0, IPV6_DEVCONF_ENTRY(RA_DEFRTR_METRIC) },
+	}
+};
+
+static const uc_nl_nested_spec_t link_attrs_af_spec_inet6_rta = {
+	.headsize = 0,
+	.nattrs = 3,
+	.attrs = {
 		{ IFLA_INET6_ADDR_GEN_MODE, "mode", DT_U8, 0, NULL },
+		{ IFLA_INET6_FLAGS, "flags", DT_U32, DF_NO_SET, NULL },
+		{ IFLA_INET6_CONF, "conf", DT_NESTED, DF_NO_SET, &link_attrs_af_spec_inet6_devconf_rta },
 	}
 };
 
@@ -608,8 +722,9 @@ static const uc_nl_nested_spec_t link_attrs_bridge_vinfo_rta = {
 
 static const uc_nl_nested_spec_t link_attrs_af_spec_rta = {
 	.headsize = 0,
-	.nattrs = 3,
+	.nattrs = 4,
 	.attrs = {
+		{ AF_INET, "inet", DT_NESTED, DF_NO_SET, &link_attrs_af_spec_inet_rta },
 		{ AF_INET6, "inet6", DT_NESTED, 0, &link_attrs_af_spec_inet6_rta },
 		{ IFLA_BRIDGE_FLAGS, "bridge_flags", DT_U16, 0, NULL },
 		{ IFLA_BRIDGE_VLAN_INFO, "bridge_vlan_info", DT_NESTED, DF_MULTIPLE|DF_FLAT, &link_attrs_bridge_vinfo_rta },
