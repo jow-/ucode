@@ -1273,8 +1273,8 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 static bool
 uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsize, const uc_nl_attr_spec_t *attrs, size_t nattrs, uc_vm_t *vm, uc_value_t *obj)
 {
+	size_t i, maxattr = 0, structlen = headsize;
 	struct nlattr **tb, *nla, *nla_nest;
-	size_t i, maxattr = 0;
 	uc_value_t *v, *arr;
 	int rem;
 
@@ -1287,9 +1287,15 @@ uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsiz
 	if (!tb)
 		return false;
 
-	nla_parse(tb, maxattr, buf + headsize, buflen - headsize, NULL);
+	if (buflen > headsize)
+		nla_parse(tb, maxattr, buf + headsize, buflen - headsize, NULL);
+	else
+		structlen = buflen;
 
 	for (i = 0; i < nattrs; i++) {
+		if (attrs[i].attr == 0 && (uintptr_t)attrs[i].auxdata >= structlen)
+			continue;
+
 		if (attrs[i].attr != 0 && !tb[attrs[i].attr])
 			continue;
 
@@ -1297,6 +1303,10 @@ uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsiz
 			continue;
 
 		if (attrs[i].flags & DF_MULTIPLE) {
+			/* can't happen, but needed to nudge clang-analyzer */
+			if (!tb[attrs[i].attr])
+				continue;
+
 			arr = ucv_array_new(vm);
 			nla_nest = tb[attrs[i].attr];
 
@@ -2337,9 +2347,6 @@ uc_nl_convert_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 	const uc_nl_nested_spec_t *nest = spec->auxdata;
 	uc_value_t *nested_obj;
 	bool rv;
-
-	if (!nla_check_len(tb[spec->attr], nest->headsize))
-		return NULL;
 
 	nested_obj = ucv_object_new(vm);
 
