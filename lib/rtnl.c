@@ -461,6 +461,7 @@ enum {
 	DF_STORE_MASK = (1 << 8),
 	DF_MULTIPLE = (1 << 9),
 	DF_FLAT = (1 << 10),
+	DF_FAMILY_HINT = (1 << 11),
 };
 
 typedef struct uc_nl_attr_spec {
@@ -528,13 +529,13 @@ static const uc_nl_nested_spec_t route_msg = {
 		{ RTA_UNSPEC, "scope", DT_U8, 0, MEMBER(rtmsg, rtm_scope) },
 		{ RTA_UNSPEC, "type", DT_U8, 0, MEMBER(rtmsg, rtm_type) },
 		{ RTA_UNSPEC, "flags", DT_U32, 0, MEMBER(rtmsg, rtm_flags) },
-		{ RTA_SRC, "src", DT_ANYADDR, DF_STORE_MASK, MEMBER(rtmsg, rtm_src_len) },
-		{ RTA_DST, "dst", DT_ANYADDR, DF_STORE_MASK, MEMBER(rtmsg, rtm_dst_len) },
+		{ RTA_SRC, "src", DT_ANYADDR, DF_STORE_MASK|DF_FAMILY_HINT, MEMBER(rtmsg, rtm_src_len) },
+		{ RTA_DST, "dst", DT_ANYADDR, DF_STORE_MASK|DF_FAMILY_HINT, MEMBER(rtmsg, rtm_dst_len) },
 		{ RTA_IIF, "iif", DT_NETDEV, 0, NULL },
 		{ RTA_OIF, "oif", DT_NETDEV, 0, NULL },
-		{ RTA_GATEWAY, "gateway", DT_ANYADDR, 0, NULL },
+		{ RTA_GATEWAY, "gateway", DT_ANYADDR, DF_FAMILY_HINT, NULL },
 		{ RTA_PRIORITY, "priority", DT_U32, 0, NULL },
-		{ RTA_PREFSRC, "prefsrc", DT_ANYADDR, 0, NULL },
+		{ RTA_PREFSRC, "prefsrc", DT_ANYADDR, DF_FAMILY_HINT, NULL },
 		{ RTA_METRICS, "metrics", DT_NESTED, 0, &route_metrics_rta },
 		{ RTA_MULTIPATH, "multipath", DT_MULTIPATH, 0, NULL },
 		{ RTA_FLOW, "flow", DT_U32, 0, NULL },
@@ -1166,8 +1167,8 @@ static const uc_nl_nested_spec_t rule_msg = {
 		{ FRA_UNSPEC, "action", DT_U8, 0, MEMBER(fib_rule_hdr, action) },
 		{ FRA_UNSPEC, "flags", DT_U32, 0, MEMBER(fib_rule_hdr, flags) },
 		{ FRA_PRIORITY, "priority", DT_U32, 0, NULL },
-		{ FRA_SRC, "src", DT_ANYADDR, DF_STORE_MASK, MEMBER(fib_rule_hdr, src_len) },
-		{ FRA_DST, "dst", DT_ANYADDR, DF_STORE_MASK, MEMBER(fib_rule_hdr, dst_len) },
+		{ FRA_SRC, "src", DT_ANYADDR, DF_STORE_MASK|DF_FAMILY_HINT, MEMBER(fib_rule_hdr, src_len) },
+		{ FRA_DST, "dst", DT_ANYADDR, DF_STORE_MASK|DF_FAMILY_HINT, MEMBER(fib_rule_hdr, dst_len) },
 		{ FRA_FWMARK, "fwmark", DT_U32, 0, NULL },
 		{ FRA_FWMASK, "fwmask", DT_U32, 0, NULL },
 		{ FRA_IFNAME, "iif", DT_NETDEV, 0, NULL },
@@ -1181,7 +1182,7 @@ static const uc_nl_nested_spec_t rule_msg = {
 		{ FRA_SUPPRESS_PREFIXLEN, "suppress_prefixlen", DT_S32, 0, NULL },
 		{ FRA_SUPPRESS_IFGROUP, "suppress_ifgroup", DT_U32, 0, NULL },
 		{ FRA_FLOW, "flow", DT_U32, 0, NULL },
-		{ RTA_GATEWAY, "gateway", DT_ANYADDR, 0, NULL },
+		{ RTA_GATEWAY, "gateway", DT_ANYADDR, DF_FAMILY_HINT, NULL },
 		{ FRA_GOTO, "goto", DT_U32, 0, NULL },
 		{ FRA_PROTOCOL, "protocol", DT_U8, 0, NULL },
 	}
@@ -2485,6 +2486,7 @@ uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, 
 {
 	uc_nl_cidr_t cidr = { 0 };
 	struct ether_addr *ea;
+	struct rtgenmsg *rtg;
 	uint64_t u64;
 	uint32_t u32;
 	uint16_t u16;
@@ -2681,6 +2683,8 @@ uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, 
 	case DT_ANYADDR:
 		assert(spec->attr != 0);
 
+		rtg = nlmsg_data(nlmsg_hdr(msg));
+
 		if (!uc_nl_parse_cidr(vm, val, &cidr))
 			return nla_parse_error(spec, vm, val, "invalid IP address");
 
@@ -2695,6 +2699,9 @@ uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, 
 			return nla_parse_error(spec, vm, val, "address range given but single address expected");
 
 		nla_put(msg, attr, cidr.alen, &cidr.addr.in6);
+
+		if ((rtg->rtgen_family == AF_UNSPEC) && (spec->flags & DF_FAMILY_HINT))
+			rtg->rtgen_family = cidr.family;
 
 		break;
 
