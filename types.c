@@ -1336,7 +1336,7 @@ ucv_to_string_json_encoded(uc_stringbuf_t *pb, const char *s, size_t len, bool r
 
 		default:
 			if (*s < 0x20)
-				ucv_stringbuf_printf(pb, "\\u%04x", *s);
+				ucv_stringbuf_printf(pb, "\\u%04x", (unsigned char)*s);
 			else
 				ucv_stringbuf_addstr(pb, s, 1);
 			break;
