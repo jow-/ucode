@@ -1,0 +1,17 @@
+When compiling certain expressions as first statement of an ucode
+program, e.g. a while loop in raw mode, a jump instruction to offset
+zero is emitted which was incorrectly treated as placeholder by the
+compiler.
+
+-- Testcase --
+while (i++ < 1)
+	print("Test\n");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+Test
+-- End --

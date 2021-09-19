@@ -503,23 +503,34 @@ uc_compiler_emit_regexp(uc_compiler_t *compiler, size_t srcpos, uc_value_t *val)
 }
 
 static size_t
-uc_compiler_emit_jmp(uc_compiler_t *compiler, size_t srcpos, uint32_t dest)
+uc_compiler_emit_jmp(uc_compiler_t *compiler, size_t srcpos)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_JMP);
-	uc_compiler_emit_u32(compiler, 0, dest ? uc_compiler_reladdr(compiler, chunk->count - 1, dest) : 0);
+	uc_compiler_emit_u32(compiler, 0, 0);
 
 	return chunk->count - 5;
 }
 
 static size_t
-uc_compiler_emit_jmpz(uc_compiler_t *compiler, size_t srcpos, uint32_t dest)
+uc_compiler_emit_jmpz(uc_compiler_t *compiler, size_t srcpos)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_JMPZ);
-	uc_compiler_emit_u32(compiler, 0, dest ? uc_compiler_reladdr(compiler, chunk->count - 1, dest) : 0);
+	uc_compiler_emit_u32(compiler, 0, 0);
+
+	return chunk->count - 5;
+}
+
+static size_t
+uc_compiler_emit_jmp_dest(uc_compiler_t *compiler, size_t srcpos, uint32_t dest)
+{
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+
+	uc_compiler_emit_insn(compiler, srcpos, I_JMP);
+	uc_compiler_emit_u32(compiler, 0, uc_compiler_reladdr(compiler, chunk->count - 1, dest));
 
 	return chunk->count - 5;
 }
@@ -1616,7 +1627,7 @@ uc_compiler_compile_and(uc_compiler_t *compiler, bool assignable)
 
 	uc_compiler_emit_insn(compiler, 0, I_COPY);
 	uc_compiler_emit_u8(compiler, 0, 0);
-	jmpz_off = uc_compiler_emit_jmpz(compiler, 0, 0);
+	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
 	uc_compiler_emit_insn(compiler, 0, I_POP);
 	uc_compiler_parse_precedence(compiler, P_AND);
 	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
@@ -1630,8 +1641,8 @@ uc_compiler_compile_or(uc_compiler_t *compiler, bool assignable)
 
 	uc_compiler_emit_insn(compiler, 0, I_COPY);
 	uc_compiler_emit_u8(compiler, 0, 0);
-	jmpz_off = uc_compiler_emit_jmpz(compiler, 0, 0);
-	jmp_off = uc_compiler_emit_jmp(compiler, 0, 0);
+	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
+	jmp_off = uc_compiler_emit_jmp(compiler, 0);
 	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
 	uc_compiler_emit_insn(compiler, 0, I_POP);
 	uc_compiler_parse_precedence(compiler, P_OR);
@@ -1675,13 +1686,13 @@ uc_compiler_compile_ternary(uc_compiler_t *compiler, bool assignable)
 	size_t jmpz_off, jmp_off;
 
 	/* jump to false branch */
-	jmpz_off = uc_compiler_emit_jmpz(compiler, 0, 0);
+	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
 
 	/* compile true branch */
 	uc_compiler_parse_precedence(compiler, P_ASSIGN);
 
 	/* jump after false branch */
-	jmp_off = uc_compiler_emit_jmp(compiler, 0, 0);
+	jmp_off = uc_compiler_emit_jmp(compiler, 0);
 
 	uc_compiler_parse_consume(compiler, TK_COLON);
 
@@ -1984,7 +1995,7 @@ uc_compiler_compile_if(uc_compiler_t *compiler)
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 
 	/* conditional jump to else/elif branch */
-	jmpz_off = uc_compiler_emit_jmpz(compiler, 0, 0);
+	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
 
 	if (uc_compiler_parse_match(compiler, TK_COLON)) {
 		while (true) {
@@ -1995,7 +2006,7 @@ uc_compiler_compile_if(uc_compiler_t *compiler)
 			if (!expect_endif && type == TK_ELIF) {
 				/* emit jump to skip to the end */
 				uc_vector_grow(&elifs);
-				elifs.entries[elifs.count++] = uc_compiler_emit_jmp(compiler, 0, 0);
+				elifs.entries[elifs.count++] = uc_compiler_emit_jmp(compiler, 0);
 
 				/* point previous conditional jump to beginning of branch */
 				uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
@@ -2008,12 +2019,12 @@ uc_compiler_compile_if(uc_compiler_t *compiler)
 				uc_compiler_parse_consume(compiler, TK_COLON);
 
 				/* conditional jump to else/elif branch */
-				jmpz_off = uc_compiler_emit_jmpz(compiler, 0, 0);
+				jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
 			}
 			else if (!expect_endif && type == TK_ELSE) {
 				/* emit jump to skip to the end */
 				uc_vector_grow(&elifs);
-				elifs.entries[elifs.count++] = uc_compiler_emit_jmp(compiler, 0, 0);
+				elifs.entries[elifs.count++] = uc_compiler_emit_jmp(compiler, 0);
 
 				/* point previous conditional jump to beginning of branch */
 				uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
@@ -2057,7 +2068,7 @@ uc_compiler_compile_if(uc_compiler_t *compiler)
 		/* ... when present, handle false branch */
 		if (uc_compiler_parse_match(compiler, TK_ELSE)) {
 			/* jump to skip else branch */
-			jmp_off = uc_compiler_emit_jmp(compiler, 0, 0);
+			jmp_off = uc_compiler_emit_jmp(compiler, 0);
 
 			/* set conditional jump address */
 			uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
@@ -2093,7 +2104,7 @@ uc_compiler_compile_while(uc_compiler_t *compiler)
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 
 	/* conditional jump to end */
-	jmpz_off = uc_compiler_emit_jmpz(compiler, 0, 0);
+	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
 
 	/* compile loop body */
 	if (uc_compiler_parse_match(compiler, TK_COLON)) {
@@ -2114,7 +2125,7 @@ uc_compiler_compile_while(uc_compiler_t *compiler)
 	end_off = chunk->count;
 
 	/* jump back to condition */
-	uc_compiler_emit_jmp(compiler, 0, cond_off);
+	uc_compiler_emit_jmp_dest(compiler, 0, cond_off);
 
 	/* set conditional jump target */
 	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
@@ -2162,7 +2173,7 @@ uc_compiler_compile_for_in(uc_compiler_t *compiler, bool local, uc_token_t *kvar
 	uc_compiler_emit_u32(compiler, 0, key_slot);
 
 	/* jump over variable read for first cycle */
-	skip_jmp = uc_compiler_emit_jmp(compiler, 0, 0);
+	skip_jmp = uc_compiler_emit_jmp(compiler, 0);
 
 	/* read value */
 	uc_compiler_emit_insn(compiler, 0, I_LLOC);
@@ -2187,7 +2198,7 @@ uc_compiler_compile_for_in(uc_compiler_t *compiler, bool local, uc_token_t *kvar
 	uc_compiler_emit_insn(compiler, 0, I_NES);
 
 	/* jump after loop body if no next key */
-	test_jmp = uc_compiler_emit_jmpz(compiler, 0, 0);
+	test_jmp = uc_compiler_emit_jmpz(compiler, 0);
 
 	/* set key and value variables */
 	if (vvar) {
@@ -2216,7 +2227,7 @@ uc_compiler_compile_for_in(uc_compiler_t *compiler, bool local, uc_token_t *kvar
 	}
 
 	/* jump back to retrieve next key */
-	uc_compiler_emit_jmp(compiler, 0, skip_jmp + 5);
+	uc_compiler_emit_jmp_dest(compiler, 0, skip_jmp + 5);
 
 	/* back patch conditional jump */
 	uc_compiler_set_jmpaddr(compiler, test_jmp, chunk->count);
@@ -2286,13 +2297,13 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 
 		uc_compiler_compile_expression(compiler);
 
-		test_off = uc_compiler_emit_jmpz(compiler, 0, 0);
+		test_off = uc_compiler_emit_jmpz(compiler, 0);
 	}
 
 	uc_compiler_parse_consume(compiler, TK_SCOL);
 
 	/* jump over incrementer */
-	skip_off = uc_compiler_emit_jmp(compiler, 0, 0);
+	skip_off = uc_compiler_emit_jmp(compiler, 0);
 
 
 	/* Incrementer ---------------------------------------------------------- */
@@ -2307,7 +2318,7 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 
 	/* if we have a condition, jump back to it, else continue to the loop body */
 	if (cond_off)
-		uc_compiler_emit_jmp(compiler, 0, cond_off);
+		uc_compiler_emit_jmp_dest(compiler, 0, cond_off);
 
 	/* back patch skip address */
 	uc_compiler_set_jmpaddr(compiler, skip_off, chunk->count);
@@ -2330,7 +2341,7 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 	}
 
 	/* jump back to incrementer */
-	uc_compiler_emit_jmp(compiler, 0, incr_off);
+	uc_compiler_emit_jmp_dest(compiler, 0, incr_off);
 
 	/* back patch conditional jump */
 	if (test_off)
@@ -2417,7 +2428,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 	value_slot = uc_compiler_declare_internal(compiler, 0, "(switch value)");
 
 	/* jump to branch tests */
-	test_jmp = uc_compiler_emit_jmp(compiler, 0, 0);
+	test_jmp = uc_compiler_emit_jmp(compiler, 0);
 
 	/* parse and compile case matches */
 	while (!uc_compiler_parse_check(compiler, TK_RBRACE) &&
@@ -2457,7 +2468,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 		/* handle `case …:` */
 		else if (uc_compiler_parse_match(compiler, TK_CASE)) {
 			/* jump over `case …:` label expression */
-			skip_jmp = uc_compiler_emit_jmp(compiler, 0, 0);
+			skip_jmp = uc_compiler_emit_jmp(compiler, 0);
 
 			/* compile case value expression */
 			uc_compiler_compile_expression(compiler);
@@ -2475,7 +2486,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 			cases.entries[cases.count++] = skip_jmp + 5;
 
 			uc_vector_grow(&cases);
-			cases.entries[cases.count++] = uc_compiler_emit_jmp(compiler, 0, 0);
+			cases.entries[cases.count++] = uc_compiler_emit_jmp(compiler, 0);
 
 			/* patch jump skipping over the case value */
 			uc_compiler_set_jmpaddr(compiler, skip_jmp, chunk->count);
@@ -2500,7 +2511,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 
 	/* evaluate case matches */
 	if (cases.count) {
-		skip_jmp = uc_compiler_emit_jmp(compiler, 0, 0);
+		skip_jmp = uc_compiler_emit_jmp(compiler, 0);
 
 		uc_compiler_set_jmpaddr(compiler, test_jmp, chunk->count);
 
@@ -2516,7 +2527,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 			uc_compiler_emit_u32(compiler, 0, value_slot);
 
 			/* jump to case value expression code */
-			uc_compiler_emit_jmp(compiler, 0, cases.entries[i + 1]);
+			uc_compiler_emit_jmp_dest(compiler, 0, cases.entries[i + 1]);
 
 			/* patch final case value expression jump back here */
 			uc_compiler_set_jmpaddr(compiler, cases.entries[i + 2], chunk->count);
@@ -2525,7 +2536,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 			uc_compiler_emit_insn(compiler, 0, I_EQS);
 
 			/* conditional jump to next match */
-			next_jmp = uc_compiler_emit_jmpz(compiler, 0, 0);
+			next_jmp = uc_compiler_emit_jmpz(compiler, 0);
 
 			/* fill local slots */
 			while (cases.entries[i + 0] > 0) {
@@ -2534,7 +2545,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 			}
 
 			/* jump to target code */
-			uc_compiler_emit_jmp(compiler, 0, cases.entries[i + 2] + 5);
+			uc_compiler_emit_jmp_dest(compiler, 0, cases.entries[i + 2] + 5);
 
 			/* patch next jump */
 			uc_compiler_set_jmpaddr(compiler, next_jmp, chunk->count);
@@ -2549,7 +2560,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 			}
 
 			/* jump to target */
-			uc_compiler_emit_jmp(compiler, 0, cases.entries[default_off + 2]);
+			uc_compiler_emit_jmp_dest(compiler, 0, cases.entries[default_off + 2]);
 		}
 
 		uc_compiler_set_jmpaddr(compiler, skip_jmp, chunk->count);
@@ -2590,7 +2601,7 @@ uc_compiler_compile_try(uc_compiler_t *compiler)
 
 	/* jump beyond catch branch */
 	try_to = chunk->count;
-	jmp_off = uc_compiler_emit_jmp(compiler, 0, 0);
+	jmp_off = uc_compiler_emit_jmp(compiler, 0);
 
 
 	/* Catch block ---------------------------------------------------------- */
@@ -2660,7 +2671,7 @@ uc_compiler_compile_control(uc_compiler_t *compiler)
 	uc_vector_grow(p);
 
 	p->entries[p->count++] =
-		uc_compiler_emit_jmp(compiler, pos, chunk->count + type);
+		uc_compiler_emit_jmp_dest(compiler, pos, chunk->count + type);
 
 	uc_compiler_parse_consume(compiler, TK_SCOL);
 }
