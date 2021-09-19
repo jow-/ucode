@@ -15,6 +15,12 @@ extract_sections() {
 
 	while IFS= read -r line; do
 		case "$line" in
+			"-- Args --")
+				tag="args"
+				count=$((count + 1))
+				outfile=$(printf "%s/%03d.args" "$dir" $count)
+				printf "" > "$outfile"
+			;;
 			"-- Testcase --")
 				tag="test"
 				count=$((count + 1))
@@ -55,11 +61,12 @@ run_testcase() {
 	local out=$4
 	local err=$5
 	local code=$6
+	local args=$7
 	local fail=0
 
 	(
 		cd "$topdir"
-		$ucode_bin -e '{ "REQUIRE_SEARCH_PATH": [ "'"$ucode_lib"'/*.so" ] }' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
+		$ucode_bin $args -e '{ "REQUIRE_SEARCH_PATH": [ "'"$ucode_lib"'/*.so" ] }' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
 	)
 
 	touch "$dir/empty"
@@ -95,7 +102,7 @@ run_testcase() {
 run_test() {
 	local file=$1
 	local name=${file##*/}
-	local res ecode eout eerr ein tests
+	local res ecode eout eerr ein eargs tests
 	local testcase_first=0 failed=0 count=0
 
 	printf "%s %s " "$name" "${line:${#name}}"
@@ -115,31 +122,34 @@ run_test() {
 				if [ $testcase_first = 1 ]; then
 					# Flush previous test
 					if [ -n "$ein" ]; then
-						run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" || failed=$((failed + 1))
+						run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" "$eargs" || failed=$((failed + 1))
 						eout=""
 						eerr=""
 						ecode=""
+						eargs=""
 					fi
 
 					ein=$res
 				else
-					run_testcase $count "/tmp/test.$$" "$res" "$eout" "$eerr" "$ecode" || failed=$((failed + 1))
+					run_testcase $count "/tmp/test.$$" "$res" "$eout" "$eerr" "$ecode" "$eargs" || failed=$((failed + 1))
 
 					eout=""
 					eerr=""
 					ecode=""
+					eargs=""
 				fi
 
 			;;
 			*.stdout) eout=$res ;;
 			*.stderr) eerr=$res ;;
 			*.exitcode) ecode=$res ;;
+			*.args) eargs=$(cat "$res") ;;
 		esac
 	done
 
 	# Flush last test
 	if [ $testcase_first = 1 ] && [ -n "$eout$eerr$ecode" ]; then
-		run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" || failed=$((failed + 1))
+		run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" "$eargs" || failed=$((failed + 1))
 	fi
 
 	rm -r "/tmp/test.$$"
