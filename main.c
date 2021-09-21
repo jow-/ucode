@@ -331,10 +331,13 @@ main(int argc, char **argv)
 			break;
 
 		case 'm':
-			o = uc_vm_invoke(&vm, "require", 1, ucv_string_new(optarg));
+			p = ucv_string_new(optarg);
+			o = uc_vm_invoke(&vm, "require", 1, p);
 
 			if (o)
 				register_variable(uc_vm_scope_get(&vm), optarg, o);
+
+			ucv_put(p);
 
 			break;
 
