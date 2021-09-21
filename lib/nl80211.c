@@ -700,9 +700,102 @@ static const uc_nl_nested_spec_t nl80211_bss_nla = {
 	}
 };
 
+static const uc_nl_nested_spec_t nl80211_sta_info_bitrate_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_RATE_INFO_BITRATE, "bitrate", DT_U16, 0, NULL },
+		{ NL80211_RATE_INFO_BITRATE32, "bitrate32", DT_U32, 0, NULL },
+		{ NL80211_RATE_INFO_MCS, "mcs", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_40_MHZ_WIDTH, "40_mhz_width", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_SHORT_GI, "short_gi", DT_FLAG, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_tid_txq_stats_nla = {
+	.headsize = 0,
+	.nattrs = 9,
+	.attrs = {
+		{ NL80211_TXQ_STATS_BACKLOG_BYTES, "backlog_bytes", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_BACKLOG_PACKETS, "backlog_packets", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_FLOWS, "flows", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_DROPS, "drops", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_ECN_MARKS, "ecn_marks", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_OVERLIMIT, "overlimit", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_COLLISIONS, "collisions", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_TX_BYTES, "tx_bytes", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_TX_PACKETS, "tx_packets", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_tid_stats_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_TID_STATS_RX_MSDU, "rx_msdu", DT_U64, 0, NULL },
+		{ NL80211_TID_STATS_TX_MSDU, "tx_msdu", DT_U64, 0, NULL },
+		{ NL80211_TID_STATS_TX_MSDU_RETRIES, "tx_msdu_retries", DT_U64, 0, NULL },
+		{ NL80211_TID_STATS_TX_MSDU_FAILED, "tx_msdu_failed", DT_U64, 0, NULL },
+		{ NL80211_TID_STATS_TXQ_STATS, "txq_stats", DT_NESTED, 0, &nl80211_tid_txq_stats_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_bss_param_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_STA_BSS_PARAM_CTS_PROT, "cts_prot", DT_FLAG, 0, NULL },
+		{ NL80211_STA_BSS_PARAM_SHORT_PREAMBLE, "short_preamble", DT_FLAG, 0, NULL },
+		{ NL80211_STA_BSS_PARAM_SHORT_SLOT_TIME, "short_slot_time", DT_FLAG, 0, NULL },
+		{ NL80211_STA_BSS_PARAM_DTIM_PERIOD, "dtim_period", DT_U8, 0, NULL },
+		{ NL80211_STA_BSS_PARAM_BEACON_INTERVAL, "beacon_interval", DT_U16, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_sta_info_nla = {
+	.headsize = 0,
+	.nattrs = 34,
+	.attrs = {
+		{ NL80211_STA_INFO_INACTIVE_TIME, "inactive_time", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_RX_BYTES, "rx_bytes", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_TX_BYTES, "tx_bytes", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_RX_BYTES64, "rx_bytes64", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_TX_BYTES64, "tx_bytes64", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_RX_PACKETS, "rx_packets", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_TX_PACKETS, "tx_packets", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_BEACON_RX, "beacon_rx", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_SIGNAL, "signal", DT_U8, 0, NULL },
+		{ NL80211_STA_INFO_T_OFFSET, "t_offset", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_TX_BITRATE, "tx_bitrate", DT_NESTED, 0, &nl80211_sta_info_bitrate_nla },
+		{ NL80211_STA_INFO_RX_BITRATE, "rx_bitrate", DT_NESTED, 0, &nl80211_sta_info_bitrate_nla },
+		{ NL80211_STA_INFO_LLID, "llid", DT_U16, 0, NULL },
+		{ NL80211_STA_INFO_PLID, "plid", DT_U16, 0, NULL },
+		{ NL80211_STA_INFO_PLINK_STATE, "plink_state", DT_U8, 0, NULL },
+		{ NL80211_STA_INFO_TX_RETRIES, "tx_retries", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_TX_FAILED, "tx_failed", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_BEACON_LOSS, "beacon_loss", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_RX_DROP_MISC, "rx_drop_misc", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_STA_FLAGS, "sta_flags", DT_U32, DF_ARRAY, NULL },
+		{ NL80211_STA_INFO_LOCAL_PM, "local_pm", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_PEER_PM, "peer_pm", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_NONPEER_PM, "nonpeer_pm", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_CHAIN_SIGNAL, "chain_signal", DT_U8, DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_STA_INFO_CHAIN_SIGNAL_AVG, "chain_signal_avg", DT_U8, DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_STA_INFO_TID_STATS, "tid_stats", DT_NESTED, 0, &nl80211_tid_stats_nla },
+		{ NL80211_STA_INFO_BSS_PARAM, "bss_param", DT_NESTED, 0, &nl80211_bss_param_nla },
+		{ NL80211_STA_INFO_RX_DURATION, "rx_duration", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_TX_DURATION, "tx_duration", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_ACK_SIGNAL, "ack_signal", DT_U8, 0, NULL },
+		{ NL80211_STA_INFO_ACK_SIGNAL_AVG, "ack_signal_avg", DT_U8, 0, NULL },
+		{ NL80211_STA_INFO_AIRTIME_LINK_METRIC, "airtime_link_metric", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_CONNECTED_TO_AS, "connected_to_as", DT_BOOL, 0, NULL },
+		{ NL80211_STA_INFO_CONNECTED_TO_GATE, "connected_to_gate", DT_BOOL, 0, NULL },
+	}
+};
+
 static const uc_nl_nested_spec_t nl80211_msg = {
 	.headsize = 0,
-	.nattrs = 123,
+	.nattrs = 124,
 	.attrs = {
 		{ NL80211_ATTR_4ADDR, "4addr", DT_U8, 0, NULL },
 		{ NL80211_ATTR_AIRTIME_WEIGHT, "airtime_weight", DT_U16, 0, NULL },
@@ -738,7 +831,7 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_FTM_RESPONDER_STATS, "ftm_responder_stats", DT_NESTED, 0, &nl80211_ftm_responder_stats_nla },
 		{ NL80211_ATTR_HIDDEN_SSID, "hidden_ssid", DT_U32, 0, NULL },
 		{ NL80211_ATTR_HT_CAPABILITY_MASK, "ht_capability_mask", DT_HT_CAP, 0, NULL },
-		{ NL80211_ATTR_IE, "ie", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_IE, "ie", DT_IE, 0, NULL },
 		{ NL80211_ATTR_IFINDEX, "dev", DT_NETDEV, 0, NULL },
 		{ NL80211_ATTR_IFNAME, "ifname", DT_STRING, 0, NULL },
 		{ NL80211_ATTR_IFTYPE, "iftype", DT_U32, 0, NULL },
@@ -789,6 +882,7 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_SPLIT_WIPHY_DUMP, "split_wiphy_dump", DT_FLAG, 0, NULL },
 		{ NL80211_ATTR_SSID, "ssid", DT_STRING, DF_BINARY, NULL },
 		{ NL80211_ATTR_STATUS_CODE, "status_code", DT_U16, 0, NULL },
+		{ NL80211_ATTR_STA_INFO, "sta_info", DT_NESTED, 0, &nl80211_sta_info_nla },
 		{ NL80211_ATTR_STA_PLINK_ACTION, "sta_plink_action", DT_U8, 0, NULL },
 		{ NL80211_ATTR_STA_TX_POWER, "sta_tx_power", DT_U16, 0, NULL },
 		{ NL80211_ATTR_STA_TX_POWER_SETTING, "sta_tx_power_setting", DT_U8, 0, NULL },
