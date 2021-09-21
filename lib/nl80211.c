@@ -182,6 +182,7 @@ typedef enum {
 	DT_FLAG,
 	DT_BOOL,
 	DT_U8,
+	DT_S8,
 	DT_U16,
 	DT_U32,
 	DT_S32,
@@ -764,7 +765,7 @@ static const uc_nl_nested_spec_t nl80211_sta_info_nla = {
 		{ NL80211_STA_INFO_RX_PACKETS, "rx_packets", DT_U32, 0, NULL },
 		{ NL80211_STA_INFO_TX_PACKETS, "tx_packets", DT_U32, 0, NULL },
 		{ NL80211_STA_INFO_BEACON_RX, "beacon_rx", DT_U64, 0, NULL },
-		{ NL80211_STA_INFO_SIGNAL, "signal", DT_U8, 0, NULL },
+		{ NL80211_STA_INFO_SIGNAL, "signal", DT_S8, 0, NULL },
 		{ NL80211_STA_INFO_T_OFFSET, "t_offset", DT_U64, 0, NULL },
 		{ NL80211_STA_INFO_TX_BITRATE, "tx_bitrate", DT_NESTED, 0, &nl80211_sta_info_bitrate_nla },
 		{ NL80211_STA_INFO_RX_BITRATE, "rx_bitrate", DT_NESTED, 0, &nl80211_sta_info_bitrate_nla },
@@ -779,8 +780,8 @@ static const uc_nl_nested_spec_t nl80211_sta_info_nla = {
 		{ NL80211_STA_INFO_LOCAL_PM, "local_pm", DT_U32, 0, NULL },
 		{ NL80211_STA_INFO_PEER_PM, "peer_pm", DT_U32, 0, NULL },
 		{ NL80211_STA_INFO_NONPEER_PM, "nonpeer_pm", DT_U32, 0, NULL },
-		{ NL80211_STA_INFO_CHAIN_SIGNAL, "chain_signal", DT_U8, DF_MULTIPLE|DF_AUTOIDX, NULL },
-		{ NL80211_STA_INFO_CHAIN_SIGNAL_AVG, "chain_signal_avg", DT_U8, DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_STA_INFO_CHAIN_SIGNAL, "chain_signal", DT_S8, DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_STA_INFO_CHAIN_SIGNAL_AVG, "chain_signal_avg", DT_S8, DF_MULTIPLE|DF_AUTOIDX, NULL },
 		{ NL80211_STA_INFO_TID_STATS, "tid_stats", DT_NESTED, 0, &nl80211_tid_stats_nla },
 		{ NL80211_STA_INFO_BSS_PARAM, "bss_param", DT_NESTED, 0, &nl80211_bss_param_nla },
 		{ NL80211_STA_INFO_RX_DURATION, "rx_duration", DT_U64, 0, NULL },
@@ -1653,6 +1654,9 @@ uc_nl_convert_numval(const uc_nl_attr_spec_t *spec, char *base)
 	case DT_U8:
 		return ucv_uint64_new(t.u8[0]);
 
+	case DT_S8:
+		return ucv_int64_new((int8_t)t.u8[0]);
+
 	case DT_U16:
 		return ucv_uint64_new(t.u16[0]);
 
@@ -1681,6 +1685,7 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 
 	switch (spec->type) {
 	case DT_U8:
+	case DT_S8:
 	case DT_U16:
 	case DT_U32:
 	case DT_S32:
