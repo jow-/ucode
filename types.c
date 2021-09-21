@@ -701,15 +701,21 @@ bool
 ucv_array_set(uc_value_t *uv, size_t index, uc_value_t *item)
 {
 	uc_array_t *array = (uc_array_t *)uv;
-	size_t old_count;
+	size_t old_count, new_count;
 
 	if (ucv_type(uv) != UC_ARRAY)
 		return false;
 
 	if (index >= array->count) {
 		old_count = array->count;
+		new_count = (index + 1) & ~(UC_VECTOR_CHUNK_SIZE - 1);
+
+		if (new_count > old_count) {
+			array->count = new_count;
+			uc_vector_grow(array);
+		}
+
 		array->count = index + 1;
-		uc_vector_grow(array);
 
 		while (old_count < array->count)
 			array->entries[old_count++] = NULL;
