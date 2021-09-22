@@ -50,7 +50,7 @@ static struct {
 	char *msg;
 } last_error;
 
-static void
+__attribute__((format(printf, 2, 3))) static void
 set_error(int errcode, const char *fmt, ...) {
 	va_list ap;
 
@@ -1152,6 +1152,9 @@ uc_nl_parse_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *
 	const uc_nl_nested_spec_t *nest = spec->auxdata;
 	struct nlattr *nested_nla;
 
+	if (!nest)
+		return false;
+
 	nested_nla = nla_reserve(msg, spec->attr, nest->headsize);
 
 	if (!uc_nl_parse_attrs(msg, nla_data(nested_nla), nest->attrs, nest->nattrs, vm, val))
@@ -1168,6 +1171,9 @@ uc_nl_convert_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 	const uc_nl_nested_spec_t *nest = spec->auxdata;
 	uc_value_t *nested_obj;
 	bool rv;
+
+	if (!nest)
+		return NULL;
 
 	if (!nla_check_len(tb[spec->attr], nest->headsize))
 		return NULL;
@@ -1483,6 +1489,7 @@ uc_nl_parse_numval(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 
 static const uint8_t dt_sizes[] = {
 	[DT_U8] = sizeof(uint8_t),
+	[DT_S8] = sizeof(int8_t),
 	[DT_U16] = sizeof(uint16_t),
 	[DT_U32] = sizeof(uint32_t),
 	[DT_S32] = sizeof(int32_t),
