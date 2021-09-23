@@ -96,10 +96,10 @@ uc_blob_to_json(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **na
 		return ucv_boolean_new(*(uint8_t *)data);
 
 	case BLOBMSG_TYPE_INT16:
-		return ucv_int64_new((int64_t)be16_to_cpu(*(uint16_t *)data));
+		return ucv_int64_new((int16_t)be16_to_cpu(*(uint16_t *)data));
 
 	case BLOBMSG_TYPE_INT32:
-		return ucv_int64_new((int64_t)be32_to_cpu(*(uint32_t *)data));
+		return ucv_int64_new((int32_t)be32_to_cpu(*(uint32_t *)data));
 
 	case BLOBMSG_TYPE_INT64:
 		return ucv_uint64_new(be64_to_cpu(*(uint64_t *)data));
