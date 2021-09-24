@@ -30,7 +30,7 @@ static const char *program = MULTILINE_STRING(
 			doesnotexist();
 		}
 
-		fail();
+		map([1], x => fail(x));
 	%}
 );
 

@@ -2278,6 +2278,8 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 			while (!uc_vm_handle_exception(vm)) {
 				/* no further callframe to pop, report unhandled exception and terminate */
 				if (vm->callframes.count <= 1) {
+					uc_vm_reset_callframes(vm);
+
 					if (vm->exhandler)
 						vm->exhandler(vm, &vm->exception);
 
