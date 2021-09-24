@@ -731,6 +731,18 @@ uc_vm_exception_new(uc_vm_t *vm, uc_exception_type_t type, const char *message, 
 	return exo;
 }
 
+static void
+uc_vm_clear_exception(uc_vm_t *vm)
+{
+	vm->exception.type = EXCEPTION_NONE;
+
+	ucv_put(vm->exception.stacktrace);
+	vm->exception.stacktrace = NULL;
+
+	free(vm->exception.message);
+	vm->exception.message = NULL;
+}
+
 static bool
 uc_vm_handle_exception(uc_vm_t *vm)
 {
@@ -765,10 +777,7 @@ uc_vm_handle_exception(uc_vm_t *vm)
 		uc_vm_stack_push(vm, exo);
 
 		/* reset exception information */
-		free(vm->exception.message);
-
-		vm->exception.type = EXCEPTION_NONE;
-		vm->exception.message = NULL;
+		uc_vm_clear_exception(vm);
 
 		/* jump to exception handler */
 		if (chunk->ehranges.entries[i].target >= chunk->count) {
@@ -2357,6 +2366,8 @@ uc_vm_call(uc_vm_t *vm, bool mcall, size_t nargs)
 {
 	uc_value_t *ctx = mcall ? ucv_get(uc_vm_stack_peek(vm, nargs + 1)) : NULL;
 	uc_value_t *fno = ucv_get(uc_vm_stack_peek(vm, nargs));
+
+	uc_vm_clear_exception(vm);
 
 	if (uc_vm_call_function(vm, ctx, fno, mcall, nargs & 0xffff)) {
 		if (ucv_type(fno) != UC_CFUNCTION)
