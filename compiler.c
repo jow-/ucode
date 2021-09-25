@@ -22,23 +22,23 @@
 #include "ucode/source.h"
 #include "ucode/lib.h" /* uc_error_context_format() */
 
-static void uc_compiler_compile_unary(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_binary(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_delete(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_paren(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_call(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_post_inc(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_constant(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_comma(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_labelexpr(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_function(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_and(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_or(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_dot(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_subscript(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_ternary(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_array(uc_compiler_t *compiler, bool assignable);
-static void uc_compiler_compile_object(uc_compiler_t *compiler, bool assignable);
+static void uc_compiler_compile_unary(uc_compiler_t *compiler);
+static void uc_compiler_compile_binary(uc_compiler_t *compiler);
+static void uc_compiler_compile_delete(uc_compiler_t *compiler);
+static void uc_compiler_compile_paren(uc_compiler_t *compiler);
+static void uc_compiler_compile_call(uc_compiler_t *compiler);
+static void uc_compiler_compile_post_inc(uc_compiler_t *compiler);
+static void uc_compiler_compile_constant(uc_compiler_t *compiler);
+static void uc_compiler_compile_comma(uc_compiler_t *compiler);
+static void uc_compiler_compile_labelexpr(uc_compiler_t *compiler);
+static void uc_compiler_compile_function(uc_compiler_t *compiler);
+static void uc_compiler_compile_and(uc_compiler_t *compiler);
+static void uc_compiler_compile_or(uc_compiler_t *compiler);
+static void uc_compiler_compile_dot(uc_compiler_t *compiler);
+static void uc_compiler_compile_subscript(uc_compiler_t *compiler);
+static void uc_compiler_compile_ternary(uc_compiler_t *compiler);
+static void uc_compiler_compile_array(uc_compiler_t *compiler);
+static void uc_compiler_compile_object(uc_compiler_t *compiler);
 
 static void uc_compiler_compile_declaration(uc_compiler_t *compiler);
 static void uc_compiler_compile_statement(uc_compiler_t *compiler);
@@ -46,48 +46,51 @@ static void uc_compiler_compile_expstmt(uc_compiler_t *compiler);
 
 static uc_parse_rule_t
 uc_compiler_parse_rules[TK_ERROR + 1] = {
-	[TK_LPAREN]	= { uc_compiler_compile_paren, uc_compiler_compile_call, P_CALL },
-	[TK_SUB]	= { uc_compiler_compile_unary, uc_compiler_compile_binary, P_ADD },
-	[TK_ADD]	= { uc_compiler_compile_unary, uc_compiler_compile_binary, P_ADD },
-	[TK_COMPL]	= { uc_compiler_compile_unary, NULL, P_UNARY },
-	[TK_NOT]	= { uc_compiler_compile_unary, NULL, P_UNARY },
-	[TK_DELETE]	= { uc_compiler_compile_delete, NULL, P_UNARY },
-	[TK_INC]	= { uc_compiler_compile_unary, uc_compiler_compile_post_inc, P_INC },
-	[TK_DEC]	= { uc_compiler_compile_unary, uc_compiler_compile_post_inc, P_INC },
-	[TK_DIV]	= { NULL, uc_compiler_compile_binary, P_MUL },
-	[TK_MUL]	= { NULL, uc_compiler_compile_binary, P_MUL },
-	[TK_MOD]	= { NULL, uc_compiler_compile_binary, P_MUL },
-	[TK_NUMBER]	= { uc_compiler_compile_constant, NULL, P_NONE },
-	[TK_DOUBLE] = { uc_compiler_compile_constant, NULL, P_NONE },
-	[TK_STRING]	= { uc_compiler_compile_constant, NULL, P_NONE },
-	[TK_TRUE]	= { uc_compiler_compile_constant, NULL, P_NONE },
-	[TK_FALSE]	= { uc_compiler_compile_constant, NULL, P_NONE },
-	[TK_NULL]	= { uc_compiler_compile_constant, NULL, P_NONE },
-	[TK_THIS]	= { uc_compiler_compile_constant, NULL, P_NONE },
-	[TK_REGEXP]	= { uc_compiler_compile_constant, NULL, P_NONE },
-	[TK_COMMA]	= { NULL, uc_compiler_compile_comma, P_COMMA },
-	[TK_LABEL]  = { uc_compiler_compile_labelexpr, NULL, P_NONE },
-	[TK_FUNC]	= { uc_compiler_compile_function, NULL, P_NONE },
-	[TK_AND]    = { NULL, uc_compiler_compile_and, P_AND },
-	[TK_OR]     = { NULL, uc_compiler_compile_or, P_OR },
-	[TK_BOR]	= { NULL, uc_compiler_compile_binary, P_BOR },
-	[TK_BXOR]	= { NULL, uc_compiler_compile_binary, P_BXOR },
-	[TK_BAND]	= { NULL, uc_compiler_compile_binary, P_BAND },
-	[TK_EQ]		= { NULL, uc_compiler_compile_binary, P_EQUAL },
-	[TK_EQS]	= { NULL, uc_compiler_compile_binary, P_EQUAL },
-	[TK_NE]		= { NULL, uc_compiler_compile_binary, P_EQUAL },
-	[TK_NES]	= { NULL, uc_compiler_compile_binary, P_EQUAL },
-	[TK_LT]		= { NULL, uc_compiler_compile_binary, P_COMPARE },
-	[TK_LE]		= { NULL, uc_compiler_compile_binary, P_COMPARE },
-	[TK_GT]		= { NULL, uc_compiler_compile_binary, P_COMPARE },
-	[TK_GE]		= { NULL, uc_compiler_compile_binary, P_COMPARE },
-	[TK_IN]		= { NULL, uc_compiler_compile_binary, P_COMPARE },
-	[TK_LSHIFT]	= { NULL, uc_compiler_compile_binary, P_SHIFT },
-	[TK_RSHIFT]	= { NULL, uc_compiler_compile_binary, P_SHIFT },
-	[TK_DOT]	= { NULL, uc_compiler_compile_dot, P_CALL },
-	[TK_LBRACK] = { uc_compiler_compile_array, uc_compiler_compile_subscript, P_CALL },
-	[TK_QMARK]  = { NULL, uc_compiler_compile_ternary, P_TERNARY },
-	[TK_LBRACE] = { uc_compiler_compile_object, NULL, P_NONE },
+	[TK_LPAREN]		= { uc_compiler_compile_paren, uc_compiler_compile_call, P_CALL },
+	[TK_QLPAREN]	= { NULL, uc_compiler_compile_call, P_CALL },
+	[TK_SUB]		= { uc_compiler_compile_unary, uc_compiler_compile_binary, P_ADD },
+	[TK_ADD]		= { uc_compiler_compile_unary, uc_compiler_compile_binary, P_ADD },
+	[TK_COMPL]		= { uc_compiler_compile_unary, NULL, P_UNARY },
+	[TK_NOT]		= { uc_compiler_compile_unary, NULL, P_UNARY },
+	[TK_DELETE]		= { uc_compiler_compile_delete, NULL, P_UNARY },
+	[TK_INC]		= { uc_compiler_compile_unary, uc_compiler_compile_post_inc, P_INC },
+	[TK_DEC]		= { uc_compiler_compile_unary, uc_compiler_compile_post_inc, P_INC },
+	[TK_DIV]		= { NULL, uc_compiler_compile_binary, P_MUL },
+	[TK_MUL]		= { NULL, uc_compiler_compile_binary, P_MUL },
+	[TK_MOD]		= { NULL, uc_compiler_compile_binary, P_MUL },
+	[TK_NUMBER]		= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_DOUBLE]		= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_STRING]		= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_TRUE]		= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_FALSE]		= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_NULL]		= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_THIS]		= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_REGEXP]		= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_COMMA]		= { NULL, uc_compiler_compile_comma, P_COMMA },
+	[TK_LABEL]		= { uc_compiler_compile_labelexpr, NULL, P_NONE },
+	[TK_FUNC]		= { uc_compiler_compile_function, NULL, P_NONE },
+	[TK_AND]		= { NULL, uc_compiler_compile_and, P_AND },
+	[TK_OR]			= { NULL, uc_compiler_compile_or, P_OR },
+	[TK_BOR]		= { NULL, uc_compiler_compile_binary, P_BOR },
+	[TK_BXOR]		= { NULL, uc_compiler_compile_binary, P_BXOR },
+	[TK_BAND]		= { NULL, uc_compiler_compile_binary, P_BAND },
+	[TK_EQ]			= { NULL, uc_compiler_compile_binary, P_EQUAL },
+	[TK_EQS]		= { NULL, uc_compiler_compile_binary, P_EQUAL },
+	[TK_NE]			= { NULL, uc_compiler_compile_binary, P_EQUAL },
+	[TK_NES]		= { NULL, uc_compiler_compile_binary, P_EQUAL },
+	[TK_LT]			= { NULL, uc_compiler_compile_binary, P_COMPARE },
+	[TK_LE]			= { NULL, uc_compiler_compile_binary, P_COMPARE },
+	[TK_GT]			= { NULL, uc_compiler_compile_binary, P_COMPARE },
+	[TK_GE]			= { NULL, uc_compiler_compile_binary, P_COMPARE },
+	[TK_IN]			= { NULL, uc_compiler_compile_binary, P_COMPARE },
+	[TK_LSHIFT]		= { NULL, uc_compiler_compile_binary, P_SHIFT },
+	[TK_RSHIFT]		= { NULL, uc_compiler_compile_binary, P_SHIFT },
+	[TK_DOT]		= { NULL, uc_compiler_compile_dot, P_CALL },
+	[TK_QDOT]		= { NULL, uc_compiler_compile_dot, P_CALL },
+	[TK_LBRACK]		= { uc_compiler_compile_array, uc_compiler_compile_subscript, P_CALL },
+	[TK_QLBRACK]	= { NULL, uc_compiler_compile_subscript, P_CALL },
+	[TK_QMARK]		= { NULL, uc_compiler_compile_ternary, P_TERNARY },
+	[TK_LBRACE]		= { uc_compiler_compile_object, NULL, P_NONE },
 };
 
 static ssize_t
@@ -95,6 +98,18 @@ uc_compiler_declare_local(uc_compiler_t *compiler, uc_value_t *name, bool consta
 
 static ssize_t
 uc_compiler_initialize_local(uc_compiler_t *compiler);
+
+static bool
+uc_compiler_exprstack_is(uc_compiler_t *compiler, uc_exprflag_t flag)
+{
+	uc_exprstack_t *expr;
+
+	for (expr = compiler->exprstack; expr; expr = expr->parent)
+		if (expr->flags & flag)
+			return true;
+
+	return false;
+}
 
 static void
 uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_source_t *source, bool strict)
@@ -311,7 +326,6 @@ static void
 uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence)
 {
 	uc_parse_rule_t *rule;
-	bool assignable;
 
 	rule = uc_compiler_parse_rule(compiler->parser->curr.type);
 
@@ -321,6 +335,10 @@ uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence
 
 		return;
 	}
+
+	uc_compiler_exprstack_push(compiler,
+		compiler->parser->curr.type,
+		(precedence <= P_ASSIGN) ? F_ASSIGNABLE : 0);
 
 	/* allow reserved words as property names in object literals */
 	if (rule->prefix == uc_compiler_compile_object)
@@ -335,11 +353,12 @@ uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence
 
 	uc_compiler_parse_advance(compiler);
 
-	assignable = (precedence <= P_ASSIGN);
-	rule->prefix(compiler, assignable);
+	rule->prefix(compiler);
 
 	while (precedence <= uc_compiler_parse_rule(compiler->parser->curr.type)->precedence) {
-		rule = uc_compiler_parse_rule(compiler->parser->curr.type);
+		compiler->exprstack->token = compiler->parser->curr.type;
+
+		rule = uc_compiler_parse_rule(compiler->exprstack->token);
 
 		/* allow reserved words in property accessors */
 		if (rule->infix == uc_compiler_compile_dot)
@@ -347,11 +366,13 @@ uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence
 
 		uc_compiler_parse_advance(compiler);
 
-		rule->infix(compiler, assignable);
+		rule->infix(compiler);
 	}
 
-	if (assignable && uc_compiler_parse_at_assignment_op(compiler))
+	if (uc_compiler_exprstack_is(compiler, F_ASSIGNABLE) && uc_compiler_parse_at_assignment_op(compiler))
 		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos, "Invalid left-hand side expression for assignment");
+
+	uc_compiler_exprstack_pop(compiler);
 }
 
 static size_t
@@ -871,7 +892,7 @@ uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool i
 
 	/* if we're mutating an object or array field, pop the last lval instruction
 	 * to leave object + last field name value on stack */
-	else if (type == I_LVAL) {
+	else if (type == I_LVAL && !uc_compiler_exprstack_is(compiler, F_OPTCHAINING)) {
 		uc_chunk_pop(chunk);
 	}
 	else {
@@ -921,7 +942,7 @@ uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool i
 
 
 static void
-uc_compiler_compile_unary(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_unary(uc_compiler_t *compiler)
 {
 	uc_tokentype_t type = compiler->parser->prev.type;
 
@@ -955,7 +976,7 @@ uc_compiler_compile_unary(uc_compiler_t *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_binary(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_binary(uc_compiler_t *compiler)
 {
 	uc_tokentype_t type = compiler->parser->prev.type;
 
@@ -964,7 +985,7 @@ uc_compiler_compile_binary(uc_compiler_t *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_delete(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_delete(uc_compiler_t *compiler)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	uc_vm_insn_t type;
@@ -1040,7 +1061,18 @@ uc_compiler_emit_variable_rw(uc_compiler_t *compiler, uc_value_t *varname, uc_to
 	}
 
 	if (!varname) {
-		insn = sub_insn ? I_UVAL : (type ? I_SVAL : I_LVAL);
+		if (sub_insn != 0)
+			insn = I_UVAL;
+		else if (type == TK_QDOT || type == TK_QLBRACK)
+			insn = I_QLVAL;
+		else if (type != 0)
+			insn = I_SVAL;
+		else
+			insn = I_LVAL;
+
+		if ((insn == I_UVAL || insn == I_SVAL) && uc_compiler_exprstack_is(compiler, F_OPTCHAINING))
+			uc_compiler_syntax_error(compiler, 0,
+				"Invalid left-hand side expression for assignment");
 
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, insn);
 
@@ -1123,6 +1155,7 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 
 	fncompiler.parent = compiler;
 	fncompiler.parser = compiler->parser;
+	fncompiler.exprstack = compiler->exprstack;
 
 	fn = (uc_function_t *)fncompiler.function;
 	fn->arrow = true;
@@ -1185,11 +1218,11 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 }
 
 static uc_tokentype_t
-uc_compiler_compile_var_or_arrowfn(uc_compiler_t *compiler, bool assignable, uc_value_t *name)
+uc_compiler_compile_var_or_arrowfn(uc_compiler_t *compiler, uc_value_t *name)
 {
 	uc_tokentype_t rv;
 
-	if (assignable && uc_compiler_compile_assignment(compiler, name)) {
+	if (uc_compiler_exprstack_is(compiler, F_ASSIGNABLE) && uc_compiler_compile_assignment(compiler, name)) {
 		rv = TK_ASSIGN;
 	}
 	else if (uc_compiler_compile_arrowfn(compiler, name, false)) {
@@ -1204,7 +1237,7 @@ uc_compiler_compile_var_or_arrowfn(uc_compiler_t *compiler, bool assignable, uc_
 }
 
 static void
-uc_compiler_compile_paren(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_paren(uc_compiler_t *compiler)
 {
 	uc_value_t *varnames = NULL, *varname;
 	bool maybe_arrowfn = false;
@@ -1260,7 +1293,8 @@ uc_compiler_compile_paren(uc_compiler_t *compiler, bool assignable)
 			}
 
 			/* If we encouter a dot, treat potential subsequent keyword as label */
-			if (uc_compiler_parse_check(compiler, TK_DOT))
+			if (uc_compiler_parse_check(compiler, TK_DOT) ||
+			    uc_compiler_parse_check(compiler, TK_QDOT))
 				compiler->parser->lex.no_keyword = true;
 
 			break;
@@ -1307,11 +1341,13 @@ uc_compiler_compile_paren(uc_compiler_t *compiler, bool assignable)
 		 * assignment or arrow function expression and if that fails, as
 		 * relational one */
 		if (compiler->parser->prev.type == TK_LABEL) {
-			if (uc_compiler_compile_var_or_arrowfn(compiler, true, varname) == TK_LABEL) {
+			uc_compiler_exprstack_push(compiler, TK_LABEL, F_ASSIGNABLE);
+
+			if (uc_compiler_compile_var_or_arrowfn(compiler, varname) == TK_LABEL) {
 				/* parse operand and rhs */
 				while (P_TERNARY <= uc_compiler_parse_rule(compiler->parser->curr.type)->precedence) {
 					uc_compiler_parse_advance(compiler);
-					uc_compiler_parse_rule(compiler->parser->prev.type)->infix(compiler, true);
+					uc_compiler_parse_rule(compiler->parser->prev.type)->infix(compiler);
 				}
 			}
 
@@ -1321,6 +1357,8 @@ uc_compiler_compile_paren(uc_compiler_t *compiler, bool assignable)
 				uc_compiler_emit_insn(compiler, 0, I_POP);
 				uc_compiler_parse_consume(compiler, TK_COMMA);
 			}
+
+			uc_compiler_exprstack_pop(compiler);
 		}
 	}
 
@@ -1343,18 +1381,22 @@ out:
 }
 
 static void
-uc_compiler_compile_call(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_call(uc_compiler_t *compiler)
 {
+	bool optional_chaining = (compiler->parser->prev.type == TK_QLPAREN);
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	uc_jmplist_t spreads = { 0 };
 	uc_vm_insn_t type;
 	size_t i, nargs = 0;
 
+	/* flag optional chaining usage in current expression */
+	compiler->exprstack->flags |= optional_chaining ? F_OPTCHAINING : 0;
+
 	/* determine the kind of the lhs */
 	type = chunk->entries[compiler->last_insn];
 
 	/* if lhs is a dot or bracket expression, pop the LVAL instruction */
-	if (type == I_LVAL)
+	if (type == I_LVAL || type == I_QLVAL)
 		uc_chunk_pop(chunk);
 
 	/* compile arguments */
@@ -1378,11 +1420,11 @@ uc_compiler_compile_call(uc_compiler_t *compiler, bool assignable)
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 
 	/* if lhs is a dot or bracket expression, emit a method call */
-	if (type == I_LVAL)
-		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_MCALL);
+	if (type == I_LVAL || type == I_QLVAL)
+		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, optional_chaining ? I_QMCALL : I_MCALL);
 	/* else ordinary call */
 	else
-		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_CALL);
+		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, optional_chaining ? I_QCALL : I_CALL);
 
 	if (nargs > 0xffff || spreads.count > 0xffff)
 		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
@@ -1399,7 +1441,7 @@ uc_compiler_compile_call(uc_compiler_t *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_post_inc(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_post_inc(uc_compiler_t *compiler)
 {
 	uc_compiler_emit_inc_dec(compiler, compiler->parser->prev.type, true);
 }
@@ -1421,7 +1463,7 @@ uc_compiler_is_use_strict_pragma(uc_compiler_t *compiler)
 }
 
 static void
-uc_compiler_compile_constant(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_constant(uc_compiler_t *compiler)
 {
 	uc_function_t *fn;
 	int64_t n;
@@ -1486,18 +1528,18 @@ uc_compiler_compile_constant(uc_compiler_t *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_comma(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_comma(uc_compiler_t *compiler)
 {
 	uc_compiler_emit_insn(compiler, 0, I_POP);
 	uc_compiler_parse_precedence(compiler, P_ASSIGN);
 }
 
 static void
-uc_compiler_compile_labelexpr(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_labelexpr(uc_compiler_t *compiler)
 {
 	uc_value_t *label = ucv_get(compiler->parser->prev.uv);
 
-	uc_compiler_compile_var_or_arrowfn(compiler, assignable, label);
+	uc_compiler_compile_var_or_arrowfn(compiler, label);
 	ucv_put(label);
 }
 
@@ -1512,7 +1554,7 @@ uc_compiler_compile_delimitted_block(uc_compiler_t *compiler, uc_tokentype_t end
 }
 
 static void
-uc_compiler_compile_function(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_function(uc_compiler_t *compiler)
 {
 	uc_compiler_t fncompiler = { 0 };
 	uc_value_t *name = NULL;
@@ -1543,6 +1585,7 @@ uc_compiler_compile_function(uc_compiler_t *compiler, bool assignable)
 
 	fncompiler.parent = compiler;
 	fncompiler.parser = compiler->parser;
+	fncompiler.exprstack = compiler->exprstack;
 	fn = (uc_function_t *)fncompiler.function;
 
 	uc_compiler_parse_consume(&fncompiler, TK_LPAREN);
@@ -1620,7 +1663,7 @@ uc_compiler_compile_function(uc_compiler_t *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_and(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_and(uc_compiler_t *compiler)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off;
@@ -1634,7 +1677,7 @@ uc_compiler_compile_and(uc_compiler_t *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_or(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_or(uc_compiler_t *compiler)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off, jmp_off;
@@ -1650,8 +1693,13 @@ uc_compiler_compile_or(uc_compiler_t *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_dot(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_dot(uc_compiler_t *compiler)
 {
+	bool optional_chaining = (compiler->parser->prev.type == TK_QDOT);
+
+	/* flag optional chaining usage in current expression */
+	compiler->exprstack->flags |= optional_chaining ? F_OPTCHAINING : 0;
+
 	/* no regexp literal possible after property access */
 	compiler->parser->lex.no_regexp = true;
 
@@ -1660,13 +1708,18 @@ uc_compiler_compile_dot(uc_compiler_t *compiler, bool assignable)
 	uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
 
 	/* depending on context, compile into I_UVAL, I_SVAL or I_LVAL operation */
-	if (!assignable || !uc_compiler_compile_assignment(compiler, NULL))
-		uc_compiler_emit_variable_rw(compiler, NULL, 0);
+	if (!uc_compiler_exprstack_is(compiler, F_ASSIGNABLE) || !uc_compiler_compile_assignment(compiler, NULL))
+		uc_compiler_emit_variable_rw(compiler, NULL, optional_chaining ? TK_QDOT : 0);
 }
 
 static void
-uc_compiler_compile_subscript(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_subscript(uc_compiler_t *compiler)
 {
+	bool optional_chaining = (compiler->parser->prev.type == TK_QLBRACK);
+
+	/* flag optional chaining usage in current expression */
+	compiler->exprstack->flags |= optional_chaining ? F_OPTCHAINING : 0;
+
 	/* compile lhs */
 	uc_compiler_compile_expression(compiler);
 
@@ -1675,12 +1728,12 @@ uc_compiler_compile_subscript(uc_compiler_t *compiler, bool assignable)
 	uc_compiler_parse_consume(compiler, TK_RBRACK);
 
 	/* depending on context, compile into I_UVAL, I_SVAL or I_LVAL operation */
-	if (!assignable || !uc_compiler_compile_assignment(compiler, NULL))
-		uc_compiler_emit_variable_rw(compiler, NULL, 0);
+	if (!uc_compiler_exprstack_is(compiler, F_ASSIGNABLE) || !uc_compiler_compile_assignment(compiler, NULL))
+		uc_compiler_emit_variable_rw(compiler, NULL, optional_chaining ? TK_QLBRACK : 0);
 }
 
 static void
-uc_compiler_compile_ternary(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_ternary(uc_compiler_t *compiler)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off, jmp_off;
@@ -1703,7 +1756,7 @@ uc_compiler_compile_ternary(uc_compiler_t *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_array(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_array(uc_compiler_t *compiler)
 {
 	size_t hint_off, hint_count = 0, len = 0;
 
@@ -1762,7 +1815,7 @@ uc_compiler_compile_array(uc_compiler_t *compiler, bool assignable)
 }
 
 static void
-uc_compiler_compile_object(uc_compiler_t *compiler, bool assignable)
+uc_compiler_compile_object(uc_compiler_t *compiler)
 {
 	size_t hint_off, hint_count = 0, len = 0;
 
@@ -1998,6 +2051,8 @@ uc_compiler_compile_if(uc_compiler_t *compiler)
 	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
 
 	if (uc_compiler_parse_match(compiler, TK_COLON)) {
+		compiler->exprstack->flags |= F_ALTBLOCKMODE;
+
 		while (true) {
 			/* compile elsif or else branch */
 			type = uc_compiler_compile_altifblock(compiler);
@@ -2266,7 +2321,9 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 		if (local)
 			uc_compiler_declare_local_null(compiler, var->pos, var->uv);
 
-		uc_compiler_compile_labelexpr(compiler, true);
+		uc_compiler_exprstack_push(compiler, TK_FOR, F_ASSIGNABLE);
+
+		uc_compiler_compile_labelexpr(compiler);
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 
 		/* If followed by a comma, continue parsing expression */
@@ -2281,6 +2338,8 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 				uc_compiler_emit_insn(compiler, 0, I_POP);
 			}
 		}
+
+		uc_compiler_exprstack_pop(compiler);
 	}
 	/* ... otherwise try parsing an entire expression (which might be absent) */
 	else if (!uc_compiler_parse_check(compiler, TK_SCOL)) {
@@ -2744,13 +2803,18 @@ uc_compiler_compile_expstmt(uc_compiler_t *compiler)
 	/* allow omitting final semicolon */
 	switch (compiler->parser->curr.type) {
 	case TK_RBRACE:
-	case TK_ELSE:	/* fixme: only in altblockmode */
 	case TK_ELIF:
 	case TK_ENDIF:
 	case TK_ENDFOR:
 	case TK_ENDWHILE:
 	case TK_ENDFUNC:
 	case TK_EOF:
+		break;
+
+	case TK_ELSE:
+		if (!uc_compiler_exprstack_is(compiler, F_ALTBLOCKMODE))
+			uc_compiler_parse_consume(compiler, TK_SCOL);
+
 		break;
 
 	default:
@@ -2765,6 +2829,13 @@ uc_compiler_compile_expstmt(uc_compiler_t *compiler)
 static void
 uc_compiler_compile_statement(uc_compiler_t *compiler)
 {
+	uc_exprstack_t expr = {
+		.token = compiler->parser->curr.type,
+		.parent = compiler->exprstack
+	};
+
+	compiler->exprstack = &expr;
+
 	if (uc_compiler_parse_match(compiler, TK_IF))
 		uc_compiler_compile_if(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_WHILE))
@@ -2776,7 +2847,7 @@ uc_compiler_compile_statement(uc_compiler_t *compiler)
 	else if (uc_compiler_parse_match(compiler, TK_TRY))
 		uc_compiler_compile_try(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_FUNC))
-		uc_compiler_compile_function(compiler, false);
+		uc_compiler_compile_function(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_BREAK))
 		uc_compiler_compile_control(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_CONTINUE))
@@ -2791,11 +2862,14 @@ uc_compiler_compile_statement(uc_compiler_t *compiler)
 		uc_compiler_compile_block(compiler);
 	else
 		uc_compiler_compile_expstmt(compiler);
+
+	compiler->exprstack = expr.parent;
 }
 
 static void
 uc_compiler_compile_declaration(uc_compiler_t *compiler)
 {
+
 	if (uc_compiler_parse_match(compiler, TK_LOCAL))
 		uc_compiler_compile_local(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_CONST))
@@ -2810,8 +2884,9 @@ uc_compiler_compile_declaration(uc_compiler_t *compiler)
 uc_function_t *
 uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
 {
+	uc_exprstack_t expr = { .token = TK_EOF };
 	uc_parser_t parser = { .config = config };
-	uc_compiler_t compiler = { .parser = &parser };
+	uc_compiler_t compiler = { .parser = &parser, .exprstack = &expr };
 	uc_function_t *fn;
 
 	uc_lexer_init(&parser.lex, config, source);

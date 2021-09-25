@@ -64,10 +64,22 @@ typedef enum {
 	P_PRIMARY	/* (…) */
 } uc_precedence_t;
 
+typedef enum {
+	F_ASSIGNABLE = (1 << 0),
+	F_OPTCHAINING = (1 << 1),
+	F_ALTBLOCKMODE = (1 << 2),
+} uc_exprflag_t;
+
 typedef struct uc_patchlist {
 	struct uc_patchlist *parent;
 	size_t depth, count, *entries;
 } uc_patchlist_t;
+
+typedef struct uc_exprstack {
+	struct uc_exprstack *parent;
+	uint32_t flags;
+	uc_tokentype_t token;
+} uc_exprstack_t;
 
 typedef struct {
 	uc_value_t *name;
@@ -101,17 +113,26 @@ typedef struct uc_compiler {
 	uc_locals_t locals;
 	uc_upvals_t upvals;
 	uc_patchlist_t *patchlist;
+	uc_exprstack_t *exprstack;
 	uc_value_t *function;
 	uc_parser_t *parser;
 	size_t scope_depth, current_srcpos, last_insn;
 } uc_compiler_t;
 
 typedef struct {
-	void (*prefix)(uc_compiler_t *, bool);
-	void (*infix)(uc_compiler_t *, bool);
+	void (*prefix)(uc_compiler_t *);
+	void (*infix)(uc_compiler_t *);
 	uc_precedence_t precedence;
 } uc_parse_rule_t;
 
 uc_function_t *uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp);
+
+#define uc_compiler_exprstack_push(compiler, token, flags) \
+	uc_exprstack_t expr = { compiler->exprstack, flags, token }; \
+	compiler->exprstack = &expr
+
+#define uc_compiler_exprstack_pop(compiler) \
+	if (compiler->exprstack) \
+		compiler->exprstack = compiler->exprstack->parent
 
 #endif /* __COMPILER_H_ */

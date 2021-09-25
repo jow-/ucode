@@ -67,7 +67,9 @@ static const int8_t insn_operand_bytes[__I_MAX] = {
 	[I_COPY] = 1,
 
 	[I_CALL] = 4,
-	[I_MCALL] = 4
+	[I_MCALL] = 4,
+	[I_QCALL] = 4,
+	[I_QMCALL] = 4,
 };
 
 static const char *exception_type_strings[] = {
@@ -1020,9 +1022,12 @@ uc_vm_insn_load_val(uc_vm_t *vm, uc_vm_insn_t insn)
 		break;
 
 	default:
-		uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
-		                      "left-hand side expression is %s",
-		                      v ? "not an array or object" : "null");
+		if (insn == I_QLVAL)
+			uc_vm_stack_push(vm, NULL);
+		else
+			uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
+			                      "left-hand side expression is %s",
+			                      v ? "not an array or object" : "null");
 
 		break;
 	}
@@ -1889,10 +1894,31 @@ uc_vm_insn_close_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 }
 
 static void
+uc_vm_skip_call(uc_vm_t *vm, bool mcall)
+{
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	size_t i;
+
+	/* pop all function arguments, the function itself and the associated
+	 * function context off the stack */
+	for (i = 0; i < 1 + mcall + (vm->arg.u32 & 0xffff); i++)
+		ucv_put(uc_vm_stack_pop(vm));
+
+	/* skip all encoded spread value indexes */
+	for (i = 0; i < (vm->arg.u32 >> 16); i++)
+		frame->ip += 2;
+
+	uc_vm_stack_push(vm, NULL);
+}
+
+static void
 uc_vm_insn_call(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *fno = ucv_get(uc_vm_stack_peek(vm, vm->arg.u32 & 0xffff));
 	uc_value_t *ctx = NULL;
+
+	if (!ucv_is_callable(fno) && insn == I_QCALL)
+		return uc_vm_skip_call(vm, false);
 
 	if (!ucv_is_arrowfn(fno))
 		ctx = NULL;
@@ -1909,6 +1935,9 @@ uc_vm_insn_mcall(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *ctx = vm->stack.entries[key_slot - 1];
 	uc_value_t *key = vm->stack.entries[key_slot];
 	uc_value_t *fno = ucv_key_get(vm, ctx, key);
+
+	if (!ucv_is_callable(fno) && insn == I_QMCALL)
+		return uc_vm_skip_call(vm, true);
 
 	uc_vm_stack_set(vm, key_slot, fno);
 
@@ -2075,6 +2104,7 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 			break;
 
 		case I_LVAL:
+		case I_QLVAL:
 			uc_vm_insn_load_val(vm, insn);
 			break;
 
@@ -2220,12 +2250,14 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 			break;
 
 		case I_CALL:
+		case I_QCALL:
 			uc_vm_insn_call(vm, insn);
 			frame = uc_vm_current_frame(vm);
 			chunk = frame->closure ? uc_vm_frame_chunk(frame) : NULL;
 			break;
 
 		case I_MCALL:
+		case I_QMCALL:
 			uc_vm_insn_mcall(vm, insn);
 			frame = uc_vm_current_frame(vm);
 			chunk = frame->closure ? uc_vm_frame_chunk(frame) : NULL;

@@ -1,0 +1,99 @@
+Optional chaining operators allow accessing nested object properties
+in a secure manner, without the need to check the entire reference
+chain for validity.
+
+
+1. The `?.` operator can be used to lookup a named property in a
+left-hand side expression without having to check whether the lhs
+value is a proper object.
+
+-- Expect stdout --
+true
+true
+-- End --
+
+-- Testcase --
+{%
+	obj = { foo: 1 };
+
+	print(obj.bar?.baz == null, "\n");	// obj.bar is null
+	print(obj.foo?.bar == null, "\n");	// obj.foo is not an object
+%}
+-- End --
+
+
+2. The `?.[…]` operator complements the `?.` one and applies the
+same semantics to computed property accesses.
+
+-- Expect stdout --
+true
+true
+true
+true
+-- End --
+
+-- Testcase --
+{%
+	obj = { foo: 1 };
+	arr = [ 1, 2 ];
+
+	print(obj["bar"]?.["baz"] == null, "\n");	// obj.bar is null
+	print(obj["foo"]?.["bar"] == null, "\n");	// obj.foo is not an object
+	print(arr[0]?.["foo"] == null, "\n");		// arr[0] is not an object
+	print(foo?.[1] == null, "\n");				// foo is not an array
+%}
+-- End --
+
+
+3. The `?.(…)` function call operator yields `null` when the left-hand
+side value is not a callable function value.
+
+-- Expect stdout --
+true
+true
+-- End --
+
+-- Testcase --
+{%
+	foo = 1;
+
+	print(foo?.(1, 2, 3) == null, "\n");	// foo is not a function
+	print(bar?.("test") == null, "\n");		// bar is null
+%}
+-- End --
+
+
+4. Optional chaining operators cannot be used on the left-hand side of
+an assignment or increment/decrement expression.
+
+-- Expect stderr --
+Syntax error: Invalid left-hand side expression for assignment
+In line 2, byte 13:
+
+ `    obj?.foo = 1;`
+  Near here -----^
+
+
+-- End --
+
+-- Testcase --
+{%
+	obj?.foo = 1;
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: Invalid increment/decrement operand
+In line 2, byte 7:
+
+ `    obj?.foo++;`
+           ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{%
+	obj?.foo++;
+%}
+-- End --
