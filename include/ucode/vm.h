@@ -40,6 +40,7 @@ __insn(LLOC) \
 __insn(LUPV) \
 __insn(LVAR) \
 __insn(LVAL) \
+__insn(QLVAL) \
 __insn(CLFN) \
 __insn(ARFN) \
 __insn(SLOC) \
@@ -87,6 +88,8 @@ __insn(CUPV) \
 __insn(RETURN) \
 __insn(CALL) \
 __insn(MCALL) \
+__insn(QCALL) \
+__insn(QMCALL) \
 __insn(PRINT) \
 __insn(NEXTK) \
 __insn(NEXTKV) \

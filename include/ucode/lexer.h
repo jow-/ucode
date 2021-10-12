@@ -106,6 +106,9 @@ typedef enum {
 	TK_THIS,
 	TK_DELETE,
 	TK_CONST,
+	TK_QLBRACK,
+	TK_QLPAREN,
+	TK_QDOT,
 
 	TK_EOF,
 	TK_ERROR
