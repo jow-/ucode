@@ -1395,8 +1395,10 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 
 				for (i = 0; sfmt + i < fp; i++) {
 					if (sfmt[i] == '.') {
-						pad_size = 1 + atoi(&sfmt[i + 1]);
-						fp = &sfmt[i];
+						for (pad_size = 0, i++; sfmt + i < fp && isdigit(sfmt[i]); i++)
+							pad_size = pad_size * 10 + (sfmt[i] - '0');
+						pad_size++;
+						fp = &sfmt[i-1];
 						break;
 					}
 				}
