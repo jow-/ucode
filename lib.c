@@ -1597,7 +1597,7 @@ uc_require_path(uc_vm_t *vm, const char *path_template, const char *name, uc_val
 	bool rv;
 
 	modtable = ucv_property_get(uc_vm_scope_get(vm), "modules");
-	*res = ucv_object_get(modtable, name, &rv);
+	*res = ucv_get(ucv_object_get(modtable, name, &rv));
 
 	if (rv)
 		goto out;
