@@ -118,7 +118,7 @@ typedef struct { char c; long long x; } s_long_long;
 #define LONG_LONG_ALIGN (sizeof(s_long_long) - sizeof(long long))
 
 #ifdef __powerc
-#pragma options align_for_entry=reset
+#pragma options align=reset
 #endif
 
 
