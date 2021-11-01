@@ -22,7 +22,7 @@
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
 static int last_error = 0;
-static uc_ressource_type_t *cursor_type;
+static uc_resource_type_t *cursor_type;
 
 enum pkg_cmd {
 	CMD_SAVE,
@@ -94,7 +94,7 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 			err_return(rv);
 	}
 
-	return uc_ressource_new(cursor_type, c);
+	return uc_resource_new(cursor_type, c);
 }
 
 

@@ -70,7 +70,7 @@
 
 #include "ucode/module.h"
 
-static uc_ressource_type_t *struct_type;
+static uc_resource_type_t *struct_type;
 
 typedef struct formatdef {
 	char format;
@@ -2529,7 +2529,7 @@ uc_struct_new(uc_vm_t *vm, size_t nargs)
 	if (!state)
 		return NULL;
 
-	return uc_ressource_new(struct_type, state);
+	return uc_resource_new(struct_type, state);
 }
 
 static void

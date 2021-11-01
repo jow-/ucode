@@ -24,7 +24,7 @@
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
 static enum ubus_msg_status last_error = 0;
-static uc_ressource_type_t *conn_type;
+static uc_resource_type_t *conn_type;
 
 typedef struct {
 	int timeout;
@@ -168,7 +168,7 @@ uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 
 	ubus_add_uloop(c->ctx);
 
-	return uc_ressource_new(conn_type, c);
+	return uc_resource_new(conn_type, c);
 }
 
 static void

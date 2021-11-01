@@ -31,7 +31,7 @@
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
 //static const uc_ops *ops;
-static uc_ressource_type_t *file_type, *proc_type, *dir_type;
+static uc_resource_type_t *file_type, *proc_type, *dir_type;
 
 static int last_error = 0;
 
@@ -223,7 +223,7 @@ uc_fs_popen(uc_vm_t *vm, size_t nargs)
 	if (!fp)
 		err_return(errno);
 
-	return uc_ressource_new(proc_type, fp);
+	return uc_resource_new(proc_type, fp);
 }
 
 
@@ -322,7 +322,7 @@ uc_fs_open(uc_vm_t *vm, size_t nargs)
 	if (!fp)
 		err_return(errno);
 
-	return uc_ressource_new(file_type, fp);
+	return uc_resource_new(file_type, fp);
 }
 
 
@@ -409,7 +409,7 @@ uc_fs_opendir(uc_vm_t *vm, size_t nargs)
 	if (!dp)
 		err_return(errno);
 
-	return uc_ressource_new(dir_type, dp);
+	return uc_resource_new(dir_type, dp);
 }
 
 static uc_value_t *
@@ -912,7 +912,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	file_type = uc_type_declare(vm, "fs.file", file_fns, close_file);
 	dir_type = uc_type_declare(vm, "fs.dir", dir_fns, close_dir);
 
-	ucv_object_add(scope, "stdin", uc_ressource_new(file_type, stdin));
-	ucv_object_add(scope, "stdout", uc_ressource_new(file_type, stdout));
-	ucv_object_add(scope, "stderr", uc_ressource_new(file_type, stderr));
+	ucv_object_add(scope, "stdin", uc_resource_new(file_type, stdin));
+	ucv_object_add(scope, "stdout", uc_resource_new(file_type, stdout));
+	ucv_object_add(scope, "stderr", uc_resource_new(file_type, stderr));
 }

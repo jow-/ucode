@@ -1828,7 +1828,7 @@ uc_vm_insn_next(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *k = uc_vm_stack_pop(vm);
 	uc_value_t *v = uc_vm_stack_pop(vm);
 	void *end = (void *)~(uintptr_t)0;
-	uc_ressource_t *iterk;
+	uc_resource_t *iterk;
 	struct lh_entry *curr;
 	uint64_t n;
 
@@ -1838,9 +1838,9 @@ uc_vm_insn_next(uc_vm_t *vm, uc_vm_insn_t insn)
 	}
 
 	if (k == NULL)
-		k = ucv_ressource_new(NULL, NULL);
+		k = ucv_resource_new(NULL, NULL);
 
-	iterk = (uc_ressource_t *)k;
+	iterk = (uc_resource_t *)k;
 
 	switch (ucv_type(v)) {
 	case UC_OBJECT:

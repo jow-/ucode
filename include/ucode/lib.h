@@ -39,7 +39,7 @@ bool uc_error_context_format(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *
 static inline void *
 _uc_fn_this(uc_vm_t *vm, const char *expected_type)
 {
-	return ucv_ressource_dataptr(vm->callframes.entries[vm->callframes.count - 1].ctx, expected_type);
+	return ucv_resource_dataptr(vm->callframes.entries[vm->callframes.count - 1].ctx, expected_type);
 }
 
 #define uc_fn_this(...) _uc_fn_this(vm, __VA_ARGS__)
@@ -63,12 +63,12 @@ _uc_fn_arg(uc_vm_t *vm, size_t nargs, size_t n)
 /* ressource type helper */
 
 static inline uc_value_t *
-uc_ressource_new(uc_ressource_type_t *type, void *data)
+uc_resource_new(uc_resource_type_t *type, void *data)
 {
-	return ucv_ressource_new(type, data);
+	return ucv_resource_new(type, data);
 }
 
-static inline uc_ressource_type_t *
+static inline uc_resource_type_t *
 _uc_type_declare(uc_vm_t *vm, const char *name, const uc_function_list_t *list, size_t len, void (*freefn)(void *))
 {
 	uc_value_t *proto = ucv_object_new(NULL);
@@ -77,7 +77,7 @@ _uc_type_declare(uc_vm_t *vm, const char *name, const uc_function_list_t *list, 
 		ucv_object_add(proto, list[len].name,
 			ucv_cfunction_new(list[len].name, list[len].func));
 
-	return ucv_ressource_type_add(vm, name, proto, freefn);
+	return ucv_resource_type_add(vm, name, proto, freefn);
 }
 
 #define uc_type_declare(vm, name, functions, freefn) \

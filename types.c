@@ -182,8 +182,8 @@ ucv_gc_mark(uc_value_t *uv)
 void
 ucv_free(uc_value_t *uv, bool retain)
 {
-	uc_ressource_type_t *restype;
-	uc_ressource_t *ressource;
+	uc_resource_type_t *restype;
+	uc_resource_t *ressource;
 	uc_function_t *function;
 	uc_closure_t *closure;
 	uc_upval_tref_t *upval;
@@ -245,7 +245,7 @@ ucv_free(uc_value_t *uv, bool retain)
 		break;
 
 	case UC_RESSOURCE:
-		ressource = (uc_ressource_t *)uv;
+		ressource = (uc_resource_t *)uv;
 		restype = ressource->type;
 
 		if (restype && restype->free)
@@ -949,12 +949,12 @@ ucv_closure_new(uc_vm_t *vm, uc_function_t *function, bool arrow_fn)
 }
 
 
-uc_ressource_type_t *
-ucv_ressource_type_add(uc_vm_t *vm, const char *name, uc_value_t *proto, void (*freefn)(void *))
+uc_resource_type_t *
+ucv_resource_type_add(uc_vm_t *vm, const char *name, uc_value_t *proto, void (*freefn)(void *))
 {
-	uc_ressource_type_t *type;
+	uc_resource_type_t *type;
 
-	type = ucv_ressource_type_lookup(vm, name);
+	type = ucv_resource_type_lookup(vm, name);
 
 	if (type) {
 		ucv_put(proto);
@@ -973,8 +973,8 @@ ucv_ressource_type_add(uc_vm_t *vm, const char *name, uc_value_t *proto, void (*
 	return type;
 }
 
-uc_ressource_type_t *
-ucv_ressource_type_lookup(uc_vm_t *vm, const char *name)
+uc_resource_type_t *
+ucv_resource_type_lookup(uc_vm_t *vm, const char *name)
 {
 	size_t i;
 
@@ -987,9 +987,9 @@ ucv_ressource_type_lookup(uc_vm_t *vm, const char *name)
 
 
 uc_value_t *
-ucv_ressource_new(uc_ressource_type_t *type, void *data)
+ucv_resource_new(uc_resource_type_t *type, void *data)
 {
-	uc_ressource_t *res;
+	uc_resource_t *res;
 
 	res = xalloc(sizeof(*res));
 	res->header.type = UC_RESSOURCE;
@@ -1001,9 +1001,9 @@ ucv_ressource_new(uc_ressource_type_t *type, void *data)
 }
 
 void **
-ucv_ressource_dataptr(uc_value_t *uv, const char *name)
+ucv_resource_dataptr(uc_value_t *uv, const char *name)
 {
-	uc_ressource_t *res = (uc_ressource_t *)uv;
+	uc_resource_t *res = (uc_resource_t *)uv;
 
 	if (ucv_type(uv) != UC_RESSOURCE)
 		return NULL;
@@ -1074,8 +1074,8 @@ ucv_upvalref_new(size_t slot)
 uc_value_t *
 ucv_prototype_get(uc_value_t *uv)
 {
-	uc_ressource_type_t *restype;
-	uc_ressource_t *ressource;
+	uc_resource_type_t *restype;
+	uc_resource_t *ressource;
 	uc_object_t *object;
 	uc_array_t *array;
 
@@ -1091,7 +1091,7 @@ ucv_prototype_get(uc_value_t *uv)
 		return object->proto;
 
 	case UC_RESSOURCE:
-		ressource = (uc_ressource_t *)uv;
+		ressource = (uc_resource_t *)uv;
 		restype = ressource->type;
 
 		return restype ? restype->proto : NULL;
@@ -1413,8 +1413,8 @@ void
 ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t depth, char pad_char, size_t pad_size)
 {
 	bool json = (pad_char != '\0');
-	uc_ressource_type_t *restype;
-	uc_ressource_t *ressource;
+	uc_resource_type_t *restype;
+	uc_resource_t *ressource;
 	uc_cfunction_t *cfunction;
 	uc_function_t *function;
 	uc_closure_t *closure;
@@ -1615,7 +1615,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		break;
 
 	case UC_RESSOURCE:
-		ressource = (uc_ressource_t *)uv;
+		ressource = (uc_resource_t *)uv;
 		restype = ressource->type;
 
 		ucv_stringbuf_printf(pb, "%s<%s %p>%s",
