@@ -1918,7 +1918,8 @@ cb_reply(struct nl_msg *msg, void *arg)
 	struct nlmsghdr *hdr = nlmsg_hdr(msg);
 	struct genlmsghdr *gnlh = nlmsg_data(hdr);
 	request_state_t *s = arg;
-	uc_value_t *o;
+	uc_value_t *o, *idx;
+	int64_t i;
 	bool rv;
 
 	o = ucv_object_new(s->vm);
@@ -1929,23 +1930,27 @@ cb_reply(struct nl_msg *msg, void *arg)
 
 	if (rv) {
 		if (hdr->nlmsg_flags & NLM_F_MULTI) {
-			if (!s->res) {
-				if (s->merge)  {
-					s->res = o;
-				}
-				else {
-					s->res = ucv_array_new(s->vm);
-					ucv_array_push(s->res, o);
+			if (!s->res)
+				s->res = ucv_array_new(s->vm);
+
+			if (s->merge) {
+				idx = ucv_object_get(o, "wiphy", NULL);
+				i = idx ? ucv_int64_get(idx) : -1;
+
+				if (i >= 0) {
+					idx = ucv_array_get(s->res, i);
+
+					if (idx) {
+						deep_merge_object(idx, o);
+						ucv_put(o);
+					}
+					else {
+						ucv_array_set(s->res, i, o);
+					}
 				}
 			}
 			else {
-				if (s->merge) {
-					deep_merge_object(s->res, o);
-					ucv_put(o);
-				}
-				else {
-					ucv_array_push(s->res, o);
-				}
+				ucv_array_push(s->res, o);
 			}
 		}
 		else {
