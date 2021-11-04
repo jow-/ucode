@@ -25,6 +25,7 @@
 #include <grp.h>
 #include <pwd.h>
 #include <glob.h>
+#include <fnmatch.h>
 
 #include "ucode/module.h"
 
@@ -834,6 +835,126 @@ uc_fs_glob(uc_vm_t *vm, size_t nargs)
 	return arr;
 }
 
+static uc_value_t *
+uc_fs_dirname(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *path = uc_fn_arg(0);
+	size_t i;
+	char *s;
+
+	if (ucv_type(path) != UC_STRING)
+		err_return(EINVAL);
+
+	i = ucv_string_length(path);
+	s = ucv_string_get(path);
+
+	if (i == 0)
+		return ucv_string_new(".");
+
+	for (i--; s[i] == '/'; i--)
+		if (i == 0)
+			return ucv_string_new("/");
+
+	for (; s[i] != '/'; i--)
+		if (i == 0)
+			return ucv_string_new(".");
+
+	for (; s[i] == '/'; i--)
+		if (i == 0)
+			return ucv_string_new("/");
+
+	return ucv_string_new_length(s, i);
+}
+
+static uc_value_t *
+uc_fs_basename(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *path = uc_fn_arg(0);
+	size_t i, len, skip;
+	char *s;
+
+	if (ucv_type(path) != UC_STRING)
+		err_return(EINVAL);
+
+	len = ucv_string_length(path);
+	s = ucv_string_get(path);
+
+	if (len == 0)
+		return ucv_string_new(".");
+
+	for (i = len - 1, skip = 0; i > 0 && s[i] == '/'; i--, skip++)
+		;
+
+	for (; i > 0 && s[i - 1] != '/'; i--)
+		;
+
+	return ucv_string_new_length(s + i, len - i - skip);
+}
+
+static int
+uc_fs_lsdir_sort_fn(const void *k1, const void *k2)
+{
+	uc_value_t * const *v1 = k1;
+	uc_value_t * const *v2 = k2;
+
+	return strcmp(ucv_string_get(*v1), ucv_string_get(*v2));
+}
+
+static uc_value_t *
+uc_fs_lsdir(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *path = uc_fn_arg(0);
+	uc_value_t *pat = uc_fn_arg(1);
+	uc_value_t *res = NULL;
+	uc_regexp_t *reg;
+	struct dirent *e;
+	DIR *d;
+
+	if (ucv_type(path) != UC_STRING)
+		err_return(EINVAL);
+
+	switch (ucv_type(pat)) {
+	case UC_NULL:
+	case UC_STRING:
+	case UC_REGEXP:
+		break;
+
+	default:
+		err_return(EINVAL);
+	}
+
+	d = opendir(ucv_string_get(path));
+
+	if (!d)
+		err_return(errno);
+
+	res = ucv_array_new(vm);
+
+	while ((e = readdir(d)) != NULL) {
+		if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
+			continue;
+
+		if (ucv_type(pat) == UC_REGEXP) {
+			reg = (uc_regexp_t *)pat;
+
+			if (regexec(&reg->regexp, e->d_name, 0, NULL, 0) == REG_NOMATCH)
+				continue;
+		}
+		else if (ucv_type(pat) == UC_STRING) {
+			if (fnmatch(ucv_string_get(pat), e->d_name, 0) == FNM_NOMATCH)
+				continue;
+		}
+
+		ucv_array_push(res, ucv_string_new(e->d_name));
+	}
+
+	closedir(d);
+
+	ucv_array_sort(res, uc_fs_lsdir_sort_fn);
+
+	return res;
+}
+
 
 static const uc_function_list_t proc_fns[] = {
 	{ "read",		uc_fs_pread },
@@ -876,7 +997,10 @@ static const uc_function_list_t global_fns[] = {
 	{ "chmod",		uc_fs_chmod },
 	{ "chown",		uc_fs_chown },
 	{ "rename",		uc_fs_rename },
-	{ "glob",		uc_fs_glob }
+	{ "glob",		uc_fs_glob },
+	{ "dirname",	uc_fs_dirname },
+	{ "basename",	uc_fs_basename },
+	{ "lsdir",		uc_fs_lsdir },
 };
 
 
