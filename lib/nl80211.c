@@ -1961,10 +1961,7 @@ cb_reply(struct nl_msg *msg, void *arg)
 		ucv_put(o);
 	}
 
-	if (hdr->nlmsg_flags & NLM_F_MULTI)
-		s->state = STATE_CONTINUE;
-	else
-		s->state = STATE_REPLIED;
+	s->state = STATE_CONTINUE;
 
 	return NL_SKIP;
 }
@@ -2281,7 +2278,7 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_nl_request(uc_vm_t *vm, size_t nargs)
 {
-	request_state_t st = { .vm = vm, .state = STATE_CONTINUE };
+	request_state_t st = { .vm = vm };
 	uc_value_t *cmd = uc_fn_arg(0);
 	uc_value_t *flags = uc_fn_arg(1);
 	uc_value_t *payload = uc_fn_arg(2);
@@ -2340,12 +2337,12 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 
 	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_reply, &st);
 	nl_cb_set(cb, NL_CB_FINISH, NL_CB_CUSTOM, cb_done, &st);
-	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_ack, &ret);
+	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_done, &st);
 	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &ret);
 
 	nl_send_auto_complete(nl80211_conn.sock, msg);
 
-	while (ret > 0 && st.state == STATE_CONTINUE)
+	while (ret > 0 && st.state < STATE_REPLIED)
 		nl_recvmsgs(nl80211_conn.sock, cb);
 
 	nlmsg_free(msg);
