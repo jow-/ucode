@@ -128,6 +128,22 @@ In line 2, byte 14:
 %}
 -- End --
 
+-- Expect stderr --
+Syntax error: Invalid identifier
+In line 2, byte 8:
+
+ `    o = { function };`
+            ^-- Near here
+
+
+-- End --
+
+-- Testcase --
+{%
+	o = { function };
+%}
+-- End --
+
 
 ES2015 computed property names are supported.
 

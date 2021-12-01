@@ -1878,6 +1878,11 @@ uc_compiler_compile_object(uc_compiler_t *compiler)
 			if (compiler->parser->prev.type == TK_LABEL &&
 			    (uc_compiler_parse_check(compiler, TK_COMMA) ||
 			     uc_compiler_parse_check(compiler, TK_RBRACE))) {
+				/* disallow keywords in this case */
+				if (uc_lexer_is_keyword(compiler->parser->prev.uv))
+					uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+						"Invalid identifier");
+
 				uc_compiler_emit_variable_rw(compiler,
 					compiler->parser->prev.uv, 0);
 			}

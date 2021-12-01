@@ -1273,3 +1273,18 @@ uc_tokenname(unsigned type)
 
 	return "?";
 }
+
+bool
+uc_lexer_is_keyword(uc_value_t *label)
+{
+	size_t i;
+
+	if (ucv_type(label) != UC_STRING)
+		return false;
+
+	for (i = 0; i < ARRAY_SIZE(reserved_words); i++)
+		if (!strcmp(reserved_words[i].pat, ucv_string_get(label)))
+			return true;
+
+	return false;
+}

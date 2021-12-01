@@ -170,6 +170,8 @@ void uc_lexer_free(uc_lexer_t *lex);
 
 uc_token_t *uc_lexer_next_token(uc_lexer_t *lex);
 
+bool uc_lexer_is_keyword(uc_value_t *label);
+
 bool utf8enc(char **out, int *rem, int code);
 
 const char *
