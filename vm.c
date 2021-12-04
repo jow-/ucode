@@ -1025,6 +1025,7 @@ uc_vm_insn_load_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *v = uc_vm_stack_pop(vm);
 
 	switch (ucv_type(v)) {
+	case UC_RESSOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
 		uc_vm_stack_push(vm, ucv_key_get(vm, v, k));
