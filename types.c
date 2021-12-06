@@ -121,6 +121,7 @@ ucv_gc_mark(uc_value_t *uv)
 	uc_upval_tref_t *upval;
 	uc_object_t *object;
 	uc_array_t *array;
+	uc_resource_t *resource;
 	struct lh_entry *entry;
 	size_t i;
 
@@ -152,7 +153,6 @@ ucv_gc_mark(uc_value_t *uv)
 		lh_foreach(object->table, entry)
 			ucv_gc_mark((uc_value_t *)lh_entry_v(entry));
 
-
 		break;
 
 	case UC_CLOSURE:
@@ -172,6 +172,14 @@ ucv_gc_mark(uc_value_t *uv)
 	case UC_UPVALUE:
 		upval = (uc_upval_tref_t *)uv;
 		ucv_gc_mark(upval->value);
+		break;
+
+	case UC_RESSOURCE:
+		resource = (uc_resource_t *)uv;
+
+		if (resource->type)
+			ucv_gc_mark(resource->type->proto);
+
 		break;
 
 	default:
