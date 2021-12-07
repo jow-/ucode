@@ -165,14 +165,14 @@ typedef struct uc_upval_tref {
 	bool closed;
 	uc_value_t *value;
 	struct uc_upval_tref *next;
-} uc_upval_tref_t;
+} uc_upvalref_t;
 
 typedef struct {
 	uc_value_t header;
 	uc_weakref_t ref;
 	bool is_arrow;
 	uc_function_t *function;
-	uc_upval_tref_t **upvals;
+	uc_upvalref_t **upvals;
 } uc_closure_t;
 
 typedef struct uc_vm uc_vm_t;
@@ -247,7 +247,7 @@ struct uc_vm {
 	uc_stack_t stack;
 	uc_exception_t exception;
 	uc_callframes_t callframes;
-	uc_upval_tref_t *open_upvals;
+	uc_upvalref_t *open_upvals;
 	uc_parse_config_t *config;
 	uc_value_t *globals;
 	uc_source_t *sources;

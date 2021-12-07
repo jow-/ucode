@@ -118,7 +118,7 @@ ucv_gc_mark(uc_value_t *uv)
 {
 	uc_function_t *function;
 	uc_closure_t *closure;
-	uc_upval_tref_t *upval;
+	uc_upvalref_t *upval;
 	uc_object_t *object;
 	uc_array_t *array;
 	uc_resource_t *resource;
@@ -170,7 +170,7 @@ ucv_gc_mark(uc_value_t *uv)
 		break;
 
 	case UC_UPVALUE:
-		upval = (uc_upval_tref_t *)uv;
+		upval = (uc_upvalref_t *)uv;
 		ucv_gc_mark(upval->value);
 		break;
 
@@ -194,7 +194,7 @@ ucv_free(uc_value_t *uv, bool retain)
 	uc_resource_t *ressource;
 	uc_function_t *function;
 	uc_closure_t *closure;
-	uc_upval_tref_t *upval;
+	uc_upvalref_t *upval;
 	uc_regexp_t *regexp;
 	uc_object_t *object;
 	uc_array_t *array;
@@ -262,7 +262,7 @@ ucv_free(uc_value_t *uv, bool retain)
 		break;
 
 	case UC_UPVALUE:
-		upval = (uc_upval_tref_t *)uv;
+		upval = (uc_upvalref_t *)uv;
 		ucv_put_value(upval->value, retain);
 		break;
 	}
@@ -943,12 +943,12 @@ ucv_closure_new(uc_vm_t *vm, uc_function_t *function, bool arrow_fn)
 {
 	uc_closure_t *closure;
 
-	closure = xalloc(sizeof(*closure) + (sizeof(uc_upval_tref_t *) * function->nupvals));
+	closure = xalloc(sizeof(*closure) + (sizeof(uc_upvalref_t *) * function->nupvals));
 	closure->header.type = UC_CLOSURE;
 	closure->header.refcount = 1;
 	closure->function = function;
 	closure->is_arrow = arrow_fn;
-	closure->upvals = function->nupvals ? (uc_upval_tref_t **)((uintptr_t)closure + ALIGN(sizeof(*closure))) : NULL;
+	closure->upvals = function->nupvals ? (uc_upvalref_t **)((uintptr_t)closure + ALIGN(sizeof(*closure))) : NULL;
 
 	if (vm)
 		ucv_ref(&vm->values, &closure->ref);
@@ -1068,7 +1068,7 @@ ucv_regexp_new(const char *pattern, bool icase, bool newline, bool global, char 
 uc_value_t *
 ucv_upvalref_new(size_t slot)
 {
-	uc_upval_tref_t *up;
+	uc_upvalref_t *up;
 
 	up = xalloc(sizeof(*up));
 	up->header.type = UC_UPVALUE;

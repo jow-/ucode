@@ -163,7 +163,7 @@ void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 
 void uc_vm_free(uc_vm_t *vm)
 {
-	uc_upval_tref_t *ref;
+	uc_upvalref_t *ref;
 	size_t i;
 
 	ucv_put(vm->exception.stacktrace);
@@ -308,7 +308,7 @@ uc_vm_frame_dump(uc_vm_t *vm, uc_callframe_t *frame)
 	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
 	uc_function_t *function;
 	uc_closure_t *closure;
-	uc_upval_tref_t *ref;
+	uc_upvalref_t *ref;
 	uc_value_t *v;
 	size_t i;
 
@@ -1050,7 +1050,7 @@ static void
 uc_vm_insn_load_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_callframe_t *frame = uc_vm_current_frame(vm);
-	uc_upval_tref_t *ref = frame->closure->upvals[vm->arg.u32];
+	uc_upvalref_t *ref = frame->closure->upvals[vm->arg.u32];
 
 	if (ref->closed)
 		uc_vm_stack_push(vm, ucv_get(ref->value));
@@ -1066,12 +1066,12 @@ uc_vm_insn_load_local(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_vm_stack_push(vm, ucv_get(vm->stack.entries[frame->stackframe + vm->arg.u32]));
 }
 
-static uc_upval_tref_t *
+static uc_upvalref_t *
 uc_vm_capture_upval(uc_vm_t *vm, size_t slot)
 {
-	uc_upval_tref_t *curr = vm->open_upvals;
-	uc_upval_tref_t *prev = NULL;
-	uc_upval_tref_t *created;
+	uc_upvalref_t *curr = vm->open_upvals;
+	uc_upvalref_t *prev = NULL;
+	uc_upvalref_t *created;
 	char *s;
 
 	while (curr && curr->slot > slot) {
@@ -1089,7 +1089,7 @@ uc_vm_capture_upval(uc_vm_t *vm, size_t slot)
 		return curr;
 	}
 
-	created = (uc_upval_tref_t *)ucv_upvalref_new(slot);
+	created = (uc_upvalref_t *)ucv_upvalref_new(slot);
 	created->next = curr;
 
 	if (vm->trace) {
@@ -1109,7 +1109,7 @@ uc_vm_capture_upval(uc_vm_t *vm, size_t slot)
 static void
 uc_vm_close_upvals(uc_vm_t *vm, size_t slot)
 {
-	uc_upval_tref_t *ref;
+	uc_upvalref_t *ref;
 
 	while (vm->open_upvals && vm->open_upvals->slot >= slot) {
 		ref = vm->open_upvals;
@@ -1223,7 +1223,7 @@ static void
 uc_vm_insn_store_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_callframe_t *frame = uc_vm_current_frame(vm);
-	uc_upval_tref_t *ref = frame->closure->upvals[vm->arg.u32];
+	uc_upvalref_t *ref = frame->closure->upvals[vm->arg.u32];
 	uc_value_t *val = ucv_get(uc_vm_stack_peek(vm, 0));
 
 	if (ref->closed) {
@@ -1476,7 +1476,7 @@ uc_vm_insn_update_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_callframe_t *frame = uc_vm_current_frame(vm);
 	size_t slot = vm->arg.u32 & 0x00FFFFFF;
-	uc_upval_tref_t *ref = frame->closure->upvals[slot];
+	uc_upvalref_t *ref = frame->closure->upvals[slot];
 	uc_value_t *inc = uc_vm_stack_pop(vm);
 	uc_value_t *val;
 
