@@ -119,6 +119,11 @@ void uc_vm_free(uc_vm_t *vm);
 uc_value_t *uc_vm_scope_get(uc_vm_t *vm);
 void uc_vm_scope_set(uc_vm_t *vm, uc_value_t *ctx);
 
+bool uc_vm_registry_exists(uc_vm_t *vm, const char *key);
+uc_value_t *uc_vm_registry_get(uc_vm_t *vm, const char *key);
+void uc_vm_registry_set(uc_vm_t *vm, const char *key, uc_value_t *value);
+bool uc_vm_registry_delete(uc_vm_t *vm, const char *key);
+
 void uc_vm_stack_push(uc_vm_t *vm, uc_value_t *value);
 uc_value_t *uc_vm_stack_pop(uc_vm_t *vm);
 uc_value_t *uc_vm_stack_peek(uc_vm_t *vm, size_t offset);

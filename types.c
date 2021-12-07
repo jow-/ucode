@@ -2078,6 +2078,7 @@ ucv_gc_common(uc_vm_t *vm, bool final)
 	if (!final) {
 		/* mark reachable objects */
 		ucv_gc_mark(vm->globals);
+		ucv_gc_mark(vm->registry);
 		ucv_gc_mark(vm->exception.stacktrace);
 
 		for (i = 0; i < vm->callframes.count; i++) {

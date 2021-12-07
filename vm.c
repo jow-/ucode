@@ -2480,3 +2480,34 @@ uc_vm_trace_set(uc_vm_t *vm, uint32_t level)
 {
 	vm->trace = level;
 }
+
+bool
+uc_vm_registry_exists(uc_vm_t *vm, const char *key)
+{
+	bool exists;
+
+	ucv_object_get(vm->registry, key, &exists);
+
+	return exists;
+}
+
+uc_value_t *
+uc_vm_registry_get(uc_vm_t *vm, const char *key)
+{
+	return ucv_object_get(vm->registry, key, NULL);
+}
+
+void
+uc_vm_registry_set(uc_vm_t *vm, const char *key, uc_value_t *value)
+{
+	if (!vm->registry)
+		vm->registry = ucv_object_new(vm);
+
+	ucv_object_add(vm->registry, key, value);
+}
+
+bool
+uc_vm_registry_delete(uc_vm_t *vm, const char *key)
+{
+	return ucv_object_delete(vm->registry, key);
+}
