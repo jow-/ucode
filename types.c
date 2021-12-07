@@ -53,7 +53,7 @@ ucv_typename(uc_value_t *uv)
 	case UC_CFUNCTION: return "cfunction";
 	case UC_CLOSURE:   return "closure";
 	case UC_UPVALUE:   return "upvalue";
-	case UC_RESSOURCE: return "ressource";
+	case UC_RESOURCE:  return "resource";
 	}
 
 	return "unknown";
@@ -174,7 +174,7 @@ ucv_gc_mark(uc_value_t *uv)
 		ucv_gc_mark(upval->value);
 		break;
 
-	case UC_RESSOURCE:
+	case UC_RESOURCE:
 		resource = (uc_resource_t *)uv;
 
 		if (resource->type)
@@ -191,7 +191,7 @@ void
 ucv_free(uc_value_t *uv, bool retain)
 {
 	uc_resource_type_t *restype;
-	uc_resource_t *ressource;
+	uc_resource_t *resource;
 	uc_function_t *function;
 	uc_closure_t *closure;
 	uc_upvalref_t *upval;
@@ -252,12 +252,12 @@ ucv_free(uc_value_t *uv, bool retain)
 		ucv_put_value(&function->header, retain);
 		break;
 
-	case UC_RESSOURCE:
-		ressource = (uc_resource_t *)uv;
-		restype = ressource->type;
+	case UC_RESOURCE:
+		resource = (uc_resource_t *)uv;
+		restype = resource->type;
 
 		if (restype && restype->free)
-			restype->free(ressource->data);
+			restype->free(resource->data);
 
 		break;
 
@@ -1000,7 +1000,7 @@ ucv_resource_new(uc_resource_type_t *type, void *data)
 	uc_resource_t *res;
 
 	res = xalloc(sizeof(*res));
-	res->header.type = UC_RESSOURCE;
+	res->header.type = UC_RESOURCE;
 	res->header.refcount = 1;
 	res->type = type;
 	res->data = data;
@@ -1013,7 +1013,7 @@ ucv_resource_dataptr(uc_value_t *uv, const char *name)
 {
 	uc_resource_t *res = (uc_resource_t *)uv;
 
-	if (ucv_type(uv) != UC_RESSOURCE)
+	if (ucv_type(uv) != UC_RESOURCE)
 		return NULL;
 
 	if (name) {
@@ -1083,7 +1083,7 @@ uc_value_t *
 ucv_prototype_get(uc_value_t *uv)
 {
 	uc_resource_type_t *restype;
-	uc_resource_t *ressource;
+	uc_resource_t *resource;
 	uc_object_t *object;
 	uc_array_t *array;
 
@@ -1098,9 +1098,9 @@ ucv_prototype_get(uc_value_t *uv)
 
 		return object->proto;
 
-	case UC_RESSOURCE:
-		ressource = (uc_resource_t *)uv;
-		restype = ressource->type;
+	case UC_RESOURCE:
+		resource = (uc_resource_t *)uv;
+		restype = resource->type;
 
 		return restype ? restype->proto : NULL;
 
@@ -1294,7 +1294,7 @@ ucv_to_json(uc_value_t *uv)
 	case UC_CLOSURE:
 	case UC_CFUNCTION:
 	case UC_FUNCTION:
-	case UC_RESSOURCE:
+	case UC_RESOURCE:
 	case UC_UPVALUE:
 	case UC_NULL:
 		return NULL;
@@ -1422,7 +1422,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 {
 	bool json = (pad_char != '\0');
 	uc_resource_type_t *restype;
-	uc_resource_t *ressource;
+	uc_resource_t *resource;
 	uc_cfunction_t *cfunction;
 	uc_function_t *function;
 	uc_closure_t *closure;
@@ -1622,14 +1622,14 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 
 		break;
 
-	case UC_RESSOURCE:
-		ressource = (uc_resource_t *)uv;
-		restype = ressource->type;
+	case UC_RESOURCE:
+		resource = (uc_resource_t *)uv;
+		restype = resource->type;
 
 		ucv_stringbuf_printf(pb, "%s<%s %p>%s",
 			json ? "\"" : "",
-			restype ? restype->name : "ressource",
-			ressource->data,
+			restype ? restype->name : "resource",
+			resource->data,
 			json ? "\"" : "");
 
 		break;

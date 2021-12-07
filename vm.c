@@ -1025,7 +1025,7 @@ uc_vm_insn_load_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *v = uc_vm_stack_pop(vm);
 
 	switch (ucv_type(v)) {
-	case UC_RESSOURCE:
+	case UC_RESOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
 		uc_vm_stack_push(vm, ucv_key_get(vm, v, k));
@@ -1833,7 +1833,7 @@ uc_vm_insn_next(uc_vm_t *vm, uc_vm_insn_t insn)
 	struct lh_entry *curr;
 	uint64_t n;
 
-	if (k != NULL && ucv_type(k) != UC_RESSOURCE) {
+	if (k != NULL && ucv_type(k) != UC_RESOURCE) {
 		fprintf(stderr, "Invalid iterator value\n");
 		abort();
 	}

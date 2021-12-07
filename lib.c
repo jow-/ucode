@@ -2422,7 +2422,7 @@ uc_proto(uc_vm_t *vm, size_t nargs)
 	proto = uc_fn_arg(1);
 
 	if (!ucv_prototype_set(val, proto))
-		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Passed value is neither a prototype, ressource or object");
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Passed value is neither a prototype, resource or object");
 
 	ucv_get(proto);
 

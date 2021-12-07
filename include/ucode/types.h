@@ -40,7 +40,7 @@ typedef enum uc_type {
 	UC_CFUNCTION,
 	UC_CLOSURE,
 	UC_UPVALUE,
-	UC_RESSOURCE
+	UC_RESOURCE
 } uc_type_t;
 
 typedef struct uc_value {

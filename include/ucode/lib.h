@@ -60,7 +60,7 @@ _uc_fn_arg(uc_vm_t *vm, size_t nargs, size_t n)
 #define uc_value_pop() uc_vm_stack_pop(vm)
 
 
-/* ressource type helper */
+/* resource type helper */
 
 static inline uc_value_t *
 uc_resource_new(uc_resource_type_t *type, void *data)
