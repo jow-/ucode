@@ -250,6 +250,7 @@ struct uc_vm {
 	uc_upvalref_t *open_upvals;
 	uc_parse_config_t *config;
 	uc_value_t *globals;
+	uc_value_t *registry;
 	uc_source_t *sources;
 	uc_weakref_t values;
 	uc_resource_types_t restypes;
