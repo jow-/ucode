@@ -43,6 +43,9 @@ typedef enum {
 
 uc_value_t *uc_number_parse(const char *buf, char **end);
 
+bool uc_double_pack(double d, char *buf, bool little_endian);
+double uc_double_unpack(const char *buf, bool little_endian);
+
 void uc_vallist_init(uc_value_list_t *list);
 void uc_vallist_free(uc_value_list_t *list);
 
