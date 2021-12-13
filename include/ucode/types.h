@@ -372,24 +372,46 @@ void ucv_to_stringbuf_formatted(uc_vm_t *, uc_stringbuf_t *, uc_value_t *, size_
 
 uc_type_t ucv_cast_number(uc_value_t *, int64_t *, double *);
 
+uc_value_t *ucv_to_number(uc_value_t *);
+
 static inline double
 ucv_to_double(uc_value_t *v)
 {
-	int64_t n;
+	uc_value_t *nv;
 	double d;
 
-	return (ucv_cast_number(v, &n, &d) == UC_DOUBLE) ? d : (double)n;
+	nv = ucv_to_number(v);
+	d = ucv_double_get(nv);
+	ucv_put(nv);
+
+	return d;
 }
 
 static inline int64_t
 ucv_to_integer(uc_value_t *v)
 {
+	uc_value_t *nv;
 	int64_t n;
-	double d;
 
-	return (ucv_cast_number(v, &n, &d) == UC_DOUBLE) ? (int64_t)d : n;
+	nv = ucv_to_number(v);
+	n = ucv_int64_get(nv);
+	ucv_put(nv);
+
+	return n;
 }
 
+static inline uint64_t
+ucv_to_unsigned(uc_value_t *v)
+{
+	uc_value_t *nv;
+	uint64_t u;
+
+	nv = ucv_to_number(v);
+	u = ucv_uint64_get(nv);
+	ucv_put(nv);
+
+	return u;
+}
 
 static inline bool
 ucv_is_callable(uc_value_t *uv)
@@ -437,7 +459,7 @@ ucv_is_scalar(uc_value_t *uv)
 bool ucv_is_equal(uc_value_t *, uc_value_t *);
 bool ucv_is_truish(uc_value_t *);
 
-bool ucv_compare(int, uc_value_t *, uc_value_t *);
+bool ucv_compare(int, uc_value_t *, uc_value_t *, int *);
 
 uc_value_t *ucv_key_get(uc_vm_t *, uc_value_t *, uc_value_t *);
 uc_value_t *ucv_key_set(uc_vm_t *, uc_value_t *, uc_value_t *, uc_value_t *);

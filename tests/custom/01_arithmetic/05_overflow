@@ -1,0 +1,54 @@
+For integers, the ucode VM tries to perform unsigned 64bit arithmetic internally
+if both operands are positive or if the result is guaranteed to be positive.
+
+In all other cases, calculations are performed using signed 64bit arithmetic
+with wrap arounds using twos-complement representation.
+
+Due to this, the minimum and maximum representable values depend on the values
+of the involved operands.
+
+-- Testcase --
+Unsigned additions roll over back to zero:
+{{ 18446744073709551615 + 1 }}
+
+Unsigned multiplications roll over back to zero:
+{{ 9223372036854775808 * 2 }}
+
+Signed additions roll over at INT64_MIN/INT64_MAX:
+{{ -9223372036854775808 + -1 }}
+
+Signed multiplications roll over back to INT64_MIN:
+{{ 18446744073709551615 * -1 }}
+
+Multiplicating two negative operands yields an unsigned result.
+{{ -9223372036854775807 * -2 }}
+
+Signed calculations yielding positive results are promoted to unsigned.
+{{ -9223372036854775808 + 9223372036854775808 + -9223372036854775807 * -2 }}
+
+Substractions roll over to INT64_MAX on underflow:
+{{ 0 - 9223372036854775809 }}
+-- End --
+
+-- Expect stdout --
+Unsigned additions roll over back to zero:
+0
+
+Unsigned multiplications roll over back to zero:
+0
+
+Signed additions roll over at INT64_MIN/INT64_MAX:
+9223372036854775807
+
+Signed multiplications roll over back to INT64_MIN:
+-9223372036854775807
+
+Multiplicating two negative operands yields an unsigned result.
+18446744073709551614
+
+Signed calculations yielding positive results are promoted to unsigned.
+18446744073709551614
+
+Substractions roll over to INT64_MAX on underflow:
+9223372036854775807
+-- End --

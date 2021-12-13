@@ -121,7 +121,7 @@ static const struct token tokens[] = {
 	{ TK_RPAREN,	{ .pat = ")" },     1, NULL },
 	{ TK_QMARK,		{ .pat = "?" },     1, NULL },
 	{ TK_SCOL,		{ .pat = ";" },     1, NULL },
-	//{ TK_SUB,		{ .pat = "-" },     1, NULL },
+	{ TK_SUB,		{ .pat = "-" },     1, NULL },
 	{ TK_DOT,		{ .pat = "." },     1, NULL },
 	{ TK_STRING,	{ .pat = "'" },     1, parse_string },
 	{ TK_STRING,	{ .pat = "\"" },    1, parse_string },
@@ -129,7 +129,6 @@ static const struct token tokens[] = {
 	{ TK_LABEL,		{ .pat = "_" },     1, parse_label },
 	{ TK_LABEL,		{ .pat = "az" },    0, parse_label },
 	{ TK_LABEL,		{ .pat = "AZ" },    0, parse_label },
-	{ TK_NUMBER,	{ .pat = "-" },     1, parse_number },
 	{ TK_NUMBER,	{ .pat = "09" },    0, parse_number },
 };
 
@@ -779,39 +778,26 @@ is_numeric_char(uc_lexer_t *lex, char c)
 static uc_token_t *
 parse_number(uc_lexer_t *lex)
 {
-	const struct token *tok = lex->tok;
 	uc_token_t *rv = NULL;
-	long long int n;
-	char *ptr, *e;
-	double d;
+	uc_value_t *nv = NULL;
+	const char *ptr;
+	char *e;
 
 	if (!buf_remaining(lex) || !is_numeric_char(lex, lex->bufstart[0])) {
-		if (lex->lookbehindlen == 0 && !is_numeric_char(lex, lex->bufstart[0]))
-			return emit_op(lex, lex->source->off, TK_SUB, NULL);
-
 		lookbehind_append(lex, "\0", 1);
 
-		n = strtoll(lex->lookbehind, &e, 0);
+		nv = uc_number_parse(lex->lookbehind, &e);
 
-		if (*e == '.' || *e == 'e' || *e == 'E') {
-			d = strtod(lex->lookbehind, &e);
+		switch (ucv_type(nv)) {
+		case UC_DOUBLE:
+			rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_DOUBLE, nv);
+			break;
 
-			if (tok->u.pat[0] == '-')
-				d = -d;
+		case UC_INTEGER:
+			rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_NUMBER, nv);
+			break;
 
-			if (e > lex->lookbehind && *e == 0)
-				rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_DOUBLE, ucv_double_new(d));
-			else
-				rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, ucv_string_new("Invalid number literal"));
-		}
-		else if (*e == 0) {
-			if (tok->u.pat[0] == '-')
-				n = (errno == ERANGE) ? INT64_MIN : -n;
-
-			rv = emit_op(lex, lex->source->off - (e - lex->lookbehind), TK_NUMBER, ucv_int64_new(n));
-			//OP(rv)->is_overflow = (errno == ERANGE);
-		}
-		else {
+		default:
 			rv = emit_op(lex, lex->source->off - (lex->lookbehindlen - (e - lex->lookbehind) - 1), TK_ERROR, ucv_string_new("Invalid number literal"));
 		}
 

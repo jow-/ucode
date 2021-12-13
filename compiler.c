@@ -15,6 +15,7 @@
  */
 
 #include <assert.h>
+#include <errno.h>
 
 #include "ucode/compiler.h"
 #include "ucode/chunk.h"
@@ -410,15 +411,6 @@ uc_compiler_emit_u8(uc_compiler_t *compiler, size_t srcpos, uint8_t n)
 }
 
 static size_t
-uc_compiler_emit_s8(uc_compiler_t *compiler, size_t srcpos, int8_t n)
-{
-	return uc_chunk_add(
-		uc_compiler_current_chunk(compiler),
-		n + 0x7f,
-		uc_compiler_set_srcpos(compiler, srcpos));
-}
-
-static size_t
 uc_compiler_emit_u16(uc_compiler_t *compiler, size_t srcpos, uint16_t n)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
@@ -426,19 +418,6 @@ uc_compiler_emit_u16(uc_compiler_t *compiler, size_t srcpos, uint16_t n)
 
 	uc_chunk_add(chunk, n / 0x100, lineoff);
 	uc_chunk_add(chunk, n % 0x100, 0);
-
-	return chunk->count - 2;
-}
-
-static size_t
-uc_compiler_emit_s16(uc_compiler_t *compiler, size_t srcpos, int16_t n)
-{
-	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
-	size_t lineoff = uc_compiler_set_srcpos(compiler, srcpos);
-	uint16_t v = n + 0x7fff;
-
-	uc_chunk_add(chunk, v / 0x100, lineoff);
-	uc_chunk_add(chunk, v % 0x100, 0);
 
 	return chunk->count - 2;
 }
@@ -866,6 +845,7 @@ uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool i
 	uc_value_t *varname = NULL;
 	uc_vm_insn_t type;
 	uint32_t cidx = 0;
+	int insn;
 
 	/* determine kind of emitted load instruction and operand value (if any) */
 	type = chunk->entries ? chunk->entries[compiler->last_insn] : 0;
@@ -901,30 +881,32 @@ uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool i
 		return;
 	}
 
+	insn = (toktype == TK_INC) ? I_PLUS : I_MINUS;
+
 	/* add / substract 1 */
 	uc_compiler_emit_insn(compiler, 0, I_LOAD8);
-	uc_compiler_emit_s8(compiler, 0, (toktype == TK_INC) ? 1 : -1);
+	uc_compiler_emit_u8(compiler, 0, 1);
 
 	/* depending on variable type, emit corresponding increment instruction */
 	switch (type) {
 	case I_LVAR:
 		uc_compiler_emit_insn(compiler, 0, I_UVAR);
-		uc_compiler_emit_u32(compiler, 0, (I_PLUS << 24) | cidx);
+		uc_compiler_emit_u32(compiler, 0, (insn << 24) | cidx);
 		break;
 
 	case I_LLOC:
 		uc_compiler_emit_insn(compiler, 0, I_ULOC);
-		uc_compiler_emit_u32(compiler, 0, (I_PLUS << 24) | cidx);
+		uc_compiler_emit_u32(compiler, 0, (insn << 24) | cidx);
 		break;
 
 	case I_LUPV:
 		uc_compiler_emit_insn(compiler, 0, I_UUPV);
-		uc_compiler_emit_u32(compiler, 0, (I_PLUS << 24) | cidx);
+		uc_compiler_emit_u32(compiler, 0, (insn << 24) | cidx);
 		break;
 
 	case I_LVAL:
 		uc_compiler_emit_insn(compiler, 0, I_UVAL);
-		uc_compiler_emit_u8(compiler, 0, I_PLUS);
+		uc_compiler_emit_u8(compiler, 0, insn);
 		break;
 
 	default:
@@ -934,7 +916,7 @@ uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool i
 	/* for post increment or decrement, add/substract 1 to yield final value */
 	if (is_postfix) {
 		uc_compiler_emit_insn(compiler, 0, I_LOAD8);
-		uc_compiler_emit_s8(compiler, 0, 1);
+		uc_compiler_emit_u8(compiler, 0, 1);
 
 		uc_compiler_emit_insn(compiler, 0, (toktype == TK_INC) ? I_SUB : I_ADD);
 	}
@@ -1466,7 +1448,7 @@ static void
 uc_compiler_compile_constant(uc_compiler_t *compiler)
 {
 	uc_function_t *fn;
-	int64_t n;
+	uint64_t u;
 
 	switch (compiler->parser->prev.type) {
 	case TK_THIS:
@@ -1502,19 +1484,20 @@ uc_compiler_compile_constant(uc_compiler_t *compiler)
 		break;
 
 	case TK_NUMBER:
-		n = ucv_int64_get(compiler->parser->prev.uv);
+		u = ucv_uint64_get(compiler->parser->prev.uv);
+		assert(errno == 0);
 
-		if (n >= -0x7f && n <= 0x7f) {
+		if (u <= 0xff) {
 			uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LOAD8);
-			uc_compiler_emit_s8(compiler, compiler->parser->prev.pos, n);
+			uc_compiler_emit_u8(compiler, compiler->parser->prev.pos, u);
 		}
-		else if (n >= -0x7fff && n <= 0x7fff) {
+		else if (u <= 0xffff) {
 			uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LOAD16);
-			uc_compiler_emit_s16(compiler, compiler->parser->prev.pos, n);
+			uc_compiler_emit_u16(compiler, compiler->parser->prev.pos, u);
 		}
-		else if (n >= -0x7fffffff && n <= 0x7fffffff) {
+		else if (u <= 0xffffffff) {
 			uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LOAD32);
-			uc_compiler_emit_s32(compiler, compiler->parser->prev.pos, n);
+			uc_compiler_emit_u32(compiler, compiler->parser->prev.pos, u);
 		}
 		else {
 			uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);

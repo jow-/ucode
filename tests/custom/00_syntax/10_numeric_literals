@@ -12,7 +12,7 @@ Special values: Infinity, Infinity, NaN, NaN
 Minimum values: -9223372036854775808, -1.79769e+308
 Maximum values: 9223372036854775807, 1.79769e+308
 Minimum truncation: -9223372036854775808, -Infinity
-Maximum truncation: 9223372036854775807, Infinity
+Maximum truncation: 18446744073709551615, Infinity
 -- End --
 
 -- Testcase --
@@ -21,6 +21,6 @@ Float literals: {{ 10. }}, {{ 10.3 }}, {{ 123.456e-67 }}, {{ 0x10.1 }}
 Special values: {{ Infinity }}, {{ 1 / 0 }}, {{ NaN }}, {{ "x" / 1 }}
 Minimum values: {{ -9223372036854775808 }}, {{ -1.7976931348623158e+308 }}
 Maximum values: {{ 9223372036854775807 }}, {{ 1.7976931348623158e+308 }}
-Minimum truncation: {{ -10000000000000000000 }}, {{ -1.0e309 }}
-Maximum truncation: {{ 10000000000000000000 }}, {{ 1.0e309 }}
+Minimum truncation: {{ -100000000000000000000 }}, {{ -1.0e309 }}
+Maximum truncation: {{ 100000000000000000000 }}, {{ 1.0e309 }}
 -- End --

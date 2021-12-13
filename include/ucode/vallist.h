@@ -41,6 +41,8 @@ typedef enum {
 	TAG_PTR = 6
 } uc_value_type_t;
 
+uc_value_t *uc_number_parse(const char *buf, char **end);
+
 void uc_vallist_init(uc_value_list_t *list);
 void uc_vallist_free(uc_value_list_t *list);
 

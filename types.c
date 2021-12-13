@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <math.h>
 #include <ctype.h>
+#include <float.h>
 
 #include "ucode/types.h"
 #include "ucode/util.h"
@@ -472,6 +473,7 @@ ucv_uint64_get(uc_value_t *uv)
 {
 	uintptr_t pv = (uintptr_t)uv;
 	uc_integer_t *integer;
+	double d;
 
 	errno = 0;
 
@@ -483,7 +485,9 @@ ucv_uint64_get(uc_value_t *uv)
 
 		return 0;
 	}
-	else if (uv != NULL && uv->type == UC_INTEGER) {
+
+	switch (ucv_type(uv)) {
+	case UC_INTEGER:
 		integer = (uc_integer_t *)uv;
 
 		if (integer->header.u64)
@@ -495,11 +499,29 @@ ucv_uint64_get(uc_value_t *uv)
 		errno = ERANGE;
 
 		return 0;
+
+	case UC_DOUBLE:
+		d = ucv_double_get(uv);
+
+		if (d < 0.0) {
+			errno = ERANGE;
+
+			return 0;
+		}
+
+		if (d >= ldexp(1.0, 64)) {
+			errno = ERANGE;
+
+			return UINT64_MAX;
+		}
+
+		return (uint64_t)d;
+
+	default:
+		errno = EINVAL;
+
+		return 0;
 	}
-
-	errno = EINVAL;
-
-	return 0;
 }
 
 int64_t
@@ -507,6 +529,7 @@ ucv_int64_get(uc_value_t *uv)
 {
 	uintptr_t pv = (uintptr_t)uv;
 	uc_integer_t *integer;
+	double d;
 
 	errno = 0;
 
@@ -516,10 +539,12 @@ ucv_int64_get(uc_value_t *uv)
 
 		return -(int64_t)(pv >> 3);
 	}
-	else if (uv != NULL && uv->type == UC_INTEGER) {
+
+	switch (ucv_type(uv)) {
+	case UC_INTEGER:
 		integer = (uc_integer_t *)uv;
 
-		if (integer->header.u64 && integer->i.u64 <= INT64_MAX)
+		if (integer->header.u64 && integer->i.u64 <= (uint64_t)INT64_MAX)
 			return (int64_t)integer->i.u64;
 
 		if (!integer->header.u64)
@@ -527,12 +552,30 @@ ucv_int64_get(uc_value_t *uv)
 
 		errno = ERANGE;
 
+		return INT64_MAX;
+
+	case UC_DOUBLE:
+		d = ucv_double_get(uv);
+
+		if (d < ldexp(-1.0, 63)) {
+			errno = ERANGE;
+
+			return INT64_MIN;
+		}
+
+		if (d >= ldexp(1.0, 63)) {
+			errno = ERANGE;
+
+			return INT64_MAX;
+		}
+
+		return (int64_t)d;
+
+	default:
+		errno = EINVAL;
+
 		return 0;
 	}
-
-	errno = EINVAL;
-
-	return 0;
 }
 
 
@@ -552,19 +595,43 @@ ucv_double_new(double d)
 double
 ucv_double_get(uc_value_t *uv)
 {
+	uint64_t max_int = (2ULL << (DBL_MANT_DIG - 1));
 	uc_double_t *dbl;
+	uint64_t u;
+	int64_t n;
 
 	errno = 0;
 
-	if (ucv_type(uv) != UC_DOUBLE) {
+	switch (ucv_type(uv)) {
+	case UC_DOUBLE:
+		dbl = (uc_double_t *)uv;
+
+		return dbl->dbl;
+
+	case UC_INTEGER:
+		n = ucv_int64_get(uv);
+
+		if (errno == ERANGE) {
+			u = ucv_uint64_get(uv);
+
+			/* signal precision loss for integral values >2^53 */
+			if (u > max_int)
+				errno = ERANGE;
+
+			return (double)u;
+		}
+
+		/* signal precision loss for integral values <-2^53 or >2^53 */
+		if (n < -(int64_t)max_int || n > (int64_t)max_int)
+			errno = ERANGE;
+
+		return (double)n;
+
+	default:
 		errno = EINVAL;
 
 		return NAN;
 	}
-
-	dbl = (uc_double_t *)uv;
-
-	return dbl->dbl;
 }
 
 
@@ -1673,77 +1740,6 @@ ucv_to_jsonstring_formatted(uc_vm_t *vm, uc_value_t *uv, char pad_char, size_t p
 	return ucv_to_string_any(vm, uv, pad_char ? pad_char : '\1', pad_size);
 }
 
-uc_type_t
-ucv_cast_number(uc_value_t *v, int64_t *n, double *d)
-{
-	bool is_double = false;
-	const char *s;
-	char *e;
-
-	*d = 0.0;
-	*n = 0;
-
-	switch (ucv_type(v)) {
-	case UC_INTEGER:
-		*n = ucv_int64_get(v);
-
-		return UC_INTEGER;
-
-	case UC_DOUBLE:
-		*d = ucv_double_get(v);
-
-		return UC_DOUBLE;
-
-	case UC_NULL:
-		return UC_INTEGER;
-
-	case UC_BOOLEAN:
-		*n = ucv_boolean_get(v);
-
-		return UC_INTEGER;
-
-	case UC_STRING:
-		s = ucv_string_get(v);
-
-		while (isspace(*s))
-			s++;
-
-		if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X') && isxdigit(s[2])) {
-			*n = strtoll(s, &e, 16);
-		}
-		else if (s[0] == '0' && isdigit(s[2])) {
-			*n = strtoll(s, &e, 8);
-		}
-		else {
-			*n = strtoll(s, &e, 10);
-
-			if (*e == '.') {
-				*d = strtod(s, &e);
-				is_double = (e > s);
-			}
-		}
-
-		while (isspace(*e))
-			e++;
-
-		if (*e) {
-			*d = NAN;
-
-			return UC_DOUBLE;
-		}
-
-		if (is_double)
-			return UC_DOUBLE;
-
-		return UC_INTEGER;
-
-	default:
-		*d = NAN;
-
-		return UC_DOUBLE;
-	}
-}
-
 
 bool
 ucv_is_equal(uc_value_t *uv1, uc_value_t *uv2)
@@ -1874,33 +1870,78 @@ ucv_is_truish(uc_value_t *val)
 	}
 }
 
+uc_value_t *
+ucv_to_number(uc_value_t *v)
+{
+	switch (ucv_type(v)) {
+	case UC_NULL:
+		return ucv_uint64_new(0);
+
+	case UC_BOOLEAN:
+		return ucv_uint64_new(ucv_boolean_get(v));
+
+	case UC_INTEGER:
+		return ucv_get(v);
+
+	case UC_DOUBLE:
+		if (isnan(ucv_double_get(v)))
+			return NULL;
+
+		return ucv_get(v);
+
+	case UC_STRING:
+		return uc_number_parse(ucv_string_get(v), NULL);
+
+	default:
+		return NULL;
+	}
+}
 
 bool
-ucv_compare(int how, uc_value_t *v1, uc_value_t *v2)
+ucv_compare(int how, uc_value_t *v1, uc_value_t *v2, int *deltap)
 {
 	uc_type_t t1 = ucv_type(v1);
 	uc_type_t t2 = ucv_type(v2);
-	int64_t n1, n2, delta;
+	uc_value_t *nv1, *nv2;
+	uint64_t u1, u2;
+	int64_t n1, n2;
 	double d1, d2;
+	int8_t delta;
 
+	/* if both operands are strings, compare bytewise */
 	if (t1 == UC_STRING && t2 == UC_STRING) {
 		delta = strcmp(ucv_string_get(v1), ucv_string_get(v2));
 	}
+
+	/* handle non-string cases... */
 	else {
+		/* ... both operands are of the same, non-scalar type... */
 		if (t1 == t2 && !ucv_is_scalar(v1)) {
+			/* ... compare memory addrs */
 			delta = (intptr_t)v1 - (intptr_t)v2;
 		}
+
+		/* ... operands are of different type or at least one is scalar... */
 		else {
-			t1 = ucv_cast_number(v1, &n1, &d1);
-			t2 = ucv_cast_number(v2, &n2, &d2);
+			nv1 = ucv_to_number(v1);
+			nv2 = ucv_to_number(v2);
 
-			if (t1 == UC_DOUBLE || t2 == UC_DOUBLE) {
-				d1 = (t1 == UC_DOUBLE) ? d1 : (double)n1;
-				d2 = (t2 == UC_DOUBLE) ? d2 : (double)n2;
+			/* ... at least one of them is NaN (not convertible)... */
+			if (!nv1 || !nv2) {
+				ucv_put(nv1);
+				ucv_put(nv2);
 
-				/* all comparison results except `!=` involving NaN are false */
-				if (isnan(d1) || isnan(d2))
-					return (how == I_NE);
+				if (deltap)
+					*deltap = 2;
+
+				/* ... all comparison results except `!=` involving NaN are false */
+				return (how == I_NE);
+			}
+
+			/* ... either of them is a double, compare both as double */
+			if (ucv_type(nv1) == UC_DOUBLE || ucv_type(nv2) == UC_DOUBLE) {
+				d1 = ucv_double_get(nv1);
+				d2 = ucv_double_get(nv2);
 
 				if (d1 == d2)
 					delta = 0;
@@ -1909,11 +1950,66 @@ ucv_compare(int how, uc_value_t *v1, uc_value_t *v2)
 				else
 					delta = 1;
 			}
+
+			/* ... both are integers... */
 			else {
-				delta = n1 - n2;
+				n1 = ucv_int64_get(nv1);
+
+				/* ... left operand is large positive... */
+				if (errno == ERANGE) {
+					ucv_int64_get(nv2);
+
+					/* ... right operand is large positive too... */
+					if (errno == ERANGE) {
+						/* ... compare both as unsigned */
+						u1 = ucv_uint64_get(nv1);
+						u2 = ucv_uint64_get(nv2);
+
+						if (u1 == u2)
+							delta = 0;
+						else if (u1 < u2)
+							delta = -1;
+						else
+							delta = 1;
+					}
+
+					/* ... right operand is within int64_t range... */
+					else {
+						/* ... left > right by definition */
+						delta = 1;
+					}
+				}
+
+				/* ... left operand is within int64_t range... */
+				else {
+					n2 = ucv_int64_get(nv2);
+
+					/* ... right operand is large positive... */
+					if (errno == ERANGE) {
+						/* ... left < right by definition */
+						delta = -1;
+					}
+
+					/* ... right operand is within int64_t range... */
+					else {
+						/* ... compare both as signed */
+						if (n1 == n2)
+							delta = 0;
+						else if (n1 < n2)
+							delta = -1;
+						else
+							delta = 1;
+					}
+				}
 			}
+
+			ucv_put(nv1);
+			ucv_put(nv2);
 		}
 	}
+
+	if (deltap)
+		*deltap = delta;
 
 	switch (how) {
 	case I_LT:
@@ -1961,7 +2057,7 @@ ucv_key_to_index(uc_value_t *val)
 	if (ucv_type(val) == UC_DOUBLE) {
 		d = ucv_double_get(val);
 
-		if ((double)(int64_t)(d) != d)
+		if (trunc(d) != d)
 			return INT64_MIN;
 
 		return (int64_t)d;

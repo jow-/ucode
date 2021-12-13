@@ -19,6 +19,7 @@
 #include <math.h> /* isnan(), INFINITY */
 #include <ctype.h> /* isspace(), isdigit(), isxdigit() */
 #include <errno.h>
+#include <assert.h>
 
 #include "ucode/util.h"
 #include "ucode/chunk.h"
@@ -28,12 +29,11 @@
 #define TAG_TYPE			uint64_t
 #define TAG_BITS			3
 #define TAG_MASK			((1LL << ((sizeof(TAG_TYPE) << 3) - TAG_BITS)) - 1)
-#define TAG_MAXN			(TAG_MASK / 2)
 #define TAG_ALIGN(s)		(((s) + (1 << TAG_BITS) - 1) & -(1 << TAG_BITS))
 #define TAG_GET_TYPE(n)		(int)((TAG_TYPE)n & ((1 << TAG_BITS) - 1))
-#define TAG_FIT_NV(n)		((int64_t)n >= -TAG_MAXN && (int64_t)n <= TAG_MAXN)
-#define TAG_SET_NV(n)		((TAG_TYPE)((int64_t)n + TAG_MAXN) << TAG_BITS)
-#define TAG_GET_NV(n)		(int64_t)((int64_t)(((TAG_TYPE)n >> TAG_BITS) & TAG_MASK) - TAG_MAXN)
+#define TAG_FIT_NV(n)		((uint64_t)n <= TAG_MASK)
+#define TAG_SET_NV(n)		((TAG_TYPE)(uint64_t)n << TAG_BITS)
+#define TAG_GET_NV(n)		(uint64_t)((uint64_t)((TAG_TYPE)n >> TAG_BITS) & TAG_MASK)
 #define TAG_FIT_STR(l)		((l - 1) < (((sizeof(TAG_TYPE) << 3) - TAG_BITS) >> 3))
 #define TAG_SET_STR_L(l)	(TAG_TYPE)((l & ((1 << (8 - TAG_BITS)) - 1)) << TAG_BITS)
 #define TAG_GET_STR_L(n)	(size_t)(((TAG_TYPE)n >> TAG_BITS) & ((1 << (8 - TAG_BITS)) - 1))
@@ -42,6 +42,56 @@
 
 #define UC_VALLIST_CHUNK_SIZE	8
 
+
+uc_value_t *
+uc_number_parse(const char *buf, char **end)
+{
+	unsigned long long u;
+	const char *p = buf;
+	bool neg = false;
+	double d;
+	char *e;
+
+	while (isspace(*p))
+		p++;
+
+	if (*p == '-') {
+		neg = true;
+		p++;
+	}
+
+	if (!isxdigit(*p))
+		return NULL;
+
+	if (!end)
+		end = &e;
+
+	u = strtoull(p, end, 0);
+
+	if (**end == '.' || **end == 'e' || **end == 'E') {
+		d = strtod(p, end);
+
+		if (*end == p || (!isspace(**end) && **end != 0))
+			return NULL;
+
+		if (neg)
+			d = -d;
+
+		return ucv_double_new(d);
+	}
+
+	if (*end == p || (!isspace(**end) && **end != 0))
+		return NULL;
+
+	if (neg) {
+		if (u > INT64_MAX)
+			return ucv_int64_new(INT64_MIN);
+
+		return ucv_int64_new(-(int64_t)u);
+	}
+
+	return ucv_uint64_new(u);
+}
 
 void
 uc_vallist_init(uc_value_list_t *list)
@@ -72,7 +122,7 @@ uc_vallist_free(uc_value_list_t *list)
 }
 
 static void
-add_num(uc_value_list_t *list, int64_t n)
+add_num(uc_value_list_t *list, uint64_t n)
 {
 	size_t sz = TAG_ALIGN(sizeof(n));
 
@@ -97,7 +147,7 @@ add_num(uc_value_list_t *list, int64_t n)
 }
 
 static ssize_t
-find_num(uc_value_list_t *list, int64_t n)
+find_num(uc_value_list_t *list, uint64_t n)
 {
 	TAG_TYPE search;
 	size_t i;
@@ -114,10 +164,10 @@ find_num(uc_value_list_t *list, int64_t n)
 			if (TAG_GET_TYPE(list->index[i]) != TAG_LNUM)
 				continue;
 
-			if (TAG_GET_OFFSET(list->index[i]) + sizeof(int64_t) > list->dsize)
+			if (TAG_GET_OFFSET(list->index[i]) + sizeof(uint64_t) > list->dsize)
 				continue;
 
-			if ((int64_t)be64toh(*(int64_t *)(list->data + TAG_GET_OFFSET(list->index[i]))) != n)
+			if ((uint64_t)be64toh(*(uint64_t *)(list->data + TAG_GET_OFFSET(list->index[i]))) != n)
 				continue;
 
 			return i;
@@ -278,6 +328,7 @@ ssize_t
 uc_vallist_add(uc_value_list_t *list, uc_value_t *value)
 {
 	ssize_t existing;
+	uint64_t u64;
 
 	if ((list->isize % UC_VALLIST_CHUNK_SIZE) == 0) {
 		list->index = xrealloc(list->index, sizeof(list->index[0]) * (list->isize + UC_VALLIST_CHUNK_SIZE));
@@ -286,13 +337,16 @@ uc_vallist_add(uc_value_list_t *list, uc_value_t *value)
 
 	switch (ucv_type(value)) {
 	case UC_INTEGER:
-		/* XXX: u64 */
-		existing = find_num(list, ucv_int64_get(value));
+		u64 = ucv_uint64_get(value);
+
+		assert(errno == 0);
+
+		existing = find_num(list, u64);
 
 		if (existing > -1)
 			return existing;
 
-		add_num(list, ucv_int64_get(value));
+		add_num(list, u64);
 
 		break;
 
@@ -348,14 +402,13 @@ uc_vallist_get(uc_value_list_t *list, size_t idx)
 
 	switch (uc_vallist_type(list, idx)) {
 	case TAG_NUM:
-		return ucv_int64_new(TAG_GET_NV(list->index[idx]));
+		return ucv_uint64_new(TAG_GET_NV(list->index[idx]));
 
 	case TAG_LNUM:
-		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(int64_t) > list->dsize)
+		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(uint64_t) > list->dsize)
 			return NULL;
 
-		/* XXX: u64 */
-		return ucv_int64_new(be64toh(*(int64_t *)(list->data + TAG_GET_OFFSET(list->index[idx]))));
+		return ucv_uint64_new(be64toh(*(uint64_t *)(list->data + TAG_GET_OFFSET(list->index[idx]))));
 
 	case TAG_DBL:
 		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(double) > list->dsize)

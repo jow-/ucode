@@ -3,7 +3,7 @@ include(CheckFunctionExists)
 include(CheckSymbolExists)
 
 PROJECT(ucode C)
-ADD_DEFINITIONS(-Os -Wall -Werror --std=gnu99 -ffunction-sections -D_GNU_SOURCE)
+ADD_DEFINITIONS(-Os -Wall -Werror --std=gnu99 -ffunction-sections -fwrapv -D_GNU_SOURCE)
 
 IF(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
 	ADD_DEFINITIONS(-Wextra -Werror=implicit-function-declaration)
@@ -64,6 +64,11 @@ TARGET_LINK_LIBRARIES(ucode libucode ${json})
 CHECK_FUNCTION_EXISTS(dlopen DLOPEN_FUNCTION_EXISTS)
 IF (NOT DLOPEN_FUNCTION_EXISTS)
   TARGET_LINK_LIBRARIES(libucode dl)
+ENDIF()
+
+CHECK_FUNCTION_EXISTS(fmod FMOD_FUNCTION_EXISTS)
+IF (NOT FMOD_FUNCTION_EXISTS)
+  TARGET_LINK_LIBRARIES(libucode m)
 ENDIF()
 
 SET(CMAKE_REQUIRED_LIBRARIES json-c)
