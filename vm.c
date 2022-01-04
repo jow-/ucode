@@ -19,6 +19,8 @@
 #include <assert.h>
 #include <ctype.h>
 #include <math.h>
+#include <errno.h>
+#include <limits.h>
 
 #include "ucode/vm.h"
 #include "ucode/compiler.h"
@@ -33,9 +35,9 @@ static const char *insn_names[__I_MAX] = {
 
 static const int8_t insn_operand_bytes[__I_MAX] = {
 	[I_LOAD] = 4,
-	[I_LOAD8] = -1,
-	[I_LOAD16] = -2,
-	[I_LOAD32] = -4,
+	[I_LOAD8] = 1,
+	[I_LOAD16] = 2,
+	[I_LOAD32] = 4,
 
 	[I_LREXP] = 4,
 
@@ -237,19 +239,6 @@ uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 	case 0:
 		break;
 
-	case -1:
-		vm->arg.s8 = frame->ip[0] - 0x7f;
-		frame->ip++;
-		break;
-
-	case -2:
-		vm->arg.s16 = (
-			frame->ip[0] * 0x100 +
-			frame->ip[1]
-		) - 0x7fff;
-		frame->ip += 2;
-		break;
-
 	case -4:
 		vm->arg.s32 = (
 			frame->ip[0] * 0x1000000UL +
@@ -263,6 +252,14 @@ uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 	case 1:
 		vm->arg.u8 = frame->ip[0];
 		frame->ip++;
+		break;
+
+	case 2:
+		vm->arg.u16 = (
+			frame->ip[0] * 0x100 +
+			frame->ip[1]
+		);
+		frame->ip += 2;
 		break;
 
 	case 4:
@@ -922,15 +919,15 @@ uc_vm_insn_load(uc_vm_t *vm, uc_vm_insn_t insn)
 		break;
 
 	case I_LOAD8:
-		uc_vm_stack_push(vm, ucv_int64_new(vm->arg.s8));
+		uc_vm_stack_push(vm, ucv_uint64_new(vm->arg.u8));
 		break;
 
 	case I_LOAD16:
-		uc_vm_stack_push(vm, ucv_int64_new(vm->arg.s16));
+		uc_vm_stack_push(vm, ucv_uint64_new(vm->arg.u16));
 		break;
 
 	case I_LOAD32:
-		uc_vm_stack_push(vm, ucv_int64_new(vm->arg.s32));
+		uc_vm_stack_push(vm, ucv_uint64_new(vm->arg.u32));
 		break;
 
 	default:
@@ -1244,43 +1241,106 @@ uc_vm_insn_store_local(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_vm_stack_set(vm, frame->stackframe + vm->arg.u32, val);
 }
 
+static int64_t
+int64(uc_value_t *nv, uint64_t *u64)
+{
+	int64_t n;
+
+	n = ucv_int64_get(nv);
+	*u64 = 0;
+
+	if (errno == ERANGE) {
+		n = INT64_MAX;
+		*u64 = ucv_uint64_get(nv);
+	}
+
+	return n;
+}
+
+static uint64_t
+abs64(int64_t n)
+{
+	if (n == INT64_MIN)
+		return 0x8000000000000000ULL;
+
+	if (n < 0)
+		return -n;
+
+	return n;
+}
+
+
 static uc_value_t *
 uc_vm_value_bitop(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_value_t *operand)
 {
-	uc_value_t *rv = NULL;
+	uc_value_t *nv1, *nv2, *rv = NULL;
+	uint64_t u1, u2;
 	int64_t n1, n2;
-	double d;
 
-	if (ucv_cast_number(value, &n1, &d) == UC_DOUBLE)
-		n1 = isnan(d) ? 0 : (int64_t)d;
+	nv1 = ucv_to_number(value);
+	nv2 = ucv_to_number(operand);
 
-	if (ucv_cast_number(operand, &n2, &d) == UC_DOUBLE)
-		n2 = isnan(d) ? 0 : (int64_t)d;
+	n1 = int64(nv1, &u1);
+	n2 = int64(nv2, &u2);
 
-	switch (operation) {
-	case I_LSHIFT:
-		rv = ucv_int64_new(n1 << n2);
-		break;
+	if (n1 < 0 || n2 < 0) {
+		switch (operation) {
+		case I_LSHIFT:
+			rv = ucv_int64_new(n1 << n2);
+			break;
 
-	case I_RSHIFT:
-		rv = ucv_int64_new(n1 >> n2);
-		break;
+		case I_RSHIFT:
+			rv = ucv_int64_new(n1 >> n2);
+			break;
 
-	case I_BAND:
-		rv = ucv_int64_new(n1 & n2);
-		break;
+		case I_BAND:
+			rv = ucv_int64_new(n1 & n2);
+			break;
 
-	case I_BXOR:
-		rv = ucv_int64_new(n1 ^ n2);
-		break;
+		case I_BXOR:
+			rv = ucv_int64_new(n1 ^ n2);
+			break;
 
-	case I_BOR:
-		rv = ucv_int64_new(n1 | n2);
-		break;
+		case I_BOR:
+			rv = ucv_int64_new(n1 | n2);
+			break;
 
-	default:
-		break;
+		default:
+			break;
+		}
 	}
+	else {
+		if (!u1) u1 = (uint64_t)n1;
+		if (!u2) u2 = (uint64_t)n2;
+
+		switch (operation) {
+		case I_LSHIFT:
+			rv = ucv_uint64_new(u1 << (u2 % (sizeof(uint64_t) * CHAR_BIT)));
+			break;
+
+		case I_RSHIFT:
+			rv = ucv_uint64_new(u1 >> (u2 % (sizeof(uint64_t) * CHAR_BIT)));
+			break;
+
+		case I_BAND:
+			rv = ucv_uint64_new(u1 & u2);
+			break;
+
+		case I_BXOR:
+			rv = ucv_uint64_new(u1 ^ u2);
+			break;
+
+		case I_BOR:
+			rv = ucv_uint64_new(u1 | u2);
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	ucv_put(nv1);
+	ucv_put(nv2);
 
 	return rv;
 }
@@ -1288,10 +1348,10 @@ uc_vm_value_bitop(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 static uc_value_t *
 uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_value_t *operand)
 {
-	uc_value_t *rv = NULL;
-	uc_type_t t1, t2;
+	uc_value_t *nv1, *nv2, *rv = NULL;
 	char *s, *s1, *s2;
 	size_t len1, len2;
+	uint64_t u1, u2;
 	int64_t n1, n2;
 	double d1, d2;
 
@@ -1318,12 +1378,19 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 		return rv;
 	}
 
-	t1 = ucv_cast_number(value, &n1, &d1);
-	t2 = ucv_cast_number(operand, &n2, &d2);
+	nv1 = ucv_to_number(value);
+	nv2 = ucv_to_number(operand);
 
-	if (t1 == UC_DOUBLE || t2 == UC_DOUBLE) {
-		d1 = (t1 == UC_DOUBLE) ? d1 : (double)n1;
-		d2 = (t2 == UC_DOUBLE) ? d2 : (double)n2;
+	/* any operation involving NaN results in NaN */
+	if (!nv1 || !nv2) {
+		ucv_put(nv1);
+		ucv_put(nv2);
+
+		return ucv_double_new(NAN);
+	}
+	if (ucv_type(nv1) == UC_DOUBLE || ucv_type(nv2) == UC_DOUBLE) {
+		d1 = ucv_double_get(nv1);
+		d2 = ucv_double_get(nv2);
 
 		switch (operation) {
 		case I_ADD:
@@ -1332,6 +1399,7 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 			break;
 
 		case I_SUB:
+		case I_MINUS:
 			rv = ucv_double_new(d1 - d2);
 			break;
 
@@ -1352,7 +1420,7 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 			break;
 
 		case I_MOD:
-			rv = ucv_double_new(NAN);
+			rv = ucv_double_new(fmod(d1, d2));
 			break;
 
 		default:
@@ -1363,30 +1431,100 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 		}
 	}
 	else {
+		n1 = int64(nv1, &u1);
+		n2 = int64(nv2, &u2);
+
 		switch (operation) {
 		case I_ADD:
 		case I_PLUS:
-			rv = ucv_int64_new(n1 + n2);
+			if (n1 < 0 || n2 < 0) {
+				if (u1)
+					rv = ucv_uint64_new(u1 - abs64(n2));
+				else if (u2)
+					rv = ucv_uint64_new(u2 - abs64(n1));
+				else
+					rv = ucv_int64_new(n1 + n2);
+			}
+			else {
+				if (!u1) u1 = (uint64_t)n1;
+				if (!u2) u2 = (uint64_t)n2;
+
+				rv = ucv_uint64_new(u1 + u2);
+			}
+
 			break;
 
 		case I_SUB:
-			rv = ucv_int64_new(n1 - n2);
+		case I_MINUS:
+			if (n1 < 0 && n2 < 0) {
+				if (n1 > n2)
+					rv = ucv_uint64_new(abs64(n2) - abs64(n1));
+				else
+					rv = ucv_int64_new(n1 - n2);
+			}
+			else if (n1 >= 0 && n2 >= 0) {
+				if (!u1) u1 = (uint64_t)n1;
+				if (!u2) u2 = (uint64_t)n2;
+
+				if (u2 > u1)
+					rv = ucv_int64_new(-(u2 - u1));
+				else
+					rv = ucv_uint64_new(u1 - u2);
+			}
+			else if (n1 >= 0) {
+				if (!u1) u1 = (uint64_t)n1;
+
+				rv = ucv_uint64_new(u1 + abs64(n2));
+			}
+			else {
+				rv = ucv_int64_new(n1 - n2);
+			}
+
 			break;
 
 		case I_MUL:
-			rv = ucv_int64_new(n1 * n2);
+			if (n1 < 0 && n2 < 0) {
+				rv = ucv_uint64_new(abs64(n1) * abs64(n2));
+			}
+			else if (n1 >= 0 && n2 >= 0) {
+				if (!u1) u1 = (uint64_t)n1;
+				if (!u2) u2 = (uint64_t)n2;
+
+				rv = ucv_uint64_new(u1 * u2);
+			}
+			else {
+				rv = ucv_int64_new(n1 * n2);
+			}
+
 			break;
 
 		case I_DIV:
-			if (n2 == 0)
+			if (n2 == 0) {
 				rv = ucv_double_new(INFINITY);
-			else
+			}
+			else if (n1 < 0 || n2 < 0) {
 				rv = ucv_int64_new(n1 / n2);
+			}
+			else {
+				if (!u1) u1 = (uint64_t)n1;
+				if (!u2) u2 = (uint64_t)n2;
+
+				rv = ucv_uint64_new(u1 / u2);
+			}
 
 			break;
 
 		case I_MOD:
-			rv = ucv_int64_new(n1 % n2);
+			if (n1 < 0 || n2 < 0) {
+				rv = ucv_int64_new(n1 % n2);
+			}
+			else {
+				if (!u1) u1 = (uint64_t)n1;
+				if (!u2) u2 = (uint64_t)n2;
+
+				rv = ucv_uint64_new(u1 % u2);
+			}
+
 			break;
 
 		default:
@@ -1396,6 +1534,9 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 			break;
 		}
 	}
+
+	ucv_put(nv1);
+	ucv_put(nv2);
 
 	return rv;
 }
@@ -1643,25 +1784,71 @@ uc_vm_insn_arith(uc_vm_t *vm, uc_vm_insn_t insn)
 static void
 uc_vm_insn_plus_minus(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_value_t *v = uc_vm_stack_pop(vm);
+	uc_value_t *v = uc_vm_stack_pop(vm), *nv;
 	bool is_sub = (insn == I_MINUS);
-	uc_type_t t;
 	int64_t n;
 	double d;
 
-	t = ucv_cast_number(v, &n, &d);
+	if (ucv_type(v) == UC_STRING) {
+		nv = uc_number_parse(ucv_string_get(v), NULL);
 
-	ucv_put(v);
+		if (nv) {
+			ucv_put(v);
+			v = nv;
+		}
+	}
 
-	switch (t) {
+	switch (ucv_type(v)) {
 	case UC_INTEGER:
+		n = ucv_int64_get(v);
+
+		/* numeric value is in range 9223372036854775808..18446744073709551615 */
+		if (errno == ERANGE) {
+			if (is_sub)
+				/* make negation of large numeric value result in smallest negative value */
+				uc_vm_stack_push(vm, ucv_int64_new(INT64_MIN));
+			else
+				/* for positive number coercion return value as-is */
+				uc_vm_stack_push(vm, ucv_get(v));
+		}
+
+		/* numeric value is in range -9223372036854775808..9223372036854775807 */
+		else {
+			if (is_sub) {
+				if (n == INT64_MIN)
+					/* make negation of minimum value result in maximum signed positive value */
+					uc_vm_stack_push(vm, ucv_int64_new(INT64_MAX));
+				else
+					/* for all other values flip the sign */
+					uc_vm_stack_push(vm, ucv_int64_new(-n));
+			}
+			else {
+				/* for positive number coercion return value as-is */
+				uc_vm_stack_push(vm, ucv_get(v));
+			}
+		}
+
+		break;
+
+	case UC_DOUBLE:
+		d = ucv_double_get(v);
+		uc_vm_stack_push(vm, ucv_double_new(is_sub ? -d : d));
+		break;
+
+	case UC_BOOLEAN:
+		n = (int64_t)ucv_boolean_get(v);
 		uc_vm_stack_push(vm, ucv_int64_new(is_sub ? -n : n));
 		break;
 
-	default:
-		uc_vm_stack_push(vm, ucv_double_new(is_sub ? -d : d));
+	case UC_NULL:
+		uc_vm_stack_push(vm, ucv_int64_new(0));
 		break;
+
+	default:
+		uc_vm_stack_push(vm, ucv_double_new(NAN));
 	}
+
+	ucv_put(v);
 }
 
 static void
@@ -1683,15 +1870,24 @@ static void
 uc_vm_insn_complement(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *v = uc_vm_stack_pop(vm);
+	uc_value_t *nv;
+	uint64_t u;
 	int64_t n;
-	double d;
 
-	if (ucv_cast_number(v, &n, &d) == UC_DOUBLE)
-		n = isnan(d) ? 0 : (int64_t)d;
+	nv = ucv_to_number(v);
+	n = int64(nv, &u);
 
+	if (n < 0) {
+		uc_vm_stack_push(vm, ucv_int64_new(~n));
+	}
+	else {
+		if (!u) u = (uint64_t)n;
+
+		uc_vm_stack_push(vm, ucv_uint64_new(~u));
+	}
+
+	ucv_put(nv);
 	ucv_put(v);
-
-	uc_vm_stack_push(vm, ucv_int64_new(~n));
 }
 
 static void
@@ -1700,7 +1896,7 @@ uc_vm_insn_rel(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *r2 = uc_vm_stack_pop(vm);
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
 
-	bool res = ucv_compare(insn, r1, r2);
+	bool res = ucv_compare(insn, r1, r2, NULL);
 
 	ucv_put(r1);
 	ucv_put(r2);
@@ -1724,7 +1920,7 @@ uc_vm_insn_in(uc_vm_t *vm, uc_vm_insn_t insn)
 		     arridx < arrlen; arridx++) {
 			item = ucv_array_get(r2, arridx);
 
-			if (ucv_compare(I_EQ, r1, item)) {
+			if (ucv_compare(I_EQ, r1, item, NULL)) {
 				found = true;
 				break;
 			}

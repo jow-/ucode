@@ -1,32 +1,31 @@
-The utpl language supports modulo divisions, however they're only defined
-for integer values.
+The ucode language supports modulo divisions.
 
 -- Expect stdout --
 If both operands are integers or convertible to integers,
-the modulo division yields the remainder:
+the modulo division yields the remaining integer value:
 10 % 4 = 2
 "10" % 4 = 2
 10 % "4" = 2
 "10" % "4" = 2
 
 If either operand is a double value, the modulo operation
-yields NaN:
-10.0 % 4 = NaN
-10 % 4.0 = NaN
-"10.0" % 4 = NaN
+yields the remaining value as calculated by fmod(3):
+10.2 % 4 = 2.2
+10 % 4.3 = 1.4
+"10.4" % 4 = 2.4
 -- End --
 
 -- Testcase --
 If both operands are integers or convertible to integers,
-the modulo division yields the remainder:
+the modulo division yields the remaining integer value:
 10 % 4 = {{ 10 % 4 }}
 "10" % 4 = {{ "10" % 4 }}
 10 % "4" = {{ 10 % 4 }}
 "10" % "4" = {{ "10" % "4" }}
 
 If either operand is a double value, the modulo operation
-yields NaN:
-10.0 % 4 = {{ 10.0 % 4 }}
-10 % 4.0 = {{ 10 % 4.0 }}
-"10.0" % 4 = {{ "10.0" % 4 }}
+yields the remaining value as calculated by fmod(3):
+10.2 % 4 = {{ 10.2 % 4 }}
+10 % 4.3 = {{ 10 % 4.3 }}
+"10.4" % 4 = {{ "10.4" % 4 }}
 -- End --

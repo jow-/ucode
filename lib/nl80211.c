@@ -69,29 +69,14 @@ set_error(int errcode, const char *fmt, ...) {
 static bool
 uc_nl_parse_u32(uc_value_t *val, uint32_t *n)
 {
-	uc_type_t t;
-	int64_t i;
-	double d;
+	uint64_t u;
 
-	t = ucv_cast_number(val, &i, &d);
+	u = ucv_to_unsigned(val);
 
-	if (t == UC_DOUBLE) {
-		if (isnan(d) || d < 0 || d > UINT32_MAX)
-			return false;
-
-		i = (int64_t)d;
-
-		if (d - i > 0)
-			return false;
-	}
-	else if (errno != 0) {
-		return false;
-	}
-
-	if (i < 0 || i > UINT32_MAX)
+	if (errno != 0 || u > UINT32_MAX)
 		return false;
 
-	*n = (uint32_t)i;
+	*n = (uint32_t)u;
 
 	return true;
 }
@@ -99,26 +84,11 @@ uc_nl_parse_u32(uc_value_t *val, uint32_t *n)
 static bool
 uc_nl_parse_s32(uc_value_t *val, uint32_t *n)
 {
-	uc_type_t t;
 	int64_t i;
-	double d;
 
-	t = ucv_cast_number(val, &i, &d);
+	i = ucv_to_integer(val);
 
-	if (t == UC_DOUBLE) {
-		if (isnan(d) || d < INT32_MIN || d > INT32_MAX)
-			return false;
-
-		i = (int64_t)d;
-
-		if (d - i > 0)
-			return false;
-	}
-	else if (errno != 0) {
-		return false;
-	}
-
-	if (i < INT32_MIN || i > INT32_MAX)
+	if (errno != 0 || i < INT32_MIN || i > INT32_MAX)
 		return false;
 
 	*n = (uint32_t)i;
@@ -129,37 +99,9 @@ uc_nl_parse_s32(uc_value_t *val, uint32_t *n)
 static bool
 uc_nl_parse_u64(uc_value_t *val, uint64_t *n)
 {
-	uc_type_t t;
-	int64_t i;
-	double d;
+	*n = ucv_to_unsigned(val);
 
-	if (ucv_type(val) == UC_INTEGER) {
-		*n = ucv_uint64_get(val);
-
-		return true;
-	}
-
-	t = ucv_cast_number(val, &i, &d);
-
-	if (t == UC_DOUBLE) {
-		if (isnan(d) || d < 0)
-			return false;
-
-		i = (int64_t)d;
-
-		if (d - i > 0)
-			return false;
-	}
-	else if (errno != 0) {
-		return false;
-	}
-
-	if (i < 0)
-		return false;
-
-	*n = (uint64_t)i;
-
-	return true;
+	return (errno == 0);
 }
 
 static bool

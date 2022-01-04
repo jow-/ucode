@@ -15,6 +15,7 @@
  */
 
 #include <math.h>
+#include <errno.h>
 #include <sys/time.h>
 
 #include "ucode/module.h"
@@ -24,20 +25,43 @@ static bool srand_called = false;
 static uc_value_t *
 uc_abs(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *v = uc_fn_arg(0);
-	uc_type_t t;
+	uc_value_t *v = uc_fn_arg(0), *nv, *res;
 	int64_t n;
 	double d;
 
-	if (ucv_type(v) == UC_NULL)
-		return ucv_double_new(NAN);
+	nv = v ? ucv_to_number(v) : NULL;
 
-	t = ucv_cast_number(v, &n, &d);
+	switch (ucv_type(nv)) {
+	case UC_INTEGER:
+		n = ucv_int64_get(nv);
 
-	if (t == UC_DOUBLE)
-		return (isnan(d) || d < 0) ? ucv_double_new(-d) : ucv_get(v);
+		if (n >= 0 || errno == ERANGE)
+			res = ucv_get(nv);
+		else if (n == INT64_MIN)
+			res = ucv_uint64_new((uint64_t)INT64_MAX + 1);
+		else
+			res = ucv_uint64_new(-n);
 
-	return (n < 0) ? ucv_int64_new(-n) : ucv_get(v);
+		break;
+
+	case UC_DOUBLE:
+		d = ucv_double_get(nv);
+
+		if (isnan(d) || d >= 0)
+			res = ucv_get(nv);
+		else
+			res = ucv_double_new(-d);
+
+		break;
+
+	default:
+		res = ucv_double_new(NAN);
+		break;
+	}
+
+	ucv_put(nv);
+
+	return res;
 }
 
 static uc_value_t *

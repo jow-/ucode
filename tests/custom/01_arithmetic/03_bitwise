@@ -1,5 +1,7 @@
-Utpl implements C-style bitwise operations. One detail is that these operations
-coerce their operands to signed 64bit integer values internally.
+Ucode implements C-style bitwise operations. One detail is that these operations
+coerce their operands to 64bit integer values internally. If both operands are
+positive, unsigned 64bit semantics are used. If one of the operands is negative,
+both are converted to signed 64bit numbers.
 
 -- Expect stdout --
 Left shift:
@@ -23,8 +25,8 @@ Bitwise or:
 120.3 | 54.3 = 126
 
 Complement:
-~0 = -1
-~10.4 = -11
+~0 = 18446744073709551615
+~10.4 = 18446744073709551605
 -- End --
 
 -- Testcase --
