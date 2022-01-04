@@ -26,6 +26,7 @@
 #include <pwd.h>
 #include <glob.h>
 #include <fnmatch.h>
+#include <limits.h>
 
 #include "ucode/module.h"
 
@@ -171,6 +172,24 @@ uc_fs_write_common(uc_vm_t *vm, size_t nargs, const char *type)
 	return ucv_int64_new(wsize);
 }
 
+static uc_value_t *
+uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
+{
+	int fd;
+
+	FILE **fp = uc_fn_this(type);
+
+	if (!fp || !*fp)
+		err_return(EBADF);
+
+	fd = fileno(*fp);
+
+	if (fd == -1)
+		err_return(errno);
+
+	return ucv_int64_new(fd);
+}
+
 
 static uc_value_t *
 uc_fs_pclose(uc_vm_t *vm, size_t nargs)
@@ -206,6 +225,12 @@ static uc_value_t *
 uc_fs_pwrite(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_write_common(vm, nargs, "fs.proc");
+}
+
+static uc_value_t *
+uc_fs_pfileno(uc_vm_t *vm, size_t nargs)
+{
+	return uc_fs_fileno_common(vm, nargs, "fs.proc");
 }
 
 static uc_value_t *
@@ -308,6 +333,12 @@ uc_fs_tell(uc_vm_t *vm, size_t nargs)
 }
 
 static uc_value_t *
+uc_fs_fileno(uc_vm_t *vm, size_t nargs)
+{
+	return uc_fs_fileno_common(vm, nargs, "fs.file");
+}
+
+static uc_value_t *
 uc_fs_open(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_fn_arg(0);
@@ -318,6 +349,31 @@ uc_fs_open(uc_vm_t *vm, size_t nargs)
 		err_return(EINVAL);
 
 	fp = fopen(ucv_string_get(path),
+		ucv_type(mode) == UC_STRING ? ucv_string_get(mode) : "r");
+
+	if (!fp)
+		err_return(errno);
+
+	return uc_resource_new(file_type, fp);
+}
+
+static uc_value_t *
+uc_fs_fdopen(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *fdno = uc_fn_arg(0);
+	uc_value_t *mode = uc_fn_arg(1);
+	int64_t n;
+	FILE *fp;
+
+	if (ucv_type(fdno) != UC_INTEGER)
+		err_return(EINVAL);
+
+	n = ucv_int64_get(fdno);
+
+	if (n < 0 || n > INT_MAX)
+		err_return(EBADF);
+
+	fp = fdopen((int)n,
 		ucv_type(mode) == UC_STRING ? ucv_string_get(mode) : "r");
 
 	if (!fp)
@@ -960,6 +1016,7 @@ static const uc_function_list_t proc_fns[] = {
 	{ "read",		uc_fs_pread },
 	{ "write",		uc_fs_pwrite },
 	{ "close",		uc_fs_pclose },
+	{ "fileno",		uc_fs_pfileno },
 	{ "error",		uc_fs_error },
 };
 
@@ -969,6 +1026,7 @@ static const uc_function_list_t file_fns[] = {
 	{ "seek",		uc_fs_seek },
 	{ "tell",		uc_fs_tell },
 	{ "close",		uc_fs_close },
+	{ "fileno",		uc_fs_fileno },
 	{ "error",		uc_fs_error },
 };
 
@@ -983,6 +1041,7 @@ static const uc_function_list_t dir_fns[] = {
 static const uc_function_list_t global_fns[] = {
 	{ "error",		uc_fs_error },
 	{ "open",		uc_fs_open },
+	{ "fdopen",		uc_fs_fdopen },
 	{ "opendir",	uc_fs_opendir },
 	{ "popen",		uc_fs_popen },
 	{ "readlink",	uc_fs_readlink },
@@ -1015,8 +1074,11 @@ static void close_proc(void *ud)
 static void close_file(void *ud)
 {
 	FILE *fp = ud;
+	int n;
 
-	if (fp && fp != stdin && fp != stdout && fp != stderr)
+	n = fp ? fileno(fp) : -1;
+
+	if (n > 2)
 		fclose(fp);
 }
 
