@@ -18,6 +18,7 @@
 #include <endian.h> /* htobe64(), be64toh() */
 #include <math.h> /* isnan(), INFINITY */
 #include <ctype.h> /* isspace(), isdigit(), isxdigit() */
+#include <assert.h>
 #include <errno.h>
 #include <assert.h>
 
@@ -91,6 +92,171 @@ uc_number_parse(const char *buf, char **end)
 	}
 
 	return ucv_uint64_new(u);
+}
+
+bool
+uc_double_pack(double d, char *buf, bool little_endian)
+{
+	int8_t step = little_endian ? -1 : 1;
+	uint32_t hibits = 0, lobits = 0;
+	int32_t exponent = 0;
+	bool sign = false;
+	double fraction;
+	uint8_t *p;
+
+	if (d == 0.0) {
+		sign = (copysign(1.0, d) == -1.0);
+	}
+	else if (isnan(d)) {
+		sign = (copysign(1.0, d) == -1.0);
+		exponent = 0x7ff;
+		lobits = 0x1000000;
+		hibits = 0xfffffff;
+	}
+	else if (!isfinite(d)) {
+		sign = (d < 0.0);
+		exponent = 0x7ff;
+	}
+	else {
+		if (d < 0.0) {
+			sign = true;
+			d = -d;
+		}
+
+		fraction = frexp(d, &exponent);
+
+		if (fraction == 0.0) {
+			exponent = 0;
+		}
+		else {
+			assert(fraction >= 0.5 && fraction < 1.0);
+
+			fraction *= 2.0;
+			exponent--;
+		}
+
+		if (exponent >= 1024) {
+			errno = ERANGE;
+
+			return false;
+		}
+		else if (exponent < -1022) {
+			fraction = ldexp(fraction, 1022 + exponent);
+			exponent = 0;
+		}
+		else if (exponent != 0 || fraction != 0.0) {
+			fraction -= 1.0;
+			exponent += 1023;
+		}
+
+		fraction *= 268435456.0;
+		hibits = (uint32_t)fraction;
+		assert(hibits <= 0xfffffff);
+
+		fraction -= (double)hibits;
+		fraction *= 16777216.0;
+		lobits = (uint32_t)(fraction + 0.5);
+		assert(lobits <= 0x1000000);
+
+		if (lobits >> 24) {
+			lobits = 0;
+
+			if (++hibits >> 28) {
+				hibits = 0;
+
+				if (++exponent >= 2047) {
+					errno = ERANGE;
+
+					return false;
+				}
+			}
+		}
+	}
+
+	p = (uint8_t *)buf + (little_endian ? 7 : 0);
+	*p = (sign << 7) | (exponent >> 4);
+
+	p += step;
+	*p = ((exponent & 0xf) << 4) | (hibits >> 24);
+
+	p += step;
+	*p = (hibits >> 16) & 0xff;
+
+	p += step;
+	*p = (hibits >> 8) & 0xff;
+
+	p += step;
+	*p = hibits & 0xff;
+
+	p += step;
+	*p = (lobits >> 16) & 0xff;
+
+	p += step;
+	*p = (lobits >> 8) & 0xff;
+
+	p += step;
+	*p = lobits & 0xff;
+
+	return true;
+}
+
+double
+uc_double_unpack(const char *buf, bool little_endian)
+{
+	int8_t step = little_endian ? -1 : 1;
+	uint32_t lofrac, hifrac;
+	int32_t exponent;
+	uint8_t *p;
+	bool sign;
+	double d;
+
+	p = (uint8_t *)buf + (little_endian ? 7 : 0);
+	sign = (*p >> 7) & 1;
+	exponent = (*p & 0x7f) << 4;
+
+	p += step;
+	exponent |= (*p >> 4) & 0xf;
+	hifrac = (*p & 0xf) << 24;
+
+	p += step;
+	hifrac |= *p << 16;
+
+	p += step;
+	hifrac |= *p << 8;
+
+	p += step;
+	hifrac |= *p;
+
+	p += step;
+	lofrac = *p << 16;
+
+	p += step;
+	lofrac |= *p << 8;
+
+	p += step;
+	lofrac |= *p;
+
+	if (exponent == 0x7ff) {
+		if (lofrac == 0 && hifrac == 0)
+			return sign ? -INFINITY : INFINITY;
+		else
+			return sign ? -NAN : NAN;
+	}
+
+	d = (double)hifrac + (double)lofrac / 16777216.0;
+	d /= 268435456.0;
+
+	if (exponent == 0) {
+		exponent = -1022;
+	}
+	else {
+		exponent -= 1023;
+		d += 1.0;
+	}
+
+	d = ldexp(d, exponent);
+
+	return sign ? -d : d;
 }
 
 void
@@ -180,7 +346,7 @@ find_num(uc_value_list_t *list, uint64_t n)
 static void
 add_dbl(uc_value_list_t *list, double d)
 {
-	size_t sz = TAG_ALIGN(sizeof(d));
+	size_t sz = TAG_ALIGN(sizeof(uint64_t));
 
 	if ((TAG_TYPE)list->dsize + sz > TAG_MASK) {
 		fprintf(stderr, "Constant data too large\n");
@@ -190,7 +356,11 @@ add_dbl(uc_value_list_t *list, double d)
 	list->data = xrealloc(list->data, list->dsize + sz);
 
 	memset(list->data + list->dsize, 0, sz);
-	memcpy(list->data + list->dsize, &d, sizeof(d));
+
+	if (!uc_double_pack(d, list->data + list->dsize, false)) {
+		fprintf(stderr, "Double value not representable\n");
+		abort();
+	}
 
 	list->index[list->isize++] = (uint64_t)(TAG_DBL | (list->dsize << TAG_BITS));
 	list->dsize += sz;
@@ -205,10 +375,10 @@ find_dbl(uc_value_list_t *list, double d)
 		if (TAG_GET_TYPE(list->index[i]) != TAG_DBL)
 			continue;
 
-		if (TAG_GET_OFFSET(list->index[i]) + sizeof(double) > list->dsize)
+		if (TAG_GET_OFFSET(list->index[i]) + sizeof(uint64_t) > list->dsize)
 			continue;
 
-		if (*(double *)(list->data + TAG_GET_OFFSET(list->index[i])) != d)
+		if (uc_double_unpack(list->data + TAG_GET_OFFSET(list->index[i]), false) != d)
 			continue;
 
 		return i;
@@ -414,7 +584,7 @@ uc_vallist_get(uc_value_list_t *list, size_t idx)
 		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(double) > list->dsize)
 			return NULL;
 
-		return ucv_double_new(*(double *)(list->data + TAG_GET_OFFSET(list->index[idx])));
+		return ucv_double_new(uc_double_unpack(list->data + TAG_GET_OFFSET(list->index[idx]), false));
 
 	case TAG_STR:
 		len = TAG_GET_STR_L(list->index[idx]);

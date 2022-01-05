@@ -69,6 +69,7 @@
 #include <assert.h>
 
 #include "ucode/module.h"
+#include "ucode/vallist.h"
 
 static uc_resource_type_t *struct_type;
 
@@ -758,111 +759,7 @@ double_pack32(double d, char *buf, bool little_endian)
 	return true;
 }
 
-static bool
-double_pack64(double d, char *buf, bool little_endian)
-{
-	int8_t step = little_endian ? -1 : 1;
-	uint32_t hibits = 0, lobits = 0;
-	int32_t exponent = 0;
-	bool sign = false;
-	double fraction;
-	uint8_t *p;
-
-	if (d == 0.0) {
-		sign = (copysign(1.0, d) == -1.0);
-	}
-	else if (isnan(d)) {
-		sign = (copysign(1.0, d) == -1.0);
-		exponent = 0x7ff;
-		lobits = 0x1000000;
-		hibits = 0xfffffff;
-	}
-	else if (!isfinite(d)) {
-		sign = (d < 0.0);
-		exponent = 0x7ff;
-	}
-	else {
-		if (d < 0.0) {
-			sign = true;
-			d = -d;
-		}
-
-		fraction = frexp(d, &exponent);
-
-		if (fraction == 0.0) {
-			exponent = 0;
-		}
-		else {
-			assert(fraction >= 0.5 && fraction < 1.0);
-
-			fraction *= 2.0;
-			exponent--;
-		}
-
-		if (exponent >= 1024) {
-			errno = ERANGE;
-
-			return false;
-		}
-		else if (exponent < -1022) {
-			fraction = ldexp(fraction, 1022 + exponent);
-			exponent = 0;
-		}
-		else if (exponent != 0 || fraction != 0.0) {
-			fraction -= 1.0;
-			exponent += 1023;
-		}
-
-		fraction *= 268435456.0;
-		hibits = (uint32_t)fraction;
-		assert(hibits <= 0xfffffff);
-
-		fraction -= (double)hibits;
-		fraction *= 16777216.0;
-		lobits = (uint32_t)(fraction + 0.5);
-		assert(lobits <= 0x1000000);
-
-		if (lobits >> 24) {
-			lobits = 0;
-
-			if (++hibits >> 28) {
-				hibits = 0;
-
-				if (++exponent >= 2047) {
-					errno = ERANGE;
-
-					return false;
-				}
-			}
-		}
-	}
-
-	p = (uint8_t *)buf + (little_endian ? 7 : 0);
-	*p = (sign << 7) | (exponent >> 4);
-
-	p += step;
-	*p = ((exponent & 0xf) << 4) | (hibits >> 24);
-
-	p += step;
-	*p = (hibits >> 16) & 0xff;
-
-	p += step;
-	*p = (hibits >> 8) & 0xff;
-
-	p += step;
-	*p = hibits & 0xff;
-
-	p += step;
-	*p = (lobits >> 16) & 0xff;
-
-	p += step;
-	*p = (lobits >> 8) & 0xff;
-
-	p += step;
-	*p = lobits & 0xff;
-
-	return true;
-}
+#define double_pack64 uc_double_pack
 
 static double
 double_unpack16(const char *buf, bool little_endian)
@@ -949,65 +846,7 @@ double_unpack32(const char *buf, bool little_endian)
 	return sign ? -d : d;
 }
 
-
-static double
-double_unpack64(const char *buf, bool little_endian)
-{
-	int8_t step = little_endian ? -1 : 1;
-	uint32_t lofrac, hifrac;
-	int32_t exponent;
-	uint8_t *p;
-	bool sign;
-	double d;
-
-	p = (uint8_t *)buf + (little_endian ? 7 : 0);
-	sign = (*p >> 7) & 1;
-	exponent = (*p & 0x7f) << 4;
-
-	p += step;
-	exponent |= (*p >> 4) & 0xf;
-	hifrac = (*p & 0xf) << 24;
-
-	p += step;
-	hifrac |= *p << 16;
-
-	p += step;
-	hifrac |= *p << 8;
-
-	p += step;
-	hifrac |= *p;
-
-	p += step;
-	lofrac = *p << 16;
-
-	p += step;
-	lofrac |= *p << 8;
-
-	p += step;
-	lofrac |= *p;
-
-	if (exponent == 0x7ff) {
-		if (lofrac == 0 && hifrac == 0)
-			return sign ? -INFINITY : INFINITY;
-		else
-			return sign ? -NAN : NAN;
-	}
-
-	d = (double)hifrac + (double)lofrac / 16777216.0;
-	d /= 268435456.0;
-
-	if (exponent == 0) {
-		exponent = -1022;
-	}
-	else {
-		exponent -= 1023;
-		d += 1.0;
-	}
-
-	d = ldexp(d, exponent);
-
-	return sign ? -d : d;
-}
+#define double_unpack64 uc_double_unpack
 
 static bool
 range_exception(uc_vm_t *vm, const formatdef_t *f, bool is_unsigned)

@@ -1346,11 +1346,40 @@ uc_vm_value_bitop(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 }
 
 static uc_value_t *
+uc_vm_string_concat(uc_vm_t *vm, uc_value_t *v1, uc_value_t *v2)
+{
+	char buf[sizeof(void *)], *s1, *s2;
+	uc_stringbuf_t *sbuf;
+	size_t l1, l2;
+
+	/* optimize cases for string+string concat... */
+	if (ucv_type(v1) == UC_STRING && ucv_type(v2) == UC_STRING) {
+		s1 = ucv_string_get(v1);
+		s2 = ucv_string_get(v2);
+		l1 = ucv_string_length(v1);
+		l2 = ucv_string_length(v2);
+
+		/* ... result fits into a tagged pointer */
+		if (l1 + l2 + 1 < sizeof(buf)) {
+			memcpy(&buf[0], s1, l1);
+			memcpy(&buf[l1], s2, l2);
+
+			return ucv_string_new_length(buf, l1 + l2);
+		}
+	}
+
+	sbuf = ucv_stringbuf_new();
+
+	ucv_to_stringbuf(vm, sbuf, v1, false);
+	ucv_to_stringbuf(vm, sbuf, v2, false);
+
+	return ucv_stringbuf_finish(sbuf);
+}
+
+static uc_value_t *
 uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_value_t *operand)
 {
 	uc_value_t *nv1, *nv2, *rv = NULL;
-	char *s, *s1, *s2;
-	size_t len1, len2;
 	uint64_t u1, u2;
 	int64_t n1, n2;
 	double d1, d2;
@@ -1359,24 +1388,8 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 	    operation == I_BAND || operation == I_BXOR || operation == I_BOR)
 		return uc_vm_value_bitop(vm, operation, value, operand);
 
-	if (operation == I_ADD && (ucv_type(value) == UC_STRING || ucv_type(operand) == UC_STRING)) {
-		s1 = (ucv_type(value) != UC_STRING) ? ucv_to_string(vm, value) : NULL;
-		s2 = (ucv_type(operand) != UC_STRING) ? ucv_to_string(vm, operand) : NULL;
-		len1 = s1 ? strlen(s1) : ucv_string_length(value);
-		len2 = s2 ? strlen(s2) : ucv_string_length(operand);
-		s = xalloc(len1 + len2 + 1);
-
-		memcpy(s, s1 ? s1 : ucv_string_get(value), len1);
-		memcpy(s + len1, s2 ? s2 : ucv_string_get(operand), len2);
-		free(s1);
-		free(s2);
-
-		rv = ucv_string_new_length(s, len1 + len2);
-
-		free(s);
-
-		return rv;
-	}
+	if (operation == I_ADD && (ucv_type(value) == UC_STRING || ucv_type(operand) == UC_STRING))
+		return uc_vm_string_concat(vm, value, operand);
 
 	nv1 = ucv_to_number(value);
 	nv2 = ucv_to_number(operand);
