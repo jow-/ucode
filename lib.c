@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <fnmatch.h>
+#include <assert.h>
 
 #include "ucode/lexer.h"
 #include "ucode/compiler.h"
@@ -2814,6 +2815,101 @@ uc_b64enc(uc_vm_t *vm, size_t nargs)
  * -------------------------------------------------------------------------
  */
 
+static unsigned long
+uc_uniq_ucv_hash(const void *k)
+{
+	union { double d; int64_t i; uint64_t u; } conv;
+	uc_value_t *uv = (uc_value_t *)k;
+	unsigned int h;
+	uint8_t *u8;
+	size_t len;
+
+	h = ucv_type(uv);
+
+	switch (h) {
+	case UC_STRING:
+		u8 = (uint8_t *)ucv_string_get(uv);
+		len = ucv_string_length(uv);
+		break;
+
+	case UC_INTEGER:
+		conv.i = ucv_int64_get(uv);
+
+		if (errno == ERANGE) {
+			h *= 2;
+			conv.u = ucv_uint64_get(uv);
+		}
+
+		u8 = (uint8_t *)&conv.u;
+		len = sizeof(conv.u);
+		break;
+
+	case UC_DOUBLE:
+		conv.d = ucv_double_get(uv);
+
+		u8 = (uint8_t *)&conv.u;
+		len = sizeof(conv.u);
+		break;
+
+	default:
+		u8 = (uint8_t *)&uv;
+		len = sizeof(uv);
+		break;
+	}
+
+	while (len > 0) {
+		h = h * 129 + (*u8++) + LH_PRIME;
+		len--;
+	}
+
+	return h;
+}
+
+static int
+uc_uniq_ucv_equal(const void *k1, const void *k2)
+{
+	uc_value_t *uv1 = (uc_value_t *)k1;
+	uc_value_t *uv2 = (uc_value_t *)k2;
+
+	if (!ucv_is_scalar(uv1) && !ucv_is_scalar(uv2))
+		return (uv1 == uv2);
+
+	return ucv_is_equal(uv1, uv2);
+}
+
+static uc_value_t *
+uc_uniq(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *list = uc_fn_arg(0);
+	uc_value_t *uniq = NULL;
+	struct lh_table *seen;
+	unsigned long hash;
+	uc_value_t *item;
+	size_t i, len;
+
+	if (ucv_type(list) != UC_ARRAY)
+		return NULL;
+
+	seen = lh_table_new(16, NULL, uc_uniq_ucv_hash, uc_uniq_ucv_equal);
+	uniq = ucv_array_new(vm);
+
+	assert(seen && uniq);
+
+	for (i = 0, len = ucv_array_length(list); i < len; i++) {
+		item = ucv_array_get(list, i);
+		hash = lh_get_hash(seen, item);
+
+		if (!lh_table_lookup_entry_w_hash(seen, item, hash)) {
+			lh_table_insert_w_hash(seen, item, NULL, hash, 0);
+			ucv_array_push(uniq, ucv_get(item));
+		}
+	}
+
+	lh_table_free(seen);
+
+	return uniq;
+}
+
 
 const uc_function_list_t uc_stdlib_functions[] = {
 	{ "chr",		uc_chr },
@@ -2872,7 +2968,8 @@ const uc_function_list_t uc_stdlib_functions[] = {
 	{ "min",		uc_min },
 	{ "max",		uc_max },
 	{ "b64dec",		uc_b64dec },
-	{ "b64enc",		uc_b64enc }
+	{ "b64enc",		uc_b64enc },
+	{ "uniq",		uc_uniq },
 };
 
 
