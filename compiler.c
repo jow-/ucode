@@ -21,6 +21,7 @@
 #include "ucode/chunk.h"
 #include "ucode/vm.h" /* I_* */
 #include "ucode/source.h"
+#include "ucode/program.h"
 #include "ucode/lib.h" /* uc_error_context_format() */
 
 static void uc_compiler_compile_unary(uc_compiler_t *compiler);
@@ -113,14 +114,15 @@ uc_compiler_exprstack_is(uc_compiler_t *compiler, uc_exprflag_t flag)
 }
 
 static void
-uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_source_t *source, bool strict)
+uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_source_t *source, uc_program_t *program, bool strict)
 {
 	uc_value_t *varname = ucv_string_new("(callee)");
 	uc_function_t *fn;
 
 	compiler->scope_depth = 0;
 
-	compiler->function = ucv_function_new(name, srcpos, source);
+	compiler->program = program;
+	compiler->function = uc_program_function_new(program, name, srcpos, source);
 
 	compiler->locals.count = 0;
 	compiler->locals.entries = NULL;
@@ -1132,7 +1134,7 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 	pos = compiler->parser->prev.pos;
 
 	uc_compiler_init(&fncompiler, NULL, compiler->parser->prev.pos,
-		uc_compiler_current_source(compiler),
+		uc_compiler_current_source(compiler), compiler->program,
 		uc_compiler_is_strict(compiler));
 
 	fncompiler.parent = compiler;
@@ -1563,7 +1565,7 @@ uc_compiler_compile_function(uc_compiler_t *compiler)
 
 	uc_compiler_init(&fncompiler,
 		name ? ucv_string_get(name) : NULL, compiler->parser->prev.pos,
-		uc_compiler_current_source(compiler),
+		uc_compiler_current_source(compiler), compiler->program,
 		uc_compiler_is_strict(compiler));
 
 	fncompiler.parent = compiler;
@@ -2875,10 +2877,11 @@ uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
 	uc_exprstack_t expr = { .token = TK_EOF };
 	uc_parser_t parser = { .config = config };
 	uc_compiler_t compiler = { .parser = &parser, .exprstack = &expr };
+	uc_program_t *prog = uc_program_new();
 	uc_function_t *fn;
 
 	uc_lexer_init(&parser.lex, config, source);
-	uc_compiler_init(&compiler, "main", 0, source,
+	uc_compiler_init(&compiler, "main", 0, source, prog,
 		config && config->strict_declarations);
 
 	uc_compiler_parse_advance(&compiler);

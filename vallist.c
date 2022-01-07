@@ -24,6 +24,7 @@
 
 #include "ucode/util.h"
 #include "ucode/chunk.h"
+#include "ucode/program.h"
 #include "ucode/vallist.h"
 #include "ucode/vm.h"
 
@@ -271,17 +272,6 @@ uc_vallist_init(uc_value_list_t *list)
 void
 uc_vallist_free(uc_value_list_t *list)
 {
-	uc_value_t *o;
-	size_t i;
-
-	for (i = 0; i < list->isize; i++) {
-		if (TAG_GET_TYPE(list->index[i]) == TAG_PTR) {
-			o = uc_vallist_get(list, i);
-			ucv_put(o);
-			ucv_put(o);
-		}
-	}
-
 	free(list->index);
 	free(list->data);
 	uc_vallist_init(list);
@@ -476,22 +466,13 @@ find_str(uc_value_list_t *list, const char *s, size_t slen)
 }
 
 static void
-add_ptr(uc_value_list_t *list, void *ptr)
+add_func(uc_value_list_t *list, uc_function_t *func)
 {
-	size_t sz = TAG_ALIGN(sizeof(ptr));
+	size_t id = uc_program_function_id(func->program, &func->header);
 
-	if ((TAG_TYPE)list->dsize + sz > TAG_MASK) {
-		fprintf(stderr, "Constant data too large\n");
-		abort();
-	}
+	assert(id != 0 && TAG_FIT_NV(id));
 
-	list->data = xrealloc(list->data, list->dsize + sz);
-
-	memset(list->data + list->dsize, 0, sz);
-	memcpy(list->data + list->dsize, &ptr, sizeof(ptr));
-
-	list->index[list->isize++] = (uint64_t)(TAG_PTR | (list->dsize << TAG_BITS));
-	list->dsize += sz;
+	list->index[list->isize++] = (TAG_TYPE)(TAG_FUNC | TAG_SET_NV(id));
 }
 
 ssize_t
@@ -545,7 +526,7 @@ uc_vallist_add(uc_value_list_t *list, uc_value_t *value)
 		break;
 
 	case UC_FUNCTION:
-		add_ptr(list, value);
+		add_func(list, (uc_function_t *)value);
 		break;
 
 	default:
@@ -564,10 +545,16 @@ uc_vallist_type(uc_value_list_t *list, size_t idx)
 	return TAG_GET_TYPE(list->index[idx]);
 }
 
+#define container_of(ptr, type, member) ({                      \
+        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+        (type *)( (char *)__mptr - offsetof(type,member) );})
+
 uc_value_t *
 uc_vallist_get(uc_value_list_t *list, size_t idx)
 {
 	char str[sizeof(TAG_TYPE)];
+	uc_function_t *func;
+	uc_chunk_t *chunk;
 	size_t n, len;
 
 	switch (uc_vallist_type(list, idx)) {
@@ -605,11 +592,11 @@ uc_vallist_get(uc_value_list_t *list, size_t idx)
 
 		return ucv_string_new_length(list->data + TAG_GET_OFFSET(list->index[idx]) + sizeof(uint32_t), len);
 
-	case TAG_PTR:
-		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(void *) > list->dsize)
-			return NULL;
+	case TAG_FUNC:
+		chunk = container_of(list, uc_chunk_t, constants);
+		func = container_of(chunk, uc_function_t, chunk);
 
-		return ucv_get(*(uc_value_t **)(list->data + TAG_GET_OFFSET(list->index[idx])));
+		return uc_program_function_load(func->program, TAG_GET_NV(list->index[idx]));
 
 	default:
 		return NULL;

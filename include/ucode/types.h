@@ -148,14 +148,16 @@ typedef struct {
 	char source[];
 } uc_regexp_t;
 
-typedef struct {
+typedef struct uc_function {
 	uc_value_t header;
-	bool arrow, vararg, strict;
+	bool arrow, vararg, strict, root;
 	size_t nargs;
 	size_t nupvals;
 	size_t srcpos;
 	uc_chunk_t chunk;
 	uc_source_t *source;
+	struct uc_program *program;
+	uc_weakref_t progref;
 	char name[];
 } uc_function_t;
 
@@ -197,6 +199,13 @@ typedef struct {
 } uc_resource_t;
 
 uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
+
+
+/* Program structure definitions */
+
+typedef struct uc_program {
+	uc_weakref_t functions;
+} uc_program_t;
 
 
 /* Parser definitions */
@@ -275,6 +284,9 @@ struct uc_vm {
 void ucv_free(uc_value_t *, bool);
 void ucv_put(uc_value_t *);
 
+void ucv_unref(uc_weakref_t *);
+void ucv_ref(uc_weakref_t *, uc_weakref_t *);
+
 uc_value_t *ucv_get(uc_value_t *uv);
 
 uc_type_t ucv_type(uc_value_t *);
@@ -338,7 +350,7 @@ size_t ucv_object_length(uc_value_t *);
 	                 : 0);																		\
 	     entry##key = entry_next##key)
 
-uc_value_t *ucv_function_new(const char *, size_t, uc_source_t *);
+uc_value_t *ucv_function_new(const char *, size_t, uc_source_t *, uc_program_t *);
 size_t ucv_function_srcpos(uc_value_t *, size_t);
 
 uc_value_t *ucv_cfunction_new(const char *, uc_cfn_ptr_t);

@@ -2602,6 +2602,8 @@ uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval)
 		break;
 	}
 
+	ucv_put(&fn->header);
+
 	return status;
 }
 
