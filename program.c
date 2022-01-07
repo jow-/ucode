@@ -15,6 +15,7 @@
  */
 
 #include "ucode/program.h"
+#include "ucode/vallist.h"
 
 
 uc_program_t *
@@ -26,6 +27,8 @@ uc_program_new(void)
 
 	prog->functions.next = &prog->functions;
 	prog->functions.prev = &prog->functions;
+
+	uc_vallist_init(&prog->constants);
 
 	return prog;
 }
@@ -60,6 +63,7 @@ uc_program_free(uc_program_t *prog)
 		ucv_put(&func->header);
 	}
 
+	uc_vallist_free(&prog->constants);
 	free(prog);
 }
 
@@ -100,4 +104,16 @@ uc_program_function_load(uc_program_t *prog, size_t id)
 			return ref_to_uv(ref);
 
 	return NULL;
+}
+
+uc_value_t *
+uc_program_get_constant(uc_program_t *prog, size_t idx)
+{
+	return uc_vallist_get(&prog->constants, idx);
+}
+
+ssize_t
+uc_program_add_constant(uc_program_t *prog, uc_value_t *val)
+{
+	return uc_vallist_add(&prog->constants, val);
 }

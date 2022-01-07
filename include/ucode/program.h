@@ -28,4 +28,7 @@ uc_value_t *uc_program_function_new(uc_program_t *, const char *, size_t, uc_sou
 size_t uc_program_function_id(uc_program_t *, uc_value_t *);
 uc_value_t *uc_program_function_load(uc_program_t *, size_t);
 
+uc_value_t *uc_program_get_constant(uc_program_t *, size_t);
+ssize_t uc_program_add_constant(uc_program_t *, uc_value_t *);
+
 #endif /* __PROGRAM_H_ */

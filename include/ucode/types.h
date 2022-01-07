@@ -90,7 +90,6 @@ uc_declare_vector(uc_offsetinfo_t, uint8_t);
 typedef struct {
 	size_t count;
 	uint8_t *entries;
-	uc_value_list_t constants;
 	uc_ehranges_t ehranges;
 	struct {
 		uc_variables_t variables;
@@ -204,6 +203,7 @@ uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
 /* Program structure definitions */
 
 typedef struct uc_program {
+	uc_value_list_t constants;
 	uc_weakref_t functions;
 } uc_program_t;
 

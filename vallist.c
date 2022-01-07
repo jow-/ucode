@@ -553,8 +553,7 @@ uc_value_t *
 uc_vallist_get(uc_value_list_t *list, size_t idx)
 {
 	char str[sizeof(TAG_TYPE)];
-	uc_function_t *func;
-	uc_chunk_t *chunk;
+	uc_program_t *program;
 	size_t n, len;
 
 	switch (uc_vallist_type(list, idx)) {
@@ -593,10 +592,9 @@ uc_vallist_get(uc_value_list_t *list, size_t idx)
 		return ucv_string_new_length(list->data + TAG_GET_OFFSET(list->index[idx]) + sizeof(uint32_t), len);
 
 	case TAG_FUNC:
-		chunk = container_of(list, uc_chunk_t, constants);
-		func = container_of(chunk, uc_function_t, chunk);
+		program = container_of(list, uc_program_t, constants);
 
-		return uc_program_function_load(func->program, TAG_GET_NV(list->index[idx]));
+		return uc_program_function_load(program, TAG_GET_NV(list->index[idx]));
 
 	default:
 		return NULL;

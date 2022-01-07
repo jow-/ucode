@@ -483,8 +483,7 @@ uc_compiler_set_u32(uc_compiler_t *compiler, size_t off, uint32_t n)
 static size_t
 uc_compiler_emit_constant(uc_compiler_t *compiler, size_t srcpos, uc_value_t *val)
 {
-	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
-	size_t cidx = uc_chunk_add_constant(chunk, val);
+	size_t cidx = uc_program_add_constant(compiler->program, val);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_LOAD);
 	uc_compiler_emit_u32(compiler, 0, cidx);
@@ -495,8 +494,7 @@ uc_compiler_emit_constant(uc_compiler_t *compiler, size_t srcpos, uc_value_t *va
 static size_t
 uc_compiler_emit_regexp(uc_compiler_t *compiler, size_t srcpos, uc_value_t *val)
 {
-	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
-	size_t cidx = uc_chunk_add_constant(chunk, val);
+	size_t cidx = uc_program_add_constant(compiler->program, val);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_LREXP);
 	uc_compiler_emit_u32(compiler, 0, cidx);
@@ -1086,7 +1084,7 @@ uc_compiler_emit_variable_rw(uc_compiler_t *compiler, uc_value_t *varname, uc_to
 			((sub_insn & 0xff) << 24) | idx);
 	}
 	else {
-		idx = uc_chunk_add_constant(uc_compiler_current_chunk(compiler), varname);
+		idx = uc_program_add_constant(compiler->program, varname);
 		insn = sub_insn ? I_UVAR : (type ? I_SVAR : I_LVAR);
 
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, insn);
@@ -1195,8 +1193,7 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 
 	if (fn)
 		uc_compiler_set_u32(compiler, load_off,
-			uc_chunk_add_constant(uc_compiler_current_chunk(compiler),
-				&fn->header));
+			uc_program_add_constant(compiler->program, &fn->header));
 
 	return true;
 }
@@ -1635,8 +1632,7 @@ uc_compiler_compile_function(uc_compiler_t *compiler)
 
 	if (fn)
 		uc_compiler_set_u32(compiler, load_off,
-			uc_chunk_add_constant(uc_compiler_current_chunk(compiler),
-				&fn->header));
+			uc_program_add_constant(compiler->program, &fn->header));
 
 	/* if a local variable of the same name already existed, overwrite its value
 	 * with the compiled function here */

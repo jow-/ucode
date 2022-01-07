@@ -28,8 +28,6 @@ void uc_chunk_init(uc_chunk_t *chunk);
 void uc_chunk_free(uc_chunk_t *chunk);
 size_t uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t line);
 
-ssize_t uc_chunk_add_constant(uc_chunk_t *chunk, uc_value_t *value);
-uc_value_t *uc_chunk_get_constant(uc_chunk_t *chunk, size_t idx);
 void uc_chunk_pop(uc_chunk_t *chunk);
 
 size_t uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t off);
