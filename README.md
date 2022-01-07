@@ -1254,3 +1254,16 @@ If a non-string argument is given, the function returns `null`.
 b64enc("This is a test");         // "VGhpcyBpcyBhIHRlc3Q="
 b64enc(123);                      // null
 ```
+
+#### 6.64. `uniq(array)`
+
+Returns a new array containing all unique values of the given input
+array. The order is preserved, that is subsequent duplicate values
+are simply skipped.
+
+If a non-array argument is given, the function returns `null`.
+
+```javascript
+uniq([ 1, true, "foo", 2, true, "bar", "foo" ]); // [ 1, true, "foo", 2, "bar" ]
+uniq("test");                                    // null
+```
