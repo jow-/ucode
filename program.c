@@ -15,11 +15,12 @@
  */
 
 #include "ucode/program.h"
+#include "ucode/source.h"
 #include "ucode/vallist.h"
 
 
 uc_program_t *
-uc_program_new(void)
+uc_program_new(uc_source_t *source)
 {
 	uc_program_t *prog;
 
@@ -27,6 +28,8 @@ uc_program_new(void)
 
 	prog->functions.next = &prog->functions;
 	prog->functions.prev = &prog->functions;
+
+	prog->source = uc_source_get(source);
 
 	uc_vallist_init(&prog->constants);
 
@@ -64,15 +67,16 @@ uc_program_free(uc_program_t *prog)
 	}
 
 	uc_vallist_free(&prog->constants);
+	uc_source_put(prog->source);
 	free(prog);
 }
 
 uc_value_t *
-uc_program_function_new(uc_program_t *prog, const char *name, size_t srcpos, uc_source_t *source)
+uc_program_function_new(uc_program_t *prog, const char *name, size_t srcpos)
 {
 	uc_function_t *func;
 
-	func = (uc_function_t *)ucv_function_new(name, srcpos, source, prog);
+	func = (uc_function_t *)ucv_function_new(name, srcpos, prog);
 	func->root = (prog->functions.next == &prog->functions);
 
 	ucv_ref(&prog->functions, &func->progref);

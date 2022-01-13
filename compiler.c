@@ -114,7 +114,7 @@ uc_compiler_exprstack_is(uc_compiler_t *compiler, uc_exprflag_t flag)
 }
 
 static void
-uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_source_t *source, uc_program_t *program, bool strict)
+uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_program_t *program, bool strict)
 {
 	uc_value_t *varname = ucv_string_new("(callee)");
 	uc_function_t *fn;
@@ -122,7 +122,7 @@ uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_so
 	compiler->scope_depth = 0;
 
 	compiler->program = program;
-	compiler->function = uc_program_function_new(program, name, srcpos, source);
+	compiler->function = uc_program_function_new(program, name, srcpos);
 
 	compiler->locals.count = 0;
 	compiler->locals.entries = NULL;
@@ -156,9 +156,7 @@ uc_compiler_current_chunk(uc_compiler_t *compiler)
 static uc_source_t *
 uc_compiler_current_source(uc_compiler_t *compiler)
 {
-	uc_function_t *fn = (uc_function_t *)compiler->function;
-
-	return fn->source;
+	return compiler->program->source;
 }
 
 __attribute__((format(printf, 3, 0))) static void
@@ -1132,7 +1130,7 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 	pos = compiler->parser->prev.pos;
 
 	uc_compiler_init(&fncompiler, NULL, compiler->parser->prev.pos,
-		uc_compiler_current_source(compiler), compiler->program,
+		compiler->program,
 		uc_compiler_is_strict(compiler));
 
 	fncompiler.parent = compiler;
@@ -1562,7 +1560,7 @@ uc_compiler_compile_function(uc_compiler_t *compiler)
 
 	uc_compiler_init(&fncompiler,
 		name ? ucv_string_get(name) : NULL, compiler->parser->prev.pos,
-		uc_compiler_current_source(compiler), compiler->program,
+		compiler->program,
 		uc_compiler_is_strict(compiler));
 
 	fncompiler.parent = compiler;
@@ -2873,29 +2871,42 @@ uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
 	uc_exprstack_t expr = { .token = TK_EOF };
 	uc_parser_t parser = { .config = config };
 	uc_compiler_t compiler = { .parser = &parser, .exprstack = &expr };
-	uc_program_t *prog = uc_program_new();
-	uc_function_t *fn;
+	uc_function_t *fn = NULL;
+	uc_program_t *prog;
 
-	uc_lexer_init(&parser.lex, config, source);
-	uc_compiler_init(&compiler, "main", 0, source, prog,
-		config && config->strict_declarations);
+	switch (uc_source_type_test(source)) {
+	case UC_SOURCE_TYPE_PLAIN:
+		prog = uc_program_new(source);
 
-	uc_compiler_parse_advance(&compiler);
+		uc_lexer_init(&parser.lex, config, source);
+		uc_compiler_init(&compiler, "main", 0, prog,
+			config && config->strict_declarations);
 
-	while (!uc_compiler_parse_match(&compiler, TK_EOF))
-		uc_compiler_compile_declaration(&compiler);
+		uc_compiler_parse_advance(&compiler);
 
-	fn = uc_compiler_finish(&compiler);
+		while (!uc_compiler_parse_match(&compiler, TK_EOF))
+			uc_compiler_compile_declaration(&compiler);
 
-	if (errp) {
-		*errp = parser.error ? parser.error->buf : NULL;
-		free(parser.error);
+		fn = uc_compiler_finish(&compiler);
+
+		if (errp) {
+			*errp = parser.error ? parser.error->buf : NULL;
+			free(parser.error);
+		}
+		else {
+			printbuf_free(parser.error);
+		}
+
+		uc_lexer_free(&parser.lex);
+
+		break;
+
+	default:
+		if (errp)
+			xasprintf(errp, "Unrecognized source type\n");
+
+		break;
 	}
-	else {
-		printbuf_free(parser.error);
-	}
-
-	uc_lexer_free(&parser.lex);
 
 	return fn;
 }

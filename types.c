@@ -248,7 +248,6 @@ ucv_free(uc_value_t *uv, bool retain)
 		}
 
 		uc_chunk_free(&function->chunk);
-		uc_source_put(function->source);
 		break;
 
 	case UC_CLOSURE:
@@ -951,7 +950,7 @@ ucv_object_length(uc_value_t *uv)
 
 
 uc_value_t *
-ucv_function_new(const char *name, size_t srcpos, uc_source_t *source, uc_program_t *program)
+ucv_function_new(const char *name, size_t srcpos, uc_program_t *program)
 {
 	size_t namelen = 0;
 	uc_function_t *fn;
@@ -969,7 +968,6 @@ ucv_function_new(const char *name, size_t srcpos, uc_source_t *source, uc_progra
 	fn->nargs = 0;
 	fn->nupvals = 0;
 	fn->srcpos = srcpos;
-	fn->source = uc_source_get(source);
 	fn->program = program;
 	fn->vararg = false;
 

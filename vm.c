@@ -208,6 +208,12 @@ uc_vm_frame_program(uc_callframe_t *frame)
 	return frame->closure ? frame->closure->function->program : NULL;
 }
 
+static uc_source_t *
+uc_vm_frame_source(uc_callframe_t *frame)
+{
+	return frame->closure ? frame->closure->function->program->source : NULL;
+}
+
 static uc_callframe_t *
 uc_vm_current_frame(uc_vm_t *vm)
 {
@@ -586,18 +592,20 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
 	uc_stringbuf_t *buf = NULL;
 	uc_value_t *cnst = NULL;
+	uc_source_t *source;
 	size_t srcpos;
 
 	srcpos = ucv_function_srcpos(&frame->closure->function->header, pos - chunk->entries);
+	source = uc_vm_frame_source(frame);
 
-	if (last_srcpos == 0 || last_source != frame->closure->function->source || srcpos != last_srcpos) {
+	if (last_srcpos == 0 || last_source != source || srcpos != last_srcpos) {
 		buf = xprintbuf_new();
 
-		uc_source_context_format(buf, frame->closure->function->source, srcpos, true);
+		uc_source_context_format(buf, source, srcpos, true);
 		fwrite(buf->buf, 1, printbuf_length(buf), stderr);
 		printbuf_free(buf);
 
-		last_source = frame->closure->function->source;
+		last_source = source;
 		last_srcpos = srcpos;
 	}
 
@@ -802,6 +810,7 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 	uc_value_t *stacktrace, *entry, *last = NULL;
 	uc_function_t *function;
 	uc_callframe_t *frame;
+	uc_source_t *source;
 	size_t off, srcpos;
 	char *name;
 
@@ -813,12 +822,13 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 
 		if (frame->closure) {
 			function = frame->closure->function;
+			source = function->program->source;
 
 			off = (frame->ip - uc_vm_frame_chunk(frame)->entries) - 1;
 			srcpos = ucv_function_srcpos(&function->header, off);
 
-			ucv_object_add(entry, "filename", ucv_string_new(function->source->filename));
-			ucv_object_add(entry, "line", ucv_int64_new(uc_source_get_line(function->source, &srcpos)));
+			ucv_object_add(entry, "filename", ucv_string_new(source->filename));
+			ucv_object_add(entry, "line", ucv_int64_new(uc_source_get_line(source, &srcpos)));
 			ucv_object_add(entry, "byte", ucv_int64_new(srcpos));
 		}
 
@@ -876,7 +886,7 @@ uc_vm_get_error_context(uc_vm_t *vm)
 	buf = ucv_stringbuf_new();
 
 	if (offset)
-		uc_error_context_format(buf, frame->closure->function->source, stacktrace, offset);
+		uc_error_context_format(buf, uc_vm_frame_source(frame), stacktrace, offset);
 	else if (frame->ip != chunk->entries)
 		ucv_stringbuf_printf(buf, "At instruction %zu", (frame->ip - chunk->entries) - 1);
 	else
@@ -2560,7 +2570,7 @@ uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval)
 	if (vm->trace) {
 		buf = xprintbuf_new();
 
-		uc_source_context_format(buf, fn->source, 0, true);
+		uc_source_context_format(buf, uc_vm_frame_source(frame), 0, true);
 
 		fwrite(buf->buf, 1, printbuf_length(buf), stderr);
 		printbuf_free(buf);

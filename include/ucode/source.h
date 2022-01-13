@@ -25,6 +25,10 @@
 #include "types.h"
 
 
+typedef enum {
+	UC_SOURCE_TYPE_PLAIN = 0,
+} uc_source_type_t;
+
 uc_source_t *uc_source_new_file(const char *path);
 uc_source_t *uc_source_new_buffer(const char *name, char *buf, size_t len);
 
@@ -32,5 +36,10 @@ size_t uc_source_get_line(uc_source_t *source, size_t *offset);
 
 uc_source_t *uc_source_get(uc_source_t *source);
 void uc_source_put(uc_source_t *source);
+
+uc_source_type_t uc_source_type_test(uc_source_t *source);
+
+void uc_source_line_next(uc_source_t *source);
+void uc_source_line_update(uc_source_t *source, size_t off);
 
 #endif /* __SOURCE_H_ */

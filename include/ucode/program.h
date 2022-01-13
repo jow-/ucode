@@ -20,11 +20,11 @@
 #include "types.h"
 
 
-uc_program_t *uc_program_new(void);
+uc_program_t *uc_program_new(uc_source_t *);
 
 void uc_program_free(uc_program_t *);
 
-uc_value_t *uc_program_function_new(uc_program_t *, const char *, size_t, uc_source_t *);
+uc_value_t *uc_program_function_new(uc_program_t *, const char *, size_t);
 size_t uc_program_function_id(uc_program_t *, uc_value_t *);
 uc_value_t *uc_program_function_load(uc_program_t *, size_t);
 

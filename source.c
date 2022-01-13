@@ -15,6 +15,7 @@
  */
 
 #include <string.h>
+#include <errno.h>
 
 #include "ucode/source.h"
 
@@ -115,4 +116,85 @@ uc_source_put(uc_source_t *source)
 	fclose(source->fp);
 	free(source->buffer);
 	free(source);
+}
+
+uc_source_type_t
+uc_source_type_test(uc_source_t *source)
+{
+	union { char s[sizeof(uint32_t)]; uint32_t n; } buf;
+	uc_source_type_t type = UC_SOURCE_TYPE_PLAIN;
+	FILE *fp = source->fp;
+	int c;
+
+	if (fread(buf.s, 1, 2, fp) == 2 && !strncmp(buf.s, "#!", 2)) {
+		source->off += 2;
+
+		while ((c = fgetc(fp)) != EOF) {
+			source->off++;
+
+			if (c == '\n') {
+				uc_source_line_update(source, source->off);
+				uc_source_line_next(source);
+
+				break;
+			}
+		}
+	}
+	else {
+		if (fseek(fp, 0L, SEEK_SET) == -1)
+			fprintf(stderr, "Failed to rewind source buffer: %s\n", strerror(errno));
+	}
+
+	return type;
+}
+
+/* lineinfo is encoded in bytes: the most significant bit specifies whether
+ * to advance the line count by one or not, while the remaining 7 bits encode
+ * the amounts of bytes on the current line.
+ *
+ * If a line has more than 127 characters, the first byte will be set to
+ * 0xff (1 1111111) and subsequent bytes will encode the remaining characters
+ * in bits 1..7 while setting bit 8 to 0. A line with 400 characters will thus
+ * be encoded as 0xff 0x7f 0x7f 0x13 (1:1111111 + 0:1111111 + 0:1111111 + 0:1111111).
+ *
+ * The newline character itself is not counted, so an empty line is encoded as
+ * 0x80 (1:0000000).
+ */
+
+void
+uc_source_line_next(uc_source_t *source)
+{
+	uc_lineinfo_t *lines = &source->lineinfo;
+
+	uc_vector_grow(lines);
+	lines->entries[lines->count++] = 0x80;
+}
+
+void
+uc_source_line_update(uc_source_t *source, size_t off)
+{
+	uc_lineinfo_t *lines = &source->lineinfo;
+	uint8_t *entry, n;
+
+	if (!lines->count)
+		uc_source_line_next(source);
+
+	entry = uc_vector_last(lines);
+
+	if ((entry[0] & 0x7f) + off <= 0x7f) {
+		entry[0] += off;
+	}
+	else {
+		off -= (0x7f - (entry[0] & 0x7f));
+		entry[0] |= 0x7f;
+
+		while (off > 0) {
+			n = (off > 0x7f) ? 0x7f : off;
+			uc_vector_grow(lines);
+			entry = uc_vector_last(lines);
+			entry[1] = n;
+			off -= n;
+			lines->count++;
+		}
+	}
 }
