@@ -2901,6 +2901,22 @@ uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
 
 		break;
 
+	case UC_SOURCE_TYPE_PRECOMPILED:
+		prog = uc_program_from_file(source->fp, errp);
+
+		if (prog) {
+			fn = uc_program_entry(prog);
+
+			if (!fn) {
+				if (errp)
+					xasprintf(errp, "Program file contains no entry function\n");
+
+				uc_program_free(prog);
+			}
+		}
+
+		break;
+
 	default:
 		if (errp)
 			xasprintf(errp, "Unrecognized source type\n");

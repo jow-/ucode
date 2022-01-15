@@ -25,8 +25,11 @@
 #include "types.h"
 
 
+#define UC_PRECOMPILED_BYTECODE_MAGIC 0x1b756362  /* <esc> 'u' 'c' 'b' */
+
 typedef enum {
 	UC_SOURCE_TYPE_PLAIN = 0,
+	UC_SOURCE_TYPE_PRECOMPILED = 1,
 } uc_source_type_t;
 
 uc_source_t *uc_source_new_file(const char *path);
