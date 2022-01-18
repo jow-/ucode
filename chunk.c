@@ -45,7 +45,6 @@ uc_chunk_init(uc_chunk_t *chunk)
 	chunk->debuginfo.variables.count = 0;
 	chunk->debuginfo.variables.entries = NULL;
 
-	uc_vallist_init(&chunk->constants);
 	uc_vallist_init(&chunk->debuginfo.varnames);
 }
 
@@ -54,7 +53,6 @@ uc_chunk_free(uc_chunk_t *chunk)
 {
 	uc_vector_clear(chunk);
 	uc_vector_clear(&chunk->ehranges);
-	uc_vallist_free(&chunk->constants);
 
 	uc_vector_clear(&chunk->debuginfo.offsets);
 	uc_vector_clear(&chunk->debuginfo.variables);
@@ -134,18 +132,6 @@ uc_chunk_pop(uc_chunk_t *chunk)
 	else {
 		offsets->count--;
 	}
-}
-
-uc_value_t *
-uc_chunk_get_constant(uc_chunk_t *chunk, size_t idx)
-{
-	return uc_vallist_get(&chunk->constants, idx);
-}
-
-ssize_t
-uc_chunk_add_constant(uc_chunk_t *chunk, uc_value_t *val)
-{
-	return uc_vallist_add(&chunk->constants, val);
 }
 
 size_t

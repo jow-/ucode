@@ -24,6 +24,7 @@
 
 #include "ucode/vm.h"
 #include "ucode/compiler.h"
+#include "ucode/program.h"
 #include "ucode/lib.h" /* uc_error_context_format() */
 
 #undef __insn
@@ -201,16 +202,28 @@ uc_vm_frame_chunk(uc_callframe_t *frame)
 	return frame->closure ? &frame->closure->function->chunk : NULL;
 }
 
+static uc_program_t *
+uc_vm_frame_program(uc_callframe_t *frame)
+{
+	return frame->closure ? frame->closure->function->program : NULL;
+}
+
+static uc_source_t *
+uc_vm_frame_source(uc_callframe_t *frame)
+{
+	return frame->closure ? frame->closure->function->program->source : NULL;
+}
+
 static uc_callframe_t *
 uc_vm_current_frame(uc_vm_t *vm)
 {
 	return uc_vector_last(&vm->callframes);
 }
 
-static uc_chunk_t *
-uc_vm_current_chunk(uc_vm_t *vm)
+static uc_program_t *
+uc_vm_current_program(uc_vm_t *vm)
 {
-	return uc_vm_frame_chunk(uc_vm_current_frame(vm));
+	return uc_vm_frame_program(uc_vm_current_frame(vm));
 }
 
 static bool
@@ -319,18 +332,6 @@ uc_vm_frame_dump(uc_vm_t *vm, uc_callframe_t *frame)
 		uc_vm_format_val(vm, frame->ctx));
 
 	if (chunk) {
-		fprintf(stderr, "   |- %zu constants\n",
-			chunk->constants.isize);
-
-		for (i = 0; i < chunk->constants.isize; i++) {
-			v = uc_chunk_get_constant(chunk, i);
-
-			fprintf(stderr, "   | [%zu] %s\n",
-				i, uc_vm_format_val(vm, v));
-
-			ucv_put(v);
-		}
-
 		closure = frame->closure;
 		function = closure->function;
 
@@ -591,18 +592,20 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
 	uc_stringbuf_t *buf = NULL;
 	uc_value_t *cnst = NULL;
+	uc_source_t *source;
 	size_t srcpos;
 
 	srcpos = ucv_function_srcpos(&frame->closure->function->header, pos - chunk->entries);
+	source = uc_vm_frame_source(frame);
 
-	if (last_srcpos == 0 || last_source != frame->closure->function->source || srcpos != last_srcpos) {
+	if (last_srcpos == 0 || last_source != source || srcpos != last_srcpos) {
 		buf = xprintbuf_new();
 
-		uc_source_context_format(buf, frame->closure->function->source, srcpos, true);
+		uc_source_context_format(buf, source, srcpos, true);
 		fwrite(buf->buf, 1, printbuf_length(buf), stderr);
 		printbuf_free(buf);
 
-		last_source = frame->closure->function->source;
+		last_source = source;
 		last_srcpos = srcpos;
 	}
 
@@ -649,7 +652,7 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 	case I_LOAD:
 	case I_LVAR:
 	case I_SVAR:
-		cnst = uc_chunk_get_constant(uc_vm_frame_chunk(uc_vector_last(&vm->callframes)), vm->arg.u32);
+		cnst = uc_program_get_constant(uc_vm_frame_program(uc_vector_last(&vm->callframes)), vm->arg.u32);
 
 		fprintf(stderr, "\t; %s",
 			cnst ? uc_vm_format_val(vm, cnst) : "(?)");
@@ -676,7 +679,7 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 
 	case I_UVAR:
 		if (!cnst)
-			cnst = uc_chunk_get_constant(uc_vm_frame_chunk(uc_vector_last(&vm->callframes)), vm->arg.u32 & 0x00ffffff);
+			cnst = uc_program_get_constant(uc_vm_frame_program(uc_vector_last(&vm->callframes)), vm->arg.u32 & 0x00ffffff);
 
 		fprintf(stderr, "\t; %s (%s)",
 			cnst ? uc_vm_format_val(vm, cnst) : "(?)",
@@ -807,6 +810,7 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 	uc_value_t *stacktrace, *entry, *last = NULL;
 	uc_function_t *function;
 	uc_callframe_t *frame;
+	uc_source_t *source;
 	size_t off, srcpos;
 	char *name;
 
@@ -818,12 +822,13 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 
 		if (frame->closure) {
 			function = frame->closure->function;
+			source = function->program->source;
 
 			off = (frame->ip - uc_vm_frame_chunk(frame)->entries) - 1;
 			srcpos = ucv_function_srcpos(&function->header, off);
 
-			ucv_object_add(entry, "filename", ucv_string_new(function->source->filename));
-			ucv_object_add(entry, "line", ucv_int64_new(uc_source_get_line(function->source, &srcpos)));
+			ucv_object_add(entry, "filename", ucv_string_new(source->filename));
+			ucv_object_add(entry, "line", ucv_int64_new(uc_source_get_line(source, &srcpos)));
 			ucv_object_add(entry, "byte", ucv_int64_new(srcpos));
 		}
 
@@ -881,7 +886,7 @@ uc_vm_get_error_context(uc_vm_t *vm)
 	buf = ucv_stringbuf_new();
 
 	if (offset)
-		uc_error_context_format(buf, frame->closure->function->source, stacktrace, offset);
+		uc_error_context_format(buf, uc_vm_frame_source(frame), stacktrace, offset);
 	else if (frame->ip != chunk->entries)
 		ucv_stringbuf_printf(buf, "At instruction %zu", (frame->ip - chunk->entries) - 1);
 	else
@@ -915,7 +920,7 @@ uc_vm_insn_load(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	switch (insn) {
 	case I_LOAD:
-		uc_vm_stack_push(vm, uc_chunk_get_constant(uc_vm_current_chunk(vm), vm->arg.u32));
+		uc_vm_stack_push(vm, uc_program_get_constant(uc_vm_current_program(vm), vm->arg.u32));
 		break;
 
 	case I_LOAD8:
@@ -938,7 +943,7 @@ uc_vm_insn_load(uc_vm_t *vm, uc_vm_insn_t insn)
 static void
 uc_vm_insn_load_regexp(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_value_t *re, *jstr = uc_chunk_get_constant(uc_vm_current_chunk(vm), vm->arg.u32);
+	uc_value_t *re, *jstr = uc_program_get_constant(uc_vm_current_program(vm), vm->arg.u32);
 	bool icase = false, newline = false, global = false;
 	char *str, *err = NULL;
 
@@ -987,7 +992,7 @@ uc_vm_insn_load_var(uc_vm_t *vm, uc_vm_insn_t insn)
 	bool found;
 
 	scope = vm->globals;
-	name = uc_chunk_get_constant(uc_vm_current_chunk(vm), vm->arg.u32);
+	name = uc_program_get_constant(uc_vm_current_program(vm), vm->arg.u32);
 
 	while (ucv_type(name) == UC_STRING) {
 		val = ucv_object_get(scope, ucv_string_get(name), &found);
@@ -1128,7 +1133,7 @@ static void
 uc_vm_insn_load_closure(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_callframe_t *frame = uc_vm_current_frame(vm);
-	uc_value_t *fno = uc_chunk_get_constant(uc_vm_current_chunk(vm), vm->arg.u32);
+	uc_value_t *fno = uc_program_get_constant(uc_vm_current_program(vm), vm->arg.u32);
 	uc_function_t *function = (uc_function_t *)fno;
 	uc_closure_t *closure = (uc_closure_t *)ucv_closure_new(vm, function, insn == I_ARFN);
 	volatile int32_t uv;
@@ -1163,7 +1168,7 @@ uc_vm_insn_store_var(uc_vm_t *vm, uc_vm_insn_t insn)
 	bool found;
 
 	scope = vm->globals;
-	name = uc_chunk_get_constant(uc_vm_current_chunk(vm), vm->arg.u32);
+	name = uc_program_get_constant(uc_vm_current_program(vm), vm->arg.u32);
 
 	while (ucv_type(name) == UC_STRING) {
 		ucv_object_get(scope, ucv_string_get(name), &found);
@@ -1562,7 +1567,7 @@ uc_vm_insn_update_var(uc_vm_t *vm, uc_vm_insn_t insn)
 	bool found;
 
 	scope = vm->globals;
-	name = uc_chunk_get_constant(uc_vm_current_chunk(vm), vm->arg.u32 & 0x00FFFFFF);
+	name = uc_program_get_constant(uc_vm_current_program(vm), vm->arg.u32 & 0x00FFFFFF);
 
 	assert(ucv_type(name) == UC_STRING);
 
@@ -2565,7 +2570,7 @@ uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval)
 	if (vm->trace) {
 		buf = xprintbuf_new();
 
-		uc_source_context_format(buf, fn->source, 0, true);
+		uc_source_context_format(buf, uc_vm_frame_source(frame), 0, true);
 
 		fwrite(buf->buf, 1, printbuf_length(buf), stderr);
 		printbuf_free(buf);
@@ -2601,6 +2606,8 @@ uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval)
 
 		break;
 	}
+
+	ucv_put(&fn->header);
 
 	return status;
 }

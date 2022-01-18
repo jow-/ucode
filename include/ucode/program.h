@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020-2021 Jo-Philipp Wich <jo@mein.io>
+ * Copyright (C) 2022 Jo-Philipp Wich <jo@mein.io>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,24 +14,26 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __CHUNK_H_
-#define __CHUNK_H_
+#ifndef __PROGRAM_H_
+#define __PROGRAM_H_
 
-#include <stdint.h>
-#include <stddef.h>
-
-#include "vallist.h"
-#include "util.h"
 #include "types.h"
 
-void uc_chunk_init(uc_chunk_t *chunk);
-void uc_chunk_free(uc_chunk_t *chunk);
-size_t uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t line);
 
-void uc_chunk_pop(uc_chunk_t *chunk);
+uc_program_t *uc_program_new(uc_source_t *);
 
-size_t uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t off);
-void uc_chunk_debug_add_variable(uc_chunk_t *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name);
-uc_value_t *uc_chunk_debug_get_variable(uc_chunk_t *chunk, size_t off, size_t slot, bool upval);
+void uc_program_free(uc_program_t *);
 
-#endif /* __CHUNK_H_ */
+uc_value_t *uc_program_function_new(uc_program_t *, const char *, size_t);
+size_t uc_program_function_id(uc_program_t *, uc_value_t *);
+uc_value_t *uc_program_function_load(uc_program_t *, size_t);
+
+uc_value_t *uc_program_get_constant(uc_program_t *, size_t);
+ssize_t uc_program_add_constant(uc_program_t *, uc_value_t *);
+
+void uc_program_to_file(uc_program_t *, FILE *, bool);
+uc_program_t *uc_program_from_file(FILE *file, char **);
+
+uc_function_t *uc_program_entry(uc_program_t *);
+
+#endif /* __PROGRAM_H_ */

@@ -26,6 +26,7 @@
 #include "ucode/types.h"
 #include "ucode/util.h"
 #include "ucode/vm.h"
+#include "ucode/program.h"
 
 uc_type_t
 ucv_type(uc_value_t *uv)
@@ -60,14 +61,14 @@ ucv_typename(uc_value_t *uv)
 	return "unknown";
 }
 
-static void
+void
 ucv_unref(uc_weakref_t *ref)
 {
 	ref->prev->next = ref->next;
 	ref->next->prev = ref->prev;
 }
 
-static void
+void
 ucv_ref(uc_weakref_t *head, uc_weakref_t *item)
 {
 	item->next = head->next;
@@ -238,8 +239,15 @@ ucv_free(uc_value_t *uv, bool retain)
 
 	case UC_FUNCTION:
 		function = (uc_function_t *)uv;
+
+		if (function->program) {
+			ucv_unref(&function->progref);
+
+			if (function->root)
+				uc_program_free(function->program);
+		}
+
 		uc_chunk_free(&function->chunk);
-		uc_source_put(function->source);
 		break;
 
 	case UC_CLOSURE:
@@ -942,7 +950,7 @@ ucv_object_length(uc_value_t *uv)
 
 
 uc_value_t *
-ucv_function_new(const char *name, size_t srcpos, uc_source_t *source)
+ucv_function_new(const char *name, size_t srcpos, uc_program_t *program)
 {
 	size_t namelen = 0;
 	uc_function_t *fn;
@@ -960,7 +968,7 @@ ucv_function_new(const char *name, size_t srcpos, uc_source_t *source)
 	fn->nargs = 0;
 	fn->nupvals = 0;
 	fn->srcpos = srcpos;
-	fn->source = uc_source_get(source);
+	fn->program = program;
 	fn->vararg = false;
 
 	uc_chunk_init(&fn->chunk);
@@ -1019,6 +1027,8 @@ ucv_closure_new(uc_vm_t *vm, uc_function_t *function, bool arrow_fn)
 
 	if (vm)
 		ucv_ref(&vm->values, &closure->ref);
+
+	ucv_get(&function->header);
 
 	return &closure->header;
 }

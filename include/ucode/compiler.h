@@ -116,6 +116,7 @@ typedef struct uc_compiler {
 	uc_exprstack_t *exprstack;
 	uc_value_t *function;
 	uc_parser_t *parser;
+	uc_program_t *program;
 	size_t scope_depth, current_srcpos, last_insn;
 } uc_compiler_t;
 

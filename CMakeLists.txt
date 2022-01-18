@@ -13,6 +13,12 @@ ADD_DEFINITIONS(-Wmissing-declarations -Wno-error=unused-variable -Wno-unused-pa
 
 INCLUDE_DIRECTORIES(include)
 
+OPTION(COMPILE_SUPPORT "Support compilation from source" ON)
+
+IF(NOT COMPILE_SUPPORT)
+  ADD_DEFINITIONS(-DNO_COMPILE)
+ENDIF()
+
 OPTION(FS_SUPPORT "Filesystem plugin support" ON)
 OPTION(MATH_SUPPORT "Math plugin support" ON)
 OPTION(UBUS_SUPPORT "Ubus plugin support" ON)
@@ -51,7 +57,7 @@ IF(JSONC_FOUND)
   INCLUDE_DIRECTORIES(${JSONC_INCLUDE_DIRS})
 ENDIF()
 
-SET(UCODE_SOURCES lexer.c lib.c vm.c chunk.c vallist.c compiler.c source.c types.c)
+SET(UCODE_SOURCES lexer.c lib.c vm.c chunk.c vallist.c compiler.c source.c types.c program.c)
 ADD_LIBRARY(libucode SHARED ${UCODE_SOURCES})
 SET(SOVERSION 0 CACHE STRING "Override ucode library version")
 SET_TARGET_PROPERTIES(libucode PROPERTIES OUTPUT_NAME ucode SOVERSION ${SOVERSION})

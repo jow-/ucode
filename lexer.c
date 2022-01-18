@@ -54,6 +54,8 @@ struct token {
 	(((x) >= 'a') ? (10 + (x) - 'a') : \
 		(((x) >= 'A') ? (10 + (x) - 'A') : dec(x)))
 
+#ifndef NO_COMPILE
+
 static uc_token_t *parse_comment(uc_lexer_t *);
 static uc_token_t *parse_string(uc_lexer_t *);
 static uc_token_t *parse_regexp(uc_lexer_t *);
@@ -165,60 +167,6 @@ static const struct keyword reserved_words[] = {
 };
 
 
-/*
- * Stores the given codepoint as a utf8 multibyte sequence into the given
- * output buffer and substracts the required amount of bytes from  the given
- * length pointer.
- *
- * Returns false if the multibyte sequence would not fit into the buffer,
- * otherwise true.
- */
-
-bool
-utf8enc(char **out, int *rem, int code)
-{
-	if (code >= 0 && code <= 0x7F) {
-		if (*rem < 1)
-			return false;
-
-		*(*out)++ = code; (*rem)--;
-
-		return true;
-	}
-	else if (code > 0 && code <= 0x7FF) {
-		if (*rem < 2)
-			return false;
-
-		*(*out)++ = ((code >>  6) & 0x1F) | 0xC0; (*rem)--;
-		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
-
-		return true;
-	}
-	else if (code > 0 && code <= 0xFFFF) {
-		if (*rem < 3)
-			return false;
-
-		*(*out)++ = ((code >> 12) & 0x0F) | 0xE0; (*rem)--;
-		*(*out)++ = ((code >>  6) & 0x3F) | 0x80; (*rem)--;
-		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
-
-		return true;
-	}
-	else if (code > 0 && code <= 0x10FFFF) {
-		if (*rem < 4)
-			return false;
-
-		*(*out)++ = ((code >> 18) & 0x07) | 0xF0; (*rem)--;
-		*(*out)++ = ((code >> 12) & 0x3F) | 0x80; (*rem)--;
-		*(*out)++ = ((code >>  6) & 0x3F) | 0x80; (*rem)--;
-		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
-
-		return true;
-	}
-
-	return true;
-}
-
 /* length of the longest token in our lookup table */
 #define UC_LEX_MAX_TOKEN_LEN 3
 
@@ -278,65 +226,14 @@ _buf_startswith(uc_lexer_t *lex, const char *str, size_t len) {
 #define buf_startswith(s, str) _buf_startswith(s, str, sizeof(str) - 1)
 
 
-/* lineinfo is encoded in bytes: the most significant bit specifies whether
- * to advance the line count by one or not, while the remaining 7 bits encode
- * the amounts of bytes on the current line.
- *
- * If a line has more than 127 characters, the first byte will be set to
- * 0xff (1 1111111) and subsequent bytes will encode the remaining characters
- * in bits 1..7 while setting bit 8 to 0. A line with 400 characters will thus
- * be encoded as 0xff 0x7f 0x7f 0x13 (1:1111111 + 0:1111111 + 0:1111111 + 0:1111111).
- *
- * The newline character itself is not counted, so an empty line is encoded as
- * 0x80 (1:0000000).
- */
-
-static void
-next_lineinfo(uc_lexer_t *lex)
-{
-	uc_lineinfo_t *lines = &lex->source->lineinfo;
-
-	uc_vector_grow(lines);
-	lines->entries[lines->count++] = 0x80;
-}
-
-static void
-update_lineinfo(uc_lexer_t *lex, size_t off)
-{
-	uc_lineinfo_t *lines = &lex->source->lineinfo;
-	uint8_t *entry, n;
-
-	entry = uc_vector_last(lines);
-
-	if ((entry[0] & 0x7f) + off <= 0x7f) {
-		entry[0] += off;
-	}
-	else {
-		off -= (0x7f - (entry[0] & 0x7f));
-		entry[0] |= 0x7f;
-
-		while (off > 0) {
-			n = (off > 0x7f) ? 0x7f : off;
-			uc_vector_grow(lines);
-			entry = uc_vector_last(lines);
-			entry[1] = n;
-			off -= n;
-			lines->count++;
-		}
-	}
-}
-
 static void
 buf_consume(uc_lexer_t *lex, size_t len) {
 	size_t i, linelen;
 
-	if (!lex->source->lineinfo.count)
-		next_lineinfo(lex);
-
 	for (i = 0, linelen = 0; i < len; i++) {
 		if (lex->bufstart[i] == '\n') {
-			update_lineinfo(lex, linelen);
-			next_lineinfo(lex);
+			uc_source_line_update(lex->source, linelen);
+			uc_source_line_next(lex->source);
 
 			linelen = 0;
 		}
@@ -346,7 +243,7 @@ buf_consume(uc_lexer_t *lex, size_t len) {
 	}
 
 	if (linelen)
-		update_lineinfo(lex, linelen);
+		uc_source_line_update(lex->source, linelen);
 
 	lex->bufstart += len;
 	lex->source->off += len;
@@ -1120,38 +1017,6 @@ lex_step(uc_lexer_t *lex, FILE *fp)
 	return NULL;
 }
 
-static void
-uc_lexer_skip_shebang(uc_lexer_t *lex)
-{
-	uc_source_t *source = lex->source;
-	FILE *fp = source->fp;
-	int c1, c2;
-
-	c1 = fgetc(fp);
-	c2 = fgetc(fp);
-
-	if (c1 == '#' && c2 == '!') {
-		next_lineinfo(lex);
-
-		source->off += 2;
-
-		while ((c1 = fgetc(fp)) != EOF) {
-			source->off++;
-
-			if (c1 == '\n') {
-				update_lineinfo(lex, source->off);
-				next_lineinfo(lex);
-
-				break;
-			}
-		}
-	}
-	else {
-		ungetc(c2, fp);
-		ungetc(c1, fp);
-	}
-}
-
 void
 uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source)
 {
@@ -1187,10 +1052,6 @@ uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source)
 		lex->state = UC_LEX_IDENTIFY_TOKEN;
 		lex->block = STATEMENTS;
 	}
-
-	/* Skip any potential interpreter line */
-	if (lex->source->off == 0)
-		uc_lexer_skip_shebang(lex);
 }
 
 void
@@ -1273,4 +1134,60 @@ uc_lexer_is_keyword(uc_value_t *label)
 			return true;
 
 	return false;
+}
+
+#endif /* NO_COMPILE */
+
+/*
+ * Stores the given codepoint as a utf8 multibyte sequence into the given
+ * output buffer and substracts the required amount of bytes from  the given
+ * length pointer.
+ *
+ * Returns false if the multibyte sequence would not fit into the buffer,
+ * otherwise true.
+ */
+
+bool
+utf8enc(char **out, int *rem, int code)
+{
+	if (code >= 0 && code <= 0x7F) {
+		if (*rem < 1)
+			return false;
+
+		*(*out)++ = code; (*rem)--;
+
+		return true;
+	}
+	else if (code > 0 && code <= 0x7FF) {
+		if (*rem < 2)
+			return false;
+
+		*(*out)++ = ((code >>  6) & 0x1F) | 0xC0; (*rem)--;
+		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
+
+		return true;
+	}
+	else if (code > 0 && code <= 0xFFFF) {
+		if (*rem < 3)
+			return false;
+
+		*(*out)++ = ((code >> 12) & 0x0F) | 0xE0; (*rem)--;
+		*(*out)++ = ((code >>  6) & 0x3F) | 0x80; (*rem)--;
+		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
+
+		return true;
+	}
+	else if (code > 0 && code <= 0x10FFFF) {
+		if (*rem < 4)
+			return false;
+
+		*(*out)++ = ((code >> 18) & 0x07) | 0xF0; (*rem)--;
+		*(*out)++ = ((code >> 12) & 0x3F) | 0x80; (*rem)--;
+		*(*out)++ = ((code >>  6) & 0x3F) | 0x80; (*rem)--;
+		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
+
+		return true;
+	}
+
+	return true;
 }

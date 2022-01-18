@@ -33,6 +33,7 @@
 #include "ucode/lib.h"
 #include "ucode/vm.h"
 #include "ucode/source.h"
+#include "ucode/program.h"
 
 
 static void
@@ -52,7 +53,9 @@ print_usage(const char *app)
 	"  -e Set global variables from given JSON object\n"
 	"  -E Set global variables from given JSON file\n"
 	"  -x Disable given function\n"
-	"  -m Preload given module\n",
+	"  -m Preload given module\n"
+	"  -o Write precompiled byte code to given file\n"
+	"  -O Write precompiled byte code to given file and strip debug information\n",
 		basename(app));
 }
 
@@ -75,7 +78,7 @@ register_variable(uc_value_t *scope, const char *key, uc_value_t *val)
 
 
 static int
-compile(uc_vm_t *vm, uc_source_t *src)
+compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip)
 {
 	uc_value_t *res = NULL;
 	uc_function_t *entry;
@@ -88,6 +91,13 @@ compile(uc_vm_t *vm, uc_source_t *src)
 		fprintf(stderr, "%s", err);
 		free(err);
 		rc = -1;
+		goto out;
+	}
+
+	if (precompile) {
+		uc_program_to_file(entry->program, precompile, !strip);
+		uc_program_free(entry->program);
+		fclose(precompile);
 		goto out;
 	}
 
@@ -188,7 +198,9 @@ int
 main(int argc, char **argv)
 {
 	uc_source_t *source = NULL, *envfile = NULL;
+	FILE *precompile = NULL;
 	char *stdin = NULL, *c;
+	bool strip = false;
 	uc_vm_t vm = { 0 };
 	uc_value_t *o, *p;
 	int opt, rv = 0;
@@ -219,7 +231,7 @@ main(int argc, char **argv)
 	ucv_object_add(uc_vm_scope_get(&vm), "ARGV", o);
 
 	/* parse options */
-	while ((opt = getopt(argc, argv, "hlrtSRe:E:i:s:m:x:")) != -1)
+	while ((opt = getopt(argc, argv, "hlrtSRe:E:i:s:m:x:o:O:")) != -1)
 	{
 		switch (opt) {
 		case 'h':
@@ -354,6 +366,26 @@ main(int argc, char **argv)
 				fprintf(stderr, "Unknown function %s specified\n", optarg);
 
 			break;
+
+		case 'o':
+		case 'O':
+			strip = (opt == 'O');
+
+			if (!strcmp(optarg, "-")) {
+				precompile = stdout;
+			}
+			else {
+				precompile = fopen(optarg, "wb");
+
+				if (!precompile) {
+					fprintf(stderr, "Unable to open output file %s: %s\n",
+					        optarg, strerror(errno));
+
+					goto out;
+				}
+			}
+
+			break;
 		}
 	}
 
@@ -373,7 +405,7 @@ main(int argc, char **argv)
 		goto out;
 	}
 
-	rv = compile(&vm, source);
+	rv = compile(&vm, source, precompile, strip);
 
 out:
 	uc_source_put(source);

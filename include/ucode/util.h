@@ -71,8 +71,8 @@
 
 /* "failsafe" utility functions */
 
-static inline void *xalloc(size_t size) {
-	void *ptr = calloc(1, size);
+static inline void *xcalloc(size_t size, size_t nmemb) {
+	void *ptr = calloc(size, nmemb);
 
 	if (!ptr) {
 		fprintf(stderr, "Out of memory\n");
@@ -80,6 +80,10 @@ static inline void *xalloc(size_t size) {
 	}
 
 	return ptr;
+}
+
+static inline void *xalloc(size_t size) {
+	return xcalloc(1, size);
 }
 
 static inline void *xrealloc(void *ptr, size_t size) {

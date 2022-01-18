@@ -25,6 +25,8 @@ check that ucode provides exepected help:
     -E Set global variables from given JSON file
     -x Disable given function
     -m Preload given module
+    -o Write precompiled byte code to given file
+    -O Write precompiled byte code to given file and strip debug information
 
 check that ucode prints greetings:
 

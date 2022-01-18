@@ -21,7 +21,10 @@
 #include "ucode/chunk.h"
 #include "ucode/vm.h" /* I_* */
 #include "ucode/source.h"
+#include "ucode/program.h"
 #include "ucode/lib.h" /* uc_error_context_format() */
+
+#ifndef NO_COMPILE
 
 static void uc_compiler_compile_unary(uc_compiler_t *compiler);
 static void uc_compiler_compile_binary(uc_compiler_t *compiler);
@@ -113,14 +116,15 @@ uc_compiler_exprstack_is(uc_compiler_t *compiler, uc_exprflag_t flag)
 }
 
 static void
-uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_source_t *source, bool strict)
+uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_program_t *program, bool strict)
 {
 	uc_value_t *varname = ucv_string_new("(callee)");
 	uc_function_t *fn;
 
 	compiler->scope_depth = 0;
 
-	compiler->function = ucv_function_new(name, srcpos, source);
+	compiler->program = program;
+	compiler->function = uc_program_function_new(program, name, srcpos);
 
 	compiler->locals.count = 0;
 	compiler->locals.entries = NULL;
@@ -154,9 +158,7 @@ uc_compiler_current_chunk(uc_compiler_t *compiler)
 static uc_source_t *
 uc_compiler_current_source(uc_compiler_t *compiler)
 {
-	uc_function_t *fn = (uc_function_t *)compiler->function;
-
-	return fn->source;
+	return compiler->program->source;
 }
 
 __attribute__((format(printf, 3, 0))) static void
@@ -481,8 +483,7 @@ uc_compiler_set_u32(uc_compiler_t *compiler, size_t off, uint32_t n)
 static size_t
 uc_compiler_emit_constant(uc_compiler_t *compiler, size_t srcpos, uc_value_t *val)
 {
-	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
-	size_t cidx = uc_chunk_add_constant(chunk, val);
+	size_t cidx = uc_program_add_constant(compiler->program, val);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_LOAD);
 	uc_compiler_emit_u32(compiler, 0, cidx);
@@ -493,8 +494,7 @@ uc_compiler_emit_constant(uc_compiler_t *compiler, size_t srcpos, uc_value_t *va
 static size_t
 uc_compiler_emit_regexp(uc_compiler_t *compiler, size_t srcpos, uc_value_t *val)
 {
-	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
-	size_t cidx = uc_chunk_add_constant(chunk, val);
+	size_t cidx = uc_program_add_constant(compiler->program, val);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_LREXP);
 	uc_compiler_emit_u32(compiler, 0, cidx);
@@ -1084,7 +1084,7 @@ uc_compiler_emit_variable_rw(uc_compiler_t *compiler, uc_value_t *varname, uc_to
 			((sub_insn & 0xff) << 24) | idx);
 	}
 	else {
-		idx = uc_chunk_add_constant(uc_compiler_current_chunk(compiler), varname);
+		idx = uc_program_add_constant(compiler->program, varname);
 		insn = sub_insn ? I_UVAR : (type ? I_SVAR : I_LVAR);
 
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, insn);
@@ -1132,7 +1132,7 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 	pos = compiler->parser->prev.pos;
 
 	uc_compiler_init(&fncompiler, NULL, compiler->parser->prev.pos,
-		uc_compiler_current_source(compiler),
+		compiler->program,
 		uc_compiler_is_strict(compiler));
 
 	fncompiler.parent = compiler;
@@ -1193,8 +1193,7 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 
 	if (fn)
 		uc_compiler_set_u32(compiler, load_off,
-			uc_chunk_add_constant(uc_compiler_current_chunk(compiler),
-				&fn->header));
+			uc_program_add_constant(compiler->program, &fn->header));
 
 	return true;
 }
@@ -1563,7 +1562,7 @@ uc_compiler_compile_function(uc_compiler_t *compiler)
 
 	uc_compiler_init(&fncompiler,
 		name ? ucv_string_get(name) : NULL, compiler->parser->prev.pos,
-		uc_compiler_current_source(compiler),
+		compiler->program,
 		uc_compiler_is_strict(compiler));
 
 	fncompiler.parent = compiler;
@@ -1633,8 +1632,7 @@ uc_compiler_compile_function(uc_compiler_t *compiler)
 
 	if (fn)
 		uc_compiler_set_u32(compiler, load_off,
-			uc_chunk_add_constant(uc_compiler_current_chunk(compiler),
-				&fn->header));
+			uc_program_add_constant(compiler->program, &fn->header));
 
 	/* if a local variable of the same name already existed, overwrite its value
 	 * with the compiled function here */
@@ -2869,16 +2867,28 @@ uc_compiler_compile_declaration(uc_compiler_t *compiler)
 		uc_compiler_parse_synchronize(compiler);
 }
 
-uc_function_t *
-uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
+#endif /* NO_COMPILE */
+
+
+static uc_function_t *
+uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, char **errp)
 {
+#ifdef NO_COMPILE
+	if (errp)
+		xasprintf(errp, "Source code compilation not supported\n");
+
+	return NULL;
+#else
+	uc_function_t *fn = NULL;
 	uc_exprstack_t expr = { .token = TK_EOF };
 	uc_parser_t parser = { .config = config };
 	uc_compiler_t compiler = { .parser = &parser, .exprstack = &expr };
-	uc_function_t *fn;
+	uc_program_t *prog;
+
+	prog = uc_program_new(source);
 
 	uc_lexer_init(&parser.lex, config, source);
-	uc_compiler_init(&compiler, "main", 0, source,
+	uc_compiler_init(&compiler, "main", 0, prog,
 		config && config->strict_declarations);
 
 	uc_compiler_parse_advance(&compiler);
@@ -2897,6 +2907,53 @@ uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
 	}
 
 	uc_lexer_free(&parser.lex);
+
+	return fn;
+#endif
+}
+
+static uc_function_t *
+uc_compile_from_bytecode(uc_parse_config_t *config, uc_source_t *source, char **errp)
+{
+	uc_function_t *fn = NULL;
+	uc_program_t *prog;
+
+	prog = uc_program_from_file(source->fp, errp);
+
+	if (prog) {
+		fn = uc_program_entry(prog);
+
+		if (!fn) {
+			if (errp)
+				xasprintf(errp, "Program file contains no entry function\n");
+
+			uc_program_free(prog);
+		}
+	}
+
+	return fn;
+}
+
+uc_function_t *
+uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
+{
+	uc_function_t *fn = NULL;
+
+	switch (uc_source_type_test(source)) {
+	case UC_SOURCE_TYPE_PLAIN:
+		fn = uc_compile_from_source(config, source, errp);
+		break;
+
+	case UC_SOURCE_TYPE_PRECOMPILED:
+		fn = uc_compile_from_bytecode(config, source, errp);
+		break;
+
+	default:
+		if (errp)
+			xasprintf(errp, "Unrecognized source type\n");
+
+		break;
+	}
 
 	return fn;
 }
