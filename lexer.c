@@ -144,9 +144,6 @@ static const struct keyword reserved_words[] = {
 	{ TK_RETURN,	"return", 6 },
 	{ TK_ENDFOR,	"endfor", 6 },
 	{ TK_SWITCH,	"switch", 6 },
-#ifndef NO_LEGACY
-	{ TK_LOCAL,		"local", 5 },
-#endif
 	{ TK_ENDIF,		"endif", 5 },
 	{ TK_WHILE,		"while", 5 },
 	{ TK_BREAK,		"break", 5 },

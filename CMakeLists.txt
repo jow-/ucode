@@ -28,8 +28,6 @@ OPTION(NL80211_SUPPORT "Wireless Netlink plugin support" ON)
 OPTION(RESOLV_SUPPORT "NS resolve plugin support" ON)
 OPTION(STRUCT_SUPPORT "Struct plugin support" ON)
 
-OPTION(LEGACY_SUPPORT "Support deprecated syntax features" ON)
-
 SET(LIB_SEARCH_PATH "${CMAKE_INSTALL_PREFIX}/lib/ucode/*.so:${CMAKE_INSTALL_PREFIX}/share/ucode/*.uc:./*.so:./*.uc" CACHE STRING "Default library search path")
 STRING(REPLACE ":" "\", \"" LIB_SEARCH_DEFINE "${LIB_SEARCH_PATH}")
 ADD_DEFINITIONS(-DLIB_SEARCH_PATH="${LIB_SEARCH_DEFINE}")
@@ -44,10 +42,6 @@ IF(DEBUG)
   ADD_DEFINITIONS(-DDEBUG -g3 -O0)
 ELSE()
   ADD_DEFINITIONS(-DNDEBUG)
-ENDIF()
-
-IF(NOT LEGACY_SUPPORT)
-  ADD_DEFINITIONS(-DNO_LEGACY)
 ENDIF()
 
 INCLUDE(FindPkgConfig)
