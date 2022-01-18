@@ -61,7 +61,7 @@ set_error(int errcode, const char *fmt, ...) {
 
 	if (fmt) {
 		va_start(ap, fmt);
-		vasprintf(&last_error.msg, fmt, ap);
+		xvasprintf(&last_error.msg, fmt, ap);
 		va_end(ap);
 	}
 }
