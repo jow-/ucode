@@ -13,6 +13,12 @@ ADD_DEFINITIONS(-Wmissing-declarations -Wno-error=unused-variable -Wno-unused-pa
 
 INCLUDE_DIRECTORIES(include)
 
+OPTION(COMPILE_SUPPORT "Support compilation from source" ON)
+
+IF(NOT COMPILE_SUPPORT)
+  ADD_DEFINITIONS(-DNO_COMPILE)
+ENDIF()
+
 OPTION(FS_SUPPORT "Filesystem plugin support" ON)
 OPTION(MATH_SUPPORT "Math plugin support" ON)
 OPTION(UBUS_SUPPORT "Ubus plugin support" ON)

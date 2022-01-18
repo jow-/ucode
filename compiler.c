@@ -24,6 +24,8 @@
 #include "ucode/program.h"
 #include "ucode/lib.h" /* uc_error_context_format() */
 
+#ifndef NO_COMPILE
+
 static void uc_compiler_compile_unary(uc_compiler_t *compiler);
 static void uc_compiler_compile_binary(uc_compiler_t *compiler);
 static void uc_compiler_compile_delete(uc_compiler_t *compiler);
@@ -2865,56 +2867,85 @@ uc_compiler_compile_declaration(uc_compiler_t *compiler)
 		uc_compiler_parse_synchronize(compiler);
 }
 
-uc_function_t *
-uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
+#endif /* NO_COMPILE */
+
+
+static uc_function_t *
+uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, char **errp)
 {
+#ifdef NO_COMPILE
+	if (errp)
+		xasprintf(errp, "Source code compilation not supported\n");
+
+	return NULL;
+#else
+	uc_function_t *fn = NULL;
 	uc_exprstack_t expr = { .token = TK_EOF };
 	uc_parser_t parser = { .config = config };
 	uc_compiler_t compiler = { .parser = &parser, .exprstack = &expr };
+	uc_program_t *prog;
+
+	prog = uc_program_new(source);
+
+	uc_lexer_init(&parser.lex, config, source);
+	uc_compiler_init(&compiler, "main", 0, prog,
+		config && config->strict_declarations);
+
+	uc_compiler_parse_advance(&compiler);
+
+	while (!uc_compiler_parse_match(&compiler, TK_EOF))
+		uc_compiler_compile_declaration(&compiler);
+
+	fn = uc_compiler_finish(&compiler);
+
+	if (errp) {
+		*errp = parser.error ? parser.error->buf : NULL;
+		free(parser.error);
+	}
+	else {
+		printbuf_free(parser.error);
+	}
+
+	uc_lexer_free(&parser.lex);
+
+	return fn;
+#endif
+}
+
+static uc_function_t *
+uc_compile_from_bytecode(uc_parse_config_t *config, uc_source_t *source, char **errp)
+{
 	uc_function_t *fn = NULL;
 	uc_program_t *prog;
 
+	prog = uc_program_from_file(source->fp, errp);
+
+	if (prog) {
+		fn = uc_program_entry(prog);
+
+		if (!fn) {
+			if (errp)
+				xasprintf(errp, "Program file contains no entry function\n");
+
+			uc_program_free(prog);
+		}
+	}
+
+	return fn;
+}
+
+uc_function_t *
+uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
+{
+	uc_function_t *fn = NULL;
+
 	switch (uc_source_type_test(source)) {
 	case UC_SOURCE_TYPE_PLAIN:
-		prog = uc_program_new(source);
-
-		uc_lexer_init(&parser.lex, config, source);
-		uc_compiler_init(&compiler, "main", 0, prog,
-			config && config->strict_declarations);
-
-		uc_compiler_parse_advance(&compiler);
-
-		while (!uc_compiler_parse_match(&compiler, TK_EOF))
-			uc_compiler_compile_declaration(&compiler);
-
-		fn = uc_compiler_finish(&compiler);
-
-		if (errp) {
-			*errp = parser.error ? parser.error->buf : NULL;
-			free(parser.error);
-		}
-		else {
-			printbuf_free(parser.error);
-		}
-
-		uc_lexer_free(&parser.lex);
-
+		fn = uc_compile_from_source(config, source, errp);
 		break;
 
 	case UC_SOURCE_TYPE_PRECOMPILED:
-		prog = uc_program_from_file(source->fp, errp);
-
-		if (prog) {
-			fn = uc_program_entry(prog);
-
-			if (!fn) {
-				if (errp)
-					xasprintf(errp, "Program file contains no entry function\n");
-
-				uc_program_free(prog);
-			}
-		}
-
+		fn = uc_compile_from_bytecode(config, source, errp);
 		break;
 
 	default:

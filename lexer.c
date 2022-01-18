@@ -54,6 +54,8 @@ struct token {
 	(((x) >= 'a') ? (10 + (x) - 'a') : \
 		(((x) >= 'A') ? (10 + (x) - 'A') : dec(x)))
 
+#ifndef NO_COMPILE
+
 static uc_token_t *parse_comment(uc_lexer_t *);
 static uc_token_t *parse_string(uc_lexer_t *);
 static uc_token_t *parse_regexp(uc_lexer_t *);
@@ -164,60 +166,6 @@ static const struct keyword reserved_words[] = {
 	{ TK_IN,		"in",    2 },
 };
 
-
-/*
- * Stores the given codepoint as a utf8 multibyte sequence into the given
- * output buffer and substracts the required amount of bytes from  the given
- * length pointer.
- *
- * Returns false if the multibyte sequence would not fit into the buffer,
- * otherwise true.
- */
-
-bool
-utf8enc(char **out, int *rem, int code)
-{
-	if (code >= 0 && code <= 0x7F) {
-		if (*rem < 1)
-			return false;
-
-		*(*out)++ = code; (*rem)--;
-
-		return true;
-	}
-	else if (code > 0 && code <= 0x7FF) {
-		if (*rem < 2)
-			return false;
-
-		*(*out)++ = ((code >>  6) & 0x1F) | 0xC0; (*rem)--;
-		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
-
-		return true;
-	}
-	else if (code > 0 && code <= 0xFFFF) {
-		if (*rem < 3)
-			return false;
-
-		*(*out)++ = ((code >> 12) & 0x0F) | 0xE0; (*rem)--;
-		*(*out)++ = ((code >>  6) & 0x3F) | 0x80; (*rem)--;
-		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
-
-		return true;
-	}
-	else if (code > 0 && code <= 0x10FFFF) {
-		if (*rem < 4)
-			return false;
-
-		*(*out)++ = ((code >> 18) & 0x07) | 0xF0; (*rem)--;
-		*(*out)++ = ((code >> 12) & 0x3F) | 0x80; (*rem)--;
-		*(*out)++ = ((code >>  6) & 0x3F) | 0x80; (*rem)--;
-		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
-
-		return true;
-	}
-
-	return true;
-}
 
 /* length of the longest token in our lookup table */
 #define UC_LEX_MAX_TOKEN_LEN 3
@@ -1186,4 +1134,60 @@ uc_lexer_is_keyword(uc_value_t *label)
 			return true;
 
 	return false;
+}
+
+#endif /* NO_COMPILE */
+
+/*
+ * Stores the given codepoint as a utf8 multibyte sequence into the given
+ * output buffer and substracts the required amount of bytes from  the given
+ * length pointer.
+ *
+ * Returns false if the multibyte sequence would not fit into the buffer,
+ * otherwise true.
+ */
+
+bool
+utf8enc(char **out, int *rem, int code)
+{
+	if (code >= 0 && code <= 0x7F) {
+		if (*rem < 1)
+			return false;
+
+		*(*out)++ = code; (*rem)--;
+
+		return true;
+	}
+	else if (code > 0 && code <= 0x7FF) {
+		if (*rem < 2)
+			return false;
+
+		*(*out)++ = ((code >>  6) & 0x1F) | 0xC0; (*rem)--;
+		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
+
+		return true;
+	}
+	else if (code > 0 && code <= 0xFFFF) {
+		if (*rem < 3)
+			return false;
+
+		*(*out)++ = ((code >> 12) & 0x0F) | 0xE0; (*rem)--;
+		*(*out)++ = ((code >>  6) & 0x3F) | 0x80; (*rem)--;
+		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
+
+		return true;
+	}
+	else if (code > 0 && code <= 0x10FFFF) {
+		if (*rem < 4)
+			return false;
+
+		*(*out)++ = ((code >> 18) & 0x07) | 0xF0; (*rem)--;
+		*(*out)++ = ((code >> 12) & 0x3F) | 0x80; (*rem)--;
+		*(*out)++ = ((code >>  6) & 0x3F) | 0x80; (*rem)--;
+		*(*out)++ = ( code        & 0x3F) | 0x80; (*rem)--;
+
+		return true;
+	}
+
+	return true;
 }
