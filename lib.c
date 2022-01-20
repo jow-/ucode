@@ -1324,8 +1324,9 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 					if (sfmt[i] == '.') {
 						for (pad_size = 0, i++; sfmt + i < fp && isdigit(sfmt[i]); i++)
 							pad_size = pad_size * 10 + (sfmt[i] - '0');
+
 						pad_size++;
-						fp = &sfmt[i-1];
+						fp = strchr(sfmt, '.');
 						break;
 					}
 				}
