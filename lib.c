@@ -1172,16 +1172,37 @@ uc_rtrim(uc_vm_t *vm, size_t nargs)
 	return uc_trim_common(vm, nargs, false, true);
 }
 
+enum {
+	FMT_F_ALT   = (1 << 0),
+	FMT_F_ZERO  = (1 << 1),
+	FMT_F_LEFT  = (1 << 2),
+	FMT_F_SPACE = (1 << 3),
+	FMT_F_SIGN  = (1 << 4),
+	FMT_F_WIDTH = (1 << 5),
+	FMT_F_PREC  = (1 << 6),
+};
+
+enum {
+	FMT_C_NONE = (1 << 0),
+	FMT_C_INT  = (1 << 1),
+	FMT_C_UINT = (1 << 2),
+	FMT_C_DBL  = (1 << 3),
+	FMT_C_CHR  = (1 << 4),
+	FMT_C_STR  = (1 << 5),
+	FMT_C_JSON = (1 << 6),
+};
+
 static void
 uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 {
-	uc_value_t *fmt = uc_fn_arg(0);
-	char *fp, sfmt[sizeof("%0- 123456789.123456789%")];
-	union { char *s; int64_t n; double d; } arg;
-	const char *fstr, *last, *p;
-	uc_type_t t = UC_NULL;
-	size_t argidx = 1;
-	int i, pad_size;
+	char *s, sfmt[sizeof("%#0- +0123456789.0123456789%")];
+	uint32_t conv, flags, width, precision;
+	uc_value_t *fmt = uc_fn_arg(0), *arg;
+	const char *fstr, *last, *p, *cfmt;
+	size_t argidx = 1, sfmtlen;
+	uint64_t u;
+	int64_t n;
+	double d;
 
 	if (ucv_type(fmt) == UC_STRING)
 		fstr = ucv_string_get(fmt);
@@ -1194,160 +1215,132 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 
 			last = p++;
 
-			fp = sfmt;
-			*fp++ = '%';
+			flags = 0;
+			width = 0;
+			precision = 0;
 
-			memset(&arg, 0, sizeof(arg));
-
-			while (*p != '\0' && strchr("0- ", *p)) {
-				if (fp + 1 >= sfmt + sizeof(sfmt))
-					goto next;
-
-				*fp++ = *p++;
+			while (*p != '\0' && strchr("#0- +", *p)) {
+				switch (*p++) {
+				case '#': flags |= FMT_F_ALT;   break;
+				case '0': flags |= FMT_F_ZERO;  break;
+				case '-': flags |= FMT_F_LEFT;  break;
+				case ' ': flags |= FMT_F_SPACE; break;
+				case '+': flags |= FMT_F_SIGN;  break;
+				}
 			}
 
 			if (*p >= '1' && *p <= '9') {
-				if (fp + 1 >= sfmt + sizeof(sfmt))
-					goto next;
+				while (isdigit(*p))
+					width = width * 10 + (*p++ - '0');
 
-				*fp++ = *p++;
-
-				while (isdigit(*p)) {
-					if (fp + 1 >= sfmt + sizeof(sfmt))
-						goto next;
-
-					*fp++ = *p++;
-				}
+				flags |= FMT_F_WIDTH;
 			}
 
 			if (*p == '.') {
-				if (fp + 1 >= sfmt + sizeof(sfmt))
-					goto next;
-
-				*fp++ = *p++;
+				p++;
 
 				if (*p == '-') {
-					if (fp + 1 >= sfmt + sizeof(sfmt))
-						goto next;
+					p++;
 
-					*fp++ = *p++;
+					while (isdigit(*p))
+						p++;
+				}
+				else {
+					while (isdigit(*p))
+						precision = precision * 10 + (*p++ - '0');
 				}
 
-				while (isdigit(*p)) {
-					if (fp + 1 >= sfmt + sizeof(sfmt))
-						goto next;
-
-					*fp++ = *p++;
-				}
-			}
-
-			if (!strncmp(p, "hh", 2) || !strncmp(p, "ll", 2)) {
-				if (fp + 2 >= sfmt + sizeof(sfmt))
-					goto next;
-
-				*fp++ = *p++;
-				*fp++ = *p++;
-			}
-			else if (*p == 'h' || *p == 'l') {
-				if (fp + 1 >= sfmt + sizeof(sfmt))
-					goto next;
-
-				*fp++ = *p++;
+				flags |= FMT_F_PREC;
 			}
 
 			switch (*p) {
 			case 'd':
 			case 'i':
+				conv = FMT_C_INT;
+				flags &= ~FMT_F_PREC;
+				cfmt = PRId64;
+				break;
+
 			case 'o':
+				conv = FMT_C_UINT;
+				flags &= ~FMT_F_PREC;
+				cfmt = PRIo64;
+				break;
+
 			case 'u':
+				conv = FMT_C_UINT;
+				flags &= ~FMT_F_PREC;
+				cfmt = PRIu64;
+				break;
+
 			case 'x':
+				conv = FMT_C_UINT;
+				flags &= ~FMT_F_PREC;
+				cfmt = PRIx64;
+				break;
+
 			case 'X':
-				t = UC_INTEGER;
-
-				if (argidx < nargs) {
-					arg.n = ucv_to_integer(uc_fn_arg(argidx));
-
-					if (errno == ERANGE)
-						arg.n = (int64_t)ucv_to_unsigned(uc_fn_arg(argidx));
-
-					argidx++;
-				}
-				else {
-					arg.n = 0;
-				}
-
+				conv = FMT_C_UINT;
+				flags &= ~FMT_F_PREC;
+				cfmt = PRIX64;
 				break;
 
 			case 'e':
+				conv = FMT_C_DBL;
+				cfmt = "e";
+				break;
+
 			case 'E':
+				conv = FMT_C_DBL;
+				cfmt = "E";
+				break;
+
 			case 'f':
+				conv = FMT_C_DBL;
+				cfmt = "f";
+				break;
+
 			case 'F':
+				conv = FMT_C_DBL;
+				cfmt = "F";
+				break;
+
 			case 'g':
+				conv = FMT_C_DBL;
+				cfmt = "g";
+				break;
+
 			case 'G':
-				t = UC_DOUBLE;
-
-				if (argidx < nargs)
-					arg.d = ucv_to_double(uc_fn_arg(argidx++));
-				else
-					arg.d = 0;
-
+				conv = FMT_C_DBL;
+				cfmt = "G";
 				break;
 
 			case 'c':
-				t = UC_INTEGER;
-
-				if (argidx < nargs)
-					arg.n = ucv_to_integer(uc_fn_arg(argidx++)) & 0xff;
-				else
-					arg.n = 0;
-
+				conv = FMT_C_CHR;
+				flags &= ~FMT_F_PREC;
+				cfmt = "c";
 				break;
 
 			case 's':
-				t = UC_STRING;
-
-				if (argidx < nargs)
-					arg.s = ucv_to_string(vm, uc_fn_arg(argidx++));
-				else
-					arg.s = NULL;
-
-				arg.s = arg.s ? arg.s : xstrdup("(null)");
-
+				conv = FMT_C_STR;
+				cfmt = "s";
 				break;
 
 			case 'J':
-				t = UC_STRING;
+				conv = FMT_C_JSON;
 
-				pad_size = 0;
-
-				for (i = 0; sfmt + i < fp; i++) {
-					if (sfmt[i] == '.') {
-						for (pad_size = 0, i++; sfmt + i < fp && isdigit(sfmt[i]); i++)
-							pad_size = pad_size * 10 + (sfmt[i] - '0');
-
-						pad_size++;
-						fp = strchr(sfmt, '.');
-						break;
-					}
+				if (flags & FMT_F_PREC) {
+					flags &= ~FMT_F_PREC;
+					precision++;
 				}
 
-				if (argidx < nargs) {
-					arg.s = ucv_to_jsonstring_formatted(vm,
-						uc_fn_arg(argidx++),
-						pad_size > 0 ? (pad_size > 1 ? ' ' : '\t') : '\0',
-						pad_size > 0 ? (pad_size > 1 ? pad_size - 1 : 1) : 0);
-				}
-				else {
-					arg.s = NULL;
-				}
-
-				arg.s = arg.s ? arg.s : xstrdup("null");
-
+				cfmt = "s";
 				break;
 
 			case '%':
-				t = UC_NULL;
-
+				conv = FMT_C_NONE;
+				flags = 0;
+				cfmt = "%";
 				break;
 
 			case '\0':
@@ -1355,40 +1348,93 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 				/* fall through */
 
 			default:
-				goto next;
+				continue;
 			}
 
-			if (fp + 2 >= sfmt + sizeof(sfmt))
-				goto next;
+			sfmtlen = 0;
+			sfmt[sfmtlen++] = '%';
 
-			*fp++ = (t == UC_STRING) ? 's' : *p;
-			*fp = 0;
+			if (flags & FMT_F_ALT)   sfmt[sfmtlen++] = '#';
+			if (flags & FMT_F_ZERO)  sfmt[sfmtlen++] = '0';
+			if (flags & FMT_F_LEFT)  sfmt[sfmtlen++] = '-';
+			if (flags & FMT_F_SPACE) sfmt[sfmtlen++] = ' ';
+			if (flags & FMT_F_SIGN)  sfmt[sfmtlen++] = '+';
 
-			switch (t) {
-			case UC_INTEGER:
-				ucv_stringbuf_printf(buf, sfmt, arg.n);
+			if (flags & FMT_F_WIDTH)
+				sfmtlen += snprintf(&sfmt[sfmtlen], sizeof(sfmt) - sfmtlen, "%" PRIu32, width);
+
+			if (flags & FMT_F_PREC)
+				sfmtlen += snprintf(&sfmt[sfmtlen], sizeof(sfmt) - sfmtlen, ".%" PRIu32, precision);
+
+			snprintf(&sfmt[sfmtlen], sizeof(sfmt) - sfmtlen, "%s", cfmt);
+
+			switch (conv) {
+			case FMT_C_NONE:
+				ucv_stringbuf_addstr(buf, cfmt, strlen(cfmt));
 				break;
 
-			case UC_DOUBLE:
-				ucv_stringbuf_printf(buf, sfmt, arg.d);
+			case FMT_C_INT:
+				arg = uc_fn_arg(argidx++);
+				n = ucv_to_integer(arg);
+
+				if (errno == ERANGE)
+					n = (int64_t)ucv_to_unsigned(arg);
+
+				ucv_stringbuf_printf(buf, sfmt, n);
 				break;
 
-			case UC_STRING:
-				ucv_stringbuf_printf(buf, sfmt, arg.s);
+			case FMT_C_UINT:
+				arg = uc_fn_arg(argidx++);
+				u = ucv_to_unsigned(arg);
+
+				if (errno == ERANGE)
+					u = (uint64_t)ucv_to_integer(arg);
+
+				ucv_stringbuf_printf(buf, sfmt, u);
 				break;
 
-			default:
-				ucv_stringbuf_addstr(buf, sfmt, strlen(sfmt));
+			case FMT_C_DBL:
+				d = ucv_to_double(uc_fn_arg(argidx++));
+				ucv_stringbuf_printf(buf, sfmt, d);
+				break;
+
+			case FMT_C_CHR:
+				n = ucv_to_integer(uc_fn_arg(argidx++));
+				ucv_stringbuf_printf(buf, sfmt, (int)n);
+				break;
+
+			case FMT_C_STR:
+				arg = uc_fn_arg(argidx++);
+
+				switch (ucv_type(arg)) {
+				case UC_STRING:
+					ucv_stringbuf_printf(buf, sfmt, ucv_string_get(arg));
+					break;
+
+				case UC_NULL:
+					ucv_stringbuf_append(buf, "(null)");
+					break;
+
+				default:
+					s = ucv_to_string(vm, arg);
+					ucv_stringbuf_printf(buf, sfmt, s ? s : "(null)");
+					free(s);
+				}
+
+				break;
+
+			case FMT_C_JSON:
+				s = ucv_to_jsonstring_formatted(vm,
+					uc_fn_arg(argidx++),
+					precision > 0 ? (precision > 1 ? ' ' : '\t') : '\0',
+					precision > 0 ? (precision > 1 ? precision - 1 : 1) : 0);
+
+				ucv_stringbuf_printf(buf, sfmt, s ? s : "null");
+				free(s);
 				break;
 			}
 
 			last = p + 1;
-
-next:
-			if (t == UC_STRING)
-				free(arg.s);
-
-			continue;
 		}
 	}
 
