@@ -69,8 +69,8 @@ run_testcase() {
 		$ucode_bin $args -e '{ "REQUIRE_SEARCH_PATH": [ "'"$ucode_lib"'/*.so" ] }' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
 	)
 
-	touch "$dir/empty"
 	printf "%d\n" $? > "$dir/res.code"
+	touch "$dir/empty"
 
 	if ! cmp -s "$dir/res.err" "${err:-$dir/empty}"; then
 		[ $fail = 0 ] && printf "!\n"
