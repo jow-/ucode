@@ -1352,6 +1352,7 @@ static const formatdef_t native_endian_table[] = {
 	{ 'b', sizeof(char), 0, native_unpack_byte, native_pack_byte },
 	{ 'B', sizeof(char), 0, native_unpack_ubyte, native_pack_ubyte },
 	{ 'c', sizeof(char), 0, native_unpack_char, native_pack_char },
+	{ '*', sizeof(char), 0, NULL, NULL },
 	{ 's', sizeof(char), 0, NULL, NULL },
 	{ 'p', sizeof(char), 0, NULL, NULL },
 	{ 'h', sizeof(short), SHORT_ALIGN, native_unpack_short, native_pack_short },
@@ -1617,6 +1618,7 @@ static formatdef_t big_endian_table[] = {
 	{ 'b', 1, 0, native_unpack_byte, native_pack_byte },
 	{ 'B', 1, 0, native_unpack_ubyte, native_pack_ubyte },
 	{ 'c', 1, 0, native_unpack_char, native_pack_char },
+	{ '*', 1, 0, NULL, NULL },
 	{ 's', 1, 0, NULL, NULL },
 	{ 'p', 1, 0, NULL, NULL },
 	{ 'h', 2, 0, be_unpack_int, be_pack_int },
@@ -1866,6 +1868,7 @@ static formatdef_t little_endian_table[] = {
 	{ 'b', 1, 0, native_unpack_byte, native_pack_byte },
 	{ 'B', 1, 0, native_unpack_ubyte, native_pack_ubyte },
 	{ 'c', 1, 0, native_unpack_char, native_pack_char },
+	{ '*', 1, 0, NULL, NULL },
 	{ 's', 1, 0, NULL, NULL },
 	{ 'p', 1, 0, NULL, NULL },
 	{ 'h', 2, 0, le_unpack_int, le_pack_int },
@@ -2074,7 +2077,8 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 			return NULL;
 
 		switch (c) {
-		case 's': /* fall through */
+		case '*': /* fall through */
+		case 's':
 		case 'p':
 			len++;
 			ncodes++;
@@ -2102,7 +2106,7 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 		if (num > (SSIZE_MAX - size) / itemsize)
 			goto overflow;
 
-		size += num * itemsize;
+		size += (c != '*') ? num * itemsize : 0;
 	}
 
 	/* check for overflow */
@@ -2131,7 +2135,10 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 
 			while ('0' <= (c = *s++) && c <= '9')
 				num = num*10 + (c - '0');
+
 		}
+		else if (c == '*')
+			num = -1;
 		else
 			num = 1;
 
@@ -2142,13 +2149,13 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 
 		size = align_for_entry(size, e);
 
-		if (c == 's' || c == 'p') {
+		if (c == '*' || c == 's' || c == 'p') {
 			codes->offset = size;
 			codes->size = num;
 			codes->fmtdef = e;
 			codes->repeat = 1;
 			codes++;
-			size += num;
+			size += (c != '*') ? num : 0;
 		}
 		else if (c == 'x') {
 			size += num;
@@ -2176,28 +2183,68 @@ static uc_value_t *
 uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 {
 	formatcode_t *code;
+	size_t ncode, off;
 	uc_string_t *buf;
-	size_t ncode;
+	ssize_t size, n;
+	const void *p;
 
-	buf = xalloc(sizeof(*buf) + state->size + 1);
+	for (ncode = 0, code = &state->codes[0], off = 0;
+	     ncode < state->ncodes;
+	     code = &state->codes[++ncode]) {
+		if (code->fmtdef->format == '*') {
+			uc_value_t *v = uc_fn_arg(argoff + ncode);
+
+			if (ucv_type(v) != UC_STRING)
+				continue;
+
+			n = ucv_string_length(v);
+
+			if (code->size == -1 || code->size > n)
+				off += n;
+			else
+				off += code->size;
+		}
+	}
+
+	buf = xalloc(sizeof(*buf) + state->size + off + 1);
 	buf->header.type = UC_STRING;
 	buf->header.refcount = 1;
-	buf->length = state->size;
+	buf->length = state->size + off;
 
-	for (ncode = 0, code = &state->codes[0];
+	for (ncode = 0, code = &state->codes[0], off = 0;
 	     ncode < state->ncodes;
 	     code = &state->codes[++ncode]) {
 		const formatdef_t *e = code->fmtdef;
-		char *res = buf->str + code->offset;
+		char *res = buf->str + code->offset + off;
 		ssize_t j = code->repeat;
 
 		while (j--) {
 			uc_value_t *v = uc_fn_arg(argoff++);
 
-			if (e->format == 's') {
-				ssize_t n;
-				const void *p;
+			size = code->size;
 
+			if (e->format == '*') {
+				if (ucv_type(v) != UC_STRING) {
+					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+						"Argument for '*' must be a string");
+
+					goto err;
+				}
+
+				n = ucv_string_length(v);
+				p = ucv_string_get(v);
+
+				if (size == -1 || n < size)
+					size = n;
+				else if (n > size)
+					n = size;
+
+				off += size;
+
+				if (n > 0)
+					memcpy(res, p, n);
+			}
+			else if (e->format == 's') {
 				if (ucv_type(v) != UC_STRING) {
 					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 						"Argument for 's' must be a string");
@@ -2208,19 +2255,16 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 				n = ucv_string_length(v);
 				p = ucv_string_get(v);
 
-				if (n > code->size)
-					n = code->size;
+				if (n > size)
+					n = size;
 
 				if (n > 0)
 					memcpy(res, p, n);
 			}
 			else if (e->format == 'p') {
-				ssize_t n;
-				const void *p;
-
 				if (ucv_type(v) != UC_STRING) {
 					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
-						"Argument for 's' must be a string");
+						"Argument for 'p' must be a string");
 
 					goto err;
 				}
@@ -2228,8 +2272,8 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 				n = ucv_string_length(v);
 				p = ucv_string_get(v);
 
-				if (n > (code->size - 1))
-					n = code->size - 1;
+				if (n > (size - 1))
+					n = size - 1;
 
 				if (n > 0)
 					memcpy(res + 1, p, n);
@@ -2244,7 +2288,7 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 					goto err;
 			}
 
-			res += code->size;
+			res += size;
 		}
 	}
 
@@ -2261,9 +2305,10 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 {
 	uc_value_t *bufval = uc_fn_arg(argoff);
 	const char *startfrom = NULL;
+	ssize_t bufrem, size, n;
 	uc_value_t *result;
 	formatcode_t *code;
-	size_t ncode = 0;
+	size_t ncode, off;
 
 	if (ucv_type(bufval) != UC_STRING) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
@@ -2273,26 +2318,39 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 	}
 
 	startfrom = ucv_string_get(bufval);
+	bufrem = ucv_string_length(bufval);
 	result = ucv_array_new(vm);
 
-	for (ncode = 0, code = &state->codes[0];
+	for (ncode = 0, code = &state->codes[0], off = 0;
 	     ncode < state->ncodes;
 	     code = &state->codes[++ncode]) {
 		const formatdef_t *e = code->fmtdef;
-		const char *res = startfrom + code->offset;
+		const char *res = startfrom + code->offset + off;
 		ssize_t j = code->repeat;
 
 		while (j--) {
 			uc_value_t *v = NULL;
 
-			if (e->format == 's') {
-				v = ucv_string_new_length(res, code->size);
+			size = code->size;
+
+			if (e->format == '*') {
+				if (size == -1 || size > bufrem)
+					size = bufrem;
+
+				off += size;
+			}
+			else if (size > bufrem) {
+				goto fail;
+			}
+
+			if (e->format == 's' || e->format == '*') {
+				v = ucv_string_new_length(res, size);
 			}
 			else if (e->format == 'p') {
-				ssize_t n = *(unsigned char *)res;
+				n = *(unsigned char *)res;
 
-				if (n >= code->size)
-					n = code->size - 1;
+				if (n >= size)
+					n = (size > 0 ? size - 1 : 0);
 
 				v = ucv_string_new_length(res + 1, n);
 			}
@@ -2305,7 +2363,8 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 
 			ucv_array_push(result, v);
 
-			res += code->size;
+			res += size;
+			bufrem -= size;
 		}
 	}
 
