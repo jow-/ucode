@@ -21,6 +21,12 @@ extract_sections() {
 				outfile=$(printf "%s/%03d.args" "$dir" $count)
 				printf "" > "$outfile"
 			;;
+			"-- Vars --")
+				tag="vars"
+				count=$((count + 1))
+				outfile=$(printf "%s/%03d.vars" "$dir" $count)
+				printf "" > "$outfile"
+			;;
 			"-- Testcase --")
 				tag="test"
 				count=$((count + 1))
@@ -62,10 +68,23 @@ run_testcase() {
 	local err=$5
 	local code=$6
 	local args=$7
+	local vars=$8
 	local fail=0
 
 	(
 		cd "$topdir"
+
+		IFS=$'\n'
+
+		local var
+		for var in $vars; do
+			case "$var" in
+				*=*) export "$var" ;;
+			esac
+		done
+
+		IFS=$' \t\n'
+
 		$ucode_bin $args -e '{ "REQUIRE_SEARCH_PATH": [ "'"$ucode_lib"'/*.so" ] }' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
 	)
 
@@ -122,21 +141,23 @@ run_test() {
 				if [ $testcase_first = 1 ]; then
 					# Flush previous test
 					if [ -n "$ein" ]; then
-						run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" "$eargs" || failed=$((failed + 1))
+						run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" "$eargs" "$evars" || failed=$((failed + 1))
 						eout=""
 						eerr=""
 						ecode=""
 						eargs=""
+						evars=""
 					fi
 
 					ein=$res
 				else
-					run_testcase $count "/tmp/test.$$" "$res" "$eout" "$eerr" "$ecode" "$eargs" || failed=$((failed + 1))
+					run_testcase $count "/tmp/test.$$" "$res" "$eout" "$eerr" "$ecode" "$eargs" "$evars" || failed=$((failed + 1))
 
 					eout=""
 					eerr=""
 					ecode=""
 					eargs=""
+					evars=""
 				fi
 
 			;;
@@ -144,12 +165,13 @@ run_test() {
 			*.stderr) eerr=$res ;;
 			*.exitcode) ecode=$res ;;
 			*.args) eargs=$(cat "$res") ;;
+			*.vars) evars=$(cat "$res") ;;
 		esac
 	done
 
 	# Flush last test
 	if [ $testcase_first = 1 ] && [ -n "$eout$eerr$ecode" ]; then
-		run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" "$eargs" || failed=$((failed + 1))
+		run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" "$eargs" "$evars" || failed=$((failed + 1))
 	fi
 
 	rm -r "/tmp/test.$$"
