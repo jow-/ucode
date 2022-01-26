@@ -62,7 +62,7 @@ uc_number_parse(const char *buf, char **end)
 		p++;
 	}
 
-	if (!isxdigit(*p))
+	if (*p != 0 && !isxdigit(*p))
 		return NULL;
 
 	if (!end)
@@ -73,7 +73,7 @@ uc_number_parse(const char *buf, char **end)
 	if (**end == '.' || **end == 'e' || **end == 'E') {
 		d = strtod(p, end);
 
-		if (*end == p || (!isspace(**end) && **end != 0))
+		if (!isspace(**end) && **end != 0)
 			return NULL;
 
 		if (neg)
@@ -82,7 +82,7 @@ uc_number_parse(const char *buf, char **end)
 		return ucv_double_new(d);
 	}
 
-	if (*end == p || (!isspace(**end) && **end != 0))
+	if (!isspace(**end) && **end != 0)
 		return NULL;
 
 	if (neg) {
