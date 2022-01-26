@@ -1,0 +1,14 @@
+When comparing `nan` with `nan` for strict equality or inequality, the
+VM incorrectly treated the result as `true` or `false` respectively.
+
+-- Testcase --
+{{ NaN === NaN }}
+{{ NaN !== NaN }}
+{{ uniq([NaN, NaN]) }}
+-- End --
+
+-- Expect stdout --
+false
+true
+[ "NaN" ]
+-- End --

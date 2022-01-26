@@ -1764,7 +1764,7 @@ ucv_is_equal(uc_value_t *uv1, uc_value_t *uv2)
 	if (t1 != t2)
 		return false;
 
-	if (uv1 == uv2)
+	if (t1 != UC_DOUBLE && uv1 == uv2)
 		return true;
 
 	switch (t1) {

@@ -2921,6 +2921,11 @@ uc_uniq_ucv_equal(const void *k1, const void *k2)
 	if (!ucv_is_scalar(uv1) && !ucv_is_scalar(uv2))
 		return (uv1 == uv2);
 
+	/* for the sake of array item uniqueness, treat two NaNs as equal */
+	if (ucv_type(uv1) == UC_DOUBLE && ucv_type(uv2) == UC_DOUBLE &&
+	    isnan(ucv_double_get(uv1)) && isnan(ucv_double_get(uv2)))
+	    return true;
+
 	return ucv_is_equal(uv1, uv2);
 }
 
