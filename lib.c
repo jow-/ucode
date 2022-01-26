@@ -445,7 +445,7 @@ uc_exists(uc_vm_t *vm, size_t nargs)
 	char *k;
 
 	if (ucv_type(obj) != UC_OBJECT)
-		return false;
+		return ucv_boolean_new(false);
 
 	k = uc_cast_string(vm, &key, &freeable);
 

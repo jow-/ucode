@@ -1918,8 +1918,13 @@ ucv_compare(int how, uc_value_t *v1, uc_value_t *v2, int *deltap)
 	double d1, d2;
 	int8_t delta;
 
-	/* if both operands are strings, compare bytewise */
-	if (t1 == UC_STRING && t2 == UC_STRING) {
+	/* at least one operand is null and we compare for equality or inequality ... */
+	if ((!v1 || !v2) && (how == I_EQ || how == I_NE)) {
+		delta = (v1 != v2);
+	}
+
+	/* ... otherwise if both operands are strings, compare bytewise ... */
+	else if (t1 == UC_STRING && t2 == UC_STRING) {
 		delta = strcmp(ucv_string_get(v1), ucv_string_get(v2));
 	}
 
