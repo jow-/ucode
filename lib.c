@@ -1558,6 +1558,7 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 		*res = uc_vm_stack_pop(vm);
 
 	uc_source_put(source);
+	ucv_put(&function->header);
 
 	return true;
 }
