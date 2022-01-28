@@ -2881,7 +2881,7 @@ uc_compile_from_bytecode(uc_parse_config_t *config, uc_source_t *source, char **
 	uc_function_t *fn = NULL;
 	uc_program_t *prog;
 
-	prog = uc_program_from_file(source->fp, errp);
+	prog = uc_program_load(source, errp);
 
 	if (prog) {
 		fn = uc_program_entry(prog);

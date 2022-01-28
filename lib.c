@@ -2141,7 +2141,7 @@ uc_include(uc_vm_t *vm, size_t nargs)
 	if (!closure)
 		return NULL;
 
-	p = include_path(closure->function->program->source->filename, ucv_string_get(path));
+	p = include_path(closure->function->program->source->runpath, ucv_string_get(path));
 
 	if (!p) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
@@ -2553,7 +2553,7 @@ uc_sourcepath(uc_vm_t *vm, size_t nargs)
 			continue;
 		}
 
-		path = realpath(frame->closure->function->program->source->filename, NULL);
+		path = realpath(frame->closure->function->program->source->runpath, NULL);
 		break;
 	}
 

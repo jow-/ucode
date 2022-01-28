@@ -45,4 +45,6 @@ uc_source_type_t uc_source_type_test(uc_source_t *source);
 void uc_source_line_next(uc_source_t *source);
 void uc_source_line_update(uc_source_t *source, size_t off);
 
+void uc_source_runpath_set(uc_source_t *source, const char *runpath);
+
 #endif /* __SOURCE_H_ */
