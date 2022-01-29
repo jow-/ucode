@@ -34,6 +34,7 @@ uc_source_new_file(const char *path)
 	src->fp = fp;
 	src->buffer = NULL;
 	src->filename = strcpy((char *)src + ALIGN(sizeof(*src)), path);
+	src->runpath = src->filename;
 
 	src->usecount = 1;
 
@@ -112,6 +113,9 @@ uc_source_put(uc_source_t *source)
 
 		return;
 	}
+
+	if (source->runpath != source->filename)
+		free(source->runpath);
 
 	uc_vector_clear(&source->lineinfo);
 	fclose(source->fp);
@@ -210,4 +214,13 @@ uc_source_line_update(uc_source_t *source, size_t off)
 			lines->count++;
 		}
 	}
+}
+
+void
+uc_source_runpath_set(uc_source_t *source, const char *runpath)
+{
+	if (source->runpath != source->filename)
+		free(source->runpath);
+
+	source->runpath = xstrdup(runpath);
 }

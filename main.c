@@ -95,7 +95,7 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip)
 	}
 
 	if (precompile) {
-		uc_program_to_file(entry->program, precompile, !strip);
+		uc_program_write(entry->program, precompile, !strip);
 		uc_program_free(entry->program);
 		fclose(precompile);
 		goto out;

@@ -66,7 +66,7 @@ typedef struct {
 uc_declare_vector(uc_lineinfo_t, uint8_t);
 
 typedef struct {
-	char *filename, *buffer;
+	char *filename, *runpath, *buffer;
 	FILE *fp;
 	size_t usecount, off;
 	uc_lineinfo_t lineinfo;

@@ -292,7 +292,7 @@ write_function(uc_function_t *func, FILE *file, bool debug)
 }
 
 void
-uc_program_to_file(uc_program_t *prog, FILE *file, bool debug)
+uc_program_write(uc_program_t *prog, FILE *file, bool debug)
 {
 	uint32_t flags = 0;
 	uc_weakref_t *ref;
@@ -533,29 +533,31 @@ out:
 }
 
 static uc_source_t *
-read_sourceinfo(FILE *file, uint32_t flags, char **errp)
+read_sourceinfo(uc_source_t *input, uint32_t flags, char **errp)
 {
 	char *path = NULL, *code = NULL;
 	uc_source_t *source = NULL;
 	size_t len;
 
 	if (flags & UC_PROGRAM_F_SOURCEINFO) {
-		if (!read_size_t(file, &len, sizeof(uint32_t), "sourceinfo filename length", errp))
+		if (!read_size_t(input->fp, &len, sizeof(uint32_t), "sourceinfo filename length", errp))
 			goto out;
 
 		path = xalloc(len);
 
-		if (!read_string(file, path, len, "sourceinfo filename", errp))
+		if (!read_string(input->fp, path, len, "sourceinfo filename", errp))
 			goto out;
 
 		if (flags & UC_PROGRAM_F_SOURCEBUF) {
-			if (!read_size_t(file, &len, sizeof(uint32_t), "sourceinfo code buffer length", errp))
+			if (!read_size_t(input->fp, &len, sizeof(uint32_t), "sourceinfo code buffer length", errp))
 				goto out;
 
 			code = xalloc(len);
 
-			if (!read_string(file, code, len, "sourceinfo code buffer data", errp))
+			if (!read_string(input->fp, code, len, "sourceinfo code buffer data", errp)) {
+				free(code);
 				goto out;
+			}
 
 			source = uc_source_new_buffer(path, code, len);
 		}
@@ -564,11 +566,11 @@ read_sourceinfo(FILE *file, uint32_t flags, char **errp)
 
 			if (!source) {
 				fprintf(stderr, "Unable to open source file %s: %s\n", path, strerror(errno));
-				source = uc_source_new_buffer(path, "", 0);
+				source = uc_source_new_buffer(path, xstrdup(""), 0);
 			}
 		}
 
-		if (!read_vector(file, &source->lineinfo, "sourceinfo lineinfo", errp)) {
+		if (!read_vector(input->fp, &source->lineinfo, "sourceinfo lineinfo", errp)) {
 			uc_source_put(source);
 			source = NULL;
 			goto out;
@@ -578,9 +580,10 @@ read_sourceinfo(FILE *file, uint32_t flags, char **errp)
 		source = uc_source_new_buffer("[no source]", xstrdup(""), 0);
 	}
 
+	uc_source_runpath_set(source, input->runpath);
+
 out:
 	free(path);
-	free(code);
 
 	return source;
 }
@@ -737,13 +740,13 @@ out:
 }
 
 uc_program_t *
-uc_program_from_file(FILE *file, char **errp)
+uc_program_load(uc_source_t *input, char **errp)
 {
 	uc_program_t *program = NULL;
 	uc_source_t *source = NULL;
 	uint32_t flags, nfuncs, i;
 
-	if (!read_u32(file, &i, "file magic", errp))
+	if (!read_u32(input->fp, &i, "file magic", errp))
 		goto out;
 
 	if (i != UC_PRECOMPILED_BYTECODE_MAGIC) {
@@ -751,10 +754,10 @@ uc_program_from_file(FILE *file, char **errp)
 		goto out;
 	}
 
-	if (!read_u32(file, &flags, "program flags", errp))
+	if (!read_u32(input->fp, &flags, "program flags", errp))
 		goto out;
 
-	source = read_sourceinfo(file, flags, errp);
+	source = read_sourceinfo(input, flags, errp);
 
 	if (!source)
 		goto out;
@@ -763,14 +766,14 @@ uc_program_from_file(FILE *file, char **errp)
 
 	uc_source_put(source);
 
-	if (!read_vallist(file, &program->constants, "constants", errp))
+	if (!read_vallist(input->fp, &program->constants, "constants", errp))
 		goto out;
 
-	if (!read_u32(file, &nfuncs, "function count", errp))
+	if (!read_u32(input->fp, &nfuncs, "function count", errp))
 		goto out;
 
 	for (i = 0; i < nfuncs; i++)
-		if (!read_function(file, program, i, errp))
+		if (!read_function(input->fp, program, i, errp))
 			goto out;
 
 	return program;
