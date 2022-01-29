@@ -1,0 +1,207 @@
+The `replace()` function replaces the given regular expression or plain
+string pattern on the given subject value with the specified replacement.
+
+In case a regular expression with the global (`g`) modifier set or a
+string is passed as pattern, all found occurrences are replaced. In case
+a regular expression without global modifier is given, only the first
+match will be replaced.
+
+The replacement value may be either a string, which is inserted in place
+of the matched result after certain interpolation steps or a function
+which is invoked for each match and whose return value is used as
+replacement.
+
+The subject is implicitly converted to a string if it is not a string.
+
+The pattern is implicitly converted to a string if it is neither a string
+nor a regular expression value.
+
+The replacement value is implicitly converted to a string if it is neither
+a string nor a function value.
+
+Returns a copy of the input string with the match(es) replaced by their
+corresponding replacement values.
+
+Returns `null` either the subject, the pattern or the replacement value
+is `null`.
+
+-- Testcase --
+{%
+	print(join("\n###\n", [
+		// Capitalize and reformat all key=value pairs using a callback
+		replace("kind=fruit name=strawberry color=red",
+			/([[:alpha:]])([[:alpha:]]*)=(.)([^= ]*) */g,
+			function(m, letter1, rest1, letter2, rest2) {
+				return sprintf('%s%s: %s%s\n',
+					uc(letter1), rest1,
+					uc(letter2), rest2
+				);
+			}),
+
+		// strike any three letter word
+		replace("The quick brown fox jumps over the lazy dog",
+			/(^| )([[:alpha:]]{3})( |$)/g,
+			"$1<s>$2</s>$3"),
+
+		// highlight any vowel
+		replace("The quick brown fox jumps over the lazy dog",
+			/[aeiou]/g,
+			"[$&]"),
+
+		// replace with fixed pattern
+		replace("foo bar foo baz foo qrx", "foo", "xxx"),
+
+		// testing all possible replacement interpolations
+		replace("before  abc def ghi jkl mno pqr stu vwx yz!  after",
+			/ ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z!]{3}) /,
+			'|\n---\n' +
+			'Entire match ($$&):  [$&]\n' +
+			'Before match ($$`):  [$`]\n' +
+			"After match ($$'):   [$']\n" +
+			'Group 1 match ($$1): [$1]\n' +
+			'Group 2 match ($$2): [$2]\n' +
+			'Group 3 match ($$3): [$3]\n' +
+			'Group 4 match ($$4): [$4]\n' +
+			'Group 5 match ($$5): [$5]\n' +
+			'Group 6 match ($$6): [$6]\n' +
+			'Group 7 match ($$7): [$7]\n' +
+			'Group 8 match ($$8): [$8]\n' +
+			'Group 9 match ($$9): [$9]\n' +
+			'Literal $$:          [$$]\n' +
+			'---\n|'),
+
+		// testing that all captures are passed to the callback
+		replace("before  abc def ghi jkl mno pqr stu vwx yz!  after",
+			/ ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z]{3}) ([a-z!]{3}) /,
+			function(m0, m1, m2, m3, m4, m5, m6, m7, m8, m9) {
+				return sprintf(
+					'|\n---\n' +
+					'Entire match (arg 0):  [%s]\n' +
+					'Group 1 match (arg 1): [%s]\n' +
+					'Group 2 match (arg 2): [%s]\n' +
+					'Group 3 match (arg 3): [%s]\n' +
+					'Group 4 match (arg 4): [%s]\n' +
+					'Group 5 match (arg 5): [%s]\n' +
+					'Group 6 match (arg 6): [%s]\n' +
+					'Group 7 match (arg 7): [%s]\n' +
+					'Group 8 match (arg 8): [%s]\n' +
+					'Group 9 match (arg 9): [%s]\n' +
+					'---\n|',
+					m0, m1, m2, m3, m4, m5, m6, m7, m8, m9
+				);
+			}),
+
+		// the subject is implictly stringified
+		replace({ foo: true }, "foo", "xxx"),
+
+		// the pattern is implictly stringified
+		replace({ foo: true }, true, "false"),
+
+		// the replacement is implictly stringified
+		replace({ foo: true }, "foo", 0x7b),
+
+		// special case: replace all empty matches
+		replace("foo", "", "."),
+		replace("foo", /()/g, ".")
+	]), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+Kind: Fruit
+Name: Strawberry
+Color: Red
+
+###
+<s>The</s> quick brown <s>fox</s> jumps over <s>the</s> lazy <s>dog</s>
+###
+Th[e] q[u][i]ck br[o]wn f[o]x j[u]mps [o]v[e]r th[e] l[a]zy d[o]g
+###
+xxx bar xxx baz xxx qrx
+###
+before |
+---
+Entire match ($&):  [ abc def ghi jkl mno pqr stu vwx yz! ]
+Before match ($`):  [before ]
+After match ($'):   [ after]
+Group 1 match ($1): [abc]
+Group 2 match ($2): [def]
+Group 3 match ($3): [ghi]
+Group 4 match ($4): [jkl]
+Group 5 match ($5): [mno]
+Group 6 match ($6): [pqr]
+Group 7 match ($7): [stu]
+Group 8 match ($8): [vwx]
+Group 9 match ($9): [yz!]
+Literal $:          [$]
+---
+| after
+###
+before |
+---
+Entire match (arg 0):  [ abc def ghi jkl mno pqr stu vwx yz! ]
+Group 1 match (arg 1): [abc]
+Group 2 match (arg 2): [def]
+Group 3 match (arg 3): [ghi]
+Group 4 match (arg 4): [jkl]
+Group 5 match (arg 5): [mno]
+Group 6 match (arg 6): [pqr]
+Group 7 match (arg 7): [stu]
+Group 8 match (arg 8): [vwx]
+Group 9 match (arg 9): [yz!]
+---
+| after
+###
+{ "xxx": true }
+###
+{ "foo": false }
+###
+{ "123": true }
+###
+.f.o.o.
+###
+.f.o.o.
+-- End --
+
+
+Omitting subject, pattern or replacement yields `null`.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		replace(null, "u", "x"),
+		replace("nullnull", null, "x"),
+		replace("foo", "o", null)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	null,
+	null,
+	null
+]
+-- End --
+
+
+Exceptions in the callback terminate the replacement process and are
+propagated to the calling context.
+
+-- Testcase --
+{%
+	replace("foo", "o", function(m) { die() });
+%}
+-- End --
+
+-- Expect stderr --
+Died
+In [anonymous function](), line 2, byte 40:
+  called from function replace ([C])
+  called from anonymous function ([stdin]:2:43)
+
+ `    replace("foo", "o", function(m) { die() });`
+  Near here --------------------------------^
+
+
+-- End --

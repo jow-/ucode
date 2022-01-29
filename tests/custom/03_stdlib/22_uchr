@@ -1,0 +1,19 @@
+The `uchr()` function takes a series of code point values and turns them
+into an UTF-8 encoded string. The resulting string will have as many
+characters as there were arguments to the function. The number of bytes
+per character varies between 1 to 4, depending on the code point value.
+
+Invalid numeric arguments or arguments being out of range 0-0x10FFFF will
+be encoded as the Unicode replacement character 0xFFFD.
+
+Returns the resulting UTF-8 string.
+
+-- Testcase --
+{{ uchr(0x2600, 0x2601, 0x2602) }}
+{{ uchr("inval", -1, 0xffffffff) }}
+-- End --
+
+-- Expect stdout --
+☀☁☂
+���
+-- End --

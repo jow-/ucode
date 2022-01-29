@@ -1,0 +1,38 @@
+The `exists()` function checks the existence of the given key within the
+given object. If the object contains the given key, `true` is returned,
+otherwise `false`.
+
+If the object argument is not an object, `false` is returned as well.
+
+The key argument is converted to a string in case it is not one already.
+
+-- Testcase --
+{%
+	let obj = {
+		"foo":   true,
+		"bar":   false,
+		"false": null,
+		"123":   "a number"
+	};
+
+	printf("%.J\n", [
+		exists(true, "test"),
+		exists(obj, "doesnotexists"),
+		exists(obj, "foo"),
+		exists(obj, "bar"),
+		exists(obj, !true),
+		exists(obj, 123)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	false,
+	false,
+	true,
+	true,
+	true,
+	true
+]
+-- End --

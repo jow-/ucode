@@ -1,0 +1,79 @@
+The `trace()` function sets the execution trace level of the VM.
+
+Throws an exception if trace level argument is not a valid integer.
+
+Returns the previously used execution trace level.
+
+-- Testcase --
+{%
+	printf("Code before enabling tracing.\n");
+
+	trace(1);
+
+	printf("Code after enabling tracing.\n");
+
+	trace(0);
+
+	printf("Code after disabling tracing.\n");
+%}
+-- End --
+
+-- Expect stdout --
+Code before enabling tracing.
+Code after enabling tracing.
+Code after disabling tracing.
+-- End --
+
+-- Expect stderr --
+  [-2] 1
+  [-1] "function trace(...) { [native code] }"
+  [+1] 0
+[2;40;97m        [stdin]:4      trace(1[22m);[m
+0000001c  POP
+  [-1] 0
+0000001d  LVAR {0x0}	; "printf"
+  [+1] "function printf(...) { [native code] }"
+[2;40;97m        [stdin]:6      [22mprintf("Code after enabling tracing.\n");[m
+00000022  LOAD {0x3}	; "Code after enabling tracing.\n"
+  [+2] "Code after enabling tracing.\n"
+[2;40;97m        [stdin]:6      printf([22m"Code after enabling tracing.\n");[m
+00000027  CALL {0x1}
+  [*] CALLFRAME[1]
+   |- stackframe 1/3
+   |- ctx null
+  [-2] "Code after enabling tracing.\n"
+  [-1] "function printf(...) { [native code] }"
+  [+1] 29
+[2;40;97m        [stdin]:6      printf("Code after enabling tracing.\n"[22m);[m
+0000002c  POP
+  [-1] 29
+0000002d  LVAR {0x2}	; "trace"
+  [+1] "function trace(...) { [native code] }"
+[2;40;97m        [stdin]:8      [22mtrace(0);[m
+00000032  LOAD8 {0}
+  [+2] 0
+[2;40;97m        [stdin]:8      trace([22m0);[m
+00000034  CALL {0x1}
+  [*] CALLFRAME[1]
+   |- stackframe 1/3
+   |- ctx null
+-- End --
+
+
+Passing an invalid trace value throws an exception.
+
+-- Testcase --
+{%
+	trace("inval");
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Invalid level specified
+In line 2, byte 15:
+
+ `    trace("inval");`
+  Near here -------^
+
+
+-- End --

@@ -1,0 +1,49 @@
+The `die()` function triggers a user defined runtime exception when invoked,
+using the given value as exception message.
+
+The given message value is converted to a string internally if it is not a
+string already. If no message argument is given or if the message argument
+is `null`, the default message is `Died`.
+
+The function does not return.
+
+-- Testcase --
+{%
+	print("Before invoking die()\n");
+
+	die("An exception!");
+
+	print("After invoking die()\n");
+%}
+-- End --
+
+-- Expect stdout --
+Before invoking die()
+-- End --
+
+-- Expect stderr --
+An exception!
+In line 4, byte 21:
+
+ `    die("An exception!");`
+  Near here -------------^
+
+
+-- End --
+
+
+-- Testcase --
+{%
+	die();
+%}
+-- End --
+
+-- Expect stderr --
+Died
+In line 2, byte 6:
+
+ `    die();`
+          ^-- Near here
+
+
+-- End --

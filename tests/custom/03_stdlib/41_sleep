@@ -1,0 +1,46 @@
+The `sleep()` function pauses program execution for the given amount of
+milliseconds.
+
+Returns `true` if the program slept.
+
+Returns `false` when the given time value was not convertible to an integer,
+negative or zero.
+
+-- Testcase --
+{%
+	let t1 = time();
+
+	sleep(1000);
+
+	let t2 = time();
+
+	printf("Slept for %d second(s).\n", t2 - t1);
+%}
+-- End --
+
+-- Expect stdout --
+Slept for 1 second(s).
+-- End --
+
+
+Passing an invalid value yields `false`.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		sleep("inval"),
+		sleep([]),
+		sleep(-1),
+		sleep(0)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	false,
+	false,
+	false,
+	false
+]
+-- End --

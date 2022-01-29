@@ -1,0 +1,21 @@
+The `keys()` function returns an array containing all keys of the given
+dictionary value. The keys are sorted in declaration order.
+
+-- Testcase --
+{{ keys({ "foo": true, "bar": false, "qrx": 123 }) }}
+-- End --
+
+-- Expect stdout --
+[ "foo", "bar", "qrx" ]
+-- End --
+
+
+If the given argument is not a dictionary, the function returns `null`.
+
+-- Testcase --
+{{ keys(true) === null }}
+-- End --
+
+-- Expect stdout --
+true
+-- End --

@@ -1,0 +1,550 @@
+The `sprintf()` function formats given input value according to a format
+string specified as first argument. The format string mimicks the syntax
+and directives used by C printf().
+
+Each directive (with the exception of %%) in the format string expects
+a corresponding argument. If fewer arguments are passed to sprintf() than
+required by the format string, missing values will be assumed to be `null`
+and be interpreted accordingly. Excess arguments are ignored.
+
+Returns an output string formatted according to the format string with all
+format directives interpolated by their respective values.
+
+Returns an empty string in case the format string argument is not a valid
+string value.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		// String interpolation, corresponding value will be converted
+		// into string if needed.
+		sprintf("Hello %s!", "World"),
+		sprintf("Hello %s!", false),
+		sprintf("Hello %s!", 123),
+		sprintf("Hello %s!", null),
+		sprintf("Hello %s!"),
+
+		// Signed integer interpolation, corresponding value will be
+		// converted into integer if needed. Also `d` and `i` are aliases.
+		sprintf("%d", 123),
+		sprintf("%i", 456.789),
+		sprintf("%d", true),
+		sprintf("%d", "0x42"),
+		sprintf("%d", "invalid"),
+		sprintf("%d", null),
+		sprintf("%d", 0xffffffffffffffff),
+		sprintf("%d"),
+
+		// Unsigned integer interpolation in decimal notation, corresponding
+		// value will be converted into unsigned integer if needed.
+		sprintf("%u", 123),
+		sprintf("%u", -123),
+		sprintf("%u", 0xffffffffffffffff),
+		sprintf("%u", 456.789),
+		sprintf("%u", "invalid"),
+		sprintf("%u", null),
+		sprintf("%u"),
+
+		// Unsigned integer interpolation in octal notation, corresponding
+		// value will be converted into unsigned integer if needed.
+		sprintf("%o", 123),
+		sprintf("%o", -123),
+		sprintf("%o", 0xffffffffffffffff),
+		sprintf("%o", 456.789),
+		sprintf("%o", "invalid"),
+		sprintf("%o", null),
+		sprintf("%o"),
+
+		// Unsigned integer interpolation in lower case hexadecimal notation,
+		// corresponding value will be converted into unsigned integer if
+		// needed.
+		sprintf("%x", 123),
+		sprintf("%x", -123),
+		sprintf("%x", 0xffffffffffffffff),
+		sprintf("%x", 456.789),
+		sprintf("%x", "invalid"),
+		sprintf("%x", null),
+		sprintf("%x"),
+
+		// Unsigned integer interpolation in upper case hexadecimal notation,
+		// corresponding value will be converted into unsigned integer if
+		// needed.
+		sprintf("%X", 123),
+		sprintf("%X", -123),
+		sprintf("%X", 0xffffffffffffffff),
+		sprintf("%X", 456.789),
+		sprintf("%X", "invalid"),
+		sprintf("%X", null),
+		sprintf("%X"),
+
+		// Floating point value interpolation in exponential notation,
+		// corresponding value will be converted to double if needed.
+		sprintf("%e", 123),
+		sprintf("%e", -123),
+		sprintf("%e", 456.789),
+		sprintf("%e", -456.789),
+		sprintf("%e", "invalid"),
+		sprintf("%e", null),
+		sprintf("%e"),
+
+		// Floating point value interpolation in exponential notation,
+		// using uppercase characters. Corresponding value will be converted
+		// to double if needed.
+		sprintf("%E", 123),
+		sprintf("%E", -123),
+		sprintf("%E", 456.789),
+		sprintf("%E", -456.789),
+		sprintf("%E", "invalid"),
+		sprintf("%E", null),
+		sprintf("%E"),
+
+		// Floating point value interpolation in decimal point notation,
+		// corresponding value will be converted to double if needed.
+		sprintf("%f", 123),
+		sprintf("%f", -123),
+		sprintf("%f", 456.789),
+		sprintf("%f", -456.789),
+		sprintf("%f", "invalid"),
+		sprintf("%f", null),
+		sprintf("%f"),
+
+		// Floating point value interpolation in decimal point notation,
+		// using uppercase characters. Corresponding value will be converted
+		// to double if needed.
+		sprintf("%F", 123),
+		sprintf("%F", -123),
+		sprintf("%F", 456.789),
+		sprintf("%F", -456.789),
+		sprintf("%F", "invalid"),
+		sprintf("%F", null),
+		sprintf("%F"),
+
+		// Floating point value interpolation in either decimal point or
+		// exponential notation, depending on size of exponent. Corresponding
+		// value will be converted to double if needed.
+		sprintf("%g", 123.456),
+		sprintf("%g", 0.0000001),
+		sprintf("%g", "invalid"),
+
+		// Floating point value interpolation in either decimal point or
+		// exponential notation, depending on size of exponent and using
+		// uppercase characters. Corresponding value will be converted to
+		// double if needed.
+		sprintf("%G", 123.456),
+		sprintf("%G", 0.0000001),
+		sprintf("%G", "invalid"),
+
+		// Character interpolation. The corresponding value is casted as `char`
+		// and the resulting character is interpolated.
+		sprintf("%c", 65),
+		sprintf("%c", -1),
+		sprintf("%c", 456.789),
+		sprintf("%c", "invalid"),
+
+		// JSON interpolation. The corresponding value is JSON encoded and
+		// interpolated as string.
+		sprintf("%J", "Hello\n"),
+		sprintf("%J", 123),
+		sprintf("%J", [ 1, 2, 3 ]),
+		sprintf("%J", { some: "dictionary", an: [ "array", true, false ] }),
+		sprintf("%J", null),
+		sprintf("%J"),
+
+		// Escaping `%`. The `%%` format string will produce a literal `%`.
+		// No corresponding argument is expected.
+		sprintf("%%")
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"Hello World!",
+	"Hello false!",
+	"Hello 123!",
+	"Hello (null)!",
+	"Hello (null)!",
+	"123",
+	"456",
+	"1",
+	"66",
+	"0",
+	"0",
+	"-1",
+	"0",
+	"123",
+	"18446744073709551493",
+	"18446744073709551615",
+	"456",
+	"0",
+	"0",
+	"0",
+	"173",
+	"1777777777777777777605",
+	"1777777777777777777777",
+	"710",
+	"0",
+	"0",
+	"0",
+	"7b",
+	"ffffffffffffff85",
+	"ffffffffffffffff",
+	"1c8",
+	"0",
+	"0",
+	"0",
+	"7B",
+	"FFFFFFFFFFFFFF85",
+	"FFFFFFFFFFFFFFFF",
+	"1C8",
+	"0",
+	"0",
+	"0",
+	"1.230000e+02",
+	"-1.230000e+02",
+	"4.567890e+02",
+	"-4.567890e+02",
+	"nan",
+	"0.000000e+00",
+	"0.000000e+00",
+	"1.230000E+02",
+	"-1.230000E+02",
+	"4.567890E+02",
+	"-4.567890E+02",
+	"NAN",
+	"0.000000E+00",
+	"0.000000E+00",
+	"123.000000",
+	"-123.000000",
+	"456.789000",
+	"-456.789000",
+	"nan",
+	"0.000000",
+	"0.000000",
+	"123.000000",
+	"-123.000000",
+	"456.789000",
+	"-456.789000",
+	"NAN",
+	"0.000000",
+	"0.000000",
+	"123.456",
+	"1e-07",
+	"nan",
+	"123.456",
+	"1E-07",
+	"NAN",
+	"A",
+	"\u00ff",
+	"\u00c8",
+	"\u0000",
+	"\"Hello\\n\"",
+	"123",
+	"[ 1, 2, 3 ]",
+	"{ \"some\": \"dictionary\", \"an\": [ \"array\", true, false ] }",
+	"null",
+	"null",
+	"%"
+]
+-- End --
+
+
+Field widths may be specified for format directives.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		// by default the output of a format directive is as long as the
+		// string representation of the corresponding value
+		sprintf("[%s]", "test"),
+
+		// by specifying a field width, the output will be padded to the
+		// given length
+		sprintf("[%10s]", "test"),
+
+		// the same applies to numbers
+		sprintf("[%10d]", 123),
+		sprintf("[%10f]", 1.0),
+
+		// and to char formats
+		sprintf("[%10c]", 65),
+
+		// field width is not applicable to `%` formats
+		sprintf("[%10%]")
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"[test]",
+	"[      test]",
+	"[       123]",
+	"[  1.000000]",
+	"[         A]",
+	"[%]"
+]
+-- End --
+
+
+Precisions may be specified for format directives.
+
+-- Testcase --
+{%
+	print(join("\n", [
+		// For `f`, `F`, `e` and `E`, the precision specifies the amount of
+		// digits after the comma
+		sprintf("[%.3f]", 1/3),
+		sprintf("[%.3F]", 1/3),
+		sprintf("[%.3e]", 1/3),
+		sprintf("[%.3E]", 1/3),
+
+		// For `g` and `G` the precision specifies the number of significant
+		// digits to print before switching to exponential notation
+		sprintf("[%.3g]", 1000.1),
+		sprintf("[%.3G]", 1000.1),
+
+		// For strings, the precision specifies the amount of characters to
+		// print at most
+		sprintf("[%.5s]", "test"),
+		sprintf("[%.3s]", "test"),
+
+		// For JSON format, the precision specifies the amount of indentation
+		// to use. Omitting precision will not indent, specifying a precision
+		// of `0` uses tabs for indentation, any other precision uses this
+		// many spaces
+		sprintf("<%J>", [ 1, 2, 3, { true: false } ]),    // no indent
+		sprintf("<%.J>", [ 1, 2, 3, { true: false } ]),   // tab indent
+		sprintf("<%.0J>", [ 1, 2, 3, { true: false } ]),  // tab indent
+		sprintf("<%.1J>", [ 1, 2, 3, { true: false } ]),  // indent using one space
+		sprintf("<%.4J>", [ 1, 2, 3, { true: false } ]),  // indent using four spaces
+
+		// precision does not apply to char, integer or `%` formats
+		sprintf("[%.3d]", 1000),
+		sprintf("[%.3c]", 65),
+		sprintf("[%.3%]"),
+	]), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+[0.000]
+[0.000]
+[0.000e+00]
+[0.000E+00]
+[1e+03]
+[1E+03]
+[test]
+[tes]
+<[ 1, 2, 3, { "true": false } ]>
+<[
+	1,
+	2,
+	3,
+	{
+		"true": false
+	}
+]>
+<[
+	1,
+	2,
+	3,
+	{
+		"true": false
+	}
+]>
+<[
+ 1,
+ 2,
+ 3,
+ {
+  "true": false
+ }
+]>
+<[
+    1,
+    2,
+    3,
+    {
+        "true": false
+    }
+]>
+[1000]
+[A]
+[%]
+-- End --
+
+
+A number of flag characters are supported for format directives.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		// The recognized flag characters are `#`, `0`, `-`, `+` and ` ` (space)
+		sprintf("%#0+- s", "test"),
+
+		// Repetitions of flag characters are accepted
+		sprintf("%###s", "test"),
+		sprintf("%000s", "test"),
+		sprintf("%++-s", "test"),
+		sprintf("%-- s", "test"),
+		sprintf("%   s", "test"),
+
+		// The `#` flag produces alternative forms of various conversions
+		sprintf("%o / %#o", 15, 15),
+		sprintf("%x / %#x", 16, 16),
+		sprintf("%X / %#X", 17, 17),
+		sprintf("%g / %#g", 1.0, 1.0),
+
+		// The `0` flag indicates zero- instead of space-padding for various
+		// numeric conversions.
+		sprintf("%5d / %05d", -10, -10),
+		sprintf("%5d / %05d", 11, 11),
+		sprintf("%5g / %05g", -12.0, -12.0),
+		sprintf("%5g / %05g", 13.0, 13.0),
+		sprintf("%5s / %05s", "a", "a"),
+
+		// The `-` flag indicates left, instead of right padding. It will
+		// override `0` and always pad with spaces
+		sprintf("%-5d / %-05d", -10, -10),
+		sprintf("%-5d / %-05d", 11, 11),
+		sprintf("%-5g / %-05g", -12.0, -12.0),
+		sprintf("%-5g / %-05g", 13.0, 13.0),
+		sprintf("%-5s / %-05s", "a", "a"),
+
+		// The `+` flag indicates that a sign (`+` or `-`) should be placed
+		// before signed numeric values. It overrides ` ` (space).
+		sprintf("%+5d / %+05d", -10, -10),
+		sprintf("%+5d / %+05d", 11, 11),
+		sprintf("%+5g / %+05g", -12.0, -12.0),
+		sprintf("%+5g / %+05g", 13.0, 13.0),
+		sprintf("%+5s / %+05s", "a", "a"),
+
+		// The ` ` (space) flag indicates that a blank should be placed
+		// before positive numbers (useful to ensure that negative and
+		// positive values in output are aligned)
+		sprintf("%-5d / %- 5d", -10, -10),
+		sprintf("%-5d / %- 5d", 11, 11),
+		sprintf("%-5g / %- 5g", -12.0, -12.0),
+		sprintf("%-5g / %- 5g", 13.0, 13.0),
+		sprintf("%-5s / %- 5s", "a", "a"),
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"test",
+	"test",
+	"test",
+	"test",
+	"test",
+	"test",
+	"17 / 017",
+	"10 / 0x10",
+	"11 / 0X11",
+	"1 / 1.00000",
+	"  -10 / -0010",
+	"   11 / 00011",
+	"  -12 / -0012",
+	"   13 / 00013",
+	"    a /     a",
+	"-10   / -10  ",
+	"11    / 11   ",
+	"-12   / -12  ",
+	"13    / 13   ",
+	"a     / a    ",
+	"  -10 / -0010",
+	"  +11 / +0011",
+	"  -12 / -0012",
+	"  +13 / +0013",
+	"    a /     a",
+	"-10   / -10  ",
+	"11    /  11  ",
+	"-12   / -12  ",
+	"13    /  13  ",
+	"a     / a    "
+]
+-- End --
+
+
+Unrecognized format directives are copied to the output string as-is.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		// A truncated format directive is preserved
+		sprintf("test %", "test"),
+		sprintf("test %-010.3", "test"),
+
+		// An unrecognized format directive is preserved
+		sprintf("test %y test", 123),
+		sprintf("test %~123s test", 123)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"test %",
+	"test %-010.3",
+	"test %y test",
+	"test %~123s test"
+]
+-- End --
+
+
+Missing values for format directives are treated as `null`.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		sprintf("%s"),
+		sprintf("%d"),
+		sprintf("%u"),
+		sprintf("%o"),
+		sprintf("%x"),
+		sprintf("%X"),
+		sprintf("%f"),
+		sprintf("%F"),
+		sprintf("%e"),
+		sprintf("%E"),
+		sprintf("%g"),
+		sprintf("%G"),
+		sprintf("%c"),
+		sprintf("%J")
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"(null)",
+	"0",
+	"0",
+	"0",
+	"0",
+	"0",
+	"0.000000",
+	"0.000000",
+	"0.000000e+00",
+	"0.000000E+00",
+	"0",
+	"0",
+	"\u0000",
+	"null"
+]
+-- End --
+
+
+Supplying a non-string format value will yield an empty string result.
+
+-- Testcase --
+{%
+	printf("%.J\n", sprintf(true, 1, 2, 3));
+%}
+-- End --
+
+-- Expect stdout --
+""
+-- End --

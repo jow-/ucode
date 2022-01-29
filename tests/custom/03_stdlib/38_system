@@ -1,0 +1,148 @@
+The `system()` function executes the given shell command or raw command
+vector, optionally terminating the spawned process after the specified
+timeout.
+
+Throws an exception if a timeout is specified but not a valid positive
+integer value.
+
+Throws an exception if the command argument is neither an array nor a
+string value.
+
+Throws an exception if an empty command vector is given.
+
+Returns the exit code of the invoked process.
+
+-- Testcase --
+{%
+	// When passing the command as string, `/bin/sh -c` is invoked with
+	// the given command string as second argument
+	system('x=1; echo $((x + x))');
+
+	// When passing the command as array, the first value is taken as
+	// executable to invoke and any further item as argument to the
+	// invoked program. Internally `execvp()` is used, which means that
+	// the executable path may be relative in which case it is looked
+	// up in the directories specified by `$PATH`. Any array items are
+	// implicitly stringified.
+	system([ '/bin/sh', TESTFILES_PATH + '/testscripts/hello.sh', true, 0x42, 123.456000, { some: "dict" } ]);
+
+	// By specifying a timeout, maximum execution time is limited to
+	// that many milliseconds. If the program does not finish before the
+	// timeout occurs, it is forcibly terminated with SIGKILL.
+	system([ '/bin/sh', TESTFILES_PATH + '/testscripts/sleep.sh' ], 100);
+
+	// The return value of system() is the exit code of the invoked program.
+	let rc = system([ '/bin/sh', TESTFILES_PATH + '/testscripts/exit.sh' ]);
+
+	printf("Return value is %d\n", rc);
+%}
+-- End --
+
+-- File testscripts/hello.sh --
+#!/bin/sh
+
+echo "This is our test program running!"
+echo "My arguments are:"
+
+for arg in "$@"; do
+	echo "<$arg>"
+done
+-- End --
+
+-- File testscripts/sleep.sh --
+#!/bin/sh
+
+echo "I'll sleep for 10s now..."
+sleep 10
+echo "I am done sleeping."
+-- End --
+
+-- File testscripts/exit.sh --
+#!/bin/sh
+
+echo "I'll exit with code 5 now."
+exit 5
+-- End --
+
+-- Expect stdout --
+2
+This is our test program running!
+My arguments are:
+<true>
+<66>
+<123.456>
+<{ "some": "dict" }>
+I'll sleep for 10s now...
+I'll exit with code 5 now.
+Return value is 5
+-- End --
+
+
+Passing an invalid command value throws an exception.
+
+-- Testcase --
+{%
+	system(true);
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Passed command is neither string nor array
+In line 2, byte 13:
+
+ `    system(true);`
+  Near here -----^
+
+
+-- End --
+
+-- Testcase --
+{%
+	system([]);
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Passed command array is empty
+In line 2, byte 11:
+
+ `    system([]);`
+  Near here ---^
+
+
+-- End --
+
+
+Passing an invalid timeout throws an exception.
+
+-- Testcase --
+{%
+	system("exit 0", "invalid")
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Invalid timeout specified
+In line 2, byte 28:
+
+ `    system("exit 0", "invalid")`
+  Near here --------------------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	system("exit 0", -100)
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Invalid timeout specified
+In line 2, byte 23:
+
+ `    system("exit 0", -100)`
+  Near here ---------------^
+
+
+-- End --

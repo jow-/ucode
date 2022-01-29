@@ -1,0 +1,55 @@
+The `match()` function applies the given regular expression pattern on
+the given subject value.
+
+Depending on whether the given regular expression sets the global (`g`)
+modifier, either an array of match groups or the first match group is
+returned.
+
+Returns `null` if the given pattern argument is not a regular expression
+value, or if the subject is `null` or unspecified.
+
+-- Testcase --
+{%
+	print(join("\n", [
+		// match all key=value pairs
+		match("kind=fruit name=strawberry color=red", /([[:alpha:]]+)=([^= ]+)/g),
+
+		// match any word
+		match("The quick brown fox jumps over the lazy dog", /[[:alpha:]]+/g),
+
+		// match the first three lowercase words
+		match("The quick brown fox jumps over the lazy dog", / ([[:lower:]]+) ([[:lower:]]+) ([[:lower:]]+)/),
+
+		// special case: match any empty string sequence
+		match("foo", /()/g),
+
+		// special case: match first empty string sequence
+		match("foo", /()/),
+
+		// subject is implictly converted to string
+		match(true, /u/)
+	]), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+[ [ "kind=fruit", "kind", "fruit" ], [ "name=strawberry", "name", "strawberry" ], [ "color=red", "color", "red" ] ]
+[ [ "The" ], [ "quick" ], [ "brown" ], [ "fox" ], [ "jumps" ], [ "over" ], [ "the" ], [ "lazy" ], [ "dog" ] ]
+[ " quick brown fox", "quick", "brown", "fox" ]
+[ [ "", "" ], [ "", "" ], [ "", "" ], [ "", "" ] ]
+[ "", "" ]
+[ "u" ]
+-- End --
+
+
+Omitting the subject yields `null`.
+
+-- Testcase --
+{%
+	printf("%.J\n", match(null, /u/));
+%}
+-- End --
+
+-- Expect stdout --
+null
+-- End --

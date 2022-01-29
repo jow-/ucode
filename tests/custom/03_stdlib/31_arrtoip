@@ -1,0 +1,57 @@
+The `arrtoip()` function converts the given byte array into an IP address
+string. Array of length 4 are converted to IPv4 addresses, arrays of
+length 16 to IPv6 addresses.
+
+Returns the resulting IPv4 or IPv6 address string.
+
+Returns `null` if the given value is not an array, if the array has an
+unsuitable length or if any item within the array is not an integer within
+the range 0-255.
+
+-- Testcase --
+{%
+	print(join("\n", [
+		arrtoip([ 0, 0, 0, 0 ]),
+		arrtoip([ 192, 168, 1, 1 ]),
+		arrtoip([ 255, 255, 255, 255 ]),
+		arrtoip([ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]),
+		arrtoip([ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 168, 1, 1 ]),
+		arrtoip([ 32, 1, 13, 184, 18, 52, 69, 103, 120, 154, 188, 222, 240, 18, 52, 86 ]),
+		arrtoip([ 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 ])
+	]), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+0.0.0.0
+192.168.1.1
+255.255.255.255
+::
+::ffff:192.168.1.1
+2001:db8:1234:4567:789a:bcde:f012:3456
+ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+-- End --
+
+
+Supplying a non-array value, an array of unsuitable length or an array
+containing invalid byte values yields `null`.
+
+-- Testcase --
+{%
+	print(join("\n", [
+		arrtoip(true),
+		arrtoip([ ]),
+		arrtoip([ 1, 2, 3 ]),
+		arrtoip([ 192, 168, 1, -1 ]),
+		arrtoip([ true, false, -5, 500 ])
+	]), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+null
+null
+null
+null
+null
+-- End --

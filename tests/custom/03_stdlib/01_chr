@@ -1,0 +1,27 @@
+The `chr()` function converts each given numeric value into a character
+and returns the resulting string, e.g. passing 97, 98 and 99 will yield
+the string `abc`.
+
+Negative numeric values and values which cannot be converted to integers
+are treated as `0`, values larger than `255` are capped to `255`.
+
+The resulting string will have the same length as the amount of arguments
+passed to the `chr()` function.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		chr(),
+		chr(97, 98, 99),
+		chr(-1, false, null, [], {}, "0x41", 66.5, 1000)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"",
+	"abc",
+	"\u0000\u0000\u0000\u0000\u0000AB\u00ff"
+]
+-- End --

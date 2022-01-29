@@ -1,0 +1,111 @@
+The `map()` function creates a new array from the given input array by
+invoking the specified callback for each item of the input array and
+putting the resulting return value into the new array.
+
+Returns the newly created array. The input array is not modified.
+
+Returns `null` if the first argument is not an array.
+
+-- Testcase --
+{%
+	let numbers = [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 ];
+
+	printf("%.J\n",
+		map(numbers, function(n) {
+			return (n * n);
+		})
+	);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	0,
+	1,
+	4,
+	9,
+	16,
+	25,
+	36,
+	49,
+	64,
+	81
+]
+-- End --
+
+
+Supplying an invalid callback will trigger an exception.
+
+-- Testcase --
+{%
+	map([1, 2, 3], "not_a_function")
+%}
+-- End --
+
+-- Expect stderr --
+Type error: left-hand side is not a function
+In line 2, byte 33:
+
+ `    map([1, 2, 3], "not_a_function")`
+  Near here -------------------------^
+
+
+-- End --
+
+
+Supplying an invalid array will yield `null`.
+
+-- Testcase --
+{%
+	printf("%.J\n", map("not_an_array", function(i) { return i > 3 }));
+%}
+-- End --
+
+-- Expect stdout --
+null
+-- End --
+
+
+The callback is invoked with three argument for each item, the current item
+value, the index position of the item and the input array being mapped.
+
+-- Testcase --
+{%
+	let words = [ "foo", "bar", "baz", "qrx" ];
+
+	print(join("\n",
+		map(words, function(word, idx, src) {
+			return sprintf("word=%s, idx=%d, src=%J", word, idx, src);
+		})
+	), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+word=foo, idx=0, src=[ "foo", "bar", "baz", "qrx" ]
+word=bar, idx=1, src=[ "foo", "bar", "baz", "qrx" ]
+word=baz, idx=2, src=[ "foo", "bar", "baz", "qrx" ]
+word=qrx, idx=3, src=[ "foo", "bar", "baz", "qrx" ]
+-- End --
+
+
+Exceptions in the callback terminate the map process and are
+propagated to the calling context.
+
+-- Testcase --
+{%
+	map([ 1, 2, 3 ], function() { die() });
+%}
+-- End --
+
+-- Expect stderr --
+Died
+In [anonymous function](), line 2, byte 36:
+  called from function map ([C])
+  called from anonymous function ([stdin]:2:39)
+
+ `    map([ 1, 2, 3 ], function() { die() });`
+  Near here ----------------------------^
+
+
+-- End --

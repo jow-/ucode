@@ -1,0 +1,33 @@
+The `hex()` function converts the given hexadecimal string into a signed
+integer value and returns the resulting number.
+
+Returns `NaN` if the given argument is not a string, an empty string or
+a string containing non-hexadecimal digits.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		hex(),
+		hex(false),
+		hex(123),
+		hex(""),
+		hex("invalid"),
+		hex("deaf"),
+		hex("0x1000"),
+		hex("ffffffffffffffff")
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"NaN",
+	"NaN",
+	"NaN",
+	"NaN",
+	"NaN",
+	57007,
+	4096,
+	9223372036854775807
+]
+-- End --

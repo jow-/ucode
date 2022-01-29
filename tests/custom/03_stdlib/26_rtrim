@@ -1,0 +1,46 @@
+The `rtrim()` function removes specific trailing characters from the given
+input string. If the characters to trim are unspecified, the space, tab,
+carriage return and newline characters will be used by default.
+
+Returns a copy of the input string with the specified trailing characters
+removed.
+
+Returns `null` if the given input argment is not a valid string value.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		// not specifying trim characters will trim whitespace
+		rtrim("Hello World!	 \r \n"),
+
+		// if trim characters are specified, only those are removed
+		rtrim("|* Foo Bar +|", "+*|"),
+
+		// rtrim does not affect characters in the middle or the beginning
+		rtrim("  Foo  Bar  "),
+		rtrim("|Foo|Bar|", "|")
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"Hello World!",
+	"|* Foo Bar ",
+	"  Foo  Bar",
+	"|Foo|Bar"
+]
+-- End --
+
+
+Supplying an invalid string will yield `null`.
+
+-- Testcase --
+{%
+	printf("%.J\n", ltrim(true));
+%}
+-- End --
+
+-- Expect stdout --
+null
+-- End --

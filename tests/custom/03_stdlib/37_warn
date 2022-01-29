@@ -1,0 +1,40 @@
+The `warn()` function outputs the given values to stderr.
+
+Returns the amount of bytes written.
+
+-- Testcase --
+{%
+	let n = 0;
+
+	n += warn(null, "\n");
+	n += warn(true, "\n");
+	n += warn(false, "\n");
+	n += warn(123, "\n");
+	n += warn(456.789, "\n");
+	n += warn(NaN, "\n");
+	n += warn(Infinity, "\n");
+	n += warn("Hello world", "\n");
+	n += warn([ 1, 2, 3 ], "\n");
+	n += warn({ some: "dict" }, "\n");
+	n += warn(warn, "\n");
+
+	warn(n, " bytes written\n");
+%}
+-- End --
+
+-- Expect stderr --
+
+true
+false
+123
+456.789
+NaN
+Infinity
+Hello world
+[ 1, 2, 3 ]
+{ "some": "dict" }
+function warn(...) { [native code] }
+117 bytes written
+-- End --
+
+

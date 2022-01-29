@@ -1,0 +1,36 @@
+The `exit()` function terminates the running program with the given exit
+code or 0 in case no argument is given or if the argument cannot be
+converted to an integer.
+
+The function does not return.
+
+-- Testcase --
+{%
+	print("Before invoking exit()\n");
+
+	exit();
+
+	print("After invoking exit()\n");
+%}
+-- End --
+
+-- Expect stdout --
+Before invoking exit()
+-- End --
+
+-- Expect exitcode --
+0
+-- End --
+
+
+Passing a code argument overrides the default "0" value.
+
+-- Testcase --
+{%
+	exit(123)
+%}
+-- End --
+
+-- Expect exitcode --
+123
+-- End --

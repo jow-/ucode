@@ -1,0 +1,18 @@
+The `time()` function returns the current UNIX epoch time.
+
+
+-- Testcase --
+{%
+	let timestamp = time();
+	let testcmd = sprintf('t=$(date +%%s); [ $t -gt %d -a $t -lt %d ]', timestamp - 3, timestamp + 3);
+
+	if (system(testcmd) == 0)
+		print("time() works\n");
+	else
+		print("time() and `date +%s` yield different results!\n");
+%}
+-- End --
+
+-- Expect stdout --
+time() works
+-- End --

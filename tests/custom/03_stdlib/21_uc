@@ -1,0 +1,27 @@
+The `uc()` function turns each lower case character in the source string
+into upper case and returns the resulting copy.
+
+The input argument is converted to a string in case it is not already a
+string value.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		uc("This Will Be All Uppercased."),
+		uc([ "An", "array", "ABC" ]),
+		uc(123),
+		uc(false),
+		uc()
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"THIS WILL BE ALL UPPERCASED.",
+	"[ \"AN\", \"ARRAY\", \"ABC\" ]",
+	"123",
+	"FALSE",
+	"NULL"
+]
+-- End --

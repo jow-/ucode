@@ -1,0 +1,31 @@
+The `reverse()` function returns the input argument in reverse order.
+
+Returns a reversed copy of the input string if the given input value
+argument is a string.
+
+Returns a reversed copy of the input array if the given input value
+argument is an array.
+
+Returns `null` if the input argument is neither a string nor an array.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		reverse("abc"),
+		reverse([1, 2, 3]),
+		reverse(true)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"cba",
+	[
+		3,
+		2,
+		1
+	],
+	null
+]
+-- End --
