@@ -927,9 +927,18 @@ uc_split(uc_vm_t *vm, size_t nargs)
 			if (res == REG_NOMATCH)
 				break;
 
-			ucv_array_push(arr, ucv_string_new_length(splitstr, pmatch.rm_so));
+			if (pmatch.rm_so != pmatch.rm_eo) {
+				ucv_array_push(arr, ucv_string_new_length(splitstr, pmatch.rm_so));
+				splitstr += pmatch.rm_eo;
+			}
+			else if (*splitstr) {
+				ucv_array_push(arr, ucv_string_new_length(splitstr, 1));
+				splitstr++;
+			}
+			else {
+				goto out;
+			}
 
-			splitstr += pmatch.rm_eo;
 			eflags |= REG_NOTBOL;
 		}
 
@@ -956,6 +965,7 @@ uc_split(uc_vm_t *vm, size_t nargs)
 		return NULL;
 	}
 
+out:
 	return arr;
 }
 
