@@ -459,6 +459,7 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 	/* XXX: make dependent on stack size */
 	if (vm->callframes.count >= 1000) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME, "Too much recursion");
+		ucv_put(fno);
 
 		return false;
 	}
@@ -495,6 +496,7 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 				s = ucv_to_string(vm, arg);
 				uc_vm_raise_exception(vm, EXCEPTION_TYPE, "(%s) is not iterable", s);
 				free(s);
+				ucv_put(fno);
 
 				return false;
 			}
@@ -526,6 +528,7 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 
 	if (ucv_type(fno) != UC_CLOSURE) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "left-hand side is not a function");
+		ucv_put(fno);
 
 		return false;
 	}
