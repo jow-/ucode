@@ -85,7 +85,10 @@ run_testcase() {
 
 		IFS=$' \t\n'
 
-		$ucode_bin $args -e '{ "REQUIRE_SEARCH_PATH": [ "'"$ucode_lib"'/*.so" ] }' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
+		$ucode_bin $args -e '{
+			"REQUIRE_SEARCH_PATH": [ "'"$ucode_lib"'/*.so" ],
+			"TESTFILES_PATH": "'"$dir"'/files"
+		}' -i - <"$in" >"$dir/res.out" 2>"$dir/res.err"
 	)
 
 	printf "%d\n" $? > "$dir/res.code"
@@ -94,7 +97,7 @@ run_testcase() {
 	if ! cmp -s "$dir/res.err" "${err:-$dir/empty}"; then
 		[ $fail = 0 ] && printf "!\n"
 		printf "Testcase #%d: Expected stderr did not match:\n" $num
-		diff -u --color=always --label="Expected stderr" --label="Resulting stderr" "${err:-$dir/empty}" "$dir/res.err"
+		diff -au --color=always --label="Expected stderr" --label="Resulting stderr" "${err:-$dir/empty}" "$dir/res.err"
 		printf -- "---\n"
 		fail=1
 	fi
@@ -102,7 +105,7 @@ run_testcase() {
 	if ! cmp -s "$dir/res.out" "${out:-$dir/empty}"; then
 		[ $fail = 0 ] && printf "!\n"
 		printf "Testcase #%d: Expected stdout did not match:\n" $num
-		diff -u --color=always --label="Expected stdout" --label="Resulting stdout" "${out:-$dir/empty}" "$dir/res.out"
+		diff -au --color=always --label="Expected stdout" --label="Resulting stdout" "${out:-$dir/empty}" "$dir/res.out"
 		printf -- "---\n"
 		fail=1
 	fi
@@ -110,7 +113,7 @@ run_testcase() {
 	if [ -n "$code" ] && ! cmp -s "$dir/res.code" "$code"; then
 		[ $fail = 0 ] && printf "!\n"
 		printf "Testcase #%d: Expected exit code did not match:\n" $num
-		diff -u --color=always --label="Expected code" --label="Resulting code" "$code" "$dir/res.code"
+		diff -au --color=always --label="Expected code" --label="Resulting code" "$code" "$dir/res.code"
 		printf -- "---\n"
 		fail=1
 	fi
