@@ -40,6 +40,14 @@ extract_sections() {
 				outfile=$(printf "%s/%03d.%s" "$dir" $count "$tag")
 				printf "" > "$outfile"
 			;;
+			"-- File "*" --")
+				tag="file"
+				outfile="${line#-- File }"
+				outfile="$(echo "${outfile% --}" | xargs)"
+				outfile="$dir/files$(readlink -m "/${outfile:-file}")"
+				mkdir -p "$(dirname "$outfile")"
+				printf "" > "$outfile"
+			;;
 			"-- End (no-eol) --")
 				truncate -s -1 "$outfile"
 				tag=""
