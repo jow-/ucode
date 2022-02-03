@@ -1975,7 +1975,12 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 				uc_replace_str(vm, replace, p, pmatch, ARRAY_SIZE(pmatch), resbuf);
 			}
 
-			p += pmatch[0].rm_eo;
+			if (pmatch[0].rm_so != pmatch[0].rm_eo)
+				p += pmatch[0].rm_eo;
+			else if (*p)
+				ucv_stringbuf_addstr(resbuf, p++, 1);
+			else
+				break;
 
 			if (re->global)
 				eflags |= REG_NOTBOL;
@@ -1989,8 +1994,10 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 		pt = uc_cast_string(vm, &pattern, &pt_freeable);
 		pl = strlen(pt);
 
-		for (l = p = sb; *p; p++) {
-			if (!strncmp(p, pt, pl)) {
+		l = p = sb;
+
+		while (true) {
+			if (pl == 0 || !strncmp(p, pt, pl)) {
 				ucv_stringbuf_addstr(resbuf, l, p - l);
 
 				pmatch[0].rm_so = p - l;
@@ -2013,9 +2020,17 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 					uc_replace_str(vm, replace, l, pmatch, 1, resbuf);
 				}
 
-				l = p + pl;
-				p += pl - 1;
+				if (pl) {
+					l = p + pl;
+					p += pl - 1;
+				}
+				else {
+					l = p;
+				}
 			}
+
+			if (!*p++)
+				break;
 		}
 
 		ucv_stringbuf_addstr(resbuf, l, strlen(l));
