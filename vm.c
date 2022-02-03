@@ -2294,12 +2294,17 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
 	uc_value_t *retval;
 	uc_vm_insn_t insn;
+	uint8_t *ip;
 
 	while (chunk) {
-		if (vm->trace)
-			uc_dump_insn(vm, frame->ip, (insn = uc_vm_decode_insn(vm, frame, chunk)));
-		else
+		if (vm->trace) {
+			ip = frame->ip;
 			insn = uc_vm_decode_insn(vm, frame, chunk);
+			uc_dump_insn(vm, ip, insn);
+		}
+		else {
+			insn = uc_vm_decode_insn(vm, frame, chunk);
+		}
 
 		switch (insn) {
 		case I_LOAD:
