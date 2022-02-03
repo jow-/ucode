@@ -1562,7 +1562,7 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 static void
 uc_vm_insn_update_var(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_value_t *name, *val, *inc = uc_vm_stack_pop(vm);
+	uc_value_t *name, *val = NULL, *inc = uc_vm_stack_pop(vm);
 	uc_value_t *scope, *next;
 	bool found;
 
