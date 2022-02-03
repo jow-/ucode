@@ -1,0 +1,110 @@
+The `json()` function parses the given string value as JSON.
+
+Throws an exception if the given input value is not a string.
+Throws an exception if the given input string cannot be parsed as JSON.
+
+Returns the resulting value.
+
+-- Testcase --
+{%
+	print(join("\n", [
+		json("null"),
+		json("true"),
+		json("false"),
+		json("123"),
+		json("456.7890000"),
+		json("-1.4E10"),
+		json("1e309"),
+		json('"A string \u2600"'),
+		json("[ 1, 2, 3 ]"),
+		json('{ "test": [ 1, 2, 3 ] }'),
+
+		// surrounding white space is ignored
+		json('    [ 1, 2, 3 ]    ')
+	]), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+null
+true
+false
+123
+456.789
+-1.4e+10
+Infinity
+A string ☀
+[ 1, 2, 3 ]
+{ "test": [ 1, 2, 3 ] }
+[ 1, 2, 3 ]
+-- End --
+
+
+Passing a non-string value throws an exception.
+
+-- Testcase --
+{%
+	json(true);
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Passed value is not a string
+In line 2, byte 11:
+
+ `    json(true);`
+  Near here ---^
+
+
+-- End --
+
+
+Unparseable JSON throws exceptions.
+
+-- Testcase --
+{%
+	json('[ "incomplete", "array" ');
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: Failed to parse JSON string: unexpected end of data
+In line 2, byte 33:
+
+ `    json('[ "incomplete", "array" ');`
+  Near here -------------------------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	json('invalid syntax');
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: Failed to parse JSON string: unexpected character
+In line 2, byte 23:
+
+ `    json('invalid syntax');`
+  Near here ---------------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	json('[] trailing garbage');
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: Trailing garbage after JSON data
+In line 2, byte 28:
+
+ `    json('[] trailing garbage');`
+  Near here --------------------^
+
+
+-- End --

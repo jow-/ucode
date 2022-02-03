@@ -1,0 +1,28 @@
+The `min()` function returns the minimum of all given arguments.
+
+If multiple equivalent minimum values are given (e.g. `null` and `false`
+both are treated as `0` when comparing numerically), the first minimal
+value is returned.
+
+Returns the minimum value among all given arguments or `null` if no
+arguments were passed.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		min(),
+		min(5, 1, 3, -10),
+		min("foo", "bar", "xxx", "abc"),
+		min(false, null, 0, NaN)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	null,
+	-10,
+	"abc",
+	false
+]
+-- End --

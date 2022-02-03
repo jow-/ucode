@@ -1,0 +1,30 @@
+The `assert()` function raises an exception using the second argument as
+message when the first argument value is not truish.
+
+Throws an exception if the first argument value is not truish.
+
+Returns the value of the first argument.
+
+-- Testcase --
+{%
+	let x = assert(123, "This should not trigger");
+	printf("x = %d\n", x);
+
+	let y = assert(false, "This should trigger");
+	printf("y = %d\n", y);
+%}
+-- End --
+
+-- Expect stdout --
+x = 123
+-- End --
+
+-- Expect stderr --
+This should trigger
+In line 5, byte 45:
+
+ `    let y = assert(false, "This should trigger");`
+  Near here -------------------------------------^
+
+
+-- End --

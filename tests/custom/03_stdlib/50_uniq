@@ -1,0 +1,66 @@
+The `uniq()` function extracts the unique set of all values within the
+given input array, maintaining the original order.
+
+Returns an array containing all unique items of the input array.
+
+Returns `null` if the input is not an array value.
+
+-- Testcase --
+{%
+	let o1 = { an: "object" };
+	let o2 = { an: "object" }; // same but not identical
+
+	let a1 = [ 1, 2, 3 ];
+	let a2 = [ 1, 2, 3 ]; // same but not identical
+
+	printf("%.J\n", [
+		// strict comparison is used, 0 and "0" are not unique
+		uniq([ 0, 1, 2, 0, "0", 2, 3, "4", 4 ]),
+
+		// despite NaN != NaN, two NaN values are not unique
+		uniq([ NaN, NaN ]),
+
+		// only identical objects are filtered, not equivalent ones
+		uniq([ o1, o1, o2, a1, a1, a2 ]),
+
+		// invalid input yields `null`
+		uniq(true)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	[
+		0,
+		1,
+		2,
+		"0",
+		3,
+		"4",
+		4
+	],
+	[
+		"NaN"
+	],
+	[
+		{
+			"an": "object"
+		},
+		{
+			"an": "object"
+		},
+		[
+			1,
+			2,
+			3
+		],
+		[
+			1,
+			2,
+			3
+		]
+	],
+	null
+]
+-- End --

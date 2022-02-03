@@ -1,0 +1,98 @@
+The `splice()` function performs in-place addition and removal of elements
+on the given array.
+
+If no offset, remove count and additional items are supplied, all elements
+are removed from the array.
+
+If just an offset, but no remove count and not additional items are given,
+all elements beginning with the given offset until the end of the array
+are removed.
+
+If at least an offset and a remove count are given, then that amount of
+items are removed from the array, beginning at the specified offset. Any
+further supplied additional item (if any) is inserted in the same order
+beginning at the given offset.
+
+If either the offset or the remove count are negative, they're treated
+as counting towards the end of the array. If either value exceeds the
+array length, it is capped to the length of the array.
+
+Returns the modified input array.
+
+Returns `null` if the given input array value is not an array.
+
+
+-- Testcase --
+{%
+	let arr = [ 6, 4.3, 1, 45, 3.01, 2 ];
+
+	print(join("\n", [
+		// remove all items
+		splice([ ...arr ]),
+
+		// remove all items from index 4 till end
+		splice([ ...arr ], 4),
+
+		// remove item 2 and 3
+		splice([ ...arr ], 1, 2),
+
+		// remove last two items
+		splice([ ...arr ], -2),
+
+		// remove items 4 and 5
+		splice([ ...arr ], -3, -1),
+
+		// replace item 2
+		splice([ ...arr ], 1, 1, 7.9),
+
+		// add item between 3 and 4
+		splice([ ...arr ], 3, 0, 34),
+
+		// append three items
+		splice([ ...arr ], length(arr), 0, 123, 456, 789)
+	]), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+[ ]
+[ 6, 4.3, 1, 45 ]
+[ 6, 45, 3.01, 2 ]
+[ 6, 4.3, 1, 45 ]
+[ 6, 4.3, 1, 2 ]
+[ 6, 7.9, 1, 45, 3.01, 2 ]
+[ 6, 4.3, 1, 34, 45, 3.01, 2 ]
+[ 6, 4.3, 1, 45, 3.01, 2, 123, 456, 789 ]
+-- End --
+
+
+Supplying an invalid array will yield `null`.
+
+-- Testcase --
+{%
+	printf("%.J\n", splice("not_an_array", 0, 1));
+%}
+-- End --
+
+-- Expect stdout --
+null
+-- End --
+
+
+Invalid, non-numeric offset or index values are treated as 0.
+
+-- Testcase --
+{%
+	let arr = [ 6, 4.3, 1, 45, 3.01, 2 ];
+
+	print(join("\n", [
+		splice([ ...arr ], "foo", "bar"),
+		splice([ ...arr ], "foo", "bar", "baz")
+	]), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+[ 6, 4.3, 1, 45, 3.01, 2 ]
+[ "baz", 6, 4.3, 1, 45, 3.01, 2 ]
+-- End --

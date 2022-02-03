@@ -126,7 +126,7 @@ uc_source_put(uc_source_t *source)
 uc_source_type_t
 uc_source_type_test(uc_source_t *source)
 {
-	union { char s[sizeof(uint32_t)]; uint32_t n; } buf;
+	union { char s[sizeof(uint32_t)]; uint32_t n; } buf = { 0 };
 	uc_source_type_t type = UC_SOURCE_TYPE_PLAIN;
 	FILE *fp = source->fp;
 	size_t rlen;

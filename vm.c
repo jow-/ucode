@@ -459,6 +459,7 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 	/* XXX: make dependent on stack size */
 	if (vm->callframes.count >= 1000) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME, "Too much recursion");
+		ucv_put(fno);
 
 		return false;
 	}
@@ -495,6 +496,7 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 				s = ucv_to_string(vm, arg);
 				uc_vm_raise_exception(vm, EXCEPTION_TYPE, "(%s) is not iterable", s);
 				free(s);
+				ucv_put(fno);
 
 				return false;
 			}
@@ -526,6 +528,7 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 
 	if (ucv_type(fno) != UC_CLOSURE) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "left-hand side is not a function");
+		ucv_put(fno);
 
 		return false;
 	}
@@ -1562,7 +1565,7 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 static void
 uc_vm_insn_update_var(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_value_t *name, *val, *inc = uc_vm_stack_pop(vm);
+	uc_value_t *name, *val = NULL, *inc = uc_vm_stack_pop(vm);
 	uc_value_t *scope, *next;
 	bool found;
 
@@ -2291,12 +2294,17 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
 	uc_value_t *retval;
 	uc_vm_insn_t insn;
+	uint8_t *ip;
 
 	while (chunk) {
-		if (vm->trace)
-			uc_dump_insn(vm, frame->ip, (insn = uc_vm_decode_insn(vm, frame, chunk)));
-		else
+		if (vm->trace) {
+			ip = frame->ip;
 			insn = uc_vm_decode_insn(vm, frame, chunk);
+			uc_dump_insn(vm, ip, insn);
+		}
+		else {
+			insn = uc_vm_decode_insn(vm, frame, chunk);
+		}
 
 		switch (insn) {
 		case I_LOAD:

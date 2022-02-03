@@ -1,0 +1,89 @@
+The `proto()` function retrievs or sets the prototype of the given object
+or resource value.
+
+Throws an exception if given value does not support setting prototypes.
+
+When invoked with one argument, returns the prototype of the given value
+(if any).
+
+When invoked with two arguments, returns the given value.
+
+-- Testcase --
+{%
+	let fs = require("fs");
+
+	// create a "class instance" by attaching a function dictionary to
+	// a plain object.
+	let obj = proto({}, {
+		greeting: function(name) {
+			printf("Hello, %s!\n", name);
+		}
+	});
+
+	// accessing a property on `obj` will look up the prototype chain
+	// if the object itself does not have it
+	obj.greeting("World");
+
+	printf("%.J\n", [
+		// retrieve prototype of `fs.file` resource
+		proto(fs.stdout),
+
+		// retrieve prototype of `obj`
+		proto(obj)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+Hello, World!
+[
+	{
+		"error": "function error(...) { [native code] }",
+		"fileno": "function fileno(...) { [native code] }",
+		"close": "function close(...) { [native code] }",
+		"tell": "function tell(...) { [native code] }",
+		"seek": "function seek(...) { [native code] }",
+		"write": "function write(...) { [native code] }",
+		"read": "function read(...) { [native code] }"
+	},
+	{
+		"greeting": "function(name) { ... }"
+	}
+]
+-- End --
+
+
+
+Passing an invalid value throws an exception.
+
+-- Testcase --
+{%
+	proto("inval", {});
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Passed value is neither a prototype, resource or object
+In line 2, byte 19:
+
+ `    proto("inval", {});`
+  Near here -----------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	proto({}, "inval");
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Passed value is neither a prototype, resource or object
+In line 2, byte 19:
+
+ `    proto({}, "inval");`
+  Near here -----------^
+
+
+-- End --

@@ -1,0 +1,117 @@
+The `regexp()` function compiles the given pattern string into a regular
+expression, optionally applying the flags specified in the second argument.
+
+Throws an exception if unrecognized flag characters are specified or if the
+flags argument is not a string value.
+
+Throws an exception if the given pattern string cannot be compiled into a
+regular expression.
+
+Returns the compiled regexp object.
+
+-- Testcase --
+{%
+	let re1 = regexp("begin (.+) end", "i");
+	let re2 = regexp("[a-z]+", "g");
+	let re3 = regexp("Dots (.+) newlines", "s");
+
+	printf("%.J\n", [
+		match("BEGIN this is some text END", re1),
+		match("This is a group of words", re2),
+		match("Dots now\ndon't\nmatch\ntext\nwith newlines", re3)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	[
+		"BEGIN this is some text END",
+		"this is some text"
+	],
+	[
+		[
+			"his"
+		],
+		[
+			"is"
+		],
+		[
+			"a"
+		],
+		[
+			"group"
+		],
+		[
+			"of"
+		],
+		[
+			"words"
+		]
+	],
+	null
+]
+-- End --
+
+
+Passing an uncompilable regexp throws an exception.
+
+-- Testcase --
+{%
+	try {
+		// unterminated capture group to trigger syntax error
+		regexp("foo(");
+	}
+	catch (e) {
+		// Massage compile error message for stable output since it is
+		// dependant on the underyling C library.
+		e.message = "Compile error";
+		die(e);
+	}
+%}
+-- End --
+
+-- Expect stderr --
+Compile error
+In line 10, byte 8:
+
+ `        die(e);`
+  Near here ---^
+
+
+-- End --
+
+
+Passing an invalid flags argument throws an exception.
+
+-- Testcase --
+{%
+	regexp(".*", true);
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Given flags argument is not a string
+In line 2, byte 19:
+
+ `    regexp(".*", true);`
+  Near here -----------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	regexp(".*", "igz");
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Unrecognized flag character 'z'
+In line 2, byte 20:
+
+ `    regexp(".*", "igz");`
+  Near here ------------^
+
+
+-- End --

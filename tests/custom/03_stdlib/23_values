@@ -1,0 +1,35 @@
+The `values()` extracts all values of a given dictionary. The values in the
+resulting array are ordered according to the keys which in turn follow
+declaration or assignment order.
+
+Returns an array containg the value of each key within the given dictionary
+value.
+
+Returns `null` if the given dictionary argment is not a valid dictionary.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		values({ foo: true, bar: false, baz: null, qrx: 123, xyz: "test" }),
+		values({}),
+		values(true),
+		values()
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	[
+		true,
+		false,
+		null,
+		123,
+		"test"
+	],
+	[
+	],
+	null,
+	null
+]
+-- End --

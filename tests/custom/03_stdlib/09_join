@@ -1,0 +1,31 @@
+The `join()` function constructs a string out of the given array by
+converting each array item into a string and then joining these substrings
+putting the given separator value in between. An empty array will result in
+an empty string.
+
+The separator argument is converted into a string in case it is not already
+a string value.
+
+Returns `null` if the given array argument is not an array value.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		join("|", []),
+		join("|", [ 1, 2, 3 ]),
+		join("|", [ null, false, "" ]),
+		join(123, [ "a", "b", "c" ]),
+		join(123, { "not": "an", "array": "value" })
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"",
+	"1|2|3",
+	"null|false|",
+	"a123b123c",
+	null
+]
+-- End --

@@ -1,0 +1,31 @@
+The `b64dec()` function decodes the given base64 input string.
+
+Returns a string containing the decoded data.
+
+Returns `null` if the input is not a string or if the input string was
+invalid base64 data (e.g. missing padding or non-whitespace characters
+outside the expected alphabet).
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		b64dec("SGVsbG8sIHdvcmxkIQ=="),
+		b64dec("SGVsbG8sIHdvcmxkIQ"),
+		b64dec("AAECAw=="),
+		b64dec("xxx"),
+		b64dec("==="),
+		b64dec(true)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"Hello, world!",
+	null,
+	"\u0000\u0001\u0002\u0003",
+	null,
+	null,
+	null
+]
+-- End --

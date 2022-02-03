@@ -1,0 +1,43 @@
+The `type()` function returns the type name of the given argument as
+string.
+
+Returns `null` if the given argument is `null` or omitted.
+
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		type(),
+		type(null),
+		type(false),
+		type(true),
+		type(123),
+		type(-0xaf),
+		type(456.789),
+		type(-456.789),
+		type([ "foo", "bar", "baz" ]),
+		type({ example: "object" }),
+		type(function() {}),
+		type((n) => n * n),
+		type(print)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	null,
+	null,
+	"bool",
+	"bool",
+	"int",
+	"int",
+	"double",
+	"double",
+	"array",
+	"object",
+	"function",
+	"function",
+	"function"
+]
+-- End --

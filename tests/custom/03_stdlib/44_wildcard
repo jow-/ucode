@@ -1,0 +1,43 @@
+The `wildcard()` function tests whether the given wildcard pattern matches
+the given subject, optionally ignoring letter case.
+
+Returns `true` if the pattern matches the subject.
+
+Returns `false` if the pattern does not match the subject.
+
+Returns `null` if the pattern argument is not a string value.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		// A simple glob pattern match
+		wildcard("file.txt", "*.txt"),
+
+		// Using `?` as single character placeholder and case folding
+		wildcard("2022-02-02_BACKUP.LIST", "????-??-??_backup.*", true),
+
+		// Using bracket expressions
+		wildcard("aaa_123_zzz", "[a-z][a-z][a-z]_???_*"),
+
+		// Using no meta characters at all
+		wildcard("test", "test"),
+
+		// No match yields `false`
+		wildcard("abc", "d*"),
+
+		// Invalid pattern value yields `null`
+		wildcard("true", true)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	true,
+	true,
+	true,
+	true,
+	false,
+	null
+]
+-- End --

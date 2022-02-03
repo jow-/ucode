@@ -1,0 +1,30 @@
+The `getenv()` function returns the value of the given environment variable
+or `null` if either the given variable does not exist or if the given name
+argument is not a string.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		getenv("TEST_VARIABLE"),
+		getenv("EMPTY_VARIABLE"),
+		getenv("THIS_LIKELY_DOES_NOT_EXIST"),
+		getenv(123),
+		getenv(null)
+	]);
+%}
+-- End --
+
+-- Vars --
+TEST_VARIABLE=Test Value
+EMPTY_VARIABLE=
+-- End --
+
+-- Expect stdout --
+[
+	"Test Value",
+	"",
+	null,
+	null,
+	null
+]
+-- End --

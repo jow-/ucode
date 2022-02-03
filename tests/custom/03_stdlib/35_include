@@ -1,0 +1,173 @@
+The `include()` function executes the specified path as ucode script,
+optionally setting a different execution scope for the invoked file.
+
+If the specified path is relative, it is treated as being relative to the
+source file currently being executed or the current working directory in
+case the interpreter executes code from stdin or a command line argument.
+
+Throws an exception if the given path value is not a string.
+
+Throws an exception if a scope argument is specified and not a valid object.
+
+Throws an exception if the given path could not be found or opened.
+
+Throws an exception if the given file could not be compiled.
+
+Returns no value.
+
+-- Testcase --
+{%
+	let real_printf = printf;
+
+	// include by relative path
+	include("files/include.uc");
+
+	printf("---\n");
+
+	// include by absolute path
+	include(TESTFILES_PATH + "/include.uc");
+
+	printf("---\n");
+
+	// include with overridden scope
+	include("files/include.uc", {
+		printf: function(...args) {
+			real_printf("This is the wrapped printf() getting called!\n");
+
+			return real_printf(...args);
+		}
+	});
+
+	printf("---\n");
+
+	// include with isolated scope
+	include("files/include.uc", proto({
+		printf: function(...args) {
+			real_printf("This is the wrapped printf() getting called!\n");
+
+			return real_printf(...args);
+		}
+	}, {}));
+%}
+-- End --
+
+-- File include.uc --
+{%
+	printf("This is the include file running! Can I access the global env? %s\n",
+		REQUIRE_SEARCH_PATH ? "Yes!" : "No.");
+%}
+-- End --
+
+-- Expect stdout --
+This is the include file running! Can I access the global env? Yes!
+---
+This is the include file running! Can I access the global env? Yes!
+---
+This is the wrapped printf() getting called!
+This is the include file running! Can I access the global env? Yes!
+---
+This is the wrapped printf() getting called!
+This is the include file running! Can I access the global env? No.
+-- End --
+
+
+An invalid path value triggers an exception.
+
+-- Testcase --
+{%
+	include(true);
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Passed filename is not a string
+In line 2, byte 14:
+
+ `    include(true);`
+  Near here ------^
+
+
+-- End --
+
+
+An invalid scope value triggers an exception.
+
+-- Testcase --
+{%
+	include("test", true);
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Passed scope value is not an object
+In line 2, byte 22:
+
+ `    include("test", true);`
+  Near here --------------^
+
+
+-- End --
+
+
+A not found file triggers an exception.
+
+-- Testcase --
+{%
+	include("files/doesnotexist.uc");
+%}
+-- End --
+
+-- Expect stderr --
+Runtime error: Include file not found
+In line 2, byte 33:
+
+ `    include("files/doesnotexist.uc");`
+  Near here -------------------------^
+
+
+-- End --
+
+
+A compilation error in the file triggers an exception.
+
+-- Testcase --
+{%
+	try {
+		include("files/broken.uc");
+	}
+	catch (e) {
+		// Catch and rethrow exception with modified message to
+		// ensure stable test output.
+		e.message = replace(e.message,
+			/(compile module '.+broken\.uc')/,
+			"compile module '.../broken.uc'");
+
+		die(e);
+	}
+%}
+-- End --
+
+-- File broken.uc --
+{%
+	// Unclosed object to force syntax error
+	return {
+%}
+-- End --
+
+-- Expect stderr --
+Unable to compile module '.../broken.uc':
+Syntax error: Expecting label
+In line 3, byte 11:
+
+ `    return {`
+  Near here --^
+
+
+
+In line 12, byte 8:
+
+ `        die(e);`
+  Near here ---^
+
+
+-- End --

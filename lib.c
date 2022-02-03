@@ -927,9 +927,18 @@ uc_split(uc_vm_t *vm, size_t nargs)
 			if (res == REG_NOMATCH)
 				break;
 
-			ucv_array_push(arr, ucv_string_new_length(splitstr, pmatch.rm_so));
+			if (pmatch.rm_so != pmatch.rm_eo) {
+				ucv_array_push(arr, ucv_string_new_length(splitstr, pmatch.rm_so));
+				splitstr += pmatch.rm_eo;
+			}
+			else if (*splitstr) {
+				ucv_array_push(arr, ucv_string_new_length(splitstr, 1));
+				splitstr++;
+			}
+			else {
+				goto out;
+			}
 
-			splitstr += pmatch.rm_eo;
 			eflags |= REG_NOTBOL;
 		}
 
@@ -956,6 +965,7 @@ uc_split(uc_vm_t *vm, size_t nargs)
 		return NULL;
 	}
 
+out:
 	return arr;
 }
 
@@ -1794,7 +1804,13 @@ uc_match(uc_vm_t *vm, size_t nargs)
 
 			ucv_array_push(rv, m);
 
-			p += pmatch[0].rm_eo;
+			if (pmatch[0].rm_so != pmatch[0].rm_eo)
+				p += pmatch[0].rm_eo;
+			else if (*p)
+				p++;
+			else
+				break;
+
 			eflags |= REG_NOTBOL;
 		}
 		else {
@@ -1959,7 +1975,12 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 				uc_replace_str(vm, replace, p, pmatch, ARRAY_SIZE(pmatch), resbuf);
 			}
 
-			p += pmatch[0].rm_eo;
+			if (pmatch[0].rm_so != pmatch[0].rm_eo)
+				p += pmatch[0].rm_eo;
+			else if (*p)
+				ucv_stringbuf_addstr(resbuf, p++, 1);
+			else
+				break;
 
 			if (re->global)
 				eflags |= REG_NOTBOL;
@@ -1973,8 +1994,10 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 		pt = uc_cast_string(vm, &pattern, &pt_freeable);
 		pl = strlen(pt);
 
-		for (l = p = sb; *p; p++) {
-			if (!strncmp(p, pt, pl)) {
+		l = p = sb;
+
+		while (true) {
+			if (pl == 0 || !strncmp(p, pt, pl)) {
 				ucv_stringbuf_addstr(resbuf, l, p - l);
 
 				pmatch[0].rm_so = p - l;
@@ -1997,9 +2020,17 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 					uc_replace_str(vm, replace, l, pmatch, 1, resbuf);
 				}
 
-				l = p + pl;
-				p += pl - 1;
+				if (pl) {
+					l = p + pl;
+					p += pl - 1;
+				}
+				else {
+					l = p;
+				}
 			}
+
+			if (!*p++)
+				break;
 		}
 
 		ucv_stringbuf_addstr(resbuf, l, strlen(l));
@@ -2017,10 +2048,10 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_json(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *rv, *src = uc_fn_arg(0);
+	uc_value_t *rv = NULL, *src = uc_fn_arg(0);
 	struct json_tokener *tok = NULL;
 	enum json_tokener_error err;
-	json_object *jso;
+	json_object *jso = NULL;
 	const char *str;
 	size_t len;
 
@@ -2042,32 +2073,30 @@ uc_json(uc_vm_t *vm, size_t nargs)
 	err = json_tokener_get_error(tok);
 
 	if (err == json_tokener_continue) {
-		json_object_put(jso);
 		uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
 		                      "Unexpected end of string in JSON data");
 
-		return NULL;
+		goto out;
 	}
 	else if (err != json_tokener_success) {
-		json_object_put(jso);
 		uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
 		                      "Failed to parse JSON string: %s",
 		                      json_tokener_error_desc(err));
 
-		return NULL;
+		goto out;
 	}
 	else if (json_tokener_get_parse_end(tok) < len) {
-		json_object_put(jso);
 		uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
 		                      "Trailing garbage after JSON data");
 
-		return NULL;
+		goto out;
 	}
 
-	json_tokener_free(tok);
 
 	rv = ucv_from_json(vm, jso);
 
+out:
+	json_tokener_free(tok);
 	json_object_put(jso);
 
 	return rv;

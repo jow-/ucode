@@ -1,0 +1,46 @@
+The `iptoarr()` function parses the given IP address string into an array
+of byte values.
+
+Returns an array of byte values for the parsed IP address.
+
+Returns `null` if the given IP argument is not a string value or if the
+IP address could not be parsed.
+
+-- Testcase --
+{%
+	print(join("\n", [
+		iptoarr("0.0.0.0"),
+		iptoarr("10.11.12.13"),
+		iptoarr("::"),
+		iptoarr("::ffff:192.168.1.1"),
+		iptoarr("2001:db8:1234:4567:789a:bcde:f012:3456"),
+		iptoarr("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")
+	]), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+[ 0, 0, 0, 0 ]
+[ 10, 11, 12, 13 ]
+[ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
+[ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 192, 168, 1, 1 ]
+[ 32, 1, 13, 184, 18, 52, 69, 103, 120, 154, 188, 222, 240, 18, 52, 86 ]
+[ 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 ]
+-- End --
+
+
+Supplying a non-string value or an unparsable address yields `null`.
+
+-- Testcase --
+{%
+	print(join("\n", [
+		iptoarr(true),
+		iptoarr("invalid")
+	]), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+null
+null
+-- End --

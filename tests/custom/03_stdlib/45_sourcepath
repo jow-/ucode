@@ -1,0 +1,69 @@
+The `sourcepath()` function determines the path of the currently executed
+ucode script file, optionally only the directory portion.
+
+By specifying the a depth parameter, the owning files of functions further
+up the call stack can be determined.
+
+Returns a string containing the path (or directory) of the running ucode
+source file.
+
+Returns `null` if the path is indeterminate.
+
+-- Testcase --
+{%
+	let output = render("files/include/level1.uc");
+
+	// replace dynamic testfiles path with placeholder for stable output
+	output = replace(output, TESTFILES_PATH, "...");
+
+	print(output);
+%}
+-- End --
+
+-- File include/level1.uc --
+This is the 1st level include.
+
+{% include("level2.uc") %}
+-- End --
+
+-- File include/level2.uc --
+This is the 2nd level include.
+
+{% include("level3.uc") %}
+-- End --
+
+-- File include/level3.uc --
+This is the 3rd level include.
+
+{% for (let depth in [0, 1, 2, 3]): %}
+Depth {{ depth }}:
+  Path:      {{ sourcepath(depth, false) || "indeterminate" }}
+  Directory: {{ sourcepath(depth, true)  || "indeterminate" }}
+
+{% endfor %}
+-- End --
+
+-- Expect stdout --
+This is the 1st level include.
+
+This is the 2nd level include.
+
+This is the 3rd level include.
+
+Depth 0:
+  Path:      .../include/level3.uc
+  Directory: .../include
+
+Depth 1:
+  Path:      .../include/level2.uc
+  Directory: .../include
+
+Depth 2:
+  Path:      .../include/level1.uc
+  Directory: .../include
+
+Depth 3:
+  Path:      indeterminate
+  Directory: indeterminate
+
+-- End --

@@ -1,0 +1,78 @@
+The `substr()` function extracts a portion of the given input string,
+specified by offset and length. and returns the resulting substring.
+
+If neither an offset, nor a length argument are provided, a copy of
+the entire input string is returned.
+
+If just an offset is specified, the entire remainder of the input string
+after the specified offset is returned.
+
+If both an offset and a length are specified, then that much characters
+of the string are extracted, beginning at the offset.
+
+If either offset or length are negative, they're counted towards the end
+of the string. If either value exceeds the input string length, it is
+capped to the length.
+
+Returns the resulting substring.
+
+Returns `null` if the given input value is not a string.
+
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		// extract entire string
+		substr("Hello world!"),
+
+		// extract anything after the 3rd character
+		substr("Hello world!", 3),
+
+		// extract the last 6 characters
+		substr("Hello world!", -6),
+
+		// extract chars 5-8
+		substr("Hello world!", 4, 3),
+
+		// extract characters 8-10
+		substr("Hello world!", -5, -2),
+
+		// overlong values are capped
+		substr("Hello world!", 100),
+		substr("Hello world!", 0, 100),
+		substr("Hello world!", 100, 100),
+
+		// invalid offset or length values are treated as 0
+		substr("Hello world!", "inval"),
+		substr("Hello world!", "inval", "inval")
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"Hello world!",
+	"lo world!",
+	"world!",
+	"o w",
+	"orl",
+	"",
+	"Hello world!",
+	"",
+	"Hello world!",
+	""
+]
+-- End --
+
+
+Supplying an invalid input string value will yield `null`.
+
+-- Testcase --
+{%
+	printf("%.J\n", substr(true, 0, 1));
+%}
+-- End --
+
+-- Expect stdout --
+null
+-- End --

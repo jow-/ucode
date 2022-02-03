@@ -1,0 +1,28 @@
+The `max()` function returns the maximum of all given arguments.
+
+If multiple equivalent maximum values are given (e.g. `null` and `false`
+both are treated as `0` when comparing numerically), the first maximal
+value is returned.
+
+Returns the maximum value among all given arguments or `null` if no
+arguments were passed.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		max(),
+		max(5, 1, 3, -10),
+		max("foo", "bar", "xxx", "abc"),
+		max(false, null, 0, NaN)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	null,
+	5,
+	"xxx",
+	false
+]
+-- End --

@@ -1,0 +1,27 @@
+The `lc()` function turns each upper case character in the source string
+into lower case and returns the resulting copy.
+
+The input argument is converted to a string in case it is not already a
+string value.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		lc("This Will Be All Lowercased."),
+		lc([ "An", "array", "ABC" ]),
+		lc(123),
+		lc(false),
+		lc()
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"this will be all lowercased.",
+	"[ \"an\", \"array\", \"abc\" ]",
+	"123",
+	"false",
+	"null"
+]
+-- End --

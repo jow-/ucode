@@ -1,0 +1,46 @@
+The `trim()` function removes specific leading and trailing characters from
+a given input string. If the characters to trim are unspecified, the space, tab,
+carriage return and newline characters will be used by default.
+
+Returns a copy of the input string with the specified leading and trailing
+characters removed.
+
+Returns `null` if the given input argment is not a valid string value.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		// not specifying trim characters will trim whitespace
+		trim(" 	Hello World!	\r\n"),
+
+		// if trim characters are specified, only those are removed
+		trim("|* Foo Bar +|", "+*|"),
+
+		// trim does not affect characters in the middle of the string
+		trim("  Foo  Bar  "),
+		trim("|Foo|Bar|", "|")
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"Hello World!",
+	" Foo Bar ",
+	"Foo  Bar",
+	"Foo|Bar"
+]
+-- End --
+
+
+Supplying an invalid string will yield `null`.
+
+-- Testcase --
+{%
+	printf("%.J\n", trim(true));
+%}
+-- End --
+
+-- Expect stdout --
+null
+-- End --

@@ -1,0 +1,25 @@
+The `b64enc()` function encodes the given input string as base64.
+
+Returns a string containing the encoded data.
+
+Returns `null` if the input is not a string.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		b64enc("Hello, world!"),
+		b64enc("\u0000\u0001\u0002\u0003"),
+		b64enc(""),
+		b64enc(true)
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"SGVsbG8sIHdvcmxkIQ==",
+	"AAECAw==",
+	"",
+	null
+]
+-- End --
