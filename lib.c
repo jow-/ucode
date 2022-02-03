@@ -1804,7 +1804,13 @@ uc_match(uc_vm_t *vm, size_t nargs)
 
 			ucv_array_push(rv, m);
 
-			p += pmatch[0].rm_eo;
+			if (pmatch[0].rm_so != pmatch[0].rm_eo)
+				p += pmatch[0].rm_eo;
+			else if (*p)
+				p++;
+			else
+				break;
+
 			eflags |= REG_NOTBOL;
 		}
 		else {
