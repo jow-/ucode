@@ -80,7 +80,7 @@ run_testcase() {
 	local fail=0
 
 	(
-		cd "$topdir"
+		cd "$dir"
 
 		IFS=$'\n'
 
