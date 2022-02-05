@@ -23,7 +23,7 @@
 
 #define MULTILINE_STRING(...) #__VA_ARGS__
 
-static const char *program = MULTILINE_STRING(
+static const char *program_code = MULTILINE_STRING(
 	{%
 		function fail() {
 			/* invoke not existing function to raise runtime error */
@@ -58,17 +58,17 @@ int main(int argc, char **argv)
 	int exit_code = 0;
 
 	/* create a source buffer containing the program code */
-	uc_source_t *src = uc_source_new_buffer("my program", strdup(program), strlen(program));
+	uc_source_t *src = uc_source_new_buffer("my program", strdup(program_code), strlen(program_code));
 
 	/* compile source buffer into function */
 	char *syntax_error = NULL;
-	uc_function_t *progfunc = uc_compile(&config, src, &syntax_error);
+	uc_program_t *program = uc_compile(&config, src, &syntax_error);
 
 	/* release source buffer */
 	uc_source_put(src);
 
 	/* check if compilation failed */
-	if (!progfunc) {
+	if (!program) {
 		fprintf(stderr, "Failed to compile program: %s\n", syntax_error);
 
 		return 1;
@@ -85,7 +85,7 @@ int main(int argc, char **argv)
 	uc_vm_exception_handler_set(&vm, log_exception);
 
 	/* execute program function */
-	int return_code = uc_vm_execute(&vm, progfunc, NULL);
+	int return_code = uc_vm_execute(&vm, program, NULL);
 
 	/* handle return status */
 	if (return_code == ERROR_COMPILE || return_code == ERROR_RUNTIME) {

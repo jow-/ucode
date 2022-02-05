@@ -178,7 +178,7 @@ uc_compiler_syntax_error(uc_compiler_t *compiler, size_t off, const char *fmt, .
 		buf = compiler->parser->error = xprintbuf_new();
 
 	if (!off)
-		off = ucv_function_srcpos(compiler->function,
+		off = uc_program_function_srcpos(compiler->function,
 			uc_compiler_current_chunk(compiler)->count);
 
 	if (off) {
@@ -603,12 +603,12 @@ uc_compiler_finish(uc_compiler_t *compiler)
 	uc_vector_clear(upvals);
 
 	if (compiler->parser->error) {
-		ucv_put(compiler->function);
+		uc_program_function_free(compiler->function);
 
 		return NULL;
 	}
 
-	return (uc_function_t *)compiler->function;
+	return compiler->function;
 }
 
 static void
@@ -1156,7 +1156,7 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 
 	if (fn)
 		uc_compiler_set_u32(compiler, load_off,
-			uc_program_add_constant(compiler->program, &fn->header));
+			uc_program_function_id(compiler->program, fn));
 
 	return true;
 }
@@ -1595,7 +1595,7 @@ uc_compiler_compile_function(uc_compiler_t *compiler)
 
 	if (fn)
 		uc_compiler_set_u32(compiler, load_off,
-			uc_program_add_constant(compiler->program, &fn->header));
+			uc_program_function_id(compiler->program, fn));
 
 	/* if a local variable of the same name already existed, overwrite its value
 	 * with the compiled function here */
@@ -2833,7 +2833,7 @@ uc_compiler_compile_declaration(uc_compiler_t *compiler)
 #endif /* NO_COMPILE */
 
 
-static uc_function_t *
+static uc_program_t *
 uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, char **errp)
 {
 #ifdef NO_COMPILE
@@ -2842,11 +2842,11 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, char **er
 
 	return NULL;
 #else
-	uc_function_t *fn = NULL;
 	uc_exprstack_t expr = { .token = TK_EOF };
 	uc_parser_t parser = { .config = config };
 	uc_compiler_t compiler = { .parser = &parser, .exprstack = &expr };
 	uc_program_t *prog;
+	uc_function_t *fn;
 
 	prog = uc_program_new(source);
 
@@ -2871,44 +2871,45 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, char **er
 
 	uc_lexer_free(&parser.lex);
 
-	return fn;
+	if (!fn) {
+		ucv_put(&prog->header);
+
+		return NULL;
+	}
+
+	return prog;
 #endif
 }
 
-static uc_function_t *
+static uc_program_t *
 uc_compile_from_bytecode(uc_parse_config_t *config, uc_source_t *source, char **errp)
 {
-	uc_function_t *fn = NULL;
 	uc_program_t *prog;
 
 	prog = uc_program_load(source, errp);
 
-	if (prog) {
-		fn = uc_program_entry(prog);
+	if (prog && !uc_program_entry(prog)) {
+		if (errp)
+			xasprintf(errp, "Program file contains no entry function\n");
 
-		if (!fn) {
-			if (errp)
-				xasprintf(errp, "Program file contains no entry function\n");
-
-			uc_program_free(prog);
-		}
+		ucv_put(&prog->header);
 	}
 
-	return fn;
+	return prog;
 }
 
-uc_function_t *
+uc_program_t *
 uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
 {
-	uc_function_t *fn = NULL;
+	uc_program_t *prog = NULL;
 
 	switch (uc_source_type_test(source)) {
 	case UC_SOURCE_TYPE_PLAIN:
-		fn = uc_compile_from_source(config, source, errp);
+		prog = uc_compile_from_source(config, source, errp);
 		break;
 
 	case UC_SOURCE_TYPE_PRECOMPILED:
-		fn = uc_compile_from_bytecode(config, source, errp);
+		prog = uc_compile_from_bytecode(config, source, errp);
 		break;
 
 	default:
@@ -2918,5 +2919,5 @@ uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
 		break;
 	}
 
-	return fn;
+	return prog;
 }

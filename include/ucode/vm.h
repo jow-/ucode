@@ -24,6 +24,7 @@
 #include "util.h"
 #include "lexer.h"
 #include "types.h"
+#include "program.h"
 
 #define __insns \
 __insn(NOOP) \
@@ -139,7 +140,7 @@ uc_exception_type_t uc_vm_call(uc_vm_t *vm, bool mcall, size_t nargs);
 void __attribute__((format(printf, 3, 0)))
 uc_vm_raise_exception(uc_vm_t *vm, uc_exception_type_t type, const char *fmt, ...);
 
-uc_vm_status_t uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval);
+uc_vm_status_t uc_vm_execute(uc_vm_t *vm, uc_program_t *fn, uc_value_t **retval);
 uc_value_t *uc_vm_invoke(uc_vm_t *vm, const char *fname, size_t nargs, ...);
 
 #endif /* __VM_H_ */

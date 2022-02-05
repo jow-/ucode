@@ -114,7 +114,7 @@ typedef struct uc_compiler {
 	uc_upvals_t upvals;
 	uc_patchlist_t *patchlist;
 	uc_exprstack_t *exprstack;
-	uc_value_t *function;
+	uc_function_t *function;
 	uc_parser_t *parser;
 	uc_program_t *program;
 	size_t scope_depth, current_srcpos, last_insn;
@@ -126,7 +126,7 @@ typedef struct {
 	uc_precedence_t precedence;
 } uc_parse_rule_t;
 
-uc_function_t *uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp);
+uc_program_t *uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp);
 
 #define uc_compiler_exprstack_push(compiler, token, flags) \
 	uc_exprstack_t expr = { compiler->exprstack, flags, token }; \

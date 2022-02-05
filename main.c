@@ -81,13 +81,13 @@ static int
 compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip)
 {
 	uc_value_t *res = NULL;
-	uc_function_t *entry;
+	uc_program_t *program;
 	int rc = 0;
 	char *err;
 
-	entry = uc_compile(vm->config, src, &err);
+	program = uc_compile(vm->config, src, &err);
 
-	if (!entry) {
+	if (!program) {
 		fprintf(stderr, "%s", err);
 		free(err);
 		rc = -1;
@@ -95,13 +95,12 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip)
 	}
 
 	if (precompile) {
-		uc_program_write(entry->program, precompile, !strip);
-		uc_program_free(entry->program);
+		uc_program_write(program, precompile, !strip);
 		fclose(precompile);
 		goto out;
 	}
 
-	rc = uc_vm_execute(vm, entry, &res);
+	rc = uc_vm_execute(vm, program, &res);
 
 	switch (rc) {
 	case STATUS_OK:
@@ -122,6 +121,7 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip)
 	}
 
 out:
+	uc_program_put(program);
 	ucv_put(res);
 
 	return rc;

@@ -21,6 +21,7 @@
 #include "ucode/program.h"
 #include "ucode/source.h"
 #include "ucode/vallist.h"
+#include "ucode/chunk.h"
 
 
 uc_program_t *
@@ -29,6 +30,9 @@ uc_program_new(uc_source_t *source)
 	uc_program_t *prog;
 
 	prog = xalloc(sizeof(*prog));
+
+	prog->header.type = UC_PROGRAM;
+	prog->header.refcount = 1;
 
 	prog->functions.next = &prog->functions;
 	prog->functions.prev = &prog->functions;
@@ -40,78 +44,81 @@ uc_program_new(uc_source_t *source)
 	return prog;
 }
 
-static inline uc_function_t *
-ref_to_function(uc_weakref_t *ref)
-{
-	return (uc_function_t *)((uintptr_t)ref - offsetof(uc_function_t, progref));
-}
-
-static inline uc_value_t *
-ref_to_uv(uc_weakref_t *ref)
-{
-	return (uc_value_t *)((uintptr_t)ref - offsetof(uc_function_t, progref));
-}
-
-void
-uc_program_free(uc_program_t *prog)
-{
-	uc_weakref_t *ref, *tmp;
-	uc_function_t *func;
-
-	if (!prog)
-		return;
-
-	for (ref = prog->functions.next, tmp = ref->next; ref != &prog->functions; ref = tmp, tmp = tmp->next) {
-		func = ref_to_function(ref);
-		func->program = NULL;
-		func->progref.next = NULL;
-		func->progref.prev = NULL;
-
-		ucv_put(&func->header);
-	}
-
-	uc_vallist_free(&prog->constants);
-	uc_source_put(prog->source);
-	free(prog);
-}
-
-uc_value_t *
+uc_function_t *
 uc_program_function_new(uc_program_t *prog, const char *name, size_t srcpos)
 {
 	uc_function_t *func;
+	size_t namelen = 0;
 
-	func = (uc_function_t *)ucv_function_new(name, srcpos, prog);
-	func->root = (prog->functions.next == &prog->functions);
+	if (name)
+		namelen = strlen(name);
 
+	func = xalloc(sizeof(*func) + namelen + 1);
+
+	if (name)
+		strcpy(func->name, name);
+
+	func->nargs = 0;
+	func->nupvals = 0;
+	func->srcpos = srcpos;
+	func->program = prog;
+	func->vararg = false;
+
+	uc_chunk_init(&func->chunk);
 	ucv_ref(&prog->functions, &func->progref);
 
-	return &func->header;
+	return func;
 }
 
 size_t
-uc_program_function_id(uc_program_t *prog, uc_value_t *func)
+uc_program_function_id(uc_program_t *prog, uc_function_t *func)
 {
-	uc_weakref_t *ref;
-	size_t i;
+	size_t i = 1;
 
-	for (ref = prog->functions.prev, i = 1; ref != &prog->functions; ref = ref->prev, i++)
-		if (ref_to_uv(ref) == func)
+	uc_program_function_foreach(prog, fn) {
+		if (fn == func)
 			return i;
+
+		i++;
+	}
 
 	return 0;
 }
 
-uc_value_t *
+uc_function_t *
 uc_program_function_load(uc_program_t *prog, size_t id)
 {
-	uc_weakref_t *ref;
-	size_t i;
+	size_t i = 1;
 
-	for (ref = prog->functions.prev, i = 1; ref != &prog->functions; ref = ref->prev, i++)
-		if (i == id)
-			return ref_to_uv(ref);
+	uc_program_function_foreach(prog, fn)
+		if (i++ == id)
+			return fn;
 
 	return NULL;
+}
+
+size_t
+uc_program_function_srcpos(uc_function_t *fn, size_t off)
+{
+	size_t pos;
+
+	if (!fn)
+		return 0;
+
+	pos = uc_chunk_debug_get_srcpos(&fn->chunk, off);
+
+	return pos ? fn->srcpos + pos : 0;
+}
+
+void
+uc_program_function_free(uc_function_t *func)
+{
+	if (!func)
+		return;
+
+	ucv_unref(&func->progref);
+	uc_chunk_free(&func->chunk);
+	free(func);
 }
 
 uc_value_t *
@@ -295,8 +302,7 @@ void
 uc_program_write(uc_program_t *prog, FILE *file, bool debug)
 {
 	uint32_t flags = 0;
-	uc_weakref_t *ref;
-	size_t i;
+	size_t i = 0;
 
 	if (debug)
 		flags |= UC_PROGRAM_F_DEBUG;
@@ -328,13 +334,15 @@ uc_program_write(uc_program_t *prog, FILE *file, bool debug)
 	write_vallist(&prog->constants, file);
 
 	/* write program sections */
-	for (i = 0, ref = prog->functions.prev; ref != &prog->functions; ref = ref->prev)
+	uc_program_function_foreach(prog, fn1) {
+		(void)fn1;
 		i++;
+	}
 
 	write_u32(i, file);
 
-	for (ref = prog->functions.prev; ref != &prog->functions; ref = ref->prev)
-		write_function(ref_to_function(ref), file, debug);
+	uc_program_function_foreach(prog, fn2)
+		write_function(fn2, file, debug);
 }
 
 static bool
@@ -779,7 +787,7 @@ uc_program_load(uc_source_t *input, char **errp)
 	return program;
 
 out:
-	uc_program_free(program);
+	uc_program_put(program);
 
 	return NULL;
 }
@@ -790,5 +798,5 @@ uc_program_entry(uc_program_t *program)
 	if (program->functions.prev == &program->functions)
 		return NULL;
 
-	return ref_to_function(program->functions.prev);
+	return (uc_function_t *)program->functions.prev;
 }
