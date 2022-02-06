@@ -40,7 +40,8 @@ typedef enum uc_type {
 	UC_CLOSURE,
 	UC_UPVALUE,
 	UC_RESOURCE,
-	UC_PROGRAM
+	UC_PROGRAM,
+	UC_SOURCE
 } uc_type_t;
 
 typedef struct uc_value {
@@ -66,9 +67,10 @@ typedef struct {
 uc_declare_vector(uc_lineinfo_t, uint8_t);
 
 typedef struct {
+	uc_value_t header;
 	char *filename, *runpath, *buffer;
 	FILE *fp;
-	size_t usecount, off;
+	size_t off;
 	uc_lineinfo_t lineinfo;
 } uc_source_t;
 

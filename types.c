@@ -56,6 +56,7 @@ ucv_typename(uc_value_t *uv)
 	case UC_UPVALUE:   return "upvalue";
 	case UC_RESOURCE:  return "resource";
 	case UC_PROGRAM:   return "program";
+	case UC_SOURCE:    return "source";
 	}
 
 	return "unknown";
@@ -124,6 +125,7 @@ ucv_gc_mark(uc_value_t *uv)
 	uc_object_t *object;
 	uc_array_t *array;
 	uc_resource_t *resource;
+	uc_program_t *program;
 	struct lh_entry *entry;
 	size_t i;
 
@@ -184,6 +186,14 @@ ucv_gc_mark(uc_value_t *uv)
 
 		break;
 
+	case UC_PROGRAM:
+		program = (uc_program_t *)uv;
+
+		if (program->source)
+			ucv_gc_mark(&program->source->header);
+
+		break;
+
 	default:
 		break;
 	}
@@ -198,6 +208,7 @@ ucv_free(uc_value_t *uv, bool retain)
 	uc_closure_t *closure;
 	uc_program_t *program;
 	uc_upvalref_t *upval;
+	uc_source_t *source;
 	uc_regexp_t *regexp;
 	uc_object_t *object;
 	uc_array_t *array;
@@ -270,7 +281,18 @@ ucv_free(uc_value_t *uv, bool retain)
 			uc_program_function_free(func);
 
 		uc_vallist_free(&program->constants);
-		uc_source_put(program->source);
+		ucv_put_value(&program->source->header, retain);
+		break;
+
+	case UC_SOURCE:
+		source = (uc_source_t *)uv;
+
+		if (source->runpath != source->filename)
+			free(source->runpath);
+
+		uc_vector_clear(&source->lineinfo);
+		fclose(source->fp);
+		free(source->buffer);
 		break;
 	}
 
@@ -1329,6 +1351,7 @@ ucv_to_json(uc_value_t *uv)
 	case UC_RESOURCE:
 	case UC_UPVALUE:
 	case UC_PROGRAM:
+	case UC_SOURCE:
 	case UC_NULL:
 		return NULL;
 	}
@@ -1669,6 +1692,14 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 
 	case UC_PROGRAM:
 		ucv_stringbuf_printf(pb, "%s<program %p>%s",
+			json ? "\"" : "",
+			uv,
+			json ? "\"" : "");
+
+		break;
+
+	case UC_SOURCE:
+		ucv_stringbuf_printf(pb, "%s<source %p>%s",
 			json ? "\"" : "",
 			uv,
 			json ? "\"" : "");
