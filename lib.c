@@ -38,6 +38,7 @@
 #include "ucode/vm.h"
 #include "ucode/lib.h"
 #include "ucode/source.h"
+#include "ucode/program.h"
 
 static void
 format_context_line(uc_stringbuf_t *buf, const char *line, size_t off, bool compact)
@@ -692,7 +693,6 @@ uc_type(uc_vm_t *vm, size_t nargs)
 
 	switch (t) {
 	case UC_CFUNCTION:
-	case UC_FUNCTION:
 	case UC_CLOSURE:
 		return ucv_string_new("function");
 
@@ -1519,7 +1519,7 @@ static bool
 uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **res)
 {
 	uc_exception_type_t extype;
-	uc_function_t *function;
+	uc_program_t *program;
 	uc_value_t *prev_scope;
 	uc_value_t *closure;
 	uc_source_t *source;
@@ -1538,21 +1538,23 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 		return true;
 	}
 
-	function = uc_compile(vm->config, source, &err);
+	program = uc_compile(vm->config, source, &err);
 
-	if (!function) {
+	uc_source_put(source);
+
+	if (!program) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
 		                      "Unable to compile module '%s':\n%s", path, err);
 
-		uc_source_put(source);
 		free(err);
 
 		return true;
 	}
 
-	closure = ucv_closure_new(vm, function, false);
+	closure = ucv_closure_new(vm, uc_program_entry(program), false);
 
 	uc_vm_stack_push(vm, closure);
+	uc_program_put(program);
 
 	if (scope) {
 		prev_scope = ucv_get(uc_vm_scope_get(vm));
@@ -1566,9 +1568,6 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 
 	if (extype == EXCEPTION_NONE)
 		*res = uc_vm_stack_pop(vm);
-
-	uc_source_put(source);
-	ucv_put(&function->header);
 
 	return true;
 }

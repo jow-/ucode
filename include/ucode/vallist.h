@@ -37,8 +37,7 @@ typedef enum {
 	TAG_LNUM = 2,
 	TAG_DBL = 3,
 	TAG_STR = 4,
-	TAG_LSTR = 5,
-	TAG_FUNC = 6
+	TAG_LSTR = 5
 } uc_value_type_t;
 
 uc_value_t *uc_number_parse(const char *buf, char **end);

@@ -23,7 +23,7 @@
 
 #define MULTILINE_STRING(...) #__VA_ARGS__
 
-static const char *program = MULTILINE_STRING(
+static const char *program_code = MULTILINE_STRING(
 	{%
 		let n = global.value || 1;
 
@@ -44,17 +44,17 @@ int main(int argc, char **argv)
 	int exit_code = 0;
 
 	/* create a source buffer containing the program code */
-	uc_source_t *src = uc_source_new_buffer("my program", strdup(program), strlen(program));
+	uc_source_t *src = uc_source_new_buffer("my program", strdup(program_code), strlen(program_code));
 
 	/* compile source buffer into function */
 	char *syntax_error = NULL;
-	uc_function_t *progfunc = uc_compile(&config, src, &syntax_error);
+	uc_program_t *program = uc_compile(&config, src, &syntax_error);
 
 	/* release source buffer */
 	uc_source_put(src);
 
 	/* check if compilation failed */
-	if (!progfunc) {
+	if (!program) {
 		fprintf(stderr, "Failed to compile program: %s\n", syntax_error);
 
 		return 1;
@@ -71,11 +71,8 @@ int main(int argc, char **argv)
 	for (int i = 0; i < 5; i++) {
 		printf("Iteration %d: ", i + 1);
 
-		/* take additional reference to progfunc to avoid freeing it after execution */
-		ucv_get(&progfunc->header);
-
 		/* execute program function */
-		int return_code = uc_vm_execute(&vm, progfunc, NULL);
+		int return_code = uc_vm_execute(&vm, program, NULL);
 
 		/* handle return status */
 		if (return_code == ERROR_COMPILE || return_code == ERROR_RUNTIME) {
@@ -89,7 +86,7 @@ int main(int argc, char **argv)
 	}
 
 	/* release program function */
-	ucv_put(&progfunc->header);
+	uc_program_put(program);
 
 	/* free VM context */
 	uc_vm_free(&vm);

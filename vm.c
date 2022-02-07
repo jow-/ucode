@@ -598,7 +598,7 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 	uc_source_t *source;
 	size_t srcpos;
 
-	srcpos = ucv_function_srcpos(&frame->closure->function->header, pos - chunk->entries);
+	srcpos = uc_program_function_srcpos(frame->closure->function, pos - chunk->entries);
 	source = uc_vm_frame_source(frame);
 
 	if (last_srcpos == 0 || last_source != source || srcpos != last_srcpos) {
@@ -828,7 +828,7 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 			source = function->program->source;
 
 			off = (frame->ip - uc_vm_frame_chunk(frame)->entries) - 1;
-			srcpos = ucv_function_srcpos(&function->header, off);
+			srcpos = uc_program_function_srcpos(function, off);
 
 			ucv_object_add(entry, "filename", ucv_string_new(source->filename));
 			ucv_object_add(entry, "line", ucv_int64_new(uc_source_get_line(source, &srcpos)));
@@ -883,7 +883,7 @@ uc_vm_get_error_context(uc_vm_t *vm)
 		return NULL;
 
 	chunk = uc_vm_frame_chunk(frame);
-	offset = ucv_function_srcpos(&frame->closure->function->header, (frame->ip - chunk->entries) - 1);
+	offset = uc_program_function_srcpos(frame->closure->function, (frame->ip - chunk->entries) - 1);
 	stacktrace = uc_vm_capture_stacktrace(vm, i);
 
 	buf = ucv_stringbuf_new();
@@ -1136,8 +1136,7 @@ static void
 uc_vm_insn_load_closure(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_callframe_t *frame = uc_vm_current_frame(vm);
-	uc_value_t *fno = uc_program_get_constant(uc_vm_current_program(vm), vm->arg.u32);
-	uc_function_t *function = (uc_function_t *)fno;
+	uc_function_t *function = uc_program_function_load(uc_vm_current_program(vm), vm->arg.u32);
 	uc_closure_t *closure = (uc_closure_t *)ucv_closure_new(vm, function, insn == I_ARFN);
 	volatile int32_t uv;
 	size_t i;
@@ -2559,8 +2558,9 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 }
 
 uc_vm_status_t
-uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval)
+uc_vm_execute(uc_vm_t *vm, uc_program_t *program, uc_value_t **retval)
 {
+	uc_function_t *fn = uc_program_entry(program);
 	uc_closure_t *closure = (uc_closure_t *)ucv_closure_new(vm, fn, false);
 	uc_vm_status_t status;
 	uc_callframe_t *frame;
@@ -2614,8 +2614,6 @@ uc_vm_execute(uc_vm_t *vm, uc_function_t *fn, uc_value_t **retval)
 
 		break;
 	}
-
-	ucv_put(&fn->header);
 
 	return status;
 }

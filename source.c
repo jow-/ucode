@@ -31,12 +31,14 @@ uc_source_new_file(const char *path)
 		return NULL;
 
 	src = xalloc(ALIGN(sizeof(*src)) + strlen(path) + 1);
+
+	src->header.type = UC_SOURCE;
+	src->header.refcount = 1;
+
 	src->fp = fp;
 	src->buffer = NULL;
 	src->filename = strcpy((char *)src + ALIGN(sizeof(*src)), path);
 	src->runpath = src->filename;
-
-	src->usecount = 1;
 
 	src->lineinfo.count = 0;
 	src->lineinfo.entries = NULL;
@@ -54,11 +56,13 @@ uc_source_new_buffer(const char *name, char *buf, size_t len)
 		return NULL;
 
 	src = xalloc(ALIGN(sizeof(*src)) + strlen(name) + 1);
+
+	src->header.type = UC_SOURCE;
+	src->header.refcount = 1;
+
 	src->fp = fp;
 	src->buffer = buf;
 	src->filename = strcpy((char *)src + ALIGN(sizeof(*src)), name);
-
-	src->usecount = 1;
 
 	src->lineinfo.count = 0;
 	src->lineinfo.entries = NULL;
@@ -89,38 +93,6 @@ uc_source_get_line(uc_source_t *source, size_t *offset)
 	}
 
 	return 0;
-}
-
-uc_source_t *
-uc_source_get(uc_source_t *source)
-{
-	if (!source)
-		return NULL;
-
-	source->usecount++;
-
-	return source;
-}
-
-void
-uc_source_put(uc_source_t *source)
-{
-	if (!source)
-		return;
-
-	if (source->usecount > 1) {
-		source->usecount--;
-
-		return;
-	}
-
-	if (source->runpath != source->filename)
-		free(source->runpath);
-
-	uc_vector_clear(&source->lineinfo);
-	fclose(source->fp);
-	free(source->buffer);
-	free(source);
 }
 
 uc_source_type_t

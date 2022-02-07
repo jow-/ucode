@@ -36,11 +36,12 @@ typedef enum uc_type {
 	UC_ARRAY,
 	UC_OBJECT,
 	UC_REGEXP,
-	UC_FUNCTION,
 	UC_CFUNCTION,
 	UC_CLOSURE,
 	UC_UPVALUE,
-	UC_RESOURCE
+	UC_RESOURCE,
+	UC_PROGRAM,
+	UC_SOURCE
 } uc_type_t;
 
 typedef struct uc_value {
@@ -66,9 +67,10 @@ typedef struct {
 uc_declare_vector(uc_lineinfo_t, uint8_t);
 
 typedef struct {
+	uc_value_t header;
 	char *filename, *runpath, *buffer;
 	FILE *fp;
-	size_t usecount, off;
+	size_t off;
 	uc_lineinfo_t lineinfo;
 } uc_source_t;
 
@@ -105,6 +107,17 @@ typedef struct uc_weakref {
 	struct uc_weakref *prev;
 	struct uc_weakref *next;
 } uc_weakref_t;
+
+typedef struct uc_function {
+	uc_weakref_t progref;
+	bool arrow, vararg, strict;
+	size_t nargs;
+	size_t nupvals;
+	size_t srcpos;
+	uc_chunk_t chunk;
+	struct uc_program *program;
+	char name[];
+} uc_function_t;
 
 typedef struct {
 	uc_value_t header;
@@ -146,18 +159,6 @@ typedef struct {
 	bool icase, newline, global;
 	char source[];
 } uc_regexp_t;
-
-typedef struct uc_function {
-	uc_value_t header;
-	bool arrow, vararg, strict, root;
-	size_t nargs;
-	size_t nupvals;
-	size_t srcpos;
-	uc_chunk_t chunk;
-	struct uc_program *program;
-	uc_weakref_t progref;
-	char name[];
-} uc_function_t;
 
 typedef struct uc_upval_tref {
 	uc_value_t header;
@@ -202,6 +203,7 @@ uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
 /* Program structure definitions */
 
 typedef struct uc_program {
+	uc_value_t header;
 	uc_value_list_t constants;
 	uc_weakref_t functions;
 	uc_source_t *source;
@@ -349,9 +351,6 @@ size_t ucv_object_length(uc_value_t *);
 	                    entry_next##key = entry##key->next, entry##key)							\
 	                 : 0);																		\
 	     entry##key = entry_next##key)
-
-uc_value_t *ucv_function_new(const char *, size_t, uc_program_t *);
-size_t ucv_function_srcpos(uc_value_t *, size_t);
 
 uc_value_t *ucv_cfunction_new(const char *, uc_cfn_ptr_t);
 

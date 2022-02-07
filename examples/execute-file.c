@@ -49,13 +49,13 @@ int main(int argc, char **argv)
 
 	/* compile source buffer into function */
 	char *syntax_error = NULL;
-	uc_function_t *progfunc = uc_compile(&config, src, &syntax_error);
+	uc_program_t *program = uc_compile(&config, src, &syntax_error);
 
 	/* release source buffer */
 	uc_source_put(src);
 
 	/* check if compilation failed */
-	if (!progfunc) {
+	if (!program) {
 		fprintf(stderr, "Failed to compile program: %s\n", syntax_error);
 
 		return 1;
@@ -74,7 +74,7 @@ int main(int argc, char **argv)
 
 	/* execute compiled program function */
 	uc_value_t *last_expression_result = NULL;
-	int return_code = uc_vm_execute(&vm, progfunc, &last_expression_result);
+	int return_code = uc_vm_execute(&vm, program, &last_expression_result);
 
 	/* handle return status */
 	switch (return_code) {

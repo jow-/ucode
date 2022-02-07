@@ -22,11 +22,36 @@
 
 uc_program_t *uc_program_new(uc_source_t *);
 
-void uc_program_free(uc_program_t *);
+static inline uc_program_t *
+uc_program_get(uc_program_t *prog) {
+	return (uc_program_t *)ucv_get(prog ? &prog->header : NULL);
+}
 
-uc_value_t *uc_program_function_new(uc_program_t *, const char *, size_t);
-size_t uc_program_function_id(uc_program_t *, uc_value_t *);
-uc_value_t *uc_program_function_load(uc_program_t *, size_t);
+static inline void
+uc_program_put(uc_program_t *prog) {
+	ucv_put(prog ? &prog->header : NULL);
+}
+
+#define uc_program_function_foreach(prog, fn)			\
+	uc_function_t *fn;									\
+	for (fn = (uc_function_t *)prog->functions.prev;	\
+	     fn != (uc_function_t *)&prog->functions; 		\
+	     fn = (uc_function_t *)fn->progref.prev)
+
+#define uc_program_function_foreach_safe(prog, fn)		\
+	uc_function_t *fn, *fn##_tmp;						\
+	for (fn = (uc_function_t *)prog->functions.prev, 	\
+	     fn##_tmp = (uc_function_t *)fn->progref.prev;	\
+	     fn != (uc_function_t *)&prog->functions; 		\
+	     fn = fn##_tmp, 								\
+	     fn##_tmp = (uc_function_t *)fn##_tmp->progref.prev)
+
+uc_function_t *uc_program_function_new(uc_program_t *, const char *, size_t);
+size_t uc_program_function_id(uc_program_t *, uc_function_t *);
+uc_function_t *uc_program_function_load(uc_program_t *, size_t);
+size_t uc_program_function_srcpos(uc_function_t *, size_t);
+void uc_program_function_free(uc_function_t *);
+
 
 uc_value_t *uc_program_get_constant(uc_program_t *, size_t);
 ssize_t uc_program_add_constant(uc_program_t *, uc_value_t *);

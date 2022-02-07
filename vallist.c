@@ -465,16 +465,6 @@ find_str(uc_value_list_t *list, const char *s, size_t slen)
 	return -1;
 }
 
-static void
-add_func(uc_value_list_t *list, uc_function_t *func)
-{
-	size_t id = uc_program_function_id(func->program, &func->header);
-
-	assert(id != 0 && TAG_FIT_NV(id));
-
-	list->index[list->isize++] = (TAG_TYPE)(TAG_FUNC | TAG_SET_NV(id));
-}
-
 ssize_t
 uc_vallist_add(uc_value_list_t *list, uc_value_t *value)
 {
@@ -525,10 +515,6 @@ uc_vallist_add(uc_value_list_t *list, uc_value_t *value)
 
 		break;
 
-	case UC_FUNCTION:
-		add_func(list, (uc_function_t *)value);
-		break;
-
 	default:
 		return -1;
 	}
@@ -545,15 +531,10 @@ uc_vallist_type(uc_value_list_t *list, size_t idx)
 	return TAG_GET_TYPE(list->index[idx]);
 }
 
-#define container_of(ptr, type, member) ({                      \
-        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
-        (type *)( (char *)__mptr - offsetof(type,member) );})
-
 uc_value_t *
 uc_vallist_get(uc_value_list_t *list, size_t idx)
 {
 	char str[sizeof(TAG_TYPE)];
-	uc_program_t *program;
 	size_t n, len;
 
 	switch (uc_vallist_type(list, idx)) {
@@ -590,11 +571,6 @@ uc_vallist_get(uc_value_list_t *list, size_t idx)
 			return NULL;
 
 		return ucv_string_new_length(list->data + TAG_GET_OFFSET(list->index[idx]) + sizeof(uint32_t), len);
-
-	case TAG_FUNC:
-		program = container_of(list, uc_program_t, constants);
-
-		return uc_program_function_load(program, TAG_GET_NV(list->index[idx]));
 
 	default:
 		return NULL;

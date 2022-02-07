@@ -51,11 +51,12 @@ ucv_typename(uc_value_t *uv)
 	case UC_ARRAY:     return "array";
 	case UC_OBJECT:    return "object";
 	case UC_REGEXP:    return "regexp";
-	case UC_FUNCTION:  return "function";
 	case UC_CFUNCTION: return "cfunction";
 	case UC_CLOSURE:   return "closure";
 	case UC_UPVALUE:   return "upvalue";
 	case UC_RESOURCE:  return "resource";
+	case UC_PROGRAM:   return "program";
+	case UC_SOURCE:    return "source";
 	}
 
 	return "unknown";
@@ -124,6 +125,7 @@ ucv_gc_mark(uc_value_t *uv)
 	uc_object_t *object;
 	uc_array_t *array;
 	uc_resource_t *resource;
+	uc_program_t *program;
 	struct lh_entry *entry;
 	size_t i;
 
@@ -167,7 +169,7 @@ ucv_gc_mark(uc_value_t *uv)
 		for (i = 0; i < function->nupvals; i++)
 			ucv_gc_mark(&closure->upvals[i]->header);
 
-		ucv_gc_mark(&function->header);
+		ucv_gc_mark(&function->program->header);
 
 		break;
 
@@ -184,6 +186,14 @@ ucv_gc_mark(uc_value_t *uv)
 
 		break;
 
+	case UC_PROGRAM:
+		program = (uc_program_t *)uv;
+
+		if (program->source)
+			ucv_gc_mark(&program->source->header);
+
+		break;
+
 	default:
 		break;
 	}
@@ -196,7 +206,9 @@ ucv_free(uc_value_t *uv, bool retain)
 	uc_resource_t *resource;
 	uc_function_t *function;
 	uc_closure_t *closure;
+	uc_program_t *program;
 	uc_upvalref_t *upval;
+	uc_source_t *source;
 	uc_regexp_t *regexp;
 	uc_object_t *object;
 	uc_array_t *array;
@@ -237,19 +249,6 @@ ucv_free(uc_value_t *uv, bool retain)
 		regfree(&regexp->regexp);
 		break;
 
-	case UC_FUNCTION:
-		function = (uc_function_t *)uv;
-
-		if (function->program) {
-			ucv_unref(&function->progref);
-
-			if (function->root)
-				uc_program_free(function->program);
-		}
-
-		uc_chunk_free(&function->chunk);
-		break;
-
 	case UC_CLOSURE:
 		closure = (uc_closure_t *)uv;
 		function = closure->function;
@@ -258,7 +257,7 @@ ucv_free(uc_value_t *uv, bool retain)
 		for (i = 0; i < function->nupvals; i++)
 			ucv_put_value(&closure->upvals[i]->header, retain);
 
-		ucv_put_value(&function->header, retain);
+		ucv_put_value(&function->program->header, retain);
 		break;
 
 	case UC_RESOURCE:
@@ -273,6 +272,27 @@ ucv_free(uc_value_t *uv, bool retain)
 	case UC_UPVALUE:
 		upval = (uc_upvalref_t *)uv;
 		ucv_put_value(upval->value, retain);
+		break;
+
+	case UC_PROGRAM:
+		program = (uc_program_t *)uv;
+
+		uc_program_function_foreach_safe(program, func)
+			uc_program_function_free(func);
+
+		uc_vallist_free(&program->constants);
+		ucv_put_value(&program->source->header, retain);
+		break;
+
+	case UC_SOURCE:
+		source = (uc_source_t *)uv;
+
+		if (source->runpath != source->filename)
+			free(source->runpath);
+
+		uc_vector_clear(&source->lineinfo);
+		fclose(source->fp);
+		free(source->buffer);
 		break;
 	}
 
@@ -950,48 +970,6 @@ ucv_object_length(uc_value_t *uv)
 
 
 uc_value_t *
-ucv_function_new(const char *name, size_t srcpos, uc_program_t *program)
-{
-	size_t namelen = 0;
-	uc_function_t *fn;
-
-	if (name)
-		namelen = strlen(name);
-
-	fn = xalloc(sizeof(*fn) + namelen + 1);
-	fn->header.type = UC_FUNCTION;
-	fn->header.refcount = 1;
-
-	if (name)
-		strcpy(fn->name, name);
-
-	fn->nargs = 0;
-	fn->nupvals = 0;
-	fn->srcpos = srcpos;
-	fn->program = program;
-	fn->vararg = false;
-
-	uc_chunk_init(&fn->chunk);
-
-	return &fn->header;
-}
-
-size_t
-ucv_function_srcpos(uc_value_t *uv, size_t off)
-{
-	uc_function_t *fn = (uc_function_t *)uv;
-	size_t pos;
-
-	if (ucv_type(uv) != UC_FUNCTION)
-		return 0;
-
-	pos = uc_chunk_debug_get_srcpos(&fn->chunk, off);
-
-	return pos ? fn->srcpos + pos : 0;
-}
-
-
-uc_value_t *
 ucv_cfunction_new(const char *name, uc_cfn_ptr_t fptr)
 {
 	uc_cfunction_t *cfn;
@@ -1028,7 +1006,7 @@ ucv_closure_new(uc_vm_t *vm, uc_function_t *function, bool arrow_fn)
 	if (vm)
 		ucv_ref(&vm->values, &closure->ref);
 
-	ucv_get(&function->header);
+	uc_program_get(function->program);
 
 	return &closure->header;
 }
@@ -1370,9 +1348,10 @@ ucv_to_json(uc_value_t *uv)
 
 	case UC_CLOSURE:
 	case UC_CFUNCTION:
-	case UC_FUNCTION:
 	case UC_RESOURCE:
 	case UC_UPVALUE:
+	case UC_PROGRAM:
+	case UC_SOURCE:
 	case UC_NULL:
 		return NULL;
 	}
@@ -1691,14 +1670,6 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 
 		break;
 
-	case UC_FUNCTION:
-		ucv_stringbuf_printf(pb, "%s<function %p>%s",
-			json ? "\"" : "",
-			uv,
-			json ? "\"" : "");
-
-		break;
-
 	case UC_RESOURCE:
 		resource = (uc_resource_t *)uv;
 		restype = resource->type;
@@ -1718,6 +1689,20 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 			json ? "\"" : "");
 
 		break;
+
+	case UC_PROGRAM:
+		ucv_stringbuf_printf(pb, "%s<program %p>%s",
+			json ? "\"" : "",
+			uv,
+			json ? "\"" : "");
+
+		break;
+
+	case UC_SOURCE:
+		ucv_stringbuf_printf(pb, "%s<source %p>%s",
+			json ? "\"" : "",
+			uv,
+			json ? "\"" : "");
 	}
 
 	ucv_clear_mark(uv);
