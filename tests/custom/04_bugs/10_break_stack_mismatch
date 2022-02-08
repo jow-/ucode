@@ -13,12 +13,14 @@ values or segmentation faults at runtime.
 	for (let y in [2])
 		break;
 
-	print(x, "\n");
+	let z = 3;
+
+	print([ x, z ], "\n");
 %}
 -- End --
 
 -- Expect stdout --
-1
+[ 1, 3 ]
 -- End --
 
 
@@ -29,10 +31,12 @@ values or segmentation faults at runtime.
 	for (let y = 0; y < 1; y++)
 		break;
 
-	print(x, "\n");
+	let z = 3;
+
+	print([ x, z ], "\n");
 %}
 -- End --
 
 -- Expect stdout --
-1
+[ 1, 3 ]
 -- End --
