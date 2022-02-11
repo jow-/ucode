@@ -380,6 +380,7 @@ find_dbl(uc_value_list_t *list, double d)
 static void
 add_str(uc_value_list_t *list, const char *s, size_t slen)
 {
+	const uint8_t *u8 = (const uint8_t *)s;
 	uint32_t sl;
 	size_t sz;
 	char *dst;
@@ -401,7 +402,7 @@ add_str(uc_value_list_t *list, const char *s, size_t slen)
 		list->index[list->isize] = (uint64_t)(TAG_STR | TAG_SET_STR_L(slen));
 
 		for (i = 0; i < slen; i++)
-			list->index[list->isize] |= (((TAG_TYPE)s[i] << ((i + 1) << 3)));
+			list->index[list->isize] |= (((TAG_TYPE)u8[i] << ((i + 1) << 3)));
 
 		list->isize++;
 	}
@@ -426,6 +427,7 @@ add_str(uc_value_list_t *list, const char *s, size_t slen)
 static ssize_t
 find_str(uc_value_list_t *list, const char *s, size_t slen)
 {
+	const uint8_t *u8 = (const uint8_t *)s;
 	TAG_TYPE search;
 	size_t i, len;
 
@@ -433,7 +435,7 @@ find_str(uc_value_list_t *list, const char *s, size_t slen)
 		search = (TAG_TYPE)(TAG_STR | TAG_SET_STR_L(slen));
 
 		for (i = 0; i < slen; i++)
-			search |= (((TAG_TYPE)s[i] << ((i + 1) << 3)));
+			search |= (((TAG_TYPE)u8[i] << ((i + 1) << 3)));
 
 		for (i = 0; i < list->isize; i++)
 			if (list->index[i] == search)
@@ -534,7 +536,7 @@ uc_vallist_type(uc_value_list_t *list, size_t idx)
 uc_value_t *
 uc_vallist_get(uc_value_list_t *list, size_t idx)
 {
-	char str[sizeof(TAG_TYPE)];
+	uint8_t str[sizeof(TAG_TYPE)];
 	size_t n, len;
 
 	switch (uc_vallist_type(list, idx)) {
@@ -559,7 +561,7 @@ uc_vallist_get(uc_value_list_t *list, size_t idx)
 		for (n = 0; n < len; n++)
 			str[n] = (list->index[idx] >> ((n + 1) << 3));
 
-		return ucv_string_new_length(str, len);
+		return ucv_string_new_length((char *)str, len);
 
 	case TAG_LSTR:
 		if (TAG_GET_OFFSET(list->index[idx]) + sizeof(uint32_t) > list->dsize)
