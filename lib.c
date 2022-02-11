@@ -648,10 +648,9 @@ static uc_value_t *
 uc_ord(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_fn_arg(0);
-	uc_value_t *rv, *pos;
 	const char *str;
-	size_t i, len;
-	int64_t n;
+	int64_t n = 0;
+	size_t len;
 
 	if (ucv_type(obj) != UC_STRING)
 		return NULL;
@@ -659,30 +658,20 @@ uc_ord(uc_vm_t *vm, size_t nargs)
 	str = ucv_string_get(obj);
 	len = ucv_string_length(obj);
 
-	if (nargs == 1)
-		return str[0] ? ucv_int64_new((int64_t)str[0]) : NULL;
+	if (nargs > 1) {
+		n = ucv_int64_get(uc_fn_arg(1));
 
-	rv = ucv_array_new(vm);
+		if (errno == EINVAL)
+			return NULL;
 
-	for (i = 1; i < nargs; i++) {
-		pos = uc_fn_arg(i);
-
-		if (ucv_type(pos) == UC_INTEGER) {
-			n = ucv_int64_get(pos);
-
-			if (n < 0)
-				n += len;
-
-			if (n >= 0 && (uint64_t)n < len) {
-				ucv_array_push(rv, ucv_int64_new((int64_t)str[n]));
-				continue;
-			}
-		}
-
-		ucv_array_push(rv, NULL);
+		if (n < 0)
+			n += len;
 	}
 
-	return rv;
+	if (n < 0 || (uint64_t)n >= len)
+		return NULL;
+
+	return ucv_int64_new((uint8_t)str[n]);
 }
 
 static uc_value_t *

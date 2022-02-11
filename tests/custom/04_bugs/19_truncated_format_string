@@ -9,6 +9,6 @@ to the resulting string.
 -- Testcase --
 {%
 	let s = sprintf("%");
-	print(ord(s, 0, 1), "\n");
+	print([ ord(s, 0), ord(s, 1) ], "\n");
 %}
 -- End --
