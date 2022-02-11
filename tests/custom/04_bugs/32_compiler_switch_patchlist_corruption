@@ -1,0 +1,75 @@
+When compiling a switch statement with duplicate `default` cases or a switch
+statement with syntax errors before the body block, two error handling cases
+were hit in the code that prematurely returned from the function without
+resetting the compiler's patchlist pointer away from the on-stack patchlist
+that had been set up for the switch statement.
+
+Upon processing a subsequent break or continue control statement, a realloc
+was performed on the then invalid patchlist contents, triggering a
+segmentation fault or libc assert.
+
+-- Testcase --
+{%
+	switch (1) {
+		default: break;
+		default: break;
+	}
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: more than one switch default case
+In line 4, byte 3:
+
+ `        default: break;`
+          ^-- Near here
+
+
+Syntax error: break must be inside loop or switch
+In line 4, byte 12:
+
+ `        default: break;`
+  Near here -------^
+
+
+Syntax error: Expecting expression
+In line 5, byte 2:
+
+ `    }`
+      ^-- Near here
+
+
+-- End --
+
+
+-- Testcase --
+{%
+	switch (*) {
+		break;
+	}
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: Expecting expression
+In line 2, byte 10:
+
+ `    switch (*) {`
+  Near here --^
+
+
+Syntax error: break must be inside loop or switch
+In line 3, byte 3:
+
+ `        break;`
+          ^-- Near here
+
+
+Syntax error: Expecting expression
+In line 4, byte 2:
+
+ `    }`
+      ^-- Near here
+
+
+-- End --

@@ -2448,7 +2448,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 					"more than one switch default case");
 
-				return;
+				break;
 			}
 
 			uc_compiler_parse_consume(compiler, TK_COLON);
@@ -2511,7 +2511,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
 				"Expecting 'case' or 'default'");
 
-			return;
+			break;
 		}
 	}
 
