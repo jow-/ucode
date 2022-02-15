@@ -40,6 +40,7 @@ Hello, World!
 	{
 		"error": "function error(...) { [native code] }",
 		"fileno": "function fileno(...) { [native code] }",
+		"flush": "function flush(...) { [native code] }",
 		"close": "function close(...) { [native code] }",
 		"tell": "function tell(...) { [native code] }",
 		"seek": "function seek(...) { [native code] }",
