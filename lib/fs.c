@@ -173,6 +173,20 @@ uc_fs_write_common(uc_vm_t *vm, size_t nargs, const char *type)
 }
 
 static uc_value_t *
+uc_fs_flush_common(uc_vm_t *vm, size_t nargs, const char *type)
+{
+	FILE **fp = uc_fn_this(type);
+
+	if (!fp || !*fp)
+		err_return(EBADF);
+
+	if (fflush(*fp) != EOF)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
 uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
 {
 	int fd;
@@ -225,6 +239,12 @@ static uc_value_t *
 uc_fs_pwrite(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_write_common(vm, nargs, "fs.proc");
+}
+
+static uc_value_t *
+uc_fs_pflush(uc_vm_t *vm, size_t nargs)
+{
+	return uc_fs_flush_common(vm, nargs, "fs.proc");
 }
 
 static uc_value_t *
@@ -330,6 +350,12 @@ uc_fs_tell(uc_vm_t *vm, size_t nargs)
 		err_return(errno);
 
 	return ucv_int64_new(offset);
+}
+
+static uc_value_t *
+uc_fs_flush(uc_vm_t *vm, size_t nargs)
+{
+	return uc_fs_flush_common(vm, nargs, "fs.file");
 }
 
 static uc_value_t *
@@ -1011,11 +1037,112 @@ uc_fs_lsdir(uc_vm_t *vm, size_t nargs)
 	return res;
 }
 
+static uc_value_t *
+uc_fs_mkstemp(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *template = uc_fn_arg(0);
+	bool ends_with_template = false;
+	char *path, *t;
+	FILE *fp;
+	size_t l;
+	int fd;
+
+	if (template && ucv_type(template) != UC_STRING)
+		err_return(EINVAL);
+
+	t = ucv_string_get(template);
+	l = ucv_string_length(template);
+
+	ends_with_template = (l >= 6 && strcmp(&t[l - 6], "XXXXXX") == 0);
+
+	if (t && strchr(t, '/')) {
+		if (ends_with_template)
+			xasprintf(&path, "%s", t);
+		else
+			xasprintf(&path, "%s.XXXXXX", t);
+	}
+	else if (t) {
+		if (ends_with_template)
+			xasprintf(&path, "/tmp/%s", t);
+		else
+			xasprintf(&path, "/tmp/%s.XXXXXX", t);
+	}
+	else {
+		xasprintf(&path, "/tmp/XXXXXX");
+	}
+
+	do {
+		fd = mkstemp(path);
+	}
+	while (fd == -1 && errno == EINTR);
+
+	if (fd == -1) {
+		free(path);
+		err_return(errno);
+	}
+
+	unlink(path);
+	free(path);
+
+	fp = fdopen(fd, "r+");
+
+	if (!fp) {
+		close(fd);
+		err_return(errno);
+	}
+
+	return uc_resource_new(file_type, fp);
+}
+
+static uc_value_t *
+uc_fs_access(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *path = uc_fn_arg(0);
+	uc_value_t *test = uc_fn_arg(1);
+	int mode = F_OK;
+	char *p;
+
+	if (ucv_type(path) != UC_STRING)
+		err_return(EINVAL);
+
+	if (test && ucv_type(test) != UC_STRING)
+		err_return(EINVAL);
+
+	for (p = ucv_string_get(test); p && *p; p++) {
+		switch (*p) {
+		case 'r':
+			mode |= R_OK;
+			break;
+
+		case 'w':
+			mode |= W_OK;
+			break;
+
+		case 'x':
+			mode |= X_OK;
+			break;
+
+		case 'f':
+			mode |= F_OK;
+			break;
+
+		default:
+			err_return(EINVAL);
+		}
+	}
+
+	if (access(ucv_string_get(path), mode) == -1)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
 
 static const uc_function_list_t proc_fns[] = {
 	{ "read",		uc_fs_pread },
 	{ "write",		uc_fs_pwrite },
 	{ "close",		uc_fs_pclose },
+	{ "flush",		uc_fs_pflush },
 	{ "fileno",		uc_fs_pfileno },
 	{ "error",		uc_fs_error },
 };
@@ -1026,6 +1153,7 @@ static const uc_function_list_t file_fns[] = {
 	{ "seek",		uc_fs_seek },
 	{ "tell",		uc_fs_tell },
 	{ "close",		uc_fs_close },
+	{ "flush",		uc_fs_flush },
 	{ "fileno",		uc_fs_fileno },
 	{ "error",		uc_fs_error },
 };
@@ -1060,6 +1188,8 @@ static const uc_function_list_t global_fns[] = {
 	{ "dirname",	uc_fs_dirname },
 	{ "basename",	uc_fs_basename },
 	{ "lsdir",		uc_fs_lsdir },
+	{ "mkstemp",	uc_fs_mkstemp },
+	{ "access",		uc_fs_access },
 };
 
 
