@@ -15,7 +15,11 @@
  */
 
 #include <string.h> /* memcpy(), memset() */
-#include <endian.h> /* htobe64(), be64toh() */
+#if defined(__APPLE__)
+  #include <machine/endian.h>
+#else
+  #include <endian.h> /* htobe64(), be64toh() */
+#endif
 #include <math.h> /* isnan(), INFINITY */
 #include <ctype.h> /* isspace(), isdigit(), isxdigit() */
 #include <assert.h>
