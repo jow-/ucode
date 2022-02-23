@@ -23,7 +23,11 @@
 #include <stdbool.h>
 #include <stdarg.h> /* va_start(), va_end(), va_list */
 #include <string.h> /* strdup() */
-#include <json-c/json.h>
+#ifdef JSONC
+	#include <json.h>
+#else
+	#include <json-c/json.h>
+#endif
 
 
 /* alignment & array size */
