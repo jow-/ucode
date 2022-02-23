@@ -1,0 +1,36 @@
+name: Build on macOS
+
+on: [ push, pull_request ]
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup
+        run: |
+          brew install json-c
+
+      - name: Build minimal version
+        run: |
+          mkdir build
+          cd build
+          cmake \
+            -D NL80211_SUPPORT=OFF \
+            -D RTNL_SUPPORT=OFF \
+            -D UBUS_SUPPORT=OFF \
+            -D UCI_SUPPORT=OFF \
+            ..
+          make
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: minimal-build
+          if-no-files-found: ignore
+          path: |
+            build/
