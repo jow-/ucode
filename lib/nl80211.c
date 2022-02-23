@@ -24,7 +24,11 @@ limitations under the License.
 #include <limits.h>
 #include <math.h>
 #include <assert.h>
-#include <endian.h>
+#if defined(__APPLE__)
+  #include <machine/endian.h>
+#else
+  #include <endian.h>
+#endif
 #include <fcntl.h>
 #include <poll.h>
 
