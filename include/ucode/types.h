@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __TYPES_H_
-#define __TYPES_H_
+#ifndef __UC_TYPES_H_
+#define __UC_TYPES_H_
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -501,4 +501,4 @@ void ucv_gc(uc_vm_t *);
 
 void ucv_freeall(uc_vm_t *);
 
-#endif /* __TYPES_H_ */
+#endif /* __UC_TYPES_H_ */
