@@ -17,6 +17,7 @@
 #include <string.h> /* memcpy(), memset() */
 #if defined(__APPLE__)
   #include <machine/endian.h>
+  #include "macos_endian.h"
 #else
   #include <endian.h> /* htobe64(), be64toh() */
 #endif

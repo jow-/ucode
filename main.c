@@ -28,6 +28,10 @@
 	#include <json-c/json.h>
 #endif
 
+#if defined(__APPLE__)
+	#include <libgen.h>
+#endif
+
 #include "ucode/compiler.h"
 #include "ucode/lexer.h"
 #include "ucode/lib.h"
@@ -37,7 +41,7 @@
 
 
 static void
-print_usage(const char *app)
+print_usage(char *app)
 {
 	printf(
 	"Usage\n\n"

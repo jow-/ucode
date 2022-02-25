@@ -25,6 +25,7 @@
 #include <errno.h>
 #if defined(__APPLE__)
   #include <machine/endian.h>
+  #include "macos_endian.h"
 #else
   #include <endian.h>
 #endif
