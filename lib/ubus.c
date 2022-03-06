@@ -106,6 +106,7 @@ _args_get(uc_vm_t *vm, size_t nargs, ...)
 #define args_get(vm, nargs, ...) do { if (!_args_get(vm, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
 
 static uc_resource_type_t *subscriber_type;
+static uc_resource_type_t *listener_type;
 static uc_resource_type_t *request_type;
 static uc_resource_type_t *notify_type;
 static uc_resource_type_t *object_type;
@@ -157,6 +158,13 @@ typedef struct {
 	bool complete;
 	uc_vm_t *vm;
 } uc_ubus_notify_t;
+
+typedef struct {
+	struct ubus_event_handler ev;
+	struct ubus_context *ctx;
+	size_t registry_index;
+	uc_vm_t *vm;
+} uc_ubus_listener_t;
 
 typedef struct {
 	struct ubus_subscriber sub;
@@ -280,6 +288,16 @@ _uc_reg_clear(uc_vm_t *vm, const char *key, size_t idx, size_t nptrs)
 
 #define notify_reg_clear(vm, idx) \
 	_uc_reg_clear(vm, "ubus.notifications", idx, 4)
+
+
+#define listener_reg_add(vm, listener, cb) \
+	_uc_reg_add(vm, "ubus.listeners", 2, listener, cb)
+
+#define listener_reg_get(vm, idx, listener, cb) \
+	_uc_reg_get(vm, "ubus.listeners", idx, 2, listener, cb)
+
+#define listener_reg_clear(vm, idx) \
+	_uc_reg_clear(vm, "ubus.listeners", idx, 2)
 
 
 #define subscriber_reg_add(vm, subscriber, ncb, rcb) \
@@ -1511,6 +1529,121 @@ uc_ubus_publish(uc_vm_t *vm, size_t nargs)
 
 
 /*
+ * ubus events
+ * --------------------------------------------------------------------------
+ */
+
+static int
+uc_ubus_listener_remove_common(uc_ubus_listener_t *uul)
+{
+	int rv = ubus_unregister_event_handler(uul->ctx, &uul->ev);
+
+	if (rv == UBUS_STATUS_OK)
+		listener_reg_clear(uul->vm, uul->registry_index);
+
+	return rv;
+}
+
+static uc_value_t *
+uc_ubus_listener_remove(uc_vm_t *vm, size_t nargs)
+{
+	uc_ubus_listener_t **uul = uc_fn_this("ubus.listener");
+	int rv;
+
+	if (!uul || !*uul)
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid listener context");
+
+	rv = uc_ubus_listener_remove_common(*uul);
+
+	if (rv != UBUS_STATUS_OK)
+		err_return(rv, "Failed to remove listener object");
+
+	return ucv_boolean_new(true);
+}
+
+static void
+uc_ubus_listener_cb(struct ubus_context *ctx, struct ubus_event_handler *ev,
+                    const char *type, struct blob_attr *msg)
+{
+	uc_ubus_listener_t *uul = (uc_ubus_listener_t *)ev;
+	uc_value_t *this, *func;
+
+	listener_reg_get(uul->vm, uul->registry_index, &this, &func);
+
+	uc_vm_stack_push(uul->vm, ucv_get(this));
+	uc_vm_stack_push(uul->vm, ucv_get(func));
+	uc_vm_stack_push(uul->vm, ucv_string_new(type));
+	uc_vm_stack_push(uul->vm, blob_array_to_ucv(uul->vm, blob_data(msg), blob_len(msg), true));
+
+	if (uc_vm_call(uul->vm, true, 2) == EXCEPTION_NONE)
+		ucv_put(uc_vm_stack_pop(uul->vm));
+	else
+		uloop_end();
+}
+
+static uc_value_t *
+uc_ubus_listener(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *cb, *pattern;
+	uc_ubus_connection_t **c;
+	uc_ubus_listener_t *uul;
+	uc_value_t *res;
+	int rv;
+
+	conn_get(vm, &c);
+
+	args_get(vm, nargs,
+	         "event type pattern", UC_STRING, false, &pattern,
+	         "event callback", UC_CLOSURE, false, &cb);
+
+	uul = xalloc(sizeof(*uul));
+	uul->vm = vm;
+	uul->ctx = (*c)->ctx;
+	uul->ev.cb = uc_ubus_listener_cb;
+
+	rv = ubus_register_event_handler((*c)->ctx, &uul->ev,
+	                                 ucv_string_get(pattern));
+
+	if (rv != UBUS_STATUS_OK) {
+		free(uul);
+		err_return(rv, "Failed to register listener object");
+	}
+
+	res = uc_resource_new(listener_type, uul);
+
+	uul->registry_index = listener_reg_add(vm, ucv_get(res), ucv_get(cb));
+
+	return res;
+}
+
+static uc_value_t *
+uc_ubus_event(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *eventtype, *eventdata;
+	uc_ubus_connection_t **c;
+	int rv;
+
+	conn_get(vm, &c);
+
+	args_get(vm, nargs,
+	         "event id", UC_STRING, false, &eventtype,
+	         "event data", UC_OBJECT, true, &eventdata);
+
+	blob_buf_init(&buf, 0);
+
+	if (eventdata)
+		ucv_object_to_blob(eventdata, &buf);
+
+	rv = ubus_send_event((*c)->ctx, ucv_string_get(eventtype), buf.head);
+
+	if (rv != UBUS_STATUS_OK)
+		err_return(rv, "Unable to send event");
+
+	return ucv_boolean_new(true);
+}
+
+
+/*
  * ubus subscriptions
  * --------------------------------------------------------------------------
  */
@@ -1692,12 +1825,14 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 	uc_ubus_subscriber_t **uusub;
 	uc_ubus_connection_t **c;
 	uc_ubus_object_t **uuobj;
+	uc_ubus_listener_t **uul;
 	int rv;
 
 	conn_get(vm, &c);
 
 	uusub = (uc_ubus_subscriber_t **)ucv_resource_dataptr(uc_fn_arg(0), "ubus.subscriber");
 	uuobj = (uc_ubus_object_t **)ucv_resource_dataptr(uc_fn_arg(0), "ubus.object");
+	uul = (uc_ubus_listener_t **)ucv_resource_dataptr(uc_fn_arg(0), "ubus.listener");
 
 	if (uusub && *uusub) {
 		if ((*uusub)->ctx != (*c)->ctx)
@@ -1718,6 +1853,16 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 
 		if (rv != UBUS_STATUS_OK)
 			err_return(rv, "Unable to remove object");
+	}
+	else if (uul && *uul) {
+		if ((*uul)->ctx != (*c)->ctx)
+			err_return(UBUS_STATUS_INVALID_ARGUMENT,
+			           "Listener belongs to different connection");
+
+		rv = uc_ubus_listener_remove_common(*uul);
+
+		if (rv != UBUS_STATUS_OK)
+			err_return(rv, "Unable to remove listener");
 	}
 	else {
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Unhandled resource type");
@@ -1789,7 +1934,9 @@ static const uc_function_list_t conn_fns[] = {
 	{ "defer",			uc_ubus_defer },
 	{ "publish",		uc_ubus_publish },
 	{ "remove",			uc_ubus_remove },
+	{ "listener",		uc_ubus_listener },
 	{ "subscriber",		uc_ubus_subscriber },
+	{ "event",			uc_ubus_event },
 	{ "error",			uc_ubus_error },
 	{ "disconnect",		uc_ubus_disconnect },
 };
@@ -1813,6 +1960,10 @@ static const uc_function_list_t request_fns[] = {
 static const uc_function_list_t notify_fns[] = {
 	{ "completed",		uc_ubus_notify_completed },
 	{ "abort",			uc_ubus_notify_abort },
+};
+
+static const uc_function_list_t listener_fns[] = {
+	{ "remove",			uc_ubus_listener_remove },
 };
 
 static const uc_function_list_t subscriber_fns[] = {
@@ -1869,6 +2020,12 @@ static void free_notify(void *ud) {
 	free(notifyctx);
 }
 
+static void free_listener(void *ud) {
+	uc_ubus_listener_t *listener = ud;
+
+	free(listener);
+}
+
 static void free_subscriber(void *ud) {
 	uc_ubus_subscriber_t *subscriber = ud;
 
@@ -1884,5 +2041,6 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	object_type = uc_type_declare(vm, "ubus.object", object_fns, free_object);
 	notify_type = uc_type_declare(vm, "ubus.notify", notify_fns, free_notify);
 	request_type = uc_type_declare(vm, "ubus.request", request_fns, free_request);
+	listener_type = uc_type_declare(vm, "ubus.listener", listener_fns, free_listener);
 	subscriber_type = uc_type_declare(vm, "ubus.subscriber", subscriber_fns, free_subscriber);
 }
