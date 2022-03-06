@@ -17,13 +17,94 @@
 #include <unistd.h>
 #include <libubus.h>
 #include <libubox/blobmsg.h>
-#include <libubox/blobmsg_json.h>
 
 #include "ucode/module.h"
 
-#define err_return(err) do { last_error = err; return NULL; } while(0)
+#define err_return(err, ...) do { set_error(err, __VA_ARGS__); return NULL; } while(0)
 
-static enum ubus_msg_status last_error = 0;
+static struct {
+	enum ubus_msg_status code;
+	char *msg;
+} last_error;
+
+__attribute__((format(printf, 2, 3))) static void
+set_error(int errcode, const char *fmt, ...)
+{
+	va_list ap;
+
+	free(last_error.msg);
+
+	last_error.code = errcode;
+	last_error.msg = NULL;
+
+	if (fmt) {
+		va_start(ap, fmt);
+		xvasprintf(&last_error.msg, fmt, ap);
+		va_end(ap);
+	}
+}
+
+static char *
+_arg_type(uc_type_t type)
+{
+	switch (type) {
+	case UC_INTEGER:   return "an integer value";
+	case UC_BOOLEAN:   return "a boolean value";
+	case UC_STRING:    return "a string value";
+	case UC_DOUBLE:    return "a double value";
+	case UC_ARRAY:     return "an array";
+	case UC_OBJECT:    return "an object";
+	case UC_REGEXP:    return "a regular expression";
+	case UC_CLOSURE:   return "a function";
+	default:           return "the expected type";
+	}
+}
+
+static bool
+_args_get(uc_vm_t *vm, size_t nargs, ...)
+{
+	uc_value_t **ptr, *arg;
+	uc_type_t type, t;
+	const char *name;
+	size_t index = 0;
+	va_list ap;
+	bool opt;
+
+	va_start(ap, nargs);
+
+	while (true) {
+		name = va_arg(ap, const char *);
+
+		if (!name)
+			break;
+
+		arg = uc_fn_arg(index++);
+
+		type = va_arg(ap, uc_type_t);
+		opt = va_arg(ap, int);
+		ptr = va_arg(ap, uc_value_t **);
+
+		if (!opt && !arg)
+			err_return(UBUS_STATUS_INVALID_ARGUMENT, "Argument %s is required", name);
+
+		t = ucv_type(arg);
+
+		if (t == UC_CFUNCTION)
+			t = UC_CLOSURE;
+
+		if (arg && t != type)
+			err_return(UBUS_STATUS_INVALID_ARGUMENT, "Argument %s is not %s", name, _arg_type(type));
+
+		*ptr = arg;
+	}
+
+	va_end(ap);
+
+	return true;
+}
+
+#define args_get(vm, nargs, ...) do { if (!_args_get(vm, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
+
 static uc_resource_type_t *subscriber_type;
 static uc_resource_type_t *request_type;
 static uc_resource_type_t *notify_type;
@@ -87,15 +168,29 @@ typedef struct {
 static uc_value_t *
 uc_ubus_error(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *errmsg;
+	uc_stringbuf_t *buf;
+	const char *s;
 
-	if (last_error == 0)
+	if (last_error.code == 0)
 		return NULL;
 
-	errmsg = ucv_string_new(ubus_strerror(last_error));
-	last_error = 0;
+	buf = ucv_stringbuf_new();
 
-	return errmsg;
+	if (last_error.code == UBUS_STATUS_UNKNOWN_ERROR && last_error.msg) {
+		ucv_stringbuf_addstr(buf, last_error.msg, strlen(last_error.msg));
+	}
+	else {
+		s = ubus_strerror(last_error.code);
+
+		ucv_stringbuf_addstr(buf, s, strlen(s));
+
+		if (last_error.msg)
+			ucv_stringbuf_printf(buf, ": %s", last_error.msg);
+	}
+
+	set_error(0, NULL);
+
+	return ucv_stringbuf_finish(buf);
 }
 
 static void
@@ -198,10 +293,10 @@ _uc_reg_clear(uc_vm_t *vm, const char *key, size_t idx, size_t nptrs)
 
 
 static uc_value_t *
-uc_blob_to_json(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **name);
+blob_to_ucv(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **name);
 
 static uc_value_t *
-uc_blob_array_to_json(uc_vm_t *vm, struct blob_attr *attr, size_t len, bool table)
+blob_array_to_ucv(uc_vm_t *vm, struct blob_attr *attr, size_t len, bool table)
 {
 	uc_value_t *o = table ? ucv_object_new(vm) : ucv_array_new(vm);
 	uc_value_t *v;
@@ -214,7 +309,7 @@ uc_blob_array_to_json(uc_vm_t *vm, struct blob_attr *attr, size_t len, bool tabl
 
 	__blob_for_each_attr(pos, attr, rem) {
 		name = NULL;
-		v = uc_blob_to_json(vm, pos, table, &name);
+		v = blob_to_ucv(vm, pos, table, &name);
 
 		if (table && name)
 			ucv_object_add(o, name, v);
@@ -228,7 +323,7 @@ uc_blob_array_to_json(uc_vm_t *vm, struct blob_attr *attr, size_t len, bool tabl
 }
 
 static uc_value_t *
-uc_blob_to_json(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **name)
+blob_to_ucv(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **name)
 {
 	void *data;
 	int len;
@@ -270,10 +365,10 @@ uc_blob_to_json(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **na
 		return ucv_string_new(data);
 
 	case BLOBMSG_TYPE_ARRAY:
-		return uc_blob_array_to_json(vm, data, len, false);
+		return blob_array_to_ucv(vm, data, len, false);
 
 	case BLOBMSG_TYPE_TABLE:
-		return uc_blob_array_to_json(vm, data, len, true);
+		return blob_array_to_ucv(vm, data, len, true);
 
 	default:
 		return NULL;
@@ -358,38 +453,24 @@ ucv_object_to_blob(uc_value_t *val, struct blob_buf *blob)
 static uc_value_t *
 uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *socket = uc_fn_arg(0);
-	uc_value_t *timeout = uc_fn_arg(1);
-	uc_value_t *co;
+	uc_value_t *socket, *timeout;
 	uc_ubus_connection_t *c;
 
-	if ((socket && ucv_type(socket) != UC_STRING) ||
-	    (timeout && ucv_type(timeout) != UC_INTEGER))
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+	args_get(vm, nargs,
+	         "socket", UC_STRING, true, &socket,
+	         "timeout", UC_INTEGER, true, &timeout);
 
-	c = calloc(1, sizeof(*c));
-
-	if (!c)
-		err_return(UBUS_STATUS_UNKNOWN_ERROR);
-
+	c = xalloc(sizeof(*c));
 	c->ctx = ubus_connect(socket ? ucv_string_get(socket) : NULL);
 	c->timeout = timeout ? ucv_int64_get(timeout) : 30;
 
 	if (!c->ctx) {
 		free(c);
-		err_return(UBUS_STATUS_UNKNOWN_ERROR);
+		err_return(UBUS_STATUS_UNKNOWN_ERROR, "Unable to connect to ubus socket");
 	}
 
 	if (c->timeout < 0)
 		c->timeout = 30;
-
-	co = ucv_object_new(vm);
-
-	if (!co) {
-		ubus_free(c->ctx);
-		free(c);
-		err_return(ENOMEM);
-	}
 
 	ubus_add_uloop(c->ctx);
 
@@ -405,7 +486,7 @@ uc_ubus_signatures_cb(struct ubus_context *c, struct ubus_object_data *o, void *
 	if (!o->signature)
 		return;
 
-	sig = uc_blob_array_to_json(NULL, blob_data(o->signature), blob_len(o->signature), true);
+	sig = blob_array_to_ucv(NULL, blob_data(o->signature), blob_len(o->signature), true);
 
 	if (sig)
 		ucv_array_push(arr, sig);
@@ -414,41 +495,35 @@ uc_ubus_signatures_cb(struct ubus_context *c, struct ubus_object_data *o, void *
 static void
 uc_ubus_objects_cb(struct ubus_context *c, struct ubus_object_data *o, void *p)
 {
-	json_object *arr = p;
-	json_object *obj;
+	uc_value_t *arr = p;
 
-	obj = json_object_new_string(o->path);
-
-	if (obj)
-		json_object_array_add(arr, obj);
+	ucv_array_push(arr, ucv_string_new(o->path));
 }
 
 static uc_value_t *
 uc_ubus_list(uc_vm_t *vm, size_t nargs)
 {
 	uc_ubus_connection_t **c = uc_fn_this("ubus.connection");
-	uc_value_t *objname = uc_fn_arg(0);
-	uc_value_t *res = NULL;
+	uc_value_t *objname, *res = NULL;
 	enum ubus_msg_status rv;
 
 	if (!c || !*c || !(*c)->ctx)
-		err_return(UBUS_STATUS_CONNECTION_FAILED);
+		err_return(UBUS_STATUS_CONNECTION_FAILED, NULL);
 
-	if (objname && ucv_type(objname) != UC_STRING)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+	args_get(vm, nargs,
+	         "object name", UC_STRING, true, &objname);
 
 	res = ucv_array_new(vm);
-
-	if (!res)
-		err_return(UBUS_STATUS_UNKNOWN_ERROR);
 
 	rv = ubus_lookup((*c)->ctx,
 	                 objname ? ucv_string_get(objname) : NULL,
 	                 objname ? uc_ubus_signatures_cb : uc_ubus_objects_cb,
 	                 res);
 
-	if (rv != UBUS_STATUS_OK)
-		err_return(rv);
+	if (rv != UBUS_STATUS_OK) {
+		ucv_put(res);
+		err_return(rv, NULL);
+	}
 
 	return res;
 }
@@ -458,7 +533,7 @@ uc_ubus_call_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 {
 	uc_value_t **res = (uc_value_t **)req->priv;
 
-	*res = msg ? uc_blob_array_to_json(NULL, blob_data(msg), blob_len(msg), true) : NULL;
+	*res = msg ? blob_array_to_ucv(NULL, blob_data(msg), blob_len(msg), true) : NULL;
 }
 
 static void
@@ -492,7 +567,7 @@ uc_ubus_call_data_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 	uc_ubus_deferred_t *defer = container_of(req, uc_ubus_deferred_t, request);
 
 	if (defer->response == NULL)
-		defer->response = uc_blob_array_to_json(defer->vm, blob_data(msg), blob_len(msg), true);
+		defer->response = blob_array_to_ucv(defer->vm, blob_data(msg), blob_len(msg), true);
 }
 
 static void
@@ -536,47 +611,54 @@ uc_ubus_have_uloop(void)
 	return active;
 }
 
+static bool
+_conn_get(uc_vm_t *vm, uc_ubus_connection_t ***conn)
+{
+	*conn = uc_fn_this("ubus.connection");
+
+	if (!*conn || !**conn)
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid connection context");
+
+	if (!(**conn)->ctx)
+		err_return(UBUS_STATUS_CONNECTION_FAILED, "Connection is closed");
+
+	return true;
+}
+
+#define conn_get(vm, ptr) do { if (!_conn_get(vm, ptr)) return NULL; } while(0)
+
 static uc_value_t *
 uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_connection_t **c = uc_fn_this("ubus.connection");
-	uc_value_t *objname = uc_fn_arg(0);
-	uc_value_t *funname = uc_fn_arg(1);
-	uc_value_t *funargs = uc_fn_arg(2);
-	uc_value_t *res = NULL;
+	uc_value_t *objname, *funname, *funargs, *res = NULL;
+	uc_ubus_connection_t **c;
 	enum ubus_msg_status rv;
-	json_object *o;
 	uint32_t id;
 
-	if (!c || !*c || !(*c)->ctx)
-		err_return(UBUS_STATUS_CONNECTION_FAILED);
+	conn_get(vm, &c);
 
-	if (ucv_type(objname) != UC_STRING ||
-	    ucv_type(funname) != UC_STRING ||
-	    (funargs && ucv_type(funargs) != UC_OBJECT))
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+	args_get(vm, nargs,
+	         "object name", UC_STRING, false, &objname,
+	         "function name", UC_STRING, false, &funname,
+	         "function arguments", UC_OBJECT, true, &funargs);
 
 	blob_buf_init(&(*c)->buf, 0);
 
-	if (funargs) {
-		o = ucv_to_json(funargs);
-		rv = blobmsg_add_object(&(*c)->buf, o);
-		json_object_put(o);
-
-		if (!rv)
-			err_return(UBUS_STATUS_UNKNOWN_ERROR);
-	}
+	if (funargs)
+		ucv_object_to_blob(funargs, &(*c)->buf);
 
 	rv = ubus_lookup_id((*c)->ctx, ucv_string_get(objname), &id);
 
 	if (rv != UBUS_STATUS_OK)
-		err_return(rv);
+		err_return(rv, "Failed to resolve object name '%s'",
+		           ucv_string_get(objname));
 
 	rv = ubus_invoke((*c)->ctx, id, ucv_string_get(funname), (*c)->buf.head,
 	                 uc_ubus_call_cb, &res, (*c)->timeout * 1000);
 
 	if (rv != UBUS_STATUS_OK)
-		err_return(rv);
+		err_return(rv, "Failed to invoke function '%s' on object '%s'",
+		           ucv_string_get(funname), ucv_string_get(objname));
 
 	return res;
 }
@@ -584,41 +666,30 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_connection_t **c = uc_fn_this("ubus.connection");
-	uc_value_t *objname = uc_fn_arg(0);
-	uc_value_t *funname = uc_fn_arg(1);
-	uc_value_t *funargs = uc_fn_arg(2);
-	uc_value_t *replycb = uc_fn_arg(3);
-	uc_value_t *res = NULL;
-	enum ubus_msg_status rv;
+	uc_value_t *objname, *funname, *funargs, *replycb, *res = NULL;
 	uc_ubus_deferred_t *defer;
-	json_object *o;
+	uc_ubus_connection_t **c;
+	enum ubus_msg_status rv;
 	uint32_t id;
 
-	if (!c || !*c || !(*c)->ctx)
-		err_return(UBUS_STATUS_CONNECTION_FAILED);
+	conn_get(vm, &c);
 
-	if (ucv_type(objname) != UC_STRING ||
-	    ucv_type(funname) != UC_STRING ||
-	    (funargs && ucv_type(funargs) != UC_OBJECT) ||
-	    (replycb && !ucv_is_callable(replycb)))
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+	args_get(vm, nargs,
+	         "object name", UC_STRING, false, &objname,
+	         "function name", UC_STRING, false, &funname,
+	         "function arguments", UC_OBJECT, true, &funargs,
+	         "reply callback", UC_CLOSURE, true, &replycb);
 
 	blob_buf_init(&(*c)->buf, 0);
 
-	if (funargs) {
-		o = ucv_to_json(funargs);
-		rv = blobmsg_add_object(&(*c)->buf, o);
-		json_object_put(o);
-
-		if (!rv)
-			err_return(UBUS_STATUS_UNKNOWN_ERROR);
-	}
+	if (funargs)
+		ucv_object_to_blob(funargs, &(*c)->buf);
 
 	rv = ubus_lookup_id((*c)->ctx, ucv_string_get(objname), &id);
 
 	if (rv != UBUS_STATUS_OK)
-		err_return(rv);
+		err_return(rv, "Failed to resolve object name '%s'",
+		           ucv_string_get(objname));
 
 	defer = xalloc(sizeof(*defer));
 
@@ -656,7 +727,8 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 	}
 
 	if (rv != UBUS_STATUS_OK)
-		err_return(rv);
+		err_return(rv, "Failed to invoke function '%s' on object '%s'",
+		           ucv_string_get(funname), ucv_string_get(objname));
 
 	return res;
 }
@@ -697,21 +769,18 @@ static uc_value_t *
 uc_ubus_request_reply(uc_vm_t *vm, size_t nargs)
 {
 	uc_ubus_request_t **callctx = uc_fn_this("ubus.request");
-	uc_value_t *reply = uc_fn_arg(0);
-	uc_value_t *rcode = uc_fn_arg(1);
 	int64_t code = UBUS_STATUS_OK;
+	uc_value_t *reply, *rcode;
 
 	if (!callctx || !*callctx)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid call context");
 
-	if (reply && ucv_type(reply) != UC_OBJECT)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
-
-	if (rcode && ucv_type(rcode) != UC_INTEGER)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+	args_get(vm, nargs,
+	         "reply", UC_OBJECT, true, &reply,
+	         "rcode", UC_INTEGER, true, &rcode);
 
 	if ((*callctx)->replied)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Reply has already been sent");
 
 	if (rcode) {
 		code = ucv_int64_get(rcode);
@@ -733,13 +802,13 @@ uc_ubus_request_error(uc_vm_t *vm, size_t nargs)
 	int64_t code;
 
 	if (!callctx || !*callctx)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid call context");
 
-	if (ucv_type(rcode) != UC_INTEGER)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+	args_get(vm, nargs,
+	         "rcode", UC_INTEGER, false, &rcode);
 
 	if ((*callctx)->replied)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Reply has already been sent");
 
 	code = ucv_int64_get(rcode);
 
@@ -763,7 +832,7 @@ uc_ubus_notify_completed(uc_vm_t *vm, size_t nargs)
 	uc_ubus_notify_t **notifyctx = uc_fn_this("ubus.notify");
 
 	if (!notifyctx || !*notifyctx)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid notify context");
 
 	return ucv_boolean_new((*notifyctx)->complete);
 }
@@ -774,7 +843,7 @@ uc_ubus_notify_abort(uc_vm_t *vm, size_t nargs)
 	uc_ubus_notify_t **notifyctx = uc_fn_this("ubus.notify");
 
 	if (!notifyctx || !*notifyctx)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid notify context");
 
 	if ((*notifyctx)->complete)
 		return ucv_boolean_new(false);
@@ -797,7 +866,7 @@ uc_ubus_object_notify_data_cb(struct ubus_notify_request *req, int type, struct 
 		uc_vm_stack_push(notifyctx->vm, ucv_get(this));
 		uc_vm_stack_push(notifyctx->vm, ucv_get(func));
 		uc_vm_stack_push(notifyctx->vm, ucv_int64_new(type));
-		uc_vm_stack_push(notifyctx->vm, uc_blob_array_to_json(notifyctx->vm, blob_data(msg), blob_len(msg), true));
+		uc_vm_stack_push(notifyctx->vm, blob_array_to_ucv(notifyctx->vm, blob_data(msg), blob_len(msg), true));
 
 		if (uc_vm_call(notifyctx->vm, true, 2) == EXCEPTION_NONE)
 			ucv_put(uc_vm_stack_pop(notifyctx->vm));
@@ -849,33 +918,29 @@ uc_ubus_object_notify_complete_cb(struct ubus_notify_request *req, int idx, int 
 static uc_value_t *
 uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 {
+	uc_value_t *typename, *message, *data_cb, *status_cb, *complete_cb, *timeout;
 	uc_ubus_object_t **uuobj = uc_fn_this("ubus.object");
-	uc_value_t *typename = uc_fn_arg(0);
-	uc_value_t *message = uc_fn_arg(1);
-	uc_value_t *data_cb = uc_fn_arg(2);
-	uc_value_t *status_cb = uc_fn_arg(3);
-	uc_value_t *complete_cb = uc_fn_arg(4);
-	uc_value_t *timeout = uc_fn_arg(5);
 	uc_ubus_notify_t *notifyctx;
 	uc_value_t *res;
 	int64_t t;
 	int rv;
 
 	if (!uuobj || !*uuobj)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid object context");
 
-	if (ucv_type(typename) != UC_STRING ||
-	    (message && ucv_type(message) != UC_OBJECT) ||
-	    (data_cb && !ucv_is_callable(data_cb)) ||
-	    (status_cb && !ucv_is_callable(status_cb)) ||
-	    (complete_cb && !ucv_is_callable(complete_cb)) ||
-	    (timeout && ucv_type(timeout) != UC_INTEGER))
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+	args_get(vm, nargs,
+	         "typename", UC_STRING, false, &typename,
+	         "message", UC_OBJECT, true, &message,
+	         "data callback", UC_CLOSURE, true, &data_cb,
+	         "status callback", UC_CLOSURE, true, &status_cb,
+	         "completion callback", UC_CLOSURE, true, &complete_cb,
+	         "timeout", UC_INTEGER, true, &timeout);
 
 	t = timeout ? ucv_int64_get(timeout) : -1;
 
 	if (errno)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT,
+		           "Invalid timeout value: %s", strerror(errno));
 
 	notifyctx = xalloc(sizeof(*notifyctx));
 	notifyctx->vm = vm;
@@ -892,7 +957,7 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 
 	if (rv != UBUS_STATUS_OK) {
 		free(notifyctx);
-		err_return(rv);
+		err_return(rv, "Failed to send notification");
 	}
 
 	notifyctx->req.data_cb = uc_ubus_object_notify_data_cb;
@@ -943,12 +1008,12 @@ uc_ubus_object_remove(uc_vm_t *vm, size_t nargs)
 	int rv;
 
 	if (!uuobj || !*uuobj)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid object context");
 
 	rv = uc_ubus_object_remove_common(*uuobj);
 
 	if (rv != UBUS_STATUS_OK)
-		err_return(rv);
+		err_return(rv, "Failed to remove object");
 
 	return ucv_boolean_new(true);
 }
@@ -964,7 +1029,7 @@ uc_ubus_object_subscribed(uc_vm_t *vm, size_t nargs)
 	uc_ubus_object_t **uuobj = uc_fn_this("ubus.object");
 
 	if (!uuobj || !*uuobj)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid object context");
 
 	return ucv_boolean_new((*uuobj)->obj.has_subscribers);
 }
@@ -1029,7 +1094,7 @@ uc_ubus_object_call_args(struct ubus_object *obj, const char *ubus_method_name,
 			goto inval;
 	}
 
-	*res = uc_blob_array_to_json(uuobj->vm, blob_data(msg), blob_len(msg), true);
+	*res = blob_array_to_ucv(uuobj->vm, blob_data(msg), blob_len(msg), true);
 
 	return UBUS_STATUS_OK;
 
@@ -1229,9 +1294,6 @@ uc_ubus_object_methods_validate(uc_value_t *methods)
 {
 	uc_value_t *func, *args;
 
-	if (ucv_type(methods) != UC_OBJECT)
-		return false;
-
 	ucv_object_foreach(methods, ubus_method_name, ubus_method_definition) {
 		(void)ubus_method_name;
 
@@ -1239,11 +1301,15 @@ uc_ubus_object_methods_validate(uc_value_t *methods)
 		args = ucv_object_get(ubus_method_definition, "args", NULL);
 
 		if (!ucv_is_callable(func))
-			return false;
+			err_return(UBUS_STATUS_INVALID_ARGUMENT,
+			           "Method '%s' field 'call' is not a function value",
+			           ubus_method_name);
 
 		if (args) {
 			if (ucv_type(args) != UC_OBJECT)
-				return false;
+				err_return(UBUS_STATUS_INVALID_ARGUMENT,
+				           "Method '%s' field 'args' is not an object value",
+				           ubus_method_name);
 
 			ucv_object_foreach(args, ubus_argument_name, ubus_argument_typehint) {
 				(void)ubus_argument_name;
@@ -1258,7 +1324,10 @@ uc_ubus_object_methods_validate(uc_value_t *methods)
 					continue;
 
 				default:
-					return false;
+					err_return(UBUS_STATUS_INVALID_ARGUMENT,
+					           "Method '%s' field 'args' argument '%s' hint has unsupported type %s",
+					           ubus_method_name, ubus_argument_name,
+					           ucv_typename(ubus_argument_typehint));
 				}
 			}
 		}
@@ -1359,7 +1428,7 @@ uc_ubus_object_register(struct ubus_context *ctx, const char *ubus_object_name,
 	                 &tnptr, typelen + 1);
 
 	if (!uuobj)
-		err_return(rv);
+		err_return(rv, "Out of memory");
 
 	snprintf(tnptr, typelen, "ucode-ubus-%s", ubus_object_name);
 
@@ -1399,33 +1468,29 @@ out:
 
 	free(uuobj);
 
-	err_return(rv); /* ENOMEM */
+	err_return(rv, "Unable to add ubus object");
 }
 
 static uc_value_t *
 uc_ubus_publish(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_connection_t **c = uc_fn_this("ubus.connection");
-	uc_value_t *objname = uc_fn_arg(0);
-	uc_value_t *methods = uc_fn_arg(1);
-	uc_value_t *subscribecb = uc_fn_arg(2);
+	uc_value_t *objname, *methods, *subscribecb;
+	uc_ubus_connection_t **c;
 	uc_ubus_object_t *uuobj;
 	uc_value_t *res;
 
-	if (!c || !*c || !(*c)->ctx)
-		err_return(UBUS_STATUS_CONNECTION_FAILED);
+	conn_get(vm, &c);
 
-	if (ucv_type(objname) != UC_STRING)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+	args_get(vm, nargs,
+	         "object name", UC_STRING, false, &objname,
+	         "object methods", UC_OBJECT, true, &methods,
+	         "subscribe callback", UC_CLOSURE, true, &subscribecb);
 
 	if (!methods && !subscribecb)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Either methods or subscribe callback required");
 
 	if (methods && !uc_ubus_object_methods_validate(methods))
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
-
-	if (subscribecb && !ucv_is_callable(subscribecb))
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		return NULL;
 
 	uuobj = uc_ubus_object_register((*c)->ctx, ucv_string_get(objname), methods);
 
@@ -1469,7 +1534,7 @@ uc_ubus_subscriber_notify_cb(struct ubus_context *ctx, struct ubus_object *obj,
 	ucv_object_add(reqproto, "type", ucv_string_new(method));
 
 	ucv_object_add(reqproto, "data",
-		uc_blob_array_to_json(uusub->vm, blob_data(msg), blob_len(msg), true));
+		blob_array_to_ucv(uusub->vm, blob_data(msg), blob_len(msg), true));
 
 	ucv_object_add(reqproto, "info",
 		uc_ubus_object_call_info(uusub->vm, ctx, req, obj, NULL));
@@ -1503,20 +1568,21 @@ static uc_value_t *
 uc_ubus_subscriber_subunsub_common(uc_vm_t *vm, size_t nargs, bool subscribe)
 {
 	uc_ubus_subscriber_t **uusub = uc_fn_this("ubus.subscriber");
-	uc_value_t *objname = uc_fn_arg(0);
+	uc_value_t *objname;
 	uint32_t id;
 	int rv;
 
 	if (!uusub || !*uusub)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid subscriber context");
 
-	if (ucv_type(objname) != UC_STRING)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+	args_get(vm, nargs,
+	         "object name", UC_STRING, false, &objname);
 
 	rv = ubus_lookup_id((*uusub)->ctx, ucv_string_get(objname), &id);
 
 	if (rv != UBUS_STATUS_OK)
-		err_return(rv);
+		err_return(rv, "Failed to resolve object name '%s'",
+		           ucv_string_get(objname));
 
 	if (subscribe)
 		rv = ubus_subscribe((*uusub)->ctx, &(*uusub)->sub, id);
@@ -1524,7 +1590,9 @@ uc_ubus_subscriber_subunsub_common(uc_vm_t *vm, size_t nargs, bool subscribe)
 		rv = ubus_unsubscribe((*uusub)->ctx, &(*uusub)->sub, id);
 
 	if (rv != UBUS_STATUS_OK)
-		err_return(rv);
+		err_return(rv, "Failed to %s object '%s'",
+		           subscribe ? "subscribe" : "unsubscribe",
+		           ucv_string_get(objname));
 
 	return ucv_boolean_new(true);
 }
@@ -1559,12 +1627,12 @@ uc_ubus_subscriber_remove(uc_vm_t *vm, size_t nargs)
 	int rv;
 
 	if (!uusub || !*uusub)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid subscriber context");
 
 	rv = uc_ubus_subscriber_remove_common(*uusub);
 
 	if (rv != UBUS_STATUS_OK)
-		err_return(rv);
+		err_return(rv, "Failed to remove subscriber object");
 
 	return ucv_boolean_new(true);
 }
@@ -1572,22 +1640,20 @@ uc_ubus_subscriber_remove(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_connection_t **c = uc_fn_this("ubus.connection");
-	uc_value_t *notify_cb = uc_fn_arg(0);
-	uc_value_t *remove_cb = uc_fn_arg(1);
+	uc_value_t *notify_cb, *remove_cb;
 	uc_ubus_subscriber_t *uusub;
+	uc_ubus_connection_t **c;
 	uc_value_t *res;
 	int rv;
 
-	if (!c || !*c || !(*c)->ctx)
-		err_return(UBUS_STATUS_CONNECTION_FAILED);
+	conn_get(vm, &c);
+
+	args_get(vm, nargs,
+	         "notify callback", UC_CLOSURE, true, &notify_cb,
+	         "remove callback", UC_CLOSURE, true, &remove_cb);
 
 	if (!notify_cb && !remove_cb)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT);
-
-	if ((notify_cb && !ucv_is_callable(notify_cb)) ||
-	    (remove_cb && !ucv_is_callable(remove_cb)))
-	    err_return(UBUS_STATUS_INVALID_ARGUMENT);
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Either notify or remove callback required");
 
 	uusub = xalloc(sizeof(*uusub));
 	uusub->vm = vm;
@@ -1597,7 +1663,7 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 
 	if (rv != UBUS_STATUS_OK) {
 		free(uusub);
-		err_return(rv);
+		err_return(rv, "Failed to register subscriber object");
 	}
 
 	if (notify_cb)
@@ -1623,26 +1689,39 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_connection_t **c = uc_fn_this("ubus.connection");
 	uc_ubus_subscriber_t **uusub;
+	uc_ubus_connection_t **c;
 	uc_ubus_object_t **uuobj;
 	int rv;
 
-	if (!c || !*c || !(*c)->ctx)
-		err_return(UBUS_STATUS_CONNECTION_FAILED);
+	conn_get(vm, &c);
 
 	uusub = (uc_ubus_subscriber_t **)ucv_resource_dataptr(uc_fn_arg(0), "ubus.subscriber");
 	uuobj = (uc_ubus_object_t **)ucv_resource_dataptr(uc_fn_arg(0), "ubus.object");
 
-	rv = UBUS_STATUS_INVALID_ARGUMENT;
+	if (uusub && *uusub) {
+		if ((*uusub)->ctx != (*c)->ctx)
+			err_return(UBUS_STATUS_INVALID_ARGUMENT,
+			           "Subscriber belongs to different connection");
 
-	if (uusub && *uusub && (*uusub)->ctx == (*c)->ctx)
 		rv = uc_ubus_subscriber_remove_common(*uusub);
-	else if (uuobj && *uuobj && (*uuobj)->ctx == (*c)->ctx)
+
+		if (rv != UBUS_STATUS_OK)
+			err_return(rv, "Unable to remove subscriber");
+	}
+	else if (uuobj && *uuobj) {
+		if ((*uuobj)->ctx != (*c)->ctx)
+			err_return(UBUS_STATUS_INVALID_ARGUMENT,
+			           "Object belongs to different connection");
+
 		rv = uc_ubus_object_remove_common(*uuobj);
 
-	if (rv != UBUS_STATUS_OK)
-		err_return(rv);
+		if (rv != UBUS_STATUS_OK)
+			err_return(rv, "Unable to remove object");
+	}
+	else {
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Unhandled resource type");
+	}
 
 	return ucv_boolean_new(true);
 }
@@ -1651,10 +1730,9 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_connection_t **c = uc_fn_this("ubus.connection");
+	uc_ubus_connection_t **c;
 
-	if (!c || !*c || !(*c)->ctx)
-		err_return(UBUS_STATUS_CONNECTION_FAILED);
+	conn_get(vm, &c);
 
 	ubus_free((*c)->ctx);
 	(*c)->ctx = NULL;
