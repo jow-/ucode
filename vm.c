@@ -1355,6 +1355,31 @@ uc_vm_value_bitop(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 }
 
 static uc_value_t *
+uc_vm_value_logical(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_value_t *operand)
+{
+	uc_value_t *rv = NULL;
+
+	switch (operation) {
+	case I_LTRUE:
+		rv = ucv_get(ucv_is_truish(value) ? operand : value);
+		break;
+
+	case I_LFALSE:
+		rv = ucv_get(ucv_is_truish(value) ? value : operand);
+		break;
+
+	case I_LNULL:
+		rv = ucv_get(value == NULL ? operand : value);
+		break;
+
+	default:
+		break;
+	}
+
+	return rv;
+}
+
+static uc_value_t *
 uc_vm_string_concat(uc_vm_t *vm, uc_value_t *v1, uc_value_t *v2)
 {
 	char buf[sizeof(void *)], *s1, *s2;
@@ -1385,6 +1410,22 @@ uc_vm_string_concat(uc_vm_t *vm, uc_value_t *v1, uc_value_t *v2)
 	return ucv_stringbuf_finish(sbuf);
 }
 
+static uint64_t
+upow64(uint64_t base, uint64_t exponent)
+{
+	uint64_t result = 1;
+
+	while (exponent) {
+		if (exponent & 1)
+			result *= base;
+
+		exponent >>= 1;
+		base *= base;
+	}
+
+	return result;
+}
+
 static uc_value_t *
 uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_value_t *operand)
 {
@@ -1396,6 +1437,9 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 	if (operation == I_LSHIFT || operation == I_RSHIFT ||
 	    operation == I_BAND || operation == I_BXOR || operation == I_BOR)
 		return uc_vm_value_bitop(vm, operation, value, operand);
+
+	if (operation == I_LTRUE || operation == I_LFALSE || operation == I_LNULL)
+		return uc_vm_value_logical(vm, operation, value, operand);
 
 	if (operation == I_ADD && (ucv_type(value) == UC_STRING || ucv_type(operand) == UC_STRING))
 		return uc_vm_string_concat(vm, value, operand);
@@ -1443,6 +1487,10 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 
 		case I_MOD:
 			rv = ucv_double_new(fmod(d1, d2));
+			break;
+
+		case I_EXP:
+			rv = ucv_double_new(pow(d1, d2));
 			break;
 
 		default:
@@ -1545,6 +1593,24 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 				if (!u2) u2 = (uint64_t)n2;
 
 				rv = ucv_uint64_new(u1 % u2);
+			}
+
+			break;
+
+		case I_EXP:
+			if (n1 < 0 || n2 < 0) {
+				if (n1 < 0 && n2 < 0)
+					rv = ucv_double_new(-(1.0 / (double)upow64(abs64(n1), abs64(n2))));
+				else if (n2 < 0)
+					rv = ucv_double_new(1.0 / (double)upow64(abs64(n1), abs64(n2)));
+				else
+					rv = ucv_int64_new(-upow64(abs64(n1), abs64(n2)));
+			}
+			else {
+				if (!u1) u1 = (uint64_t)n1;
+				if (!u2) u2 = (uint64_t)n2;
+
+				rv = ucv_uint64_new(upow64(u1, u2));
 			}
 
 			break;
@@ -2415,6 +2481,7 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 		case I_MUL:
 		case I_DIV:
 		case I_MOD:
+		case I_EXP:
 			uc_vm_insn_arith(vm, insn);
 			break;
 

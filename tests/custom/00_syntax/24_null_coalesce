@@ -1,0 +1,50 @@
+Null coalescing operators return the right hand side of an expression of
+the left hand side is null.
+
+
+1. The `??` operator returns the right hand side of the expression if the
+left hand side evaluates to `null`.
+
+-- Expect stdout --
+is null
+false
+0
+-- End --
+
+-- Testcase --
+{%
+	x = null;
+	y = false;
+	z = 0;
+
+	print(x ?? "is null", "\n");
+	print(y ?? "is null", "\n");
+	print(z ?? "is null", "\n");
+%}
+-- End --
+
+
+2. The `??=` nullish assignment operator sets the left hand side variable
+or value to the right hand side expression if the existing value is null.
+
+-- Expect stdout --
+is null
+false
+0
+-- End --
+
+-- Testcase --
+{%
+	x = null;
+	y = false;
+	z = 0;
+
+	x ??= "is null";
+	y ??= "is null";
+	z ??= "is null";
+
+	print(x, "\n");
+	print(y, "\n");
+	print(z, "\n");
+%}
+-- End --

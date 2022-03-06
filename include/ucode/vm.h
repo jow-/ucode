@@ -77,6 +77,7 @@ __insn(SUB) \
 __insn(MUL) \
 __insn(DIV) \
 __insn(MOD) \
+__insn(EXP) \
 __insn(NOT) \
 __insn(COMPL) \
 __insn(PLUS) \

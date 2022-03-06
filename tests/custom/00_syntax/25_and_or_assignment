@@ -1,0 +1,55 @@
+The logical AND and logical OR assignment operators set the left hand side
+variable or value to the right hand side expression result depending on
+whether the lhs value is truish.
+
+
+1. The `&&=` operator overwrites the lhs variable or field with the rhs
+expression result if the lhs is truish.
+
+-- Expect stdout --
+[
+	null,
+	false,
+	"is truish"
+]
+-- End --
+
+-- Testcase --
+{%
+	x = null;
+	y = false;
+	z = true;
+
+	x &&= "is truish";
+	y &&= "is truish";
+	z &&= "is truish";
+
+	printf("%.J\n", [ x, y, z ]);
+%}
+-- End --
+
+
+2. The `||=` operator overwrites the lhs variable or field with the rhs
+expression result if the lhs is falsy.
+
+-- Expect stdout --
+[
+	"is falsy",
+	"is falsy",
+	true
+]
+-- End --
+
+-- Testcase --
+{%
+	x = null;
+	y = false;
+	z = true;
+
+	x ||= "is falsy";
+	y ||= "is falsy";
+	z ||= "is falsy";
+
+	printf("%.J\n", [ x, y, z ]);
+%}
+-- End --
