@@ -1,0 +1,56 @@
+The exponentiation and exponentiation assignment operands allow raising
+the base operand value to the given power.
+
+
+1. The `**` operator returns the result of raising the first operand to
+the power of the second operand.
+
+-- Expect stdout --
+[
+	1,
+	4,
+	9223372036854775808,
+	-9223372036854775808,
+	-0.25,
+	2.75568
+]
+-- End --
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		2 ** 0,
+		2 ** 2,
+		2 ** 63,
+		-2 ** 63,
+		-2 ** -2,
+		1.5 ** 2.5
+	]);
+%}
+-- End --
+
+
+2. The `**=` operator raises the lhs variable or field value to the
+power value in the rhs expression.
+
+-- Expect stdout --
+[
+	4,
+	-0.25,
+	2.75568
+]
+-- End --
+
+-- Testcase --
+{%
+	x = 2;
+	y = -2;
+	z = 1.5;
+
+	x **= 2;
+	y **= -2;
+	z **= 2.5;
+
+	printf("%.J\n", [ x, y, z ]);
+%}
+-- End --

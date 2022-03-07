@@ -63,6 +63,7 @@ typedef enum {
 	TK_MUL,
 	TK_DIV,
 	TK_MOD,
+	TK_EXP,
 	TK_NOT,
 	TK_COMPL,
 	TK_INC,
@@ -109,6 +110,11 @@ typedef enum {
 	TK_QLBRACK,
 	TK_QLPAREN,
 	TK_QDOT,
+	TK_ASEXP,
+	TK_ASAND,
+	TK_ASOR,
+	TK_ASNULLISH,
+	TK_NULLISH,
 
 	TK_EOF,
 	TK_ERROR

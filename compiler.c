@@ -38,6 +38,7 @@ static void uc_compiler_compile_labelexpr(uc_compiler_t *compiler);
 static void uc_compiler_compile_function(uc_compiler_t *compiler);
 static void uc_compiler_compile_and(uc_compiler_t *compiler);
 static void uc_compiler_compile_or(uc_compiler_t *compiler);
+static void uc_compiler_compile_nullish(uc_compiler_t *compiler);
 static void uc_compiler_compile_dot(uc_compiler_t *compiler);
 static void uc_compiler_compile_subscript(uc_compiler_t *compiler);
 static void uc_compiler_compile_ternary(uc_compiler_t *compiler);
@@ -62,6 +63,7 @@ uc_compiler_parse_rules[TK_ERROR + 1] = {
 	[TK_DIV]		= { NULL, uc_compiler_compile_binary, P_MUL },
 	[TK_MUL]		= { NULL, uc_compiler_compile_binary, P_MUL },
 	[TK_MOD]		= { NULL, uc_compiler_compile_binary, P_MUL },
+	[TK_EXP]		= { NULL, uc_compiler_compile_binary, P_EXP },
 	[TK_NUMBER]		= { uc_compiler_compile_constant, NULL, P_NONE },
 	[TK_DOUBLE]		= { uc_compiler_compile_constant, NULL, P_NONE },
 	[TK_STRING]		= { uc_compiler_compile_constant, NULL, P_NONE },
@@ -75,6 +77,7 @@ uc_compiler_parse_rules[TK_ERROR + 1] = {
 	[TK_FUNC]		= { uc_compiler_compile_function, NULL, P_NONE },
 	[TK_AND]		= { NULL, uc_compiler_compile_and, P_AND },
 	[TK_OR]			= { NULL, uc_compiler_compile_or, P_OR },
+	[TK_NULLISH]	= { NULL, uc_compiler_compile_nullish, P_OR },
 	[TK_BOR]		= { NULL, uc_compiler_compile_binary, P_BOR },
 	[TK_BXOR]		= { NULL, uc_compiler_compile_binary, P_BXOR },
 	[TK_BAND]		= { NULL, uc_compiler_compile_binary, P_BAND },
@@ -317,6 +320,10 @@ uc_compiler_parse_at_assignment_op(uc_compiler_t *compiler)
 	case TK_ASMOD:
 	case TK_ASADD:
 	case TK_ASSUB:
+	case TK_ASAND:
+	case TK_ASOR:
+	case TK_ASEXP:
+	case TK_ASNULLISH:
 	case TK_ASSIGN:
 		return true;
 
@@ -992,17 +999,21 @@ uc_compiler_emit_variable_rw(uc_compiler_t *compiler, uc_value_t *varname, uc_to
 	ssize_t idx;
 
 	switch (type) {
-	case TK_ASADD:   sub_insn = I_ADD;    break;
-	case TK_ASSUB:   sub_insn = I_SUB;    break;
-	case TK_ASMUL:   sub_insn = I_MUL;    break;
-	case TK_ASDIV:   sub_insn = I_DIV;    break;
-	case TK_ASMOD:   sub_insn = I_MOD;    break;
-	case TK_ASBAND:  sub_insn = I_BAND;   break;
-	case TK_ASBXOR:  sub_insn = I_BXOR;   break;
-	case TK_ASBOR:   sub_insn = I_BOR;    break;
-	case TK_ASLEFT:  sub_insn = I_LSHIFT; break;
-	case TK_ASRIGHT: sub_insn = I_RSHIFT; break;
-	default:         sub_insn = 0;        break;
+	case TK_ASADD:     sub_insn = I_ADD;     break;
+	case TK_ASSUB:     sub_insn = I_SUB;     break;
+	case TK_ASMUL:     sub_insn = I_MUL;     break;
+	case TK_ASDIV:     sub_insn = I_DIV;     break;
+	case TK_ASMOD:     sub_insn = I_MOD;     break;
+	case TK_ASBAND:    sub_insn = I_BAND;    break;
+	case TK_ASBXOR:    sub_insn = I_BXOR;    break;
+	case TK_ASBOR:     sub_insn = I_BOR;     break;
+	case TK_ASLEFT:    sub_insn = I_LSHIFT;  break;
+	case TK_ASRIGHT:   sub_insn = I_RSHIFT;  break;
+	case TK_ASAND:     sub_insn = I_LTRUE;   break;
+	case TK_ASOR:      sub_insn = I_LFALSE;  break;
+	case TK_ASEXP:     sub_insn = I_EXP;     break;
+	case TK_ASNULLISH: sub_insn = I_LNULL;   break;
+	default:           sub_insn = 0;         break;
 	}
 
 	if (!varname) {
@@ -1628,6 +1639,24 @@ uc_compiler_compile_or(uc_compiler_t *compiler)
 
 	uc_compiler_emit_insn(compiler, 0, I_COPY);
 	uc_compiler_emit_u8(compiler, 0, 0);
+	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
+	jmp_off = uc_compiler_emit_jmp(compiler, 0);
+	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
+	uc_compiler_emit_insn(compiler, 0, I_POP);
+	uc_compiler_parse_precedence(compiler, P_OR);
+	uc_compiler_set_jmpaddr(compiler, jmp_off, chunk->count);
+}
+
+static void
+uc_compiler_compile_nullish(uc_compiler_t *compiler)
+{
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	size_t jmpz_off, jmp_off;
+
+	uc_compiler_emit_insn(compiler, 0, I_COPY);
+	uc_compiler_emit_u8(compiler, 0, 0);
+	uc_compiler_emit_insn(compiler, 0, I_LNULL);
+	uc_compiler_emit_insn(compiler, 0, I_NES);
 	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
 	jmp_off = uc_compiler_emit_jmp(compiler, 0);
 	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
