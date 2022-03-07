@@ -111,6 +111,7 @@ uc_uloop_run(uc_vm_t *vm, size_t nargs)
 	uc_value_t *timeout = uc_fn_arg(0);
 	int t, rv;
 
+	errno = 0;
 	t = timeout ? (int)ucv_int64_get(timeout) : -1;
 
 	if (errno)
@@ -182,6 +183,7 @@ uc_uloop_timer_set(uc_vm_t *vm, size_t nargs)
 	if (!timer || !*timer)
 		err_return(EINVAL);
 
+	errno = 0;
 	t = timeout ? (int)ucv_int64_get(timeout) : -1;
 
 	if (errno)
@@ -243,6 +245,7 @@ uc_uloop_timer(uc_vm_t *vm, size_t nargs)
 	uc_value_t *res;
 	int t;
 
+	errno = 0;
 	t = timeout ? ucv_int64_get(timeout) : -1;
 
 	if (errno)
