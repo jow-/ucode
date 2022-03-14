@@ -42,15 +42,13 @@ Returns the value returned by the invoked module code (typically an object).
 -- End --
 
 -- File require/test/module.uc --
-{%
-	print("This is require.test.module running!\n\n");
+print("This is require.test.module running!\n\n");
 
-	return {
-		greeting: function(name) {
-			printf("Hello, %s!\n", name);
-		}
-	};
-%}
+return {
+	greeting: function(name) {
+		printf("Hello, %s!\n", name);
+	}
+};
 -- End --
 
 -- Expect stdout --
@@ -139,19 +137,17 @@ A compilation error in the module triggers an exception.
 -- End --
 
 -- File require/test/broken.uc --
-{%
-	// Unclosed object to force syntax error
-	return {
-%}
+// Unclosed object to force syntax error
+return {
 -- End --
 
 -- Expect stderr --
 Unable to compile module '.../require/test/broken.uc':
 Syntax error: Expecting label
-In line 3, byte 11:
+In line 2, byte 10:
 
- `    return {`
-  Near here --^
+ `return {`
+          ^-- Near here
 
 
 

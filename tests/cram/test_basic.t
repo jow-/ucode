@@ -10,52 +10,95 @@ setup common environment:
 check that ucode provides exepected help:
 
   $ ucode | sed 's/ucode-san/ucode/'
-  Usage
+  Usage:
+    ucode -h
+    ucode -e "expression"
+    ucode input.uc [input2.uc ...]
+    ucode -c [-s] [-o output.uc] input.uc [input2.uc ...]
   
-    # ucode [-t] [-l] [-r] [-S] [-R] [-x function [-x ...]] [-e '[prefix=]{"var": ...}'] [-E [prefix=]env.json] {-i <file> | -s "ucode script..."}
-    -h, --help\tPrint this help (esc)
-    -i file\tExecute the given ucode script file (esc)
-    -s "ucode script..."\tExecute the given string as ucode script (esc)
-    -t Enable VM execution tracing
-    -l Do not strip leading block whitespace
-    -r Do not trim trailing block newlines
-    -S Enable strict mode
-    -R Enable raw code mode
-    -e Set global variables from given JSON object
-    -E Set global variables from given JSON file
-    -x Disable given function
-    -m Preload given module
-    -o Write precompiled byte code to given file
-    -O Write precompiled byte code to given file and strip debug information
+  -h
+    Help display this help.
+  
+  -e "expression"
+    Execute the given expression as ucode program.
+  
+  -t
+    Enable VM execution tracing.
+  
+  -S
+    Enable strict mode.
+  
+  -R
+    Process source file(s) as raw script code (default).
+  
+  -T[flag,flag,...]
+    Process the source file(s) as templates, not as raw script code.
+    Supported flags: no-lstrip (don't strip leading whitespace before
+    block tags), no-rtrim (don't strip trailing newline after block tags).
+  
+  -D [name=]value
+    Define global variable. If `name` is omitted, a JSON dictionary is
+    expected with each property becoming a global variable set to the
+    corresponding value. If `name` is specified, it is defined as global
+    variable set to `value` parsed as JSON (or the literal `value` string
+    if JSON parsing fails).
+  
+  -F [name=]path
+    Like `-D` but reading the value from the file in `path`. The given
+    file must contain a single, well-formed JSON dictionary.
+  
+  -U name
+    Undefine the given global variable name.
+  
+  -l [name=]library
+    Preload the given `library`, optionally aliased to `name`.
+  
+  -L pattern
+    Append given `pattern` to default library search paths. If the pattern
+    contains no `*`, it is added twice, once with `/*.so` and once with
+    `/*.uc` appended to it.
+  
+  -c[flag,flag,...]
+    Compile the given source file(s) to bytecode instead of executing them.
+    Supported flags: no-interp (omit interpreter line), interp=... (over-
+    ride interpreter line with ...)
+  
+  -o path
+    Output file path when compiling. If omitted, the compiled byte code
+    is written to `./uc.out`. Only meaningful in conjunction with `-c`.
+  
+  -s
+    Omit (strip) debug information when compiling files.
+    Only meaningful in conjunction with `-c`.
+  
 
 check that ucode prints greetings:
 
-  $ ucode -s "{% print('hello world') %}"
+  $ ucode -e "print('hello world')"
   hello world (no-eol)
 
 check that ucode provides proper error messages:
 
-  $ ucode -m foo
-  One of -i or -s is required
+  $ ucode -l foo
+  Require either -e expression or source file
   [1]
 
-  $ ucode -m foo -s ' '
+  $ ucode -l foo -e ' '
   Runtime error: No module named 'foo' could be found
   
   [254]
 
-  $ touch moo; ucode -m foo -i moo
+  $ touch moo; ucode -l foo moo
   Runtime error: No module named 'foo' could be found
   
   [254]
 
 check that ucode can load fs module:
 
-  $ ucode -m fs
-  One of -i or -s is required
+  $ ucode -l fs
+  Require either -e expression or source file
   [1]
 
-  $ ucode -m fs -s ' '
-    (no-eol)
+  $ ucode -l fs -e ' '
 
-  $ touch moo; ucode -m fs -i moo
+  $ touch moo; ucode -l fs moo

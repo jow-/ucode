@@ -171,3 +171,35 @@ In line 12, byte 8:
 
 
 -- End --
+
+
+Ensure that included files inherit the parse mode of their calling file.
+
+-- Testcase --
+{% include("files/inctest.uc"); %}
+-- End --
+
+-- File inctest.uc --
+print("Test\n");
+-- End --
+
+-- Expect stdout --
+print("Test\n");
+-- End --
+
+
+-- Testcase --
+include("files/inctest.uc");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- File inctest.uc --
+print("Test\n");
+-- End --
+
+-- Expect stdout --
+Test
+-- End --

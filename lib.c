@@ -1505,14 +1505,16 @@ uc_require_so(uc_vm_t *vm, const char *path, uc_value_t **res)
 }
 
 static bool
-uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **res)
+uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **res, bool raw_mode)
 {
+	uc_parse_config_t config = { 0 };
 	uc_exception_type_t extype;
 	uc_program_t *program;
 	uc_value_t *prev_scope;
 	uc_value_t *closure;
 	uc_source_t *source;
 	struct stat st;
+	bool prev_mode;
 	char *err;
 
 	if (stat(path, &st))
@@ -1527,6 +1529,12 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 		return true;
 	}
 
+	if (!vm->config)
+		vm->config = &config;
+
+	prev_mode = vm->config->raw_mode;
+	vm->config->raw_mode = raw_mode;
+
 	program = uc_compile(vm->config, source, &err);
 
 	uc_source_put(source);
@@ -1536,6 +1544,8 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 		                      "Unable to compile module '%s':\n%s", path, err);
 
 		free(err);
+
+		vm->config->raw_mode = prev_mode;
 
 		return true;
 	}
@@ -1557,6 +1567,8 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 
 	if (extype == EXCEPTION_NONE)
 		*res = uc_vm_stack_pop(vm);
+
+	vm->config->raw_mode = prev_mode;
 
 	return true;
 }
@@ -1604,7 +1616,7 @@ uc_require_path(uc_vm_t *vm, const char *path_template, const char *name, uc_val
 	if (!strcmp(p + 1, ".so"))
 		rv = uc_require_so(vm, buf->buf, res);
 	else if (!strcmp(p + 1, ".uc"))
-		rv = uc_require_ucode(vm, buf->buf, NULL, res);
+		rv = uc_require_ucode(vm, buf->buf, NULL, res, true);
 
 	if (rv)
 		ucv_object_add(modtable, name, ucv_get(*res));
@@ -2124,7 +2136,7 @@ include_path(const char *curpath, const char *incpath)
 }
 
 static uc_value_t *
-uc_include(uc_vm_t *vm, size_t nargs)
+uc_include_common(uc_vm_t *vm, size_t nargs, bool raw_mode)
 {
 	uc_value_t *path = uc_fn_arg(0);
 	uc_value_t *scope = uc_fn_arg(1);
@@ -2182,13 +2194,19 @@ uc_include(uc_vm_t *vm, size_t nargs)
 		sc = ucv_get(uc_vm_scope_get(vm));
 	}
 
-	if (uc_require_ucode(vm, p, sc, &rv))
+	if (uc_require_ucode(vm, p, sc, &rv, raw_mode))
 		ucv_put(rv);
 
 	ucv_put(sc);
 	free(p);
 
 	return NULL;
+}
+
+static uc_value_t *
+uc_include(uc_vm_t *vm, size_t nargs)
+{
+	return uc_include_common(vm, nargs, vm->config && vm->config->raw_mode);
 }
 
 static uc_value_t *
@@ -2213,7 +2231,7 @@ uc_render(uc_vm_t *vm, size_t nargs)
 	vm->output = mem;
 
 	/* execute include */
-	(void) uc_include(vm, nargs);
+	(void) uc_include_common(vm, nargs, false);
 
 	/* restore previous VM output */
 	vm->output = prev;
