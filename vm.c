@@ -1804,15 +1804,12 @@ static void
 uc_vm_insn_sobj(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *obj = uc_vm_stack_peek(vm, vm->arg.u32);
-	uc_value_t *val;
 	size_t idx;
 
-	for (idx = 0; idx < vm->arg.u32; idx += 2) {
-		val = uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1);
-		ucv_object_add(obj,
-			ucv_string_get(val),
-			ucv_get(uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2)));
-	}
+	for (idx = 0; idx < vm->arg.u32; idx += 2)
+		ucv_key_set(vm, obj,
+			uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1),
+			uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2));
 
 	for (idx = 0; idx < vm->arg.u32; idx++)
 		ucv_put(uc_vm_stack_pop(vm));
