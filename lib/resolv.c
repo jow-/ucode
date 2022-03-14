@@ -28,6 +28,7 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <fcntl.h>
 
 #include "ucode/module.h"
 
@@ -521,7 +522,7 @@ add_status(uc_vm_t *vm, uc_value_t *res_obj, const char *name, const char *rcode
 static int
 send_queries(resolve_ctx_t *ctx, uc_vm_t *vm, uc_value_t *res_obj)
 {
-	int fd;
+	int fd, flags;
 	int servfail_retry = 0;
 	addr_t from = { };
 	int one = 1;
@@ -543,12 +544,18 @@ send_queries(resolve_ctx_t *ctx, uc_vm_t *vm, uc_value_t *res_obj)
 		}
 	}
 
+#ifdef __APPLE__
+	flags = SOCK_DGRAM;
+#else
+	flags = SOCK_DGRAM|SOCK_CLOEXEC|SOCK_NONBLOCK;
+#endif
+
 	/* Get local address and open/bind a socket */
-	fd = socket(from.u.sa.sa_family, SOCK_DGRAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
+	fd = socket(from.u.sa.sa_family, flags, 0);
 
 	/* Handle case where system lacks IPv6 support */
 	if (fd < 0 && from.u.sa.sa_family == AF_INET6 && errno == EAFNOSUPPORT) {
-		fd = socket(AF_INET, SOCK_DGRAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0);
+		fd = socket(AF_INET, flags, 0);
 		from.u.sa.sa_family = AF_INET;
 	}
 
@@ -557,6 +564,24 @@ send_queries(resolve_ctx_t *ctx, uc_vm_t *vm, uc_value_t *res_obj)
 
 		return -1;
 	}
+
+#ifdef __APPLE__
+	flags = fcntl(fd, F_GETFD);
+
+	if (flags < 0) {
+		set_error(errno, "Unable to acquire socket descriptor flags");
+		close(fd);
+
+		return -1;
+	}
+
+	if (fcntl(fd, F_SETFD, flags|O_CLOEXEC|O_NONBLOCK) < 0) {
+		set_error(errno, "Unable to set socket descriptor flags");
+		close(fd);
+
+		return -1;
+	}
+#endif
 
 	if (bind(fd, &from.u.sa, from.len) < 0) {
 		set_error(errno, "Unable to bind UDP socket");
