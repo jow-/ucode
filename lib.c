@@ -2194,6 +2194,7 @@ uc_include(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_render(uc_vm_t *vm, size_t nargs)
 {
+	uc_string_t hdr = { .header = { .type = UC_STRING, .refcount = 1 } };
 	uc_string_t *ustr = NULL;
 	FILE *mem, *prev;
 	size_t len = 0;
@@ -2204,7 +2205,7 @@ uc_render(uc_vm_t *vm, size_t nargs)
 		goto out;
 
 	/* reserve space for uc_string_t header... */
-	if (fseek(mem, sizeof(*ustr), SEEK_SET))
+	if (fwrite(&hdr, 1, sizeof(hdr), mem) != sizeof(hdr))
 		goto out;
 
 	/* divert VM output to memory fd */
@@ -2219,8 +2220,6 @@ uc_render(uc_vm_t *vm, size_t nargs)
 	fclose(mem);
 
 	/* update uc_string_t length */
-	ustr->header.type = UC_STRING;
-	ustr->header.refcount = 1;
 	ustr->length = len - sizeof(*ustr);
 
 	return &ustr->header;
