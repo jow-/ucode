@@ -1,0 +1,17 @@
+When executing an object literal declaration using non-string computed
+property name values, the VM crashed caused by an attempt to use a NULL
+pointer (result of ucv_string_get() on a non-string value) as hash table
+key.
+
+-- Testcase --
+{%
+	printf("%.J\n", { [1]: "test", [true]: "foo" });
+%}
+-- End --
+
+-- Expect stdout --
+{
+	"1": "test",
+	"true": "foo"
+}
+-- End --
