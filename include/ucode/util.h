@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __UTIL_H_
-#define __UTIL_H_
+#ifndef UCODE_UTIL_H
+#define UCODE_UTIL_H
 
 #include <stdio.h>
 #include <stddef.h>
@@ -159,4 +159,4 @@ static inline struct printbuf *xprintbuf_new(void) {
 	return pb;
 }
 
-#endif /* __UTIL_H_ */
+#endif /* UCODE_UTIL_H */

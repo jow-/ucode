@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __LIB_H_
-#define __LIB_H_
+#ifndef UCODE_LIB_H
+#define UCODE_LIB_H
 
 #include "vm.h"
 #include "lexer.h"
@@ -103,4 +103,4 @@ _uc_function_list_register(uc_value_t *object, const uc_function_list_t *list, s
 #define uc_function_list_register(object, functions) \
 	_uc_function_list_register(object, functions, ARRAY_SIZE(functions))
 
-#endif /* __LIB_H_ */
+#endif /* UCODE_LIB_H */

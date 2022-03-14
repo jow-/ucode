@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __SOURCE_H_
-#define __SOURCE_H_
+#ifndef UCODE_SOURCE_H
+#define UCODE_SOURCE_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -54,4 +54,4 @@ void uc_source_line_update(uc_source_t *source, size_t off);
 
 void uc_source_runpath_set(uc_source_t *source, const char *runpath);
 
-#endif /* __SOURCE_H_ */
+#endif /* UCODE_SOURCE_H */
