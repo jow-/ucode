@@ -45,6 +45,12 @@ limitations under the License.
 
 #define err_return(code, ...) do { set_error(code, __VA_ARGS__); return NULL; } while(0)
 
+/* Modified downstream nl80211.h headers may disable certain unsupported
+ * attributes by setting the corresponding defines to 0x10000 without having
+ * to patch the attribute dictionaries within this file. */
+
+#define NL80211_ATTR_NOT_IMPLEMENTED 0x10000
+
 static struct {
 	int code;
 	char *msg;
@@ -645,13 +651,26 @@ static const uc_nl_nested_spec_t nl80211_bss_nla = {
 
 static const uc_nl_nested_spec_t nl80211_sta_info_bitrate_nla = {
 	.headsize = 0,
-	.nattrs = 5,
+	.nattrs = 18,
 	.attrs = {
 		{ NL80211_RATE_INFO_BITRATE, "bitrate", DT_U16, 0, NULL },
 		{ NL80211_RATE_INFO_BITRATE32, "bitrate32", DT_U32, 0, NULL },
 		{ NL80211_RATE_INFO_MCS, "mcs", DT_U8, 0, NULL },
 		{ NL80211_RATE_INFO_40_MHZ_WIDTH, "40_mhz_width", DT_FLAG, 0, NULL },
 		{ NL80211_RATE_INFO_SHORT_GI, "short_gi", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_VHT_MCS, "vht_mcs", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_VHT_NSS, "vht_nss", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_HE_MCS, "he_mcs", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_HE_NSS, "he_nss", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_HE_GI, "he_gi", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_HE_DCM, "he_dcm", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_HE_RU_ALLOC, "he_ru_alloc", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_40_MHZ_WIDTH, "width_40", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_80_MHZ_WIDTH, "width_80", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_80P80_MHZ_WIDTH, "width_80p80", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_160_MHZ_WIDTH, "width_160", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_10_MHZ_WIDTH, "width_10", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_5_MHZ_WIDTH, "width_5", DT_FLAG, 0, NULL },
 	}
 };
 
@@ -697,7 +716,7 @@ static const uc_nl_nested_spec_t nl80211_bss_param_nla = {
 
 static const uc_nl_nested_spec_t nl80211_sta_info_nla = {
 	.headsize = 0,
-	.nattrs = 34,
+	.nattrs = 35,
 	.attrs = {
 		{ NL80211_STA_INFO_INACTIVE_TIME, "inactive_time", DT_U32, 0, NULL },
 		{ NL80211_STA_INFO_RX_BYTES, "rx_bytes", DT_U32, 0, NULL },
@@ -724,21 +743,37 @@ static const uc_nl_nested_spec_t nl80211_sta_info_nla = {
 		{ NL80211_STA_INFO_NONPEER_PM, "nonpeer_pm", DT_U32, 0, NULL },
 		{ NL80211_STA_INFO_CHAIN_SIGNAL, "chain_signal", DT_S8, DF_MULTIPLE|DF_AUTOIDX, NULL },
 		{ NL80211_STA_INFO_CHAIN_SIGNAL_AVG, "chain_signal_avg", DT_S8, DF_MULTIPLE|DF_AUTOIDX, NULL },
-		{ NL80211_STA_INFO_TID_STATS, "tid_stats", DT_NESTED, 0, &nl80211_tid_stats_nla },
+		{ NL80211_STA_INFO_TID_STATS, "tid_stats", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &nl80211_tid_stats_nla },
 		{ NL80211_STA_INFO_BSS_PARAM, "bss_param", DT_NESTED, 0, &nl80211_bss_param_nla },
 		{ NL80211_STA_INFO_RX_DURATION, "rx_duration", DT_U64, 0, NULL },
 		{ NL80211_STA_INFO_TX_DURATION, "tx_duration", DT_U64, 0, NULL },
-		{ NL80211_STA_INFO_ACK_SIGNAL, "ack_signal", DT_U8, 0, NULL },
-		{ NL80211_STA_INFO_ACK_SIGNAL_AVG, "ack_signal_avg", DT_U8, 0, NULL },
+		{ NL80211_STA_INFO_ACK_SIGNAL, "ack_signal", DT_S8, 0, NULL },
+		{ NL80211_STA_INFO_ACK_SIGNAL_AVG, "ack_signal_avg", DT_S8, 0, NULL },
 		{ NL80211_STA_INFO_AIRTIME_LINK_METRIC, "airtime_link_metric", DT_U32, 0, NULL },
 		{ NL80211_STA_INFO_CONNECTED_TO_AS, "connected_to_as", DT_BOOL, 0, NULL },
 		{ NL80211_STA_INFO_CONNECTED_TO_GATE, "connected_to_gate", DT_BOOL, 0, NULL },
+		{ NL80211_STA_INFO_CONNECTED_TIME, "connected_time", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_survey_info_nla = {
+	.headsize = 0,
+	.nattrs = 8,
+	.attrs = {
+		{ NL80211_SURVEY_INFO_FREQUENCY, "frequency", DT_U32, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME, "time", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME_TX, "time_tx", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME_RX, "time_rx", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME_BUSY, "busy", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME_EXT_BUSY, "ext_busy", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME_SCAN, "scan", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_NOISE, "noise", DT_U8, 0, NULL },
 	}
 };
 
 static const uc_nl_nested_spec_t nl80211_msg = {
 	.headsize = 0,
-	.nattrs = 124,
+	.nattrs = 126,
 	.attrs = {
 		{ NL80211_ATTR_4ADDR, "4addr", DT_U8, 0, NULL },
 		{ NL80211_ATTR_AIRTIME_WEIGHT, "airtime_weight", DT_U16, 0, NULL },
@@ -864,6 +899,8 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_WPA_VERSIONS, "wpa_versions", DT_U32, 0, NULL },
 		{ NL80211_ATTR_SUPPORTED_IFTYPES, "supported_iftypes", DT_NESTED, 0, &nl80211_ifcomb_limit_types_nla },
 		{ NL80211_ATTR_SOFTWARE_IFTYPES, "software_iftypes", DT_NESTED, 0, &nl80211_ifcomb_limit_types_nla },
+		{ NL80211_ATTR_MAX_AP_ASSOC_STA, "max_ap_assoc", DT_U16, 0, NULL },
+		{ NL80211_ATTR_SURVEY_INFO, "survey_info", DT_NESTED, 0, &nl80211_survey_info_nla },
 	}
 };
 
@@ -1044,6 +1081,9 @@ uc_nl_parse_attrs(struct nl_msg *msg, char *base, const uc_nl_attr_spec_t *attrs
 	bool exists;
 
 	for (i = 0; i < nattrs; i++) {
+		if (attrs[i].attr == NL80211_ATTR_NOT_IMPLEMENTED)
+			continue;
+
 		v = ucv_object_get(obj, attrs[i].key, &exists);
 
 		if (!exists)
