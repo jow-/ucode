@@ -1,0 +1,45 @@
+Testing that require(), render() and include() properly toggle between
+raw- and template parse mode.
+
+
+1. Testing recursive invocation.
+
+-- Testcase --
+require("files.requiretest");
+print(render("files/render-test.uc"));
+include("files/include-test.uc");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- File requiretest.uc --
+print("This is a raw mode file loaded by require()\n");
+print(render("require-render-test.uc"));
+include("require-include-test.uc");
+-- End --
+
+-- File require-include-test.uc --
+print("This is a raw mode file included by a required file\n");
+-- End --
+
+-- File require-render-test.uc --
+This is a {{ "template mode" }} file rendered by a required file
+-- End --
+
+-- File render-test.uc --
+This is a {{ "template mode" }} file loaded by render() from a raw mode file
+-- End --
+
+-- File include-test.uc --
+print("This is a raw mode file loaded by include() from a raw mode file\n");
+-- End --
+
+-- Expect stdout --
+This is a raw mode file loaded by require()
+This is a template mode file rendered by a required file
+This is a raw mode file included by a required file
+This is a template mode file loaded by render() from a raw mode file
+This is a raw mode file loaded by include() from a raw mode file
+-- End --
