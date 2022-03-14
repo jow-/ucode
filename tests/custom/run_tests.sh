@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 
+if greadlink -f . &>/dev/null; then
+	readlink=greadlink
+else
+	readlink=readlink
+fi
+
 testdir=$(dirname "$0")
-topdir=$(readlink -f "$testdir/../..")
+topdir=$($readlink -f "$testdir/../..")
 
 line='........................................'
 ucode_bin=${UCODE_BIN:-"$topdir/ucode"}
@@ -44,7 +50,7 @@ extract_sections() {
 				tag="file"
 				outfile="${line#-- File }"
 				outfile="$(echo "${outfile% --}" | xargs)"
-				outfile="$dir/files$(readlink -m "/${outfile:-file}")"
+				outfile="$dir/files$($readlink -m "/${outfile:-file}")"
 				mkdir -p "$(dirname "$outfile")"
 				printf "" > "$outfile"
 			;;
@@ -200,14 +206,14 @@ n_fails=0
 select_tests="$@"
 
 use_test() {
-	local input="$(readlink -f "$1")"
+	local input="$($readlink -f "$1")"
 	local test
 
 	[ -f "$input" ] || return 1
 	[ -n "$select_tests" ] || return 0
 
 	for test in "$select_tests"; do
-		test="$(readlink -f "$test")"
+		test="$($readlink -f "$test")"
 
 		[ "$test" != "$input" ] || return 0
 	done
