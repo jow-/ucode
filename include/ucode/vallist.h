@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __VALUE_H_
-#define __VALUE_H_
+#ifndef UCODE_VALUE_H
+#define UCODE_VALUE_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -52,4 +52,4 @@ ssize_t uc_vallist_add(uc_value_list_t *list, uc_value_t *value);
 uc_value_type_t uc_vallist_type(uc_value_list_t *list, size_t idx);
 uc_value_t *uc_vallist_get(uc_value_list_t *list, size_t idx);
 
-#endif /* __VALUE_H_ */
+#endif /* UCODE_VALUE_H */

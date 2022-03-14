@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __CHUNK_H_
-#define __CHUNK_H_
+#ifndef UCODE_CHUNK_H
+#define UCODE_CHUNK_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -34,4 +34,4 @@ size_t uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t off);
 void uc_chunk_debug_add_variable(uc_chunk_t *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name);
 uc_value_t *uc_chunk_debug_get_variable(uc_chunk_t *chunk, size_t off, size_t slot, bool upval);
 
-#endif /* __CHUNK_H_ */
+#endif /* UCODE_CHUNK_H */

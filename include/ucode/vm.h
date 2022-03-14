@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __VM_H_
-#define __VM_H_
+#ifndef UCODE_VM_H
+#define UCODE_VM_H
 
 #include <stdbool.h>
 #include <stdarg.h>
@@ -144,4 +144,4 @@ uc_vm_raise_exception(uc_vm_t *vm, uc_exception_type_t type, const char *fmt, ..
 uc_vm_status_t uc_vm_execute(uc_vm_t *vm, uc_program_t *fn, uc_value_t **retval);
 uc_value_t *uc_vm_invoke(uc_vm_t *vm, const char *fname, size_t nargs, ...);
 
-#endif /* __VM_H_ */
+#endif /* UCODE_VM_H */
