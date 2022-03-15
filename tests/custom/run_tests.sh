@@ -99,7 +99,7 @@ run_testcase() {
 
 		IFS=$' \t\n'
 
-		$ucode_bin -T -L "$ucode_lib/*.so" -D TESTFILES_PATH="$dir/files" $args - <"$in" >"$dir/res.out" 2>"$dir/res.err"
+		$ucode_bin -T"," -L "$ucode_lib/*.so" -D TESTFILES_PATH="$($readlink -f "$dir/files")" $args - <"$in" >"$dir/res.out" 2>"$dir/res.err"
 	)
 
 	printf "%d\n" $? > "$dir/res.code"
