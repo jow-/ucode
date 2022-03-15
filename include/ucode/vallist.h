@@ -20,14 +20,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-
-#ifdef JSONC
-	#include <json.h>
-#else
-	#include <json-c/json.h>
-#endif
-
 #include <stdio.h>
+#include <json-c/json.h>
 
 #include "types.h"
 
