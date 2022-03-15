@@ -1322,6 +1322,7 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 
 			case 's':
 				conv = FMT_C_STR;
+				flags &= ~FMT_F_ZERO;
 				cfmt = "s";
 				break;
 
