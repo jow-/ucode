@@ -23,12 +23,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-
-#ifdef JSONC
-	#include <json.h>
-#else
-	#include <json-c/json.h>
-#endif
+#include <json-c/json.h>
 
 #include "ucode/compiler.h"
 #include "ucode/lexer.h"
