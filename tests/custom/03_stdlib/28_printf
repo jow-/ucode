@@ -524,3 +524,20 @@ Supplying a non-string format value will yield an empty string result.
 
 -- Expect stdout --
 -- End --
+
+
+Prefixing a format directive with `n$` will select the corresponding argument
+with 1 referring to the first argument. Missing or out-of range arguments will
+be treated as `null`.
+
+-- Testcase --
+{%
+	printf("%2$s\n", "foo", "bar", "baz");
+	printf("%10$s\n", "foo", "bar", "baz");
+%}
+-- End --
+
+-- Expect stdout --
+bar
+(null)
+-- End --
