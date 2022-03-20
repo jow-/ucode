@@ -1198,7 +1198,7 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 	uint32_t conv, flags, width, precision;
 	uc_value_t *fmt = uc_fn_arg(0), *arg;
 	const char *fstr, *last, *p, *cfmt;
-	size_t argidx = 1, sfmtlen;
+	size_t argidx = 1, argpos, sfmtlen;
 	uint64_t u;
 	int64_t n;
 	double d;
@@ -1218,6 +1218,26 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 			width = 0;
 			precision = 0;
 
+			argpos = argidx;
+
+			if (*p >= '1' && *p <= '9') {
+				while (isdigit(*p))
+					width = width * 10 + (*p++ - '0');
+
+				/* if a dollar sign follows, this is an argument index */
+				if (*p == '$') {
+					argpos = width;
+					width = 0;
+					p++;
+				}
+
+				/* otherwise skip to parsing precision, flags can't possibly follow */
+				else {
+					flags |= FMT_F_WIDTH;
+					goto parse_precision;
+				}
+			}
+
 			while (*p != '\0' && strchr("#0- +", *p)) {
 				switch (*p++) {
 				case '#': flags |= FMT_F_ALT;   break;
@@ -1235,6 +1255,7 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 				flags |= FMT_F_WIDTH;
 			}
 
+parse_precision:
 			if (*p == '.') {
 				p++;
 
@@ -1374,7 +1395,8 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 				break;
 
 			case FMT_C_INT:
-				arg = uc_fn_arg(argidx++);
+				argidx++;
+				arg = uc_fn_arg(argpos);
 				n = ucv_to_integer(arg);
 
 				if (errno == ERANGE)
@@ -1384,7 +1406,8 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 				break;
 
 			case FMT_C_UINT:
-				arg = uc_fn_arg(argidx++);
+				argidx++;
+				arg = uc_fn_arg(argpos);
 				u = ucv_to_unsigned(arg);
 
 				if (errno == ERANGE)
@@ -1394,17 +1417,20 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 				break;
 
 			case FMT_C_DBL:
-				d = ucv_to_double(uc_fn_arg(argidx++));
+				argidx++;
+				d = ucv_to_double(uc_fn_arg(argpos));
 				ucv_stringbuf_printf(buf, sfmt, d);
 				break;
 
 			case FMT_C_CHR:
-				n = ucv_to_integer(uc_fn_arg(argidx++));
+				argidx++;
+				n = ucv_to_integer(uc_fn_arg(argpos));
 				ucv_stringbuf_printf(buf, sfmt, (int)n);
 				break;
 
 			case FMT_C_STR:
-				arg = uc_fn_arg(argidx++);
+				argidx++;
+				arg = uc_fn_arg(argpos);
 
 				switch (ucv_type(arg)) {
 				case UC_STRING:
@@ -1424,8 +1450,9 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 				break;
 
 			case FMT_C_JSON:
+				argidx++;
 				s = ucv_to_jsonstring_formatted(vm,
-					uc_fn_arg(argidx++),
+					uc_fn_arg(argpos),
 					precision > 0 ? (precision > 1 ? ' ' : '\t') : '\0',
 					precision > 0 ? (precision > 1 ? precision - 1 : 1) : 0);
 
