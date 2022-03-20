@@ -14,18 +14,13 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __COMPILER_H_
-#define __COMPILER_H_
+#ifndef UCODE_COMPILER_H
+#define UCODE_COMPILER_H
 
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
-
-#ifdef JSONC
-	#include <json.h>
-#else
-	#include <json-c/json.h>
-#endif
+#include <json-c/json.h>
 
 #include "source.h"
 #include "lexer.h"
@@ -138,4 +133,4 @@ uc_program_t *uc_compile(uc_parse_config_t *config, uc_source_t *source, char **
 	if (compiler->exprstack) \
 		compiler->exprstack = compiler->exprstack->parent
 
-#endif /* __COMPILER_H_ */
+#endif /* UCODE_COMPILER_H */

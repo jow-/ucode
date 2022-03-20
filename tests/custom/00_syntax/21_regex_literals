@@ -73,17 +73,23 @@ In line 2, byte 2:
 Testing regex compilation errors.
 
 -- Expect stderr --
-Syntax error: Unmatched \{
-In line 2, byte 3:
+Catched syntax error
+In line 7, byte 30:
 
- `     /foo {/`
-       ^-- Near here
+ `            die("Catched syntax error");`
+  Near here ----------------------------^
 
 
 -- End --
 
 -- Testcase --
 {%
-	 /foo {/
+	try {
+		/foo (/
+	}
+	catch (e) {
+		if (e.type == "Syntax error")
+			die("Catched syntax error");
+	}
 %}
 -- End --

@@ -21,12 +21,15 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/sysmacros.h>
 #include <grp.h>
 #include <pwd.h>
 #include <glob.h>
 #include <fnmatch.h>
 #include <limits.h>
+
+#ifndef __APPLE__
+#include <sys/sysmacros.h> /* major(), minor() */
+#endif
 
 #include "ucode/module.h"
 

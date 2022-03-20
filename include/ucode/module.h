@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __MODULE_H_
-#define __MODULE_H_
+#ifndef UCODE_MODULE_H
+#define UCODE_MODULE_H
 
 #include "lib.h"
 #include "vm.h"
@@ -30,4 +30,4 @@ void uc_module_entry(uc_vm_t *vm, uc_value_t *scope)
 		uc_module_init(vm, scope);
 }
 
-#endif /* __MODULE_H_ */
+#endif /* UCODE_MODULE_H */

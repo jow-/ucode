@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __LEXER_H_
-#define __LEXER_H_
+#ifndef UCODE_LEXER_H
+#define UCODE_LEXER_H
 
 #include "source.h"
 #include "types.h"
@@ -183,4 +183,4 @@ bool utf8enc(char **out, int *rem, int code);
 const char *
 uc_tokenname(unsigned type);
 
-#endif /* __LEXER_H_ */
+#endif /* UCODE_LEXER_H */

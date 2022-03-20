@@ -1322,6 +1322,7 @@ uc_printf_common(uc_vm_t *vm, size_t nargs, uc_stringbuf_t *buf)
 
 			case 's':
 				conv = FMT_C_STR;
+				flags &= ~FMT_F_ZERO;
 				cfmt = "s";
 				break;
 
@@ -2260,6 +2261,107 @@ uc_warn(uc_vm_t *vm, size_t nargs)
 {
 	return uc_print_common(vm, nargs, stderr);
 }
+
+#ifdef __APPLE__
+/*
+ * sigtimedwait() implementation based on
+ * https://comp.unix.programmer.narkive.com/rEDH0sPT/sigtimedwait-implementation
+ * and
+ * https://github.com/wahern/lunix/blob/master/src/unix.c
+ */
+static void
+sigtimedwait_consume_signal(int signo)
+{
+}
+
+static int
+sigtimedwait(const sigset_t *set, siginfo_t *info, const struct timespec *timeout)
+{
+	struct timespec elapsed = { 0, 0 }, sleep, rem;
+	sigset_t pending, unblock, omask;
+	struct sigaction sa, osa;
+	int signo;
+	bool lt;
+
+	while (true) {
+		sigemptyset(&pending);
+		sigpending(&pending);
+
+		for (signo = 1; signo < NSIG; signo++) {
+			if (!sigismember(set, signo) || !sigismember(&pending, signo))
+				continue;
+
+			sa.sa_handler = sigtimedwait_consume_signal;
+			sa.sa_flags = 0;
+			sigfillset(&sa.sa_mask);
+
+			sigaction(signo, &sa, &osa);
+
+			sigemptyset(&unblock);
+			sigaddset(&unblock, signo);
+			sigprocmask(SIG_UNBLOCK, &unblock, &omask);
+			sigprocmask(SIG_SETMASK, &omask, NULL);
+
+			sigaction(signo, &osa, NULL);
+
+			if (info) {
+				memset(info, 0, sizeof(*info));
+				info->si_signo = signo;
+			}
+
+			return signo;
+		}
+
+		sleep.tv_sec = 0;
+		sleep.tv_nsec = 200000000L; /* 2/10th second */
+		rem = sleep;
+
+		if (nanosleep(&sleep, &rem) == 0) {
+			elapsed.tv_sec += sleep.tv_sec;
+			elapsed.tv_nsec += sleep.tv_nsec;
+
+			if (elapsed.tv_nsec > 1000000000) {
+				elapsed.tv_sec++;
+				elapsed.tv_nsec -= 1000000000;
+			}
+		}
+		else if (errno == EINTR) {
+			sleep.tv_sec -= rem.tv_sec;
+			sleep.tv_nsec -= rem.tv_nsec;
+
+			if (sleep.tv_nsec < 0) {
+				sleep.tv_sec--;
+				sleep.tv_nsec += 1000000000;
+			}
+
+			elapsed.tv_sec += sleep.tv_sec;
+			elapsed.tv_nsec += sleep.tv_nsec;
+
+			if (elapsed.tv_nsec > 1000000000) {
+				elapsed.tv_sec++;
+				elapsed.tv_nsec -= 1000000000;
+			}
+		}
+		else {
+			return errno;
+		}
+
+		lt = timeout
+			? ((elapsed.tv_sec == timeout->tv_sec)
+				? (elapsed.tv_nsec < timeout->tv_nsec)
+				: (elapsed.tv_sec < timeout->tv_sec))
+			: true;
+
+		if (!lt)
+			break;
+	}
+
+	errno = EAGAIN;
+
+	return -1;
+}
+
+#endif
 
 static uc_value_t *
 uc_system(uc_vm_t *vm, size_t nargs)

@@ -14,8 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __PROGRAM_H_
-#define __PROGRAM_H_
+#ifndef UCODE_PROGRAM_H
+#define UCODE_PROGRAM_H
 
 #include "types.h"
 
@@ -61,4 +61,4 @@ uc_program_t *uc_program_load(uc_source_t *, char **);
 
 uc_function_t *uc_program_entry(uc_program_t *);
 
-#endif /* __PROGRAM_H_ */
+#endif /* UCODE_PROGRAM_H */
