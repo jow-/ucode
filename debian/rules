@@ -1,0 +1,11 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-D NL80211_SUPPORT=OFF \
+		-D RTNL_SUPPORT=OFF \
+		-D UBUS_SUPPORT=OFF \
+		-D UCI_SUPPORT=OFF \
+		-D ULOOP_SUPPORT=OFF

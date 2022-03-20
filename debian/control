@@ -1,0 +1,14 @@
+Source: ucode
+Maintainer: Paul Spooren <mail@aparcar.org>
+Section: misc
+Priority: optional
+Standards-Version: 0.0.20220322-1
+Build-Depends: debhelper-compat (= 13) libjson-c-dev
+
+Package: ucode
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Jinja-like micro templating
+ An ucode template consists of arbitrary plain text which is outputted as-is
+ while control flow or expression logic is embedded in blocks that may appear
+ anywhere throughout the template.
