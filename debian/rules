@@ -1,0 +1,12 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-D SOVERSION=$(shell dpkg-parsechangelog | sed -rne 's/^Version: 0\.0\.([0-9]+).*$$/\1/p') \
+		-D NL80211_SUPPORT=OFF \
+		-D RTNL_SUPPORT=OFF \
+		-D UBUS_SUPPORT=OFF \
+		-D UCI_SUPPORT=OFF \
+		-D ULOOP_SUPPORT=OFF

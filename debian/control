@@ -1,0 +1,70 @@
+Source: ucode
+Maintainer: Paul Spooren <mail@aparcar.org>
+Section: misc
+Priority: optional
+Standards-Version: 0.0.20220322-1
+Build-Depends: debhelper-compat (= 12), libjson-c-dev
+
+Package: ucode
+Architecture: any
+Multi-Arch: foreign
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Tiny scripting language with ECMA script syntax
+ Ucode is a tiny script language featuring ECMA script syntax, builtin JSON
+ support and templating using Jinja inspired markup. The ucode VM is provided
+ as shared library with a C API allowing embedding into host applications and
+ interchanging data between ucode and C programs. The ucode VM can also be
+ used as stand-alone multi purpose scripting language through the provided
+ ucode cli interpreter.
+ .
+ This package contains the ucode command line interpreter, which is required
+ to develop, debug and precompile ucode scripts.
+
+Package: ucode-modules
+Architecture: any
+Multi-Arch: foreign
+Depends: libucode (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: Extension modules for the ucode language
+ Ucode is a tiny script language featuring ECMA script syntax, builtin JSON
+ support and templating using Jinja inspired markup. The ucode VM is provided
+ as shared library with a C API allowing embedding into host applications and
+ interchanging data between ucode and C programs. The ucode VM can also be
+ used as stand-alone multi purpose scripting language through the provided
+ ucode cli interpreter.
+ .
+ This package contains various native ucode extensions which provide further
+ functionality such as filesystem access, math functions etc.
+
+Package: libucode
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Section: libs
+Description: Shared library for the ucode interpreter
+ Ucode is a tiny script language featuring ECMA script syntax, builtin JSON
+ support and templating using Jinja inspired markup. The ucode VM is provided
+ as shared library with a C API allowing embedding into host applications and
+ interchanging data between ucode and C programs. The ucode VM can also be
+ used as stand-alone multi purpose scripting language through the provided
+ ucode cli interpreter.
+ .
+ This package contains the libucode VM runtime, it should not be needed to
+ install it explicitly.
+
+Package: libucode-dev
+Architecture: any
+Multi-Arch: same
+Depends: libucode (= ${binary:Version}), libc6-dev|libc-dev, ${misc:Depends}
+Section: libdevel
+Description: Development files for the ucode VM library
+ Ucode is a tiny script language featuring ECMA script syntax, builtin JSON
+ support and templating using Jinja inspired markup. The ucode VM is provided
+ as shared library with a C API allowing embedding into host applications and
+ interchanging data between ucode and C programs. The ucode VM can also be
+ used as stand-alone multi purpose scripting language through the provided
+ ucode cli interpreter.
+ .
+ This package contains the development header to interface with the libucode
+ VM runtime, which is required when developing programs or extensions using
+ the ucode C API.
