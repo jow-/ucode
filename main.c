@@ -37,8 +37,6 @@ static FILE *stdin_unused;
 static void
 print_usage(const char *app)
 {
-	const char *p = strrchr(app, '/');
-
 	printf(
 	"Usage:\n"
 	"  %1$s -h\n"
@@ -100,7 +98,7 @@ print_usage(const char *app)
 	"-s\n"
 	"  Omit (strip) debug information when compiling files.\n"
 	"  Only meaningful in conjunction with `-c`.\n\n",
-		p ? p + 1 : app);
+		app);
 }
 
 
@@ -444,6 +442,22 @@ parse_library_load(char *opt, uc_vm_t *vm)
 	return true;
 }
 
+static const char *
+appname(const char *argv0)
+{
+	const char *p;
+
+	if (!argv0)
+		return "ucode";
+
+	p = strrchr(argv0, '/');
+
+	if (p)
+		return p + 1;
+
+	return argv0;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -454,6 +468,7 @@ main(int argc, char **argv)
 	bool strip = false;
 	uc_vm_t vm = { 0 };
 	int opt, rv = 0;
+	const char *app;
 	uc_value_t *o;
 	int fd;
 
@@ -464,10 +479,17 @@ main(int argc, char **argv)
 		.raw_mode = true
 	};
 
+	app = appname(argv[0]);
+
 	if (argc == 1) {
-		print_usage(argv[0]);
+		print_usage(app);
 		goto out;
 	}
+
+	if (!strcmp(app, "utpl"))
+		config.raw_mode = false;
+	else if (!strcmp(app, "ucc"))
+		outfile = "./uc.out";
 
 	stdin_unused = stdin;
 
