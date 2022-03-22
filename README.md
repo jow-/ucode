@@ -1268,3 +1268,95 @@ If a non-array argument is given, the function returns `null`.
 uniq([ 1, true, "foo", 2, true, "bar", "foo" ]); // [ 1, true, "foo", 2, "bar" ]
 uniq("test");                                    // null
 ```
+
+#### 6.65. `localtime([epoch])`
+
+Return the given epoch timestamp (or now, if omitted) as a dictionary
+containing broken-down date and time information according to the local
+system timezone.
+
+The resulting dictionary contains the following fields:
+
+ - `sec`    Seconds (0-60)
+ - `min`    Minutes (0-59)
+ - `hour`   Hours (0-23)
+ - `mday`   Day of month (1-31)
+ - `mon`    Month (1-12)
+ - `year`   Year (>= 1900)
+ - `wday`   Day of the week (1-7, Sunday = 7)
+ - `yday`   Day of the year (1-366, Jan 1st = 1)
+ - `isdst`  Daylight saving time in effect (yes = 1)
+
+Note that in contrast to the underlying `localtime(3)` C library function,
+the values for `mon`, `wday` and `yday` are 1-based and the `year` is
+1900-based.
+
+```javascript
+localtime(1647953502);
+// {
+//         "sec": 42,
+//         "min": 51,
+//         "hour": 13,
+//         "mday": 22,
+//         "mon": 3,
+//         "year": 2022,
+//         "wday": 2,
+//         "yday": 81,
+//         "isdst": 0
+// }
+```
+
+#### 6.66. `gmtime([epoch])`
+
+Like `localtime()` but interpreting the given epoch value as UTC time.
+
+See `localtime()` for details on the return value.
+
+#### 6.67. `timelocal(datetimespec)`
+
+Performs the inverse operation of `localtime()` by taking a broken-down
+date and time dictionary and transforming it into an epoch value according
+to the local system timezone.
+
+The `wday` and `yday` fields of the given date time specification are
+ignored. Field values outside of their valid range are internally normalized,
+e.g. October 40th is interpreted as November 9th.
+
+Returns the resulting epoch value or null if the input date time dictionary
+was invalid or if the date time specification cannot be represented as
+epoch value.
+
+```javascript
+timelocal({ "sec": 42, "min": 51, "hour": 13, "mday": 22, "mon": 3, "year": 2022, "isdst": 0 })
+// 1647953502
+```
+
+#### 6.68. `timegm(datetimespec)`
+
+Like `timelocal()` but interpreting the given date time specification as
+UTC time.
+
+See `timelocal()` for details.
+
+#### 6.69. `clock([monotonic])`
+
+Reads the current second and microsecond value of the system clock.
+
+By default, the realtime clock is queried which might skew forwards
+or backwards due to NTP changes, system sleep modes etc.
+
+If a truish value is passed as argument, the monotonic system clock
+is queried instead, which will return the monotonically increasing
+time since some arbitrary point in the past (usually the system boot
+time).
+
+Returns a two element array containing the full seconds as first and
+the nanosecond fraction as second element.
+
+Returns `null` if a monotonic clock value is requested and the system
+does not implement this clock type.
+
+```javascript
+clock();        // [ 1647954926, 798269464 ]
+clock(true);    // [ 474751, 527959975 ]
+```

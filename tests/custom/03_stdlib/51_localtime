@@ -1,0 +1,36 @@
+The `localtime()` function returns the given epoch timestamp (or now,
+if omitted) as a dictionary containing broken-down date and time
+information according to the local system timezone.
+
+-- Testcase --
+{%
+	let t = time();
+	let d1 = localtime();
+	let d2 = localtime(1647953502);
+
+	// assert that localtime without epoch returns the current time
+	let c = timelocal(d1);
+	assert(c >= t && c <= t + 5, "localtime() result does not match time()");
+
+	// dump fixed time and check expected output
+	printf("%.J\n", d2);
+%}
+-- End --
+
+-- Vars --
+TZ=CET-1CEST,M3.5.0/2,M10.5.0/3
+-- End --
+
+-- Expect stdout --
+{
+	"sec": 42,
+	"min": 51,
+	"hour": 13,
+	"mday": 22,
+	"mon": 3,
+	"year": 2022,
+	"wday": 2,
+	"yday": 81,
+	"isdst": 0
+}
+-- End --

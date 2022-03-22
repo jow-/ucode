@@ -1,0 +1,33 @@
+The `clock()` function reads the current second and microsecond value of
+the system clock, optionally using the monotonic clock instead of the
+default realtime one.
+
+-- Testcase --
+{%
+	let t1 = clock();
+	let t3 = clock(true);
+
+	sleep(250);
+
+	let t2 = clock();
+	let t4 = clock(true);
+
+	let delta1 = (t2[0] - t1[0]) * 1000000000 + (t2[1] - t1[1]);
+	let delta2 = (t4[0] - t3[0]) * 1000000000 + (t4[1] - t3[1]);
+
+	assert(delta1 >= 0, "Realtime clock went backwards!");
+	assert(delta2 >= 0, "Monotonic clock went backwards!");
+
+	printf("%.J\n", [
+		(delta1 >= 240000000 && delta1 <= 260000000) ? true : "unexpected delta: " + delta1,
+		(delta2 >= 240000000 && delta2 <= 260000000) ? true : "unexpected delta: " + delta2
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	true,
+	true
+]
+-- End --
