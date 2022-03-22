@@ -1,0 +1,32 @@
+The `gmtime()` function returns the given epoch timestamp (or now,
+if omitted) as a dictionary containing broken-down date and time
+information interpreted as UTC time.
+
+-- Testcase --
+{%
+	let t = time();
+	let d1 = gmtime();
+	let d2 = gmtime(1647953502);
+
+	// assert that localtime without epoch returns the current time
+	let c = timegm(d1);
+	assert(c >= t && c <= t + 5, "gmtime() result does not match time()");
+
+	// dump fixed time and check expected output
+	printf("%.J\n", d2);
+%}
+-- End --
+
+-- Expect stdout --
+{
+	"sec": 42,
+	"min": 51,
+	"hour": 12,
+	"mday": 22,
+	"mon": 3,
+	"year": 2022,
+	"wday": 2,
+	"yday": 81,
+	"isdst": 0
+}
+-- End --

@@ -3126,6 +3126,122 @@ uc_uniq(uc_vm_t *vm, size_t nargs)
 	return uniq;
 }
 
+static uc_value_t *
+uc_gettime_common(uc_vm_t *vm, size_t nargs, bool local)
+{
+	uc_value_t *ts = uc_fn_arg(0), *res;
+	time_t t = ts ? (time_t)ucv_to_integer(ts) : time(NULL);
+	struct tm *tm = (local ? localtime : gmtime)(&t);
+
+	if (!tm)
+		return NULL;
+
+	res = ucv_object_new(vm);
+
+	ucv_object_add(res, "sec", ucv_int64_new(tm->tm_sec));
+	ucv_object_add(res, "min", ucv_int64_new(tm->tm_min));
+	ucv_object_add(res, "hour", ucv_int64_new(tm->tm_hour));
+	ucv_object_add(res, "mday", ucv_int64_new(tm->tm_mday));
+	ucv_object_add(res, "mon", ucv_int64_new(tm->tm_mon + 1));
+	ucv_object_add(res, "year", ucv_int64_new(tm->tm_year + 1900));
+	ucv_object_add(res, "wday", ucv_int64_new(tm->tm_wday ? tm->tm_wday : 7));
+	ucv_object_add(res, "yday", ucv_int64_new(tm->tm_yday + 1));
+	ucv_object_add(res, "isdst", ucv_int64_new(tm->tm_isdst));
+
+	return res;
+}
+
+static uc_value_t *
+uc_localtime(uc_vm_t *vm, size_t nargs)
+{
+	return uc_gettime_common(vm, nargs, true);
+}
+
+static uc_value_t *
+uc_gmtime(uc_vm_t *vm, size_t nargs)
+{
+	return uc_gettime_common(vm, nargs, false);
+}
+
+static uc_value_t *
+uc_mktime_common(uc_vm_t *vm, size_t nargs, bool local)
+{
+#define FIELD(name, required) \
+	{ #name, required, offsetof(struct tm, tm_##name) }
+
+	const struct {
+		const char *name;
+		bool required;
+		size_t off;
+	} fields[] = {
+		FIELD(sec, false),
+		FIELD(min, false),
+		FIELD(hour, false),
+		FIELD(mday, true),
+		FIELD(mon, true),
+		FIELD(year, true),
+		FIELD(isdst, false)
+	};
+
+	uc_value_t *to = uc_fn_arg(0), *v;
+	struct tm tm = { 0 };
+	bool exists;
+	time_t t;
+	size_t i;
+
+	if (ucv_type(to) != UC_OBJECT)
+		return NULL;
+
+	for (i = 0; i < ARRAY_SIZE(fields); i++) {
+		v = ucv_object_get(to, fields[i].name, &exists);
+
+		if (!exists && fields[i].required)
+			return NULL;
+
+		*(int *)((char *)&tm + fields[i].off) = (int)ucv_to_integer(v);
+	}
+
+	if (tm.tm_mon > 0)
+		tm.tm_mon--;
+
+	if (tm.tm_year >= 1900)
+		tm.tm_year -= 1900;
+
+	t = (local ? mktime : timegm)(&tm);
+
+	return (t != (time_t)-1) ? ucv_int64_new((int64_t)t) : NULL;
+}
+
+static uc_value_t *
+uc_timelocal(uc_vm_t *vm, size_t nargs)
+{
+	return uc_mktime_common(vm, nargs, true);
+}
+
+static uc_value_t *
+uc_timegm(uc_vm_t *vm, size_t nargs)
+{
+	return uc_mktime_common(vm, nargs, false);
+}
+
+static uc_value_t *
+uc_clock(uc_vm_t *vm, size_t nargs)
+{
+	clockid_t id = ucv_is_truish(uc_fn_arg(0)) ? CLOCK_MONOTONIC : CLOCK_REALTIME;
+	struct timespec ts;
+	uc_value_t *res;
+
+	if (clock_gettime(id, &ts) == -1)
+		return NULL;
+
+	res = ucv_array_new(vm);
+
+	ucv_array_set(res, 0, ucv_int64_new((int64_t)ts.tv_sec));
+	ucv_array_set(res, 1, ucv_int64_new((int64_t)ts.tv_nsec));
+
+	return res;
+}
+
 
 const uc_function_list_t uc_stdlib_functions[] = {
 	{ "chr",		uc_chr },
@@ -3186,6 +3302,11 @@ const uc_function_list_t uc_stdlib_functions[] = {
 	{ "b64dec",		uc_b64dec },
 	{ "b64enc",		uc_b64enc },
 	{ "uniq",		uc_uniq },
+	{ "localtime",	uc_localtime },
+	{ "gmtime",		uc_gmtime },
+	{ "timelocal",	uc_timelocal },
+	{ "timegm",		uc_timegm },
+	{ "clock",		uc_clock },
 };
 
 
