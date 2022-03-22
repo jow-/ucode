@@ -3194,3 +3194,15 @@ uc_stdlib_load(uc_value_t *scope)
 {
 	uc_function_list_register(scope, uc_stdlib_functions);
 }
+
+uc_cfn_ptr_t
+uc_stdlib_function(const char *name)
+{
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(uc_stdlib_functions); i++)
+		if (!strcmp(uc_stdlib_functions[i].name, name))
+			return uc_stdlib_functions[i].func;
+
+	return NULL;
+}
