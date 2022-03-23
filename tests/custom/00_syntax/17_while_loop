@@ -1,4 +1,4 @@
-Utpl implements C-style while loops which run as long as the condition
+Ucode implements C-style while loops which run as long as the condition
 is fulfilled.
 
 Like with for-loops, an alternative syntax form suitable for template

@@ -1,4 +1,4 @@
-Besides the ordinary ES5-like function declarations, utpl supports ES6 inspired
+Besides the ordinary ES5-like function declarations, ucode supports ES6 inspired
 arrow function syntax as well. Such arrow functions are useful for callbacks to functions such as replace(), map() or filter().
 
 -- Expect stdout --

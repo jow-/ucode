@@ -1,4 +1,4 @@
-The utpl script language supports declaring objects (dictionaries) using
+The ucode script language supports declaring objects (dictionaries) using
 either JSON or JavaScript notation.
 
 -- Expect stdout --
@@ -52,7 +52,7 @@ either JSON or JavaScript notation.
 -- End --
 
 
-Additionally, utpl implements ES6-like spread operators to allow shallow copying
+Additionally, ucode implements ES6-like spread operators to allow shallow copying
 of object properties into other objects.
 
 -- Expect stdout --

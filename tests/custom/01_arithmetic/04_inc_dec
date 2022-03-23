@@ -1,4 +1,4 @@
-Utpl implements C-style pre- and postfix increment and decrement operators.
+Ucode implements C-style pre- and postfix increment and decrement operators.
 
 Pre-increment or -decrement operations first mutate the value and then return
 the resulting value while post-increment or -decrement operations first return

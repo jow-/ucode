@@ -3,7 +3,7 @@ consisting of an initialization expression, a test condition
 and a step expression and a for-in-loop variant which allows
 enumerating properties of objects or items of arrays.
 
-Additionally, utpl supports an alternative syntax suitable for
+Additionally, ucode supports an alternative syntax suitable for
 template block tags.
 
 

@@ -57,7 +57,7 @@ The function was called with arguments {{ a }} and {{ b }}.
 -- End --
 
 
-Additionally, utpl implements ES6-like "rest" argument syntax to declare
+Additionally, ucode implements ES6-like "rest" argument syntax to declare
 variadic functions.
 
 -- Expect stdout --

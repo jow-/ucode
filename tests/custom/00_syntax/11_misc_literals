@@ -1,4 +1,4 @@
-The utpl script language features a number of keywords which represent
+The ucode script language features a number of keywords which represent
 certain special values.
 
 -- Expect stdout --

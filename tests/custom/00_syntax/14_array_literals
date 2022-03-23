@@ -1,4 +1,4 @@
-The utpl script language supports declaring arrays using JSON notation.
+The ucode script language supports declaring arrays using JSON notation.
 
 -- Expect stdout --
 [ ]
@@ -25,7 +25,7 @@ The utpl script language supports declaring arrays using JSON notation.
 -- End --
 
 
-Additionally, utpl implements ES6-like spread operators to allow shallow copying
+Additionally, ucode implements ES6-like spread operators to allow shallow copying
 of array values into other arrays.
 
 -- Expect stdout --

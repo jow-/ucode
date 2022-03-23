@@ -1,4 +1,4 @@
-Testing utpl switch statements.
+Testing ucode switch statements.
 
 
 1. Ensure that execution starts at the first matching case.

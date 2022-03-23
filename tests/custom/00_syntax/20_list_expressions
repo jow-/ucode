@@ -1,4 +1,4 @@
-Similar to ES5, utpl's language grammar allows comma separated list expressions
+Similar to ES5, ucode's language grammar allows comma separated list expressions
 in various contexts. Unless such lists happen to be part of a function call
 or array construction expression, only the last result of such an expression
 list should be used while still evaluating all sub-expressions, triggering

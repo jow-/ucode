@@ -1,4 +1,4 @@
-Utpl implements C-style if/else conditions and ?: ternary statements.
+Ucode implements C-style if/else conditions and ?: ternary statements.
 
 Like with for- and while-loops, an alternative syntax form suitable
 for template blocks is supported.

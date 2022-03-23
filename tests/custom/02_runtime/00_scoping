@@ -1,4 +1,4 @@
-Utpl implements function scoping, make sure that let variables are
+Ucode implements function scoping, make sure that let variables are
 invisible outside of the function scope.
 
 -- Expect stdout --

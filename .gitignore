@@ -6,6 +6,9 @@ install_manifest.txt
 parser.[ch]
 parser.out
 contrib/lemon
+ucode
 utpl
-lib/*.so
+ucc
+*.so*
 tests/cram/*.t.err
+examples/
