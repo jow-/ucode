@@ -1,0 +1,31 @@
+name: Build .deb package
+
+on:
+  push: {}
+    # tags:
+    #   - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          path: ucode/
+          
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install devscripts build-essential lintian libjson-c-dev debhelper-compat debhelper
+
+      - name: Build package
+        run: |
+          cd ucode/
+          touch ucc utpl
+          dpkg-buildpackage -b -us -uc
+
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v3
+        with:
+          name: deb
+          path: ucode*.deb

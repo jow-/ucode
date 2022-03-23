@@ -3,7 +3,7 @@ Maintainer: Paul Spooren <mail@aparcar.org>
 Section: misc
 Priority: optional
 Standards-Version: 0.0.20220322-1
-Build-Depends: debhelper-compat (= 13) libjson-c-dev
+Build-Depends: debhelper-compat (= 12), libjson-c-dev
 
 Package: ucode
 Architecture: any
