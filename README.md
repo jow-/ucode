@@ -1,8 +1,17 @@
 ## ABOUT
 
-An ucode template consists of arbitrary plain text which is outputted as-is
-while control flow or expression logic is embedded in blocks that may appear
-anywhere throughout the template.
+The ucode language is a tiny general purpose scripting language featuring a
+syntax closely resembling ECMAScript. It can be used in a stand-alone manner
+by using the ucode command line interpreter or embedded into host applications
+by linking libucode and utilizing its C language API. Additionally, ucode can
+be invoked in template mode where control flow and expression logic statements
+are embedded in Jinja-like markup blocks.
+
+Besides aiming for small size, the major design goals of ucode are the ability
+to trivially read and write JSON data, good embeddability into C applications,
+template capabilities for output formatting, extensiblity through loadable
+native extension modules and a straightforward set of builtin functions
+mimicking those found in the Perl 5 language.
 
 
 ## BLOCKS
