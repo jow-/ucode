@@ -20,8 +20,12 @@ jobs:
 
       - name: Build package
         run: |
+          export DEBFULLNAME=CI
+          export DEBEMAIL=autobuild@invalid
+          export GITVERSION=$(git describe --long --tags)
+          export DEBVERSION=${GITVERSION#v}
           cd ucode/
-          touch ucc utpl
+          dch -v ${DEBVERSION%-*} "Autobuild of $GITVERSION"
           dpkg-buildpackage -b -us -uc
 
       - name: Archive code coverage results
