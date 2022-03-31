@@ -1,0 +1,16 @@
+Make sure fs.dirname() doesn't truncate the last character of the
+returned path. Previously ucv_string_new_length was called with a
+length which no longer included the last character (which had just
+been tested not to be a '/' or '.' and hence broke the loop at that
+point).
+
+-- Testcase --
+{%
+	fs = require('fs');
+	printf("%s\n", fs.dirname('/etc/config/wireless'));
+%}
+-- End --
+
+-- Expect stdout --
+/etc/config
+-- End --

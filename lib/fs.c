@@ -948,7 +948,7 @@ uc_fs_dirname(uc_vm_t *vm, size_t nargs)
 		if (i == 0)
 			return ucv_string_new("/");
 
-	return ucv_string_new_length(s, i);
+	return ucv_string_new_length(s, i + 1);
 }
 
 static uc_value_t *
