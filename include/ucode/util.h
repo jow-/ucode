@@ -159,4 +159,30 @@ static inline struct printbuf *xprintbuf_new(void) {
 	return pb;
 }
 
+
+/* json-c compat */
+
+#ifndef HAVE_PARSE_END
+static inline size_t json_tokener_get_parse_end(struct json_tokener *tok) {
+	return (size_t)tok->char_offset;
+}
+#endif
+
+#ifndef HAVE_ARRAY_EXT
+static inline struct json_object *json_object_new_array_ext(int size) {
+	(void) size;
+	return json_object_new_array();
+}
+#endif
+
+#ifndef HAVE_JSON_UINT64
+static inline struct json_object *json_object_new_uint64(uint64_t i) {
+	return json_object_new_int64((int64_t)i);
+}
+
+static inline uint64_t json_object_get_uint64(const struct json_object *obj) {
+	return (uint64_t)json_object_get_int64(obj);
+}
+#endif
+
 #endif /* UCODE_UTIL_H */
