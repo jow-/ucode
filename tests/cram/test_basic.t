@@ -79,19 +79,19 @@ check that ucode prints greetings:
 
 check that ucode provides proper error messages:
 
-  $ ucode -l foo
+  $ touch lib.uc; ucode -l lib
   Require either -e expression or source file
   [1]
 
   $ ucode -l foo -e ' '
   Runtime error: No module named 'foo' could be found
   
-  [254]
+  [1]
 
   $ touch moo; ucode -l foo moo
   Runtime error: No module named 'foo' could be found
   
-  [254]
+  [1]
 
 check that ucode can load fs module:
 
