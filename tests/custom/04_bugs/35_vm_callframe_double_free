@@ -1,0 +1,36 @@
+When invoking a native function as toplevel VM call which indirectly
+triggers an unhandled exception in managed code, the callframes are
+completely reset before the C function returns, leading to invalid
+memory accesses when `uc_vm_call_native()` subsequently popped it's
+own callframe again.
+
+This issue did not surface by executing script code through the
+interpreter since in this case the VM will always execute a managed
+code as toplevel call, but it could be triggered by invoking a native
+function triggering an exception through the C API using `uc_vm_call()`
+on a fresh `uc_vm_t` context or by utilizing the CLI interpreters `-l`
+flag to preload a native code library triggering an exception.
+
+
+-- File ex.uc --
+die("Exception");
+-- End --
+
+-- Args --
+-L files/ -l ex
+-- End --
+
+-- Expect stderr --
+Exception
+In main(), file files/ex.uc, line 1, byte 16:
+  called from anonymous function ([C])
+
+ `die("Exception");`
+  Near here -----^
+
+
+-- End --
+
+-- Testcase --
+not reached
+-- End --

@@ -435,8 +435,10 @@ uc_vm_call_native(uc_vm_t *vm, uc_value_t *ctx, uc_cfunction_t *fptr, bool mcall
 
 	res = fptr->cfn(vm, nargs);
 
-	/* reset stack */
-	ucv_put(uc_vm_callframe_pop(vm));
+	/* Reset stack, check for callframe depth since an uncatched exception in managed
+	 * code executed by fptr->cfn() could've reset the callframe stack already. */
+	if (vm->callframes.count > 0)
+		ucv_put(uc_vm_callframe_pop(vm));
 
 	/* push return value */
 	if (!vm->exception.type)
