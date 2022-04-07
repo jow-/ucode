@@ -33,6 +33,8 @@
 #include <fnmatch.h>
 #include <assert.h>
 
+#include "json-c-compat.h"
+
 #include "ucode/lexer.h"
 #include "ucode/compiler.h"
 #include "ucode/vm.h"

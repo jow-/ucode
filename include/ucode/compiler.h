@@ -20,7 +20,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <json-c/json.h>
 
 #include "source.h"
 #include "lexer.h"
