@@ -1140,6 +1140,128 @@ uc_fs_access(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+static uc_value_t *
+uc_fs_readfile(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *path = uc_fn_arg(0);
+	uc_value_t *size = uc_fn_arg(1);
+	uc_value_t *res = NULL;
+	uc_stringbuf_t *buf;
+	ssize_t limit = -1;
+	size_t rlen, blen;
+	FILE *fp;
+
+	if (ucv_type(path) != UC_STRING)
+		err_return(EINVAL);
+
+	if (size) {
+		if (ucv_type(size) != UC_INTEGER)
+			err_return(EINVAL);
+
+		limit = ucv_int64_get(size);
+	}
+
+	fp = fopen(ucv_string_get(path), "r");
+
+	if (!fp)
+		err_return(errno);
+
+	buf = ucv_stringbuf_new();
+
+	while (limit != 0) {
+		blen = 1024;
+
+		if (limit > 0 && blen > (size_t)limit)
+			blen = (size_t)limit;
+
+		printbuf_memset(buf, printbuf_length(buf) + blen - 1, 0, 1);
+
+		buf->bpos -= blen;
+		rlen = fread(buf->buf + buf->bpos, 1, blen, fp);
+		buf->bpos += rlen;
+
+		if (rlen < blen)
+			break;
+
+		if (limit > 0)
+			limit -= rlen;
+	}
+
+	if (ferror(fp)) {
+		fclose(fp);
+		printbuf_free(buf);
+		err_return(errno);
+	}
+
+	fclose(fp);
+
+	/* add sentinel null byte but don't count it towards the string length */
+	printbuf_memappend_fast(buf, "\0", 1);
+	res = ucv_stringbuf_finish(buf);
+	((uc_string_t *)res)->length--;
+
+	return res;
+}
+
+static uc_value_t *
+uc_fs_writefile(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *path = uc_fn_arg(0);
+	uc_value_t *data = uc_fn_arg(1);
+	uc_value_t *size = uc_fn_arg(2);
+	uc_stringbuf_t *buf = NULL;
+	ssize_t limit = -1;
+	size_t wlen = 0;
+	int err = 0;
+	FILE *fp;
+
+	if (ucv_type(path) != UC_STRING)
+		err_return(EINVAL);
+
+	if (size) {
+		if (ucv_type(size) != UC_INTEGER)
+			err_return(EINVAL);
+
+		limit = ucv_int64_get(size);
+	}
+
+	fp = fopen(ucv_string_get(path), "w");
+
+	if (!fp)
+		err_return(errno);
+
+	if (data && ucv_type(data) != UC_STRING) {
+		buf = xprintbuf_new();
+		ucv_to_stringbuf_formatted(vm, buf, data, 0, '\0', 0);
+
+		if (limit < 0 || limit > printbuf_length(buf))
+			limit = printbuf_length(buf);
+
+		wlen = fwrite(buf->buf, 1, limit, fp);
+
+		if (wlen < (size_t)limit)
+			err = errno;
+
+		printbuf_free(buf);
+	}
+	else if (data) {
+		if (limit < 0 || (size_t)limit > ucv_string_length(data))
+			limit = ucv_string_length(data);
+
+		wlen = fwrite(ucv_string_get(data), 1, limit, fp);
+
+		if (wlen < (size_t)limit)
+			err = errno;
+	}
+
+	fclose(fp);
+
+	if (err)
+		err_return(err);
+
+	return ucv_uint64_new(wlen);
+}
+
 
 static const uc_function_list_t proc_fns[] = {
 	{ "read",		uc_fs_pread },
@@ -1193,6 +1315,8 @@ static const uc_function_list_t global_fns[] = {
 	{ "lsdir",		uc_fs_lsdir },
 	{ "mkstemp",	uc_fs_mkstemp },
 	{ "access",		uc_fs_access },
+	{ "readfile",	uc_fs_readfile },
+	{ "writefile",	uc_fs_writefile },
 };
 
 
