@@ -435,7 +435,7 @@ parse_library_load(char *opt, uc_vm_t *vm)
 	ucv_put(lib);
 
 	if (!ctx)
-		return false;
+		return vm->exception.type == EXCEPTION_NONE;
 
 	ucv_object_add(uc_vm_scope_get(vm), name ? name : p, ctx);
 
@@ -557,7 +557,11 @@ main(int argc, char **argv)
 			break;
 
 		case 'l':
-			parse_library_load(optarg, &vm);
+			if (!parse_library_load(optarg, &vm)) {
+				rv = 1;
+				goto out;
+			}
+
 			break;
 
 		case 'c':

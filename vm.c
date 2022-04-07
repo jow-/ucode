@@ -435,8 +435,10 @@ uc_vm_call_native(uc_vm_t *vm, uc_value_t *ctx, uc_cfunction_t *fptr, bool mcall
 
 	res = fptr->cfn(vm, nargs);
 
-	/* reset stack */
-	ucv_put(uc_vm_callframe_pop(vm));
+	/* Reset stack, check for callframe depth since an uncatched exception in managed
+	 * code executed by fptr->cfn() could've reset the callframe stack already. */
+	if (vm->callframes.count > 0)
+		ucv_put(uc_vm_callframe_pop(vm));
 
 	/* push return value */
 	if (!vm->exception.type)
@@ -2600,9 +2602,6 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 				if (vm->callframes.count <= 1) {
 					uc_vm_reset_callframes(vm);
 
-					if (vm->exhandler)
-						vm->exhandler(vm, &vm->exception);
-
 					return ERROR_RUNTIME;
 				}
 
@@ -2675,6 +2674,9 @@ uc_vm_execute(uc_vm_t *vm, uc_program_t *program, uc_value_t **retval)
 		break;
 
 	default:
+		if (vm->exhandler)
+			vm->exhandler(vm, &vm->exception);
+
 		if (retval)
 			*retval = NULL;
 
@@ -2739,8 +2741,12 @@ uc_vm_invoke(uc_vm_t *vm, const char *fname, size_t nargs, ...)
 
 	ex = uc_vm_call(vm, false, nargs);
 
-	if (ex)
+	if (ex) {
+		if (vm->exhandler)
+			vm->exhandler(vm, &vm->exception);
+
 		return NULL;
+	}
 
 	return uc_vm_stack_pop(vm);
 }
