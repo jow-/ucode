@@ -2073,6 +2073,117 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 	return ucv_stringbuf_finish(resbuf);
 }
 
+static struct json_tokener *
+uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
+{
+	bool trail = false, eof = false;
+	enum json_tokener_error err;
+	struct json_tokener *tok;
+	uc_value_t *rfn, *rbuf;
+	uc_stringbuf_t *buf;
+
+	rfn = ucv_property_get(obj, "read");
+
+	if (!ucv_is_callable(rfn)) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+		                      "Input object does not implement read() method");
+
+		return NULL;
+	}
+
+	tok = xjs_new_tokener();
+
+	while (true) {
+		uc_vm_stack_push(vm, ucv_get(obj));
+		uc_vm_stack_push(vm, ucv_get(rfn));
+		uc_vm_stack_push(vm, ucv_int64_new(1024));
+
+		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE) {
+			json_tokener_free(tok);
+
+			return NULL;
+		}
+
+		rbuf = uc_vm_stack_pop(vm);
+
+		/* check EOF */
+		eof = (rbuf == NULL || (ucv_type(rbuf) == UC_STRING && ucv_string_length(rbuf) == 0));
+
+		/* on EOF, stop parsing unless trailing garbage was detected which handled below */
+		if (eof && !trail) {
+			ucv_put(rbuf);
+
+			/* Didn't parse a complete object yet, possibly a non-delimitted atomic value
+			   such as `null`, `true` etc. - nudge parser by sending final zero byte.
+			   See json-c issue #681 <https://github.com/json-c/json-c/issues/681> */
+			if (json_tokener_get_error(tok) == json_tokener_continue)
+				*jso = json_tokener_parse_ex(tok, "\0", 1);
+
+			break;
+		}
+
+		if (trail || *jso) {
+			uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
+			                      "Trailing garbage after JSON data");
+
+			json_tokener_free(tok);
+			ucv_put(rbuf);
+
+			return NULL;
+		}
+
+		if (ucv_type(rbuf) != UC_STRING) {
+			buf = xprintbuf_new();
+			ucv_to_stringbuf_formatted(vm, buf, rbuf, 0, '\0', 0);
+
+			*jso = json_tokener_parse_ex(tok, buf->buf, printbuf_length(buf));
+
+			trail = (json_tokener_get_error(tok) == json_tokener_success &&
+			         json_tokener_get_parse_end(tok) < (size_t)printbuf_length(buf));
+
+			printbuf_free(buf);
+		}
+		else {
+			*jso = json_tokener_parse_ex(tok, ucv_string_get(rbuf), ucv_string_length(rbuf));
+
+			trail = (json_tokener_get_error(tok) == json_tokener_success &&
+			         json_tokener_get_parse_end(tok) < ucv_string_length(rbuf));
+		}
+
+		ucv_put(rbuf);
+
+		err = json_tokener_get_error(tok);
+
+		if (err != json_tokener_success && err != json_tokener_continue)
+			break;
+	}
+
+	return tok;
+}
+
+static struct json_tokener *
+uc_json_from_string(uc_vm_t *vm, uc_value_t *str, json_object **jso)
+{
+	struct json_tokener *tok = xjs_new_tokener();
+
+	/* NB: the len + 1 here is intentional to pass the terminating \0 byte
+	 * to the json-c parser. This is required to work-around upstream
+	 * issue #681 <https://github.com/json-c/json-c/issues/681> */
+	*jso = json_tokener_parse_ex(tok, ucv_string_get(str), ucv_string_length(str) + 1);
+
+	if (json_tokener_get_error(tok) == json_tokener_success &&
+	    json_tokener_get_parse_end(tok) < ucv_string_length(str)) {
+		uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
+		                      "Trailing garbage after JSON data");
+
+		json_tokener_free(tok);
+
+		return NULL;
+	}
+
+	return tok;
+}
+
 static uc_value_t *
 uc_json(uc_vm_t *vm, size_t nargs)
 {
@@ -2080,24 +2191,26 @@ uc_json(uc_vm_t *vm, size_t nargs)
 	struct json_tokener *tok = NULL;
 	enum json_tokener_error err;
 	json_object *jso = NULL;
-	const char *str;
-	size_t len;
 
-	if (ucv_type(src) != UC_STRING) {
+	switch (ucv_type(src)) {
+	case UC_STRING:
+		tok = uc_json_from_string(vm, src, &jso);
+		break;
+
+	case UC_RESOURCE:
+	case UC_OBJECT:
+	case UC_ARRAY:
+		tok = uc_json_from_object(vm, src, &jso);
+		break;
+
+	default:
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
-		                      "Passed value is not a string");
-
-		return NULL;
+		                      "Passed value is neither a string nor an object");
 	}
 
-	tok = xjs_new_tokener();
-	str = ucv_string_get(src);
-	len = ucv_string_length(src);
+	if (!tok)
+		goto out;
 
-	/* NB: the len + 1 here is intentional to pass the terminating \0 byte
-	 * to the json-c parser. This is required to work-around upstream
-	 * issue #681 <https://github.com/json-c/json-c/issues/681> */
-	jso = json_tokener_parse_ex(tok, str, len + 1);
 	err = json_tokener_get_error(tok);
 
 	if (err == json_tokener_continue) {
@@ -2113,18 +2226,13 @@ uc_json(uc_vm_t *vm, size_t nargs)
 
 		goto out;
 	}
-	else if (json_tokener_get_parse_end(tok) < len) {
-		uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
-		                      "Trailing garbage after JSON data");
-
-		goto out;
-	}
-
 
 	rv = ucv_from_json(vm, jso);
 
 out:
-	json_tokener_free(tok);
+	if (tok)
+		json_tokener_free(tok);
+
 	json_object_put(jso);
 
 	return rv;
