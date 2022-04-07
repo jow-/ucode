@@ -21,7 +21,6 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <json-c/json.h>
 
 #include "types.h"
 

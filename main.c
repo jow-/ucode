@@ -23,7 +23,8 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <json-c/json.h>
+
+#include "json-c-compat.h"
 
 #include "ucode/compiler.h"
 #include "ucode/lexer.h"

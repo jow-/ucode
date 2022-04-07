@@ -23,6 +23,8 @@
 #include <ctype.h>
 #include <float.h>
 
+#include "json-c-compat.h"
+
 #include "ucode/types.h"
 #include "ucode/util.h"
 #include "ucode/vm.h"
