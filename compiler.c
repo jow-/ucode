@@ -33,6 +33,7 @@ static void uc_compiler_compile_paren(uc_compiler_t *compiler);
 static void uc_compiler_compile_call(uc_compiler_t *compiler);
 static void uc_compiler_compile_post_inc(uc_compiler_t *compiler);
 static void uc_compiler_compile_constant(uc_compiler_t *compiler);
+static void uc_compiler_compile_template(uc_compiler_t *compiler);
 static void uc_compiler_compile_comma(uc_compiler_t *compiler);
 static void uc_compiler_compile_labelexpr(uc_compiler_t *compiler);
 static void uc_compiler_compile_function(uc_compiler_t *compiler);
@@ -72,6 +73,7 @@ uc_compiler_parse_rules[TK_ERROR + 1] = {
 	[TK_NULL]		= { uc_compiler_compile_constant, NULL, P_NONE },
 	[TK_THIS]		= { uc_compiler_compile_constant, NULL, P_NONE },
 	[TK_REGEXP]		= { uc_compiler_compile_constant, NULL, P_NONE },
+	[TK_TEMPLATE]	= { uc_compiler_compile_template, NULL, P_NONE },
 	[TK_COMMA]		= { NULL, uc_compiler_compile_comma, P_COMMA },
 	[TK_LABEL]		= { uc_compiler_compile_labelexpr, NULL, P_NONE },
 	[TK_FUNC]		= { uc_compiler_compile_function, NULL, P_NONE },
@@ -1480,6 +1482,27 @@ uc_compiler_compile_constant(uc_compiler_t *compiler)
 
 	default:
 		break;
+	}
+}
+
+static void
+uc_compiler_compile_template(uc_compiler_t *compiler)
+{
+	uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
+
+	while (true) {
+		if (uc_compiler_parse_match(compiler, TK_TEMPLATE)) {
+			uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
+			uc_compiler_emit_insn(compiler, 0, I_ADD);
+		}
+		else if (uc_compiler_parse_match(compiler, TK_PLACEH)) {
+			uc_compiler_compile_expression(compiler);
+			uc_compiler_emit_insn(compiler, 0, I_ADD);
+			uc_compiler_parse_consume(compiler, TK_RBRACE);
+		}
+		else {
+			break;
+		}
 	}
 }
 

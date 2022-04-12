@@ -115,6 +115,8 @@ typedef enum {
 	TK_ASOR,
 	TK_ASNULLISH,
 	TK_NULLISH,
+	TK_PLACEH,
+	TK_TEMPLATE,
 
 	TK_EOF,
 	TK_ERROR
@@ -129,6 +131,7 @@ typedef enum {
 	UC_LEX_BLOCK_COMMENT,
 	UC_LEX_IDENTIFY_TOKEN,
 	UC_LEX_PARSE_TOKEN,
+	UC_LEX_PLACEHOLDER,
 	UC_LEX_EOF
 } uc_lex_state_t;
 
@@ -144,6 +147,7 @@ typedef struct {
 	uc_source_t *source;
 	uint8_t eof:1;
 	uint8_t is_escape:1;
+	uint8_t is_placeholder:1;
 	uint8_t no_regexp:1;
 	uint8_t no_keyword:1;
 	size_t buflen;
@@ -168,6 +172,10 @@ typedef struct {
 		STATEMENTS = '%',
 		COMMENT = '#'
 	} block;
+	struct {
+		size_t count;
+		size_t *entries;
+	} templates;
 } uc_lexer_t;
 
 

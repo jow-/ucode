@@ -1,0 +1,102 @@
+The ucode language supports ES6 template literals for easy interpolation
+of expression results into strings.
+
+
+1. Simple template literals are equivalent to strings.
+
+-- Testcase --
+{{ `foo` === 'foo' }}
+-- End --
+
+-- Expect stdout --
+true
+-- End --
+
+
+2. Template literals may embed expressions using `${...}` placeholder notation.
+
+-- Testcase --
+{%
+	let x = 2;
+	let y = 4;
+
+	print(`The result of ${x} * ${y} is ${x * y}\n`);
+%}
+-- End --
+
+-- Expect stdout --
+The result of 2 * 4 is 8
+-- End --
+
+
+3. Template literals may be nested.
+
+-- Testcase --
+{%
+	let isFoo = false;
+	let isBar = true;
+
+	print(`Foo is ${isFoo} and ${isBar ? `bar is ${isBar}` : `nothing else`}!\n`);
+%}
+-- End --
+
+-- Expect stdout --
+Foo is false and bar is true!
+-- End --
+
+
+4. Placeholder expression results are implicitly stringified.
+
+-- Testcase --
+{%
+	let o1 = { foo: true };
+	let o2 = proto({ color: "red" }, { tostring: function() { return `I am a ${this.color} object` } });
+
+	print(`The first object is ${o1} and the second says "${o2}".\n`);
+%}
+-- End --
+
+-- Expect stdout --
+The first object is { "foo": true } and the second says "I am a red object".
+-- End --
+
+
+5. Escaping either `$` or `{` prevents interpolation as placeholder, sole `$`
+   characters bear no special meaning.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		`foo \${bar} baz`,
+		`foo $\{bar} baz`,
+		`foo $bar baz`
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"foo ${bar} baz",
+	"foo ${bar} baz",
+	"foo $bar baz"
+]
+-- End --
+
+
+6. Unterminated placeholder expressions are a synatax error.
+
+-- Testcase --
+{{
+	`foo ${ bar`
+}}
+-- End --
+
+-- Expect stderr --
+Syntax error: Unterminated string
+In line 2, byte 13:
+
+ `    `foo ${ bar``
+  Near here -----^
+
+
+-- End --
