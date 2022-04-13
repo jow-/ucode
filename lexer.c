@@ -107,6 +107,7 @@ static const struct token tokens[] = {
 	{ TK_ARROW,		{ .pat = "=>" },    2, NULL },
 	{ TK_NULLISH,	{ .pat = "??" },    2, NULL },
 	{ TK_QDOT,		{ .pat = "?." },    2, NULL },
+	{ TK_PLACEH,	{ .pat = "${" },    2, NULL },
 	{ TK_ADD,		{ .pat = "+" },     1, NULL },
 	{ TK_ASSIGN,	{ .pat = "=" },     1, NULL },
 	{ TK_BAND,		{ .pat = "&" },     1, NULL },
@@ -138,6 +139,9 @@ static const struct token tokens[] = {
 	{ TK_LABEL,		{ .pat = "az" },    0, parse_label },
 	{ TK_LABEL,		{ .pat = "AZ" },    0, parse_label },
 	{ TK_NUMBER,	{ .pat = "09" },    0, parse_number },
+
+	/* NB: this must be last for simple retrieval */
+	{ TK_TEMPLATE,	{ .pat = "`" },     1, parse_string }
 };
 
 static const struct keyword reserved_words[] = {
@@ -313,6 +317,22 @@ parse_string(uc_lexer_t *lex)
 		return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated string"));
 
 	for (ptr = lex->bufstart; ptr < lex->bufend; ptr++) {
+		/* continuation of placeholder start */
+		if (lex->is_placeholder) {
+			if (*ptr == '{') {
+				buf_consume(lex, 1);
+				rv = lookbehind_to_text(lex, lex->lastoff, tok->type, NULL);
+
+				if (!rv)
+					rv = emit_op(lex, lex->lastoff, tok->type, ucv_string_new_length("", 0));
+
+				return rv;
+			}
+
+			lex->is_placeholder = false;
+			lookbehind_append(lex, "$", 1);
+		}
+
 		/* continuation of escape sequence */
 		if (lex->is_escape) {
 			if (lex->esclen == 0) {
@@ -486,10 +506,10 @@ parse_string(uc_lexer_t *lex)
 			lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
 			buf_consume(lex, (ptr + 1) - lex->bufstart);
 
-			rv = lookbehind_to_text(lex, lex->lastoff, TK_STRING, NULL);
+			rv = lookbehind_to_text(lex, lex->lastoff, tok->type, NULL);
 
 			if (!rv)
-				rv = emit_op(lex, lex->lastoff, TK_STRING, ucv_string_new_length("", 0));
+				rv = emit_op(lex, lex->lastoff, tok->type, ucv_string_new_length("", 0));
 
 			return rv;
 		}
@@ -497,6 +517,13 @@ parse_string(uc_lexer_t *lex)
 		/* escape sequence start */
 		else if (*ptr == '\\') {
 			lex->is_escape = true;
+			lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
+			buf_consume(lex, (ptr - lex->bufstart) + 1);
+		}
+
+		/* potential placeholder start */
+		else if (q == '`' && *ptr == '$') {
+			lex->is_placeholder = true;
 			lookbehind_append(lex, lex->bufstart, ptr - lex->bufstart);
 			buf_consume(lex, (ptr - lex->bufstart) + 1);
 		}
@@ -721,7 +748,7 @@ lex_step(uc_lexer_t *lex, FILE *fp)
 	uint32_t masks[] = { 0, le32toh(0x000000ff), le32toh(0x0000ffff), le32toh(0x00ffffff), le32toh(0xffffffff) };
 	union { uint32_t n; char str[4]; } search;
 	const struct token *tok;
-	size_t rlen, rem;
+	size_t rlen, rem, *nest;
 	char *ptr, c;
 	uc_token_t *rv;
 	size_t i;
@@ -966,6 +993,26 @@ lex_step(uc_lexer_t *lex, FILE *fp)
 					lex->block = NONE;
 				}
 
+				/* track opening braces */
+				else if (tok->type == TK_LBRACE && lex->templates.count > 0) {
+					nest = uc_vector_last(&lex->templates);
+					(*nest)++;
+				}
+
+				/* check end of placeholder expression */
+				else if (tok->type == TK_RBRACE && lex->templates.count > 0) {
+					nest = uc_vector_last(&lex->templates);
+
+					if (*nest == 0) {
+						lex->templates.count--;
+						lex->state = UC_LEX_PARSE_TOKEN;
+						lex->tok = &tokens[ARRAY_SIZE(tokens) - 1]; /* NB: TK_TEMPLATE token spec */
+					}
+					else {
+						(*nest)--;
+					}
+				}
+
 				/* do not report statement tags to the parser */
 				if (tok->type != 0 && tok->type != TK_LSTM)
 					rv = emit_op(lex, lex->source->off,
@@ -1001,7 +1048,8 @@ lex_step(uc_lexer_t *lex, FILE *fp)
 
 		if (rv) {
 			memset(lex->esc, 0, sizeof(lex->esc));
-			lex->state = UC_LEX_IDENTIFY_TOKEN;
+			lex->state = lex->is_placeholder ? UC_LEX_PLACEHOLDER : UC_LEX_IDENTIFY_TOKEN;
+			lex->is_placeholder = false;
 			lex->tok = NULL;
 
 			if (rv == UC_LEX_CONTINUE_PARSING)
@@ -1011,6 +1059,14 @@ lex_step(uc_lexer_t *lex, FILE *fp)
 		}
 
 		break;
+
+
+	case UC_LEX_PLACEHOLDER:
+		lex->state = UC_LEX_IDENTIFY_TOKEN;
+
+		uc_vector_push(&lex->templates, 0);
+
+		return emit_op(lex, lex->source->off, TK_PLACEH, NULL);
 
 
 	case UC_LEX_EOF:
@@ -1051,6 +1107,9 @@ uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source)
 
 	lex->lastoff = 0;
 
+	lex->templates.count = 0;
+	lex->templates.entries = NULL;
+
 	if (config && config->raw_mode) {
 		lex->state = UC_LEX_IDENTIFY_TOKEN;
 		lex->block = STATEMENTS;
@@ -1060,6 +1119,7 @@ uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source)
 void
 uc_lexer_free(uc_lexer_t *lex)
 {
+	uc_vector_clear(&lex->templates);
 	uc_source_put(lex->source);
 
 	free(lex->lookbehind);
@@ -1095,12 +1155,13 @@ uc_tokenname(unsigned type)
 	size_t i;
 
 	switch (type) {
-	case 0:        return "End of file";
-	case TK_STRING: return "String";
-	case TK_LABEL:  return "Label";
-	case TK_NUMBER: return "Number";
-	case TK_DOUBLE: return "Double";
-	case TK_REGEXP: return "Regexp";
+	case 0:           return "End of file";
+	case TK_TEMPLATE: return "Template";
+	case TK_STRING:   return "String";
+	case TK_LABEL:    return "Label";
+	case TK_NUMBER:   return "Number";
+	case TK_DOUBLE:   return "Double";
+	case TK_REGEXP:   return "Regexp";
 	}
 
 	for (i = 0; i < ARRAY_SIZE(tokens); i++) {

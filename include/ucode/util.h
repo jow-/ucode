@@ -68,6 +68,11 @@
 #define uc_vector_last(vec) \
 	(&((vec)->entries[(vec)->count - 1]))
 
+#define uc_vector_push(vec, val) do { \
+	uc_vector_grow(vec); \
+	(vec)->entries[(vec)->count++] = (val); \
+} while(0)
+
 
 /* "failsafe" utility functions */
 
