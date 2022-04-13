@@ -1,0 +1,52 @@
+When indirectly invoking a managed function from manged code, e.g.
+on stringifying an object using it's tostring() prototype method
+during string concatenation, bytecode execution of the nested managed
+function call did not stop and return to the caller, but continued
+past the return of the invoked function, clobbering the VM context.
+
+
+-- Testcase --
+{%
+	let o = proto(
+		{ color: "red" },
+		{ tostring: function() { return "I am a " + this.color + " object" } }
+	);
+
+	print("Result: " + o + ".\n");
+%}
+-- End --
+
+-- Expect stdout --
+Result: I am a red object.
+-- End --
+
+
+-- Testcase --
+{%
+	let o = proto(
+		{ color: "red" },
+		{ tostring: function() { die("Exception while stringifying") } }
+	);
+
+	function t() {
+		try {
+			print("Result: " + o + ".\n");
+		}
+		catch (e) {
+			warn("Caught exception: " + e.stacktrace[0].context + "\n");
+		}
+	}
+
+	t();
+%}
+-- End --
+
+-- Expect stderr --
+Caught exception: In [anonymous function](), line 4, byte 62:
+  called from function t ([stdin]:9:23)
+  called from anonymous function ([stdin]:16:4)
+
+ `        { tostring: function() { die("Exception while stringifying") } }`
+  Near here ---------------------------------------------------------^
+
+-- End --
