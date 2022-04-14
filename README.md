@@ -1,4 +1,4 @@
-## ABOUT
+# ABOUT
 
 The ucode language is a tiny general purpose scripting language featuring a
 syntax closely resembling ECMAScript. It can be used in a stand-alone manner
@@ -10,18 +10,121 @@ are embedded in Jinja-like markup blocks.
 Besides aiming for small size, the major design goals of ucode are the ability
 to trivially read and write JSON data, good embeddability into C applications,
 template capabilities for output formatting, extensiblity through loadable
-native extension modules and a straightforward set of builtin functions
+native extension modules and a straightforward set of built-in functions
 mimicking those found in the Perl 5 language.
 
+## HISTORY AND MOTIVATION
 
-## BLOCKS
+In spring 2021 it has been decided to rewrite the OpenWrt firewall framework on
+top of nftables with the goal to replace the then current C application with a
+kind of preprocessor generating nftables rulesets using a set of templates
+instead of relying on built-in hardcoded rules like its predecessor.
 
-There are three kinds of blocks; expression blocks, statement blocks and
-comment blocks. The former two embed code logic using a JavaScript-like syntax
-while the latter comment block type is simply discarded during processing.
+That decision spurred the development of *ucode*, initially meant to be a
+simple template processor solely for the OpenWrt nftables firewall but quickly
+evolving into a general purpose scripting language suitable for a wider range
+of system scripting tasks.
+
+Despite OpenWrt predominantly relying on POSIX shell and Lua as system
+scripting languages already, a new solution was needed to accomodate the needs
+of the new firewall implementation; mainly the ability to efficiently deal with
+JSON data and complex data structures such as arrays and dictionaries and the
+ability to closely interface with OpenWrt's *ubus* message bus system.
+
+Throughout the design process of the new firewall and its template processor,
+the following design goals were defined for the *ucode* scripting language:
+
+ - Ability to embed code logic fragments such as control flow statements,
+   function calls or arithmetic expressions into plain text templates, using
+   a block syntax and functionality roughly inspired by Jinja templates
+ - Built-in support for JSON data parsing and serialization, without the need
+   for external libraries
+ - Distinct array and object types (compared to Lua's single table datatype)
+ - Distinct integer and float types and guaranteed 64bit integer range
+ - Built-in support for bit operations
+ - Built-in support for (POSIX) regular expressions
+ - A comprehensive set of built-in standard functions, inspired by the core
+   functions found in the Perl 5 interpreter
+ - Staying as close to ECMAScript syntax as possible due to higher developer
+   familiarity and to be able to reuse existing tooling such as editor syntax
+   highlighting
+ - Bindings for all relevant Linux and OpenWrt APIs, such as *ubus*, *uci*,
+   *uloop*, *netlink* etc.
+ - Procedural, synchronous programming flow
+ - Very small executable size (the interpreter and runtime is currently around
+   64KB on ARM Cortex A9)
+ - Embeddability into C host applications
+
+Summarized, *ucode* can be described as synchronous ECMAScript without the
+object oriented standard library.
 
 
-### 1. STATEMENT BLOCKS
+# INSTALLATION
+
+## OpenWrt
+
+In OpenWrt 22.03 and later, *ucode* should already be preinstalled. If not,
+it can be installed via the package manager, using the `opkg install ucode`
+command.
+
+## MacOS
+
+To build on MacOS, first install *cmake* and *json-c* via
+[Homebrew](https://brew.sh/), then clone the ucode repository and execute
+*cmake* followed by *make*:
+
+    $ brew install cmake json-c
+    $ git clone https://github.com/jow-/ucode.git
+    $ cd ucode/
+    $ cmake -DUBUS_SUPPORT=OFF -DUCI_SUPPORT=OFF -DULOOP_SUPPORT=OFF .
+    $ make
+    $ sudo make install
+
+## Debian
+
+The ucode repository contains build recipes for Debian packages, to build .deb
+packages for local installation, first install required development packages,
+then clone the repository and invoke *dpkg-buildpackage* to produce the binary
+package files:
+
+    $ sudo apt-get install build-essential devscripts debhelper libjson-c-dev
+    $ git clone https://github.com/jow-/ucode.git
+    $ cd ucode/
+    $ dpkg-buildpackage -b -us -uc
+    $ sudo dpkg -i ../ucode*.deb ../libucode*.deb
+
+## Other Linux systems
+
+To install ucode from source on other systems, ensure that the json-c library
+and associated development headers are installed, then clone and compile the
+ucode repository:
+
+    $ git clone https://github.com/jow-/ucode.git
+    $ cd ucode/
+    $ cmake -DUBUS_SUPPORT=OFF -DUCI_SUPPORT=OFF -DULOOP_SUPPORT=OFF .
+    $ make
+    $ sudo make install
+
+
+# SYNTAX
+
+## Template mode
+
+By default, *ucode* is executed in *raw mode*, means it expects a given source
+file to only contain script code. By invoking the ucode interpreter with the
+`-T` flag or by using the `utpl` alias, the *ucode* interpreter is switched
+into *template mode* where the source file is expected to be a plaintext file
+containing *template blocks* containing ucode script expressions or comments.
+
+### Block types
+
+There are three kinds of blocks; *expression blocks*, *statement blocks* and
+*comment blocks*. The former two embed code logic using ucode's JavaScript-like
+syntax while the latter comment block type is simply discarded during
+processing.
+
+
+#### 1. Statement block
 
 Statement blocks are enclosed in an opening `{%` and a closing `%}` tag and
 may contain any number of script code statements, even entire programs.
@@ -39,7 +142,7 @@ For example the following template would result in `The epoch is odd` or
 `The epoch is {% if (time() % 2): %}odd{% else %}even{% endif %}!`
 
 
-### 2. EXPRESSION BLOCKS
+#### 2. Expression block
 
 Expression blocks are enclosed in an opening `{{` and a closing `}}` tag and
 may only contain a single expression statement (multiple expressions may be
@@ -51,7 +154,7 @@ the output "Hello world, user!" where `user` would correspond to the name of
 the current user executing the ucode interpreter.
 
 
-### 3. COMMENT BLOCKS
+#### 3. Comment block
 
 Comment blocks, which are denoted with an opening `{#` and a closing `#}` tag
 may contain arbitrary text except the closing `#}` tag itself. Comments blocks
@@ -62,7 +165,7 @@ The following example template would result in the output "Hello world":
 `Hello {# mad #}word`
 
 
-### WHITESPACE
+### Whitespace handling
 
 Each block start tag may be suffixed with a dash to strip any whitespace
 before the block and likewise any block end tag may be prefixed with a dash
@@ -128,12 +231,13 @@ Output:
 This is a first lineThis is item 1.This is item 2.This is item 3.This is the last line
 ```
 
-## SCRIPT LANGUAGE
+## Script syntax
 
-The ucode script language used within statement and expression blocks uses
-untyped variables and employs a simplified JavaScript like syntax.
+The ucode script language - used either within statement and expression blocks
+or throughout the entire file in *raw mode*, uses untyped variables and employs
+a simplified JavaScript like syntax.
 
-Ucode script implements function scoping and differentiates between local and
+The language implements function scoping and differentiates between local and
 global variables. Each function has its own private scope while executing and
 local variables declared inside a function are not accessible in the outer
 calling scope.
@@ -551,7 +655,7 @@ operator which removes a property from an object value.
 
 ### 6. Functions
 
-Ucode scripts may call a number of builtin functions to manipulate values or
+Ucode scripts may call a number of built-in functions to manipulate values or
 to output information.
 
 #### 6.1. `abs(x)`
