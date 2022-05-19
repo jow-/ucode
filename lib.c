@@ -3352,6 +3352,98 @@ uc_clock(uc_vm_t *vm, size_t nargs)
 	return res;
 }
 
+static uc_value_t *
+uc_hexenc(uc_vm_t *vm, size_t nargs)
+{
+	const char *hex = "0123456789abcdef";
+	uc_value_t *input = uc_fn_arg(0);
+	uc_stringbuf_t *buf;
+	size_t off, len;
+	uint8_t byte;
+
+	if (!input)
+		return NULL;
+
+	buf = ucv_stringbuf_new();
+	off = printbuf_length(buf);
+
+	ucv_to_stringbuf(vm, buf, input, false);
+
+	len = printbuf_length(buf) - off;
+
+	/* memset the last expected output char to grow the output buffer */
+	printbuf_memset(buf, off + len * 2, 0, 1);
+
+	/* translate string into hex back to front to reuse the same buffer */
+	while (len > 0) {
+		byte = buf->buf[--len + off];
+		buf->buf[off + len * 2 + 0] = hex[byte / 16];
+		buf->buf[off + len * 2 + 1] = hex[byte % 16];
+	}
+
+	/* do not include sentinel `\0` in string length */
+	buf->bpos--;
+
+	return ucv_stringbuf_finish(buf);
+}
+
+static inline uint8_t
+hexval(unsigned char c, bool lo)
+{
+	return ((c > '9') ? (c - 'a') + 10 : c - '0') << (lo ? 0 : 4);
+}
+
+static uc_value_t *
+uc_hexdec(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *input = uc_fn_arg(0);
+	uc_value_t *skip = uc_fn_arg(1);
+	size_t len, off, n, i;
+	uc_stringbuf_t *buf;
+	unsigned char *p;
+	const char *s;
+
+	if (ucv_type(input) != UC_STRING)
+		return NULL;
+
+	if (skip && ucv_type(skip) != UC_STRING)
+		return NULL;
+
+	p = (unsigned char *)ucv_string_get(input);
+	len = ucv_string_length(input);
+
+	s = skip ? (const char *)ucv_string_get(skip) : " \t\n";
+
+	for (i = 0, n = 0; i < len; i++) {
+		if (isxdigit(p[i]))
+			n++;
+		else if (!s || !strchr(s, p[i]))
+			return NULL;
+	}
+
+	if (n & 1)
+		return NULL;
+
+	buf = ucv_stringbuf_new();
+	off = printbuf_length(buf);
+
+	/* preallocate the output buffer */
+	printbuf_memset(buf, off, 0, n / 2 + 1);
+
+	for (i = 0, n = 0; i < len; i++) {
+		if (!isxdigit(p[i]))
+			continue;
+
+		buf->buf[off + (n >> 1)] |= hexval(p[i] | 32, n & 1);
+		n++;
+	}
+
+	/* do not include sentinel `\0` in string length */
+	buf->bpos--;
+
+	return ucv_stringbuf_finish(buf);
+}
+
 
 const uc_function_list_t uc_stdlib_functions[] = {
 	{ "chr",		uc_chr },
@@ -3417,6 +3509,8 @@ const uc_function_list_t uc_stdlib_functions[] = {
 	{ "timelocal",	uc_timelocal },
 	{ "timegm",		uc_timegm },
 	{ "clock",		uc_clock },
+	{ "hexdec",		uc_hexdec },
+	{ "hexenc",		uc_hexenc },
 };
 
 

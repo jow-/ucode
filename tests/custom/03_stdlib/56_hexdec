@@ -1,0 +1,29 @@
+The `hexdec()` function decodes the given hexadecimal digit string into
+a byte string, optionally skipping specified characters.
+
+Returns null if the input string contains invalid characters or an uneven
+amount of hex digits.
+
+Returns the decoded byte string on success.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		hexdec("44 55 66 77 33 44\n"),   	// whitespace is skipped by default
+		hexdec("44-55-66:77-33-44", ":-"),	// skip specified characters
+		hexdec("abc"),						// error; uneven amount of digits
+		hexdec("ab cd !"),					// error; non-whitespace, non-hex, non-skipped char
+		hexdec(1234),						// error; non-string input
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"DUfw3D",
+	"DUfw3D",
+	null,
+	null,
+	null
+]
+-- End --

@@ -1473,3 +1473,32 @@ does not implement this clock type.
 clock();        // [ 1647954926, 798269464 ]
 clock(true);    // [ 474751, 527959975 ]
 ```
+
+#### 6.70. `hexdec(hexstring[, skipchars])`
+
+The `hexdec()` function decodes the given hexadecimal digit string into
+a byte string, optionally skipping specified characters.
+
+If the characters to skip are not specified, a default of `" \t\n"` is
+used.
+
+Returns null if the input string contains invalid characters or an uneven
+amount of hex digits.
+
+Returns the decoded byte string on success.
+
+```javascript
+hexdec("48656c6c6f20776f726c64210a");  // "Hello world!\n"
+hexdec("44:55:66:77:33:44", ":");      // "DUfw3D"
+```
+
+#### 6.71. `hexenc(val)`
+
+The `hexenc()` function encodes the given byte string into a hexadecimal
+digit string, converting the input value to a string if needed.
+
+Returns the encoded hexadecimal digit string.
+
+```javascript
+hexenc("Hello world!\n");   // "48656c6c6f20776f726c64210a"
+```

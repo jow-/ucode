@@ -1,0 +1,24 @@
+The `hexenc()` function encodes the given byte string into a hexadecimal
+digit string, converting the input value to a string if needed.
+
+Returns the encoded hexadecimal digit string.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		hexenc("Hello world!\n"),  	// encoding a simple string
+		hexenc(""),  				// empty input -> empty output
+		hexenc([1, 2, 3]),  		// implicit stringification
+		hexenc(null),  				// null input -> null output
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"48656c6c6f20776f726c64210a",
+	"",
+	"5b20312c20322c2033205d",
+	null
+]
+-- End --
