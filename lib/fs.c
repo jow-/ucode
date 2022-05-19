@@ -1168,6 +1168,9 @@ uc_fs_readfile(uc_vm_t *vm, size_t nargs)
 
 	buf = ucv_stringbuf_new();
 
+	if (limit > -1 && limit < BUFSIZ)
+		setvbuf(fp, NULL, _IONBF, 0);
+
 	while (limit != 0) {
 		blen = 1024;
 
