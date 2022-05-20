@@ -372,6 +372,13 @@ uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence
 
 		rule = uc_compiler_parse_rule(compiler->exprstack->token);
 
+		if (!rule->infix) {
+			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos, "Expecting ';' or binary operator");
+			uc_compiler_parse_advance(compiler);
+
+			return;
+		}
+
 		/* allow reserved words in property accessors */
 		if (rule->infix == uc_compiler_compile_dot)
 			compiler->parser->lex.no_keyword = true;

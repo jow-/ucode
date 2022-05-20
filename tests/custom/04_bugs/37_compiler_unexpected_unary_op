@@ -1,0 +1,21 @@
+When compiling expressions followed by a unary operator, the compiler
+triggered a segmentation fault due to invoking an unset infix parser
+routine.
+
+-- Testcase --
+1~1
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Syntax error: Expecting ';' or binary operator
+In line 1, byte 2:
+
+ `1~1`
+   ^-- Near here
+
+
+-- End --
