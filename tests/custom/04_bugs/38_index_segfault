@@ -1,0 +1,28 @@
+When index() or rindex() was invoked with a string haystack and a non-
+string needle argument, a segmentation fault occurred due to an internal
+strlen() invocation on a NULL pointer.
+
+-- Testcase --
+print(index("abc", []), "\n")
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+-1
+-- End --
+
+
+-- Testcase --
+print(rindex("abc", []), "\n")
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+-1
+-- End --
