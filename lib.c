@@ -285,39 +285,68 @@ uc_length(uc_vm_t *vm, size_t nargs)
 	}
 }
 
+static int
+uc_uniq_ucv_equal(const void *k1, const void *k2);
+
 static uc_value_t *
 uc_index(uc_vm_t *vm, size_t nargs, bool right)
 {
 	uc_value_t *stack = uc_fn_arg(0);
 	uc_value_t *needle = uc_fn_arg(1);
 	const char *sstr, *nstr, *p;
-	size_t arridx, len;
+	size_t arridx, slen, nlen;
 	ssize_t ret = -1;
 
 	switch (ucv_type(stack)) {
 	case UC_ARRAY:
-		for (arridx = 0, len = ucv_array_length(stack); arridx < len; arridx++) {
-			if (ucv_compare(I_EQ, ucv_array_get(stack, arridx), needle, NULL)) {
-				ret = (ssize_t)arridx;
-
-				if (!right)
+		if (right) {
+			for (arridx = ucv_array_length(stack); arridx > 0; arridx--) {
+				if (uc_uniq_ucv_equal(ucv_array_get(stack, arridx - 1), needle)) {
+					ret = (ssize_t)(arridx - 1);
 					break;
+				}
+			}
+		}
+		else {
+			for (arridx = 0, slen = ucv_array_length(stack); arridx < slen; arridx++) {
+				if (uc_uniq_ucv_equal(ucv_array_get(stack, arridx), needle)) {
+					ret = (ssize_t)arridx;
+					break;
+				}
 			}
 		}
 
 		return ucv_int64_new(ret);
 
 	case UC_STRING:
-		sstr = ucv_string_get(stack);
-		nstr = needle ? ucv_string_get(needle) : NULL;
-		len = needle ? strlen(nstr) : 0;
+		if (ucv_type(needle) == UC_STRING) {
+			sstr = ucv_string_get(stack);
+			slen = ucv_string_length(stack);
+			nstr = ucv_string_get(needle);
+			nlen = ucv_string_length(needle);
 
-		for (p = sstr; *p && len; p++) {
-			if (!strncmp(p, nstr, len)) {
-				ret = (ssize_t)(p - sstr);
+			if (slen == nlen) {
+				if (memcmp(sstr, nstr, nlen) == 0)
+					ret = 0;
+			}
+			else if (slen > nlen) {
+				if (right) {
+					p = sstr + slen - nlen;
 
-				if (!right)
-					break;
+					do {
+						if (memcmp(p, nstr, nlen) == 0) {
+							ret = (ssize_t)(p - sstr);
+							break;
+						}
+					}
+					while (--p != sstr);
+				}
+				else {
+					p = (const char *)memmem(sstr, slen, nstr, nlen);
+
+					if (p)
+						ret = (ssize_t)(p - sstr);
+				}
 			}
 		}
 

@@ -1,0 +1,48 @@
+The `index()` function locates an element within a given array or a substring
+position within a given string, depending on the type of arguments given.
+
+Returns `null` if the given haystack argument is neither an array nor a string,
+returns `-1` if the element was not found within the array or the substring was
+not found within the string.
+
+Returns the first found index position in all other cases.
+
+-- Testcase --
+{%
+	let o = {};
+
+	printf("%.J\n", [
+		index([ 1, 2, "abc", 3, "abc", 1, 2 ], "abc"),	// should return 2
+		index([ 1, 2, 3 ], 4),							// should return -1
+		index([ [], {} ], {}),							// should return -1 (strict equality)
+		index([ [], o ], o),							// should return 1 (strict equality)
+
+		index("foobarfoobarfoobar", "arf"),				// should return 4
+		index("test", "hello"),							// should return -1
+		index("test", "test"),							// should return 0 (needle = haystack length special case)
+		index("test", ""),								// should return 0 (zero length needle special case)
+		index("", ""),									// should return 0 (zero length special case)
+		index("foo\0foo\0foo", "o\0f"),					// should return 2 (binary safe)
+
+		index({ test: true }, true),					// should return null
+		index(1234, 3),									// should return null
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	2,
+	-1,
+	-1,
+	1,
+	4,
+	-1,
+	0,
+	0,
+	0,
+	2,
+	null,
+	null
+]
+-- End --

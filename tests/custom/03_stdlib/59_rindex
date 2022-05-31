@@ -1,0 +1,48 @@
+The `rindex()` function locates an element within a given array or a substring
+position within a given string, depending on the type of arguments given.
+
+Returns `null` if the given haystack argument is neither an array nor a string,
+returns `-1` if the element was not found within the array or the substring was
+not found within the string.
+
+Returns the last found index position in all other cases.
+
+-- Testcase --
+{%
+	let o = {};
+
+	printf("%.J\n", [
+		rindex([ 1, 2, "abc", 3, "abc", 1, 2 ], "abc"),	// should return 4
+		rindex([ 1, 2, 3 ], 4),							// should return -1
+		rindex([ [], {} ], {}),							// should return -1 (strict equality)
+		rindex([ [], o ], o),							// should return 1 (strict equality)
+
+		rindex("foobarfoobarfoobar", "arf"),			// should return 10
+		rindex("test", "hello"),						// should return -1
+		rindex("test", "test"),							// should return 0 (needle = haystack length special case)
+		rindex("test", ""),								// should return 4 (zero length needle special case)
+		rindex("", ""),									// should return 0 (zero length special case)
+		rindex("foo\0foo\0foo", "o\0f"),				// should return 6 (binary safe)
+
+		rindex({ test: true }, true),					// should return null
+		rindex(1234, 3),								// should return null
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	4,
+	-1,
+	-1,
+	1,
+	10,
+	-1,
+	0,
+	4,
+	0,
+	6,
+	null,
+	null
+]
+-- End --
