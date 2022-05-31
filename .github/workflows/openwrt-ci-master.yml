@@ -1,6 +1,10 @@
-name: OpenWrt CI testing
+name: OpenWrt CI master branch testing
 
-on: [ push, pull_request ]
+on:
+  push:
+    branches:
+      - master
+
 env:
   CI_ENABLE_UNIT_TESTING: 1
   CI_TARGET_BUILD_DEPENDS: libnl-tiny ubus uci
@@ -13,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: ynezz/gh-actions-openwrt-ci-native@v0.0.1
+      - uses: ynezz/gh-actions-openwrt-ci-native@v0.0.2
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v2
