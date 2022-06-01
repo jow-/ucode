@@ -34,6 +34,7 @@ typedef enum {
 } uc_value_type_t;
 
 uc_value_t *uc_number_parse(const char *buf, char **end);
+uc_value_t *uc_number_parse_octal(const char *buf, char **end);
 
 bool uc_double_pack(double d, char *buf, bool little_endian);
 double uc_double_unpack(const char *buf, bool little_endian);

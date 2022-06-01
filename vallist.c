@@ -45,12 +45,13 @@
 #define UC_VALLIST_CHUNK_SIZE	8
 
 
-uc_value_t *
-uc_number_parse(const char *buf, char **end)
+static uc_value_t *
+uc_number_parse_common(const char *buf, bool octal, char **end)
 {
 	unsigned long long u;
 	const char *p = buf;
 	bool neg = false;
+	int base = 10;
 	double d;
 	char *e;
 
@@ -61,6 +62,9 @@ uc_number_parse(const char *buf, char **end)
 		neg = true;
 		p++;
 	}
+	else if (*p == '+') {
+		p++;
+	}
 
 	if (*p != 0 && !isxdigit(*p))
 		return NULL;
@@ -68,9 +72,38 @@ uc_number_parse(const char *buf, char **end)
 	if (!end)
 		end = &e;
 
-	u = strtoull(p, end, 0);
+	if (p[0] == '0') {
+		switch (p[1]|32) {
+		case '0':
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+			base = octal ? 8 : 10;
+			break;
 
-	if (**end == '.' || **end == 'e' || **end == 'E') {
+		case 'x':
+			base = 16;
+			break;
+
+		case 'b':
+			base = 2;
+			p += 2;
+			break;
+
+		case 'o':
+			base = 8;
+			p += 2;
+			break;
+		}
+	}
+
+	u = strtoull(p, end, base);
+
+	if (base >= 10 && (**end == '.' || (**end|32) == 'e')) {
 		d = strtod(p, end);
 
 		if (!isspace(**end) && **end != 0)
@@ -93,6 +126,18 @@ uc_number_parse(const char *buf, char **end)
 	}
 
 	return ucv_uint64_new(u);
+}
+
+uc_value_t *
+uc_number_parse(const char *buf, char **end)
+{
+	return uc_number_parse_common(buf, false, end);
+}
+
+uc_value_t *
+uc_number_parse_octal(const char *buf, char **end)
+{
+	return uc_number_parse_common(buf, true, end);
 }
 
 bool
