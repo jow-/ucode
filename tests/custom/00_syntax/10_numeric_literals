@@ -8,6 +8,8 @@ doubles internally.
 -- Expect stdout --
 Integers literals: 123, 127, 2748, 57082
 Float literals: 10, 10.3, 1.23456e-65, 16.0625
+Octal literals: 63, 118
+Binary literals: 7, 11
 Special values: Infinity, Infinity, NaN, NaN
 Minimum values: -9223372036854775808, -1.79769e+308
 Maximum values: 9223372036854775807, 1.79769e+308
@@ -18,6 +20,8 @@ Maximum truncation: 18446744073709551615, Infinity
 -- Testcase --
 Integers literals: {{ 123 }}, {{ 0177 }}, {{ 0xabc }}, {{ 0xDEFA }}
 Float literals: {{ 10. }}, {{ 10.3 }}, {{ 123.456e-67 }}, {{ 0x10.1 }}
+Octal literals: {{ 0o77 }}, {{ 0O166 }}
+Binary literals: {{ 0b111 }}, {{ 0B1011 }}
 Special values: {{ Infinity }}, {{ 1 / 0 }}, {{ NaN }}, {{ "x" / 1 }}
 Minimum values: {{ -9223372036854775808 }}, {{ -1.7976931348623158e+308 }}
 Maximum values: {{ 9223372036854775807 }}, {{ 1.7976931348623158e+308 }}

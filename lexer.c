@@ -696,10 +696,38 @@ is_numeric_char(uc_lexer_t *lex, char c)
 {
 	char prev = lex->lookbehindlen ? lex->lookbehind[lex->lookbehindlen-1] : 0;
 
-	if ((prev == 'e' || prev == 'E') && (c == '-' || c == '+'))
+	switch (c|32) {
+	case '.':
+	case '0':
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
 		return true;
 
-	return prev ? (isxdigit(c) || c == 'x' || c == 'X' || c == '.') : (isdigit(c) || c == '.');
+	case 'a':
+	case 'b':
+	case 'c':
+	case 'd':
+	case 'e':
+	case 'f':
+	case 'o':
+	case 'x':
+		/* require previous char, a number literal cannot start with these */
+		return prev != 0;
+
+	case '+':
+	case '-':
+		/* sign is only allowed after an exponent char */
+		return (prev|32) == 'e';
+	}
+
+	return false;
 }
 
 static uc_token_t *
@@ -713,7 +741,7 @@ parse_number(uc_lexer_t *lex)
 	if (!buf_remaining(lex) || !is_numeric_char(lex, lex->bufstart[0])) {
 		lookbehind_append(lex, "\0", 1);
 
-		nv = uc_number_parse(lex->lookbehind, &e);
+		nv = uc_number_parse_octal(lex->lookbehind, &e);
 
 		switch (ucv_type(nv)) {
 		case UC_DOUBLE:

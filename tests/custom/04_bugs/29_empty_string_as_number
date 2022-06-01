@@ -1,16 +1,14 @@
-When an empty string was casted to a number, e.g. explicitly through `+`
-or `int()` or implicitly through numerical calculations, it was incorrectly
-treated as `NaN` and not `0`.
+When an empty string was explicitly casted to a number through `+` or
+implicitly through numerical calculations, it was incorrectly treated
+as `NaN` and not `0`.
 
 -- Testcase --
 {{ +"" }}
-{{ int("") }}
 {{ "" + 0 }}
 {{ "" - 0.0 }}
 -- End --
 
 -- Expect stdout --
-0
 0
 0
 0

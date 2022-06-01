@@ -570,7 +570,22 @@ uc_hex(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_int(uc_vm_t *vm, size_t nargs)
 {
-	int64_t n = ucv_to_integer(uc_fn_arg(0));
+	uc_value_t *val = uc_fn_arg(0);
+	uc_value_t *base = uc_fn_arg(1);
+	char *e, *v;
+	int64_t n;
+
+	if (ucv_type(val) == UC_STRING) {
+		errno = 0;
+		v = ucv_string_get(val);
+		n = strtoll(v, &e, base ? ucv_int64_get(base) : 10);
+
+		if (e == v)
+			return ucv_double_new(NAN);
+	}
+	else {
+		n = ucv_to_integer(val);
+	}
 
 	if (errno == EINVAL || errno == ERANGE)
 		return ucv_double_new(NAN);
