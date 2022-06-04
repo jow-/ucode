@@ -1345,10 +1345,13 @@ uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsiz
 	if (!tb)
 		return false;
 
-	if (buflen > headsize)
-		nla_parse(tb, maxattr, buf + headsize, buflen - headsize, NULL);
-	else
+	if (buflen > headsize) {
+		if (maxattr)
+			nla_parse(tb, maxattr, buf + headsize, buflen - headsize, NULL);
+	}
+	else {
 		structlen = buflen;
+	}
 
 	for (i = 0; i < nattrs; i++) {
 		if (attrs[i].attr == 0 && (uintptr_t)attrs[i].auxdata >= structlen)
