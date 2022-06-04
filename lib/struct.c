@@ -2182,17 +2182,17 @@ overflow:
 static uc_value_t *
 uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 {
+	size_t ncode, arg, off;
 	formatcode_t *code;
-	size_t ncode, off;
 	uc_string_t *buf;
 	ssize_t size, n;
 	const void *p;
 
-	for (ncode = 0, code = &state->codes[0], off = 0;
+	for (ncode = 0, code = &state->codes[0], arg = argoff, off = 0;
 	     ncode < state->ncodes;
 	     code = &state->codes[++ncode]) {
 		if (code->fmtdef->format == '*') {
-			uc_value_t *v = uc_fn_arg(argoff + ncode);
+			uc_value_t *v = uc_fn_arg(arg++);
 
 			if (ucv_type(v) != UC_STRING)
 				continue;
@@ -2203,6 +2203,9 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 				off += n;
 			else
 				off += code->size;
+		}
+		else {
+			arg += code->repeat;
 		}
 	}
 
