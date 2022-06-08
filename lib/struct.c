@@ -2307,6 +2307,7 @@ static uc_value_t *
 uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 {
 	uc_value_t *bufval = uc_fn_arg(argoff);
+	uc_value_t *offset = uc_fn_arg(argoff + 1);
 	const char *startfrom = NULL;
 	ssize_t bufrem, size, n;
 	uc_value_t *result;
@@ -2322,6 +2323,27 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 
 	startfrom = ucv_string_get(bufval);
 	bufrem = ucv_string_length(bufval);
+
+	if (offset) {
+		if (ucv_type(offset) != UC_INTEGER) {
+			uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+				"Offset value not an integer");
+
+			return NULL;
+		}
+
+		n = (ssize_t)ucv_int64_get(offset);
+
+		if (n < 0)
+			n += bufrem;
+
+		if (n < 0 || n >= bufrem)
+			return NULL;
+
+		startfrom += n;
+		bufrem -= n;
+	}
+
 	result = ucv_array_new(vm);
 
 	for (ncode = 0, code = &state->codes[0], off = 0;
