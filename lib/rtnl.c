@@ -3121,6 +3121,7 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 	int enable = 1, err;
 	struct nl_msg *msg;
 	struct nl_cb *cb;
+	void *buf;
 	size_t i;
 
 	if (ucv_type(cmd) != UC_INTEGER || ucv_int64_get(cmd) < 0 ||
@@ -3168,7 +3169,17 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 		err_return(NLE_NOMEM, NULL);
 
 	if (st.spec) {
-		nlmsg_reserve(msg, st.spec->headsize, 0);
+		if (st.spec->headsize) {
+			buf = nlmsg_reserve(msg, st.spec->headsize, 0);
+
+			if (!buf) {
+				nlmsg_free(msg);
+
+				return NULL;
+			}
+
+			memset(buf, 0, st.spec->headsize);
+		}
 
 		if (!uc_nl_parse_attrs(msg, NLMSG_DATA(nlmsg_hdr(msg)), st.spec->attrs, st.spec->nattrs, vm, payload)) {
 			nlmsg_free(msg);
