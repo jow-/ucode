@@ -1890,8 +1890,9 @@ uc_nl_convert_rta_linkinfo_data(uc_value_t *obj, size_t attr, struct nl_msg *msg
 		}
 	}
 
-	if (nattrs > 0) {
-		attr = (attr == IFLA_INFO_KIND) ? IFLA_INFO_DATA : IFLA_INFO_SLAVE_DATA;
+	attr = (attr == IFLA_INFO_KIND) ? IFLA_INFO_DATA : IFLA_INFO_SLAVE_DATA;
+
+	if (nattrs > 0 && tb[attr]) {
 		rv = uc_nl_convert_attrs(msg, nla_data(tb[attr]), nla_len(tb[attr]), 0, attrs, nattrs, vm, obj);
 
 		if (!rv)
