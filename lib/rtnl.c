@@ -3090,10 +3090,7 @@ cb_reply(struct nl_msg *msg, void *arg)
 		}
 	}
 
-	if (hdr->nlmsg_flags & NLM_F_MULTI)
-		s->state = STATE_CONTINUE;
-	else
-		s->state = STATE_REPLIED;
+	s->state = STATE_CONTINUE;
 
 	return NL_SKIP;
 }
@@ -3189,6 +3186,7 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 
 	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_reply, &st);
 	nl_cb_set(cb, NL_CB_FINISH, NL_CB_CUSTOM, cb_done, &st);
+	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_done, &st);
 	nl_cb_err(cb, NL_CB_CUSTOM, cb_error, &st);
 
 	nl_send_auto_complete(sock, msg);
@@ -3202,7 +3200,7 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 			st.state = STATE_ERROR;
 		}
 	}
-	while (st.state == STATE_CONTINUE);
+	while (st.state < STATE_REPLIED);
 
 	nlmsg_free(msg);
 	nl_cb_put(cb);
