@@ -716,7 +716,7 @@ static const uc_nl_nested_spec_t nl80211_bss_param_nla = {
 
 static const uc_nl_nested_spec_t nl80211_sta_info_nla = {
 	.headsize = 0,
-	.nattrs = 35,
+	.nattrs = 40,
 	.attrs = {
 		{ NL80211_STA_INFO_INACTIVE_TIME, "inactive_time", DT_U32, 0, NULL },
 		{ NL80211_STA_INFO_RX_BYTES, "rx_bytes", DT_U32, 0, NULL },
@@ -750,9 +750,14 @@ static const uc_nl_nested_spec_t nl80211_sta_info_nla = {
 		{ NL80211_STA_INFO_ACK_SIGNAL, "ack_signal", DT_S8, 0, NULL },
 		{ NL80211_STA_INFO_ACK_SIGNAL_AVG, "ack_signal_avg", DT_S8, 0, NULL },
 		{ NL80211_STA_INFO_AIRTIME_LINK_METRIC, "airtime_link_metric", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_AIRTIME_WEIGHT, "airtime_weight", DT_U16, 0, NULL },
 		{ NL80211_STA_INFO_CONNECTED_TO_AS, "connected_to_as", DT_BOOL, 0, NULL },
 		{ NL80211_STA_INFO_CONNECTED_TO_GATE, "connected_to_gate", DT_BOOL, 0, NULL },
 		{ NL80211_STA_INFO_CONNECTED_TIME, "connected_time", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_ASSOC_AT_BOOTTIME, "assoc_at_boottime", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_BEACON_SIGNAL_AVG, "beacon_signal_avg", DT_S8, 0, NULL },
+		{ NL80211_STA_INFO_EXPECTED_THROUGHPUT, "expected_throughput", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_SIGNAL_AVG, "signal_avg", DT_S8, 0, NULL },
 	}
 };
 
