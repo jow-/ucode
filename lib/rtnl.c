@@ -3119,9 +3119,10 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 	uc_value_t *payload = uc_fn_arg(2);
 	request_state_t st = { .vm = vm };
 	uint16_t flagval = 0;
-	int enable = 1, err;
 	struct nl_msg *msg;
 	struct nl_cb *cb;
+	socklen_t optlen;
+	int enable, err;
 	void *buf;
 	size_t i;
 
@@ -3155,16 +3156,21 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 
 		if (err != 0)
 			err_return(err, NULL);
-
-		if (flagval & NLM_F_STRICT_CHK) {
-			if (setsockopt(sock->s_fd, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &enable, sizeof(enable)) < 0)
-				err_return(nl_syserr2nlerr(errno), "Unable to enable NETLINK_GET_STRICT_CHK");
-
-			flagval &= ~NLM_F_STRICT_CHK;
-		}
 	}
 
-	msg = nlmsg_alloc_simple(ucv_int64_get(cmd), NLM_F_REQUEST | flagval);
+	optlen = sizeof(enable);
+
+	if (getsockopt(sock->s_fd, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &enable, &optlen) < 0)
+		enable = 0;
+
+	if (!!(flagval & NLM_F_STRICT_CHK) != enable) {
+		enable = !!(flagval & NLM_F_STRICT_CHK);
+
+		if (setsockopt(sock->s_fd, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &enable, sizeof(enable)) < 0)
+			err_return(nl_syserr2nlerr(errno), "Unable to toggle NETLINK_GET_STRICT_CHK");
+	}
+
+	msg = nlmsg_alloc_simple(ucv_int64_get(cmd), NLM_F_REQUEST | (flagval & ~NLM_F_STRICT_CHK));
 
 	if (!msg)
 		err_return(NLE_NOMEM, NULL);
