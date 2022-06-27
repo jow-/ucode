@@ -772,7 +772,7 @@ static const uc_nl_nested_spec_t nl80211_survey_info_nla = {
 		{ NL80211_SURVEY_INFO_TIME_BUSY, "busy", DT_U64, 0, NULL },
 		{ NL80211_SURVEY_INFO_TIME_EXT_BUSY, "ext_busy", DT_U64, 0, NULL },
 		{ NL80211_SURVEY_INFO_TIME_SCAN, "scan", DT_U64, 0, NULL },
-		{ NL80211_SURVEY_INFO_NOISE, "noise", DT_U8, 0, NULL },
+		{ NL80211_SURVEY_INFO_NOISE, "noise", DT_S8, 0, NULL },
 	}
 };
 
