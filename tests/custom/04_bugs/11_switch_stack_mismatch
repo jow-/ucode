@@ -37,3 +37,30 @@ Matching 3:
 	}
 %}
 -- End --
+
+-- Expect stdout --
+Matching 1:
+Matching 2:
+ - 2: [ 3, 4 ]
+ - 3: [ 3, 4, 5, 6 ]
+Matching 3:
+ - 3: [ null, null, 5, 6 ]
+-- End --
+
+-- Testcase --
+{%
+	for (let n in [1, 2, 3]) {
+		printf("Matching %d:\n", n);
+
+		switch (n) {
+			case 2:
+				let a = 3, b = 4;
+				print(" - 2: ", [a, b], "\n");
+
+			case 3:
+				let c = 5, d = 6;
+				print(" - 3: ", [a, b, c, d], "\n");
+		}
+	}
+%}
+-- End --

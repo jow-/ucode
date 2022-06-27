@@ -2475,7 +2475,7 @@ out:
 static void
 uc_compiler_compile_switch(uc_compiler_t *compiler)
 {
-	size_t i, test_jmp, skip_jmp, next_jmp, value_slot, default_off = 0;
+	size_t i, test_jmp, skip_jmp, next_jmp = 0, value_slot, default_off = 0;
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	uc_patchlist_t p = { .depth = compiler->scope_depth };
 	uc_locals_t *locals = &compiler->locals;
@@ -2628,6 +2628,10 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 
 			/* jump to target */
 			uc_compiler_emit_jmp_dest(compiler, 0, cases.entries[default_off + 2]);
+
+			/* do not patch final match failure jump later, we handle it here
+			 * in the default case */
+			next_jmp = 0;
 		}
 
 		uc_compiler_set_jmpaddr(compiler, skip_jmp, chunk->count);
@@ -2639,6 +2643,16 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 	uc_vector_clear(&cases);
 
 	uc_compiler_leave_scope(compiler);
+
+	/* if no default case exists, patch last case match failure jump */
+	if (next_jmp) {
+		/* There's pop instructions for all local variables including the
+		 * switch test value itself on the stack. Jump onto the last POP
+		 * instruction (-1) to get rid of the on-stack switch test value
+		 * but skip the POP instructions for all other scoped local variables
+		 * which never have been initialized. */
+		uc_compiler_set_jmpaddr(compiler, next_jmp, chunk->count - 1);
+	}
 
 	uc_compiler_backpatch(compiler, chunk->count, 0);
 }
