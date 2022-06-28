@@ -676,12 +676,13 @@ static const uc_nl_nested_spec_t link_attrs_af_spec_rta = {
 
 static const uc_nl_nested_spec_t link_msg = {
 	.headsize = NLA_ALIGN(sizeof(struct ifinfomsg)),
-	.nattrs = 23,
+	.nattrs = 24,
 	.attrs = {
 		{ IFLA_UNSPEC, "family", DT_U8, 0, MEMBER(ifinfomsg, ifi_family) },
 		{ IFLA_UNSPEC, "type", DT_U16, 0, MEMBER(ifinfomsg, ifi_type) },
 		{ IFLA_UNSPEC, "dev", DT_NETDEV, 0, MEMBER(ifinfomsg, ifi_index) },
 		{ IFLA_UNSPEC, "flags", DT_FLAGS, 0, MEMBER(ifinfomsg, ifi_flags) },
+		{ IFLA_UNSPEC, "change", DT_FLAGS, 0, MEMBER(ifinfomsg, ifi_change) },
 		{ IFLA_ADDRESS, "address", DT_LLADDR, 0, NULL },
 		{ IFLA_BROADCAST, "broadcast", DT_LLADDR, 0, NULL },
 		{ IFLA_TXQLEN, "txqlen", DT_U32, 0, NULL },
