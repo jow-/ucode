@@ -740,6 +740,8 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 
 		if (uc_vm_call(vm, false, 1) == EXCEPTION_NONE)
 			ucv_put(uc_vm_stack_pop(vm));
+		else
+			uloop_end();
 
 		free(defer);
 	}
@@ -888,6 +890,8 @@ uc_ubus_object_notify_data_cb(struct ubus_notify_request *req, int type, struct 
 
 		if (uc_vm_call(notifyctx->vm, true, 2) == EXCEPTION_NONE)
 			ucv_put(uc_vm_stack_pop(notifyctx->vm));
+		else
+			uloop_end();
 	}
 }
 
@@ -907,6 +911,8 @@ uc_ubus_object_notify_status_cb(struct ubus_notify_request *req, int idx, int re
 
 		if (uc_vm_call(notifyctx->vm, true, 2) == EXCEPTION_NONE)
 			ucv_put(uc_vm_stack_pop(notifyctx->vm));
+		else
+			uloop_end();
 	}
 }
 
@@ -926,6 +932,8 @@ uc_ubus_object_notify_complete_cb(struct ubus_notify_request *req, int idx, int 
 
 		if (uc_vm_call(notifyctx->vm, true, 2) == EXCEPTION_NONE)
 			ucv_put(uc_vm_stack_pop(notifyctx->vm));
+		else
+			uloop_end();
 	}
 
 	notifyctx->complete = true;
@@ -1203,7 +1211,6 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 			callctx->registry_index = request_reg_add(vm, ucv_get(reqobj), NULL);
 		}
 
-
 		/* Otherwise, when the function returned an object, treat it as
 		* reply data and conclude deferred request immediately */
 		else if (ucv_type(res) == UC_OBJECT) {
@@ -1238,9 +1245,10 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 		callctx->replied = true;
 		break;
 
-	/* treat other exceptions as unknown error */
+	/* treat other exceptions as fatal and halt uloop */
 	default:
 		ubus_complete_deferred_request(ctx, &callctx->req, UBUS_STATUS_UNKNOWN_ERROR);
+		uloop_end();
 		callctx->replied = true;
 		break;
 	}
