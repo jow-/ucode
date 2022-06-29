@@ -674,9 +674,40 @@ static const uc_nl_nested_spec_t link_attrs_af_spec_rta = {
 	}
 };
 
+static const uc_nl_nested_spec_t link_attrs_stats64_rta = {
+	.headsize = NLA_ALIGN(sizeof(struct rtnl_link_stats64)),
+	.nattrs = 24,
+	.attrs = {
+		{ IFLA_UNSPEC, "rx_packets", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_packets) },
+		{ IFLA_UNSPEC, "tx_packets", DT_U64, 0, MEMBER(rtnl_link_stats64, tx_packets) },
+		{ IFLA_UNSPEC, "rx_bytes", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_bytes) },
+		{ IFLA_UNSPEC, "tx_bytes", DT_U64, 0, MEMBER(rtnl_link_stats64, tx_bytes) },
+		{ IFLA_UNSPEC, "rx_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_errors) },
+		{ IFLA_UNSPEC, "tx_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, tx_errors) },
+		{ IFLA_UNSPEC, "rx_dropped", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_dropped) },
+		{ IFLA_UNSPEC, "tx_dropped", DT_U64, 0, MEMBER(rtnl_link_stats64, tx_dropped) },
+		{ IFLA_UNSPEC, "multicast", DT_U64, 0, MEMBER(rtnl_link_stats64, multicast) },
+		{ IFLA_UNSPEC, "collisions", DT_U64, 0, MEMBER(rtnl_link_stats64, collisions) },
+		{ IFLA_UNSPEC, "rx_length_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_length_errors) },
+		{ IFLA_UNSPEC, "rx_over_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_over_errors) },
+		{ IFLA_UNSPEC, "rx_crc_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_crc_errors) },
+		{ IFLA_UNSPEC, "rx_frame_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_frame_errors) },
+		{ IFLA_UNSPEC, "rx_fifo_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_fifo_errors) },
+		{ IFLA_UNSPEC, "rx_missed_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_missed_errors) },
+		{ IFLA_UNSPEC, "tx_aborted_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, tx_aborted_errors) },
+		{ IFLA_UNSPEC, "tx_carrier_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, tx_carrier_errors) },
+		{ IFLA_UNSPEC, "tx_fifo_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, tx_fifo_errors) },
+		{ IFLA_UNSPEC, "tx_heartbeat_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, tx_heartbeat_errors) },
+		{ IFLA_UNSPEC, "tx_window_errors", DT_U64, 0, MEMBER(rtnl_link_stats64, tx_window_errors) },
+		{ IFLA_UNSPEC, "rx_compressed", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_compressed) },
+		{ IFLA_UNSPEC, "tx_compressed", DT_U64, 0, MEMBER(rtnl_link_stats64, tx_compressed) },
+		{ IFLA_UNSPEC, "rx_nohandler", DT_U64, 0, MEMBER(rtnl_link_stats64, rx_nohandler) },
+	}
+};
+
 static const uc_nl_nested_spec_t link_msg = {
 	.headsize = NLA_ALIGN(sizeof(struct ifinfomsg)),
-	.nattrs = 24,
+	.nattrs = 25,
 	.attrs = {
 		{ IFLA_UNSPEC, "family", DT_U8, 0, MEMBER(ifinfomsg, ifi_family) },
 		{ IFLA_UNSPEC, "type", DT_U16, 0, MEMBER(ifinfomsg, ifi_type) },
@@ -704,6 +735,7 @@ static const uc_nl_nested_spec_t link_msg = {
 		{ IFLA_IFNAME, "ifname", DT_STRING, 0, NULL },
 		{ IFLA_LINKINFO, "linkinfo", DT_LINKINFO, 0, NULL }, /* XXX: DF_NO_GET ? */
 		{ IFLA_EXT_MASK, "ext_mask", DT_U32, 0, NULL },
+		{ IFLA_STATS64, "stats64", DT_NESTED, DF_NO_SET, &link_attrs_stats64_rta },
 	}
 };
 
