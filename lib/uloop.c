@@ -884,11 +884,13 @@ uc_uloop_task_output_cb(struct uloop_fd *fd, unsigned int flags)
 					uc_vm_stack_push(task->vm, ucv_get(obj));
 					uc_vm_stack_push(task->vm, ucv_get(task->input_cb));
 
-					if (uc_vm_call(task->vm, true, 0) == EXCEPTION_NONE)
-						msg = uc_vm_stack_pop(task->vm);
-					else
-						msg = NULL;
+					if (uc_vm_call(task->vm, true, 0) != EXCEPTION_NONE) {
+						uloop_end();
 
+						return;
+					}
+
+					msg = uc_vm_stack_pop(task->vm);
 					uc_uloop_pipe_send_common(task->vm, msg, task->input_fd);
 					ucv_put(msg);
 
@@ -903,8 +905,14 @@ uc_uloop_task_output_cb(struct uloop_fd *fd, unsigned int flags)
 			uc_vm_stack_push(task->vm, ucv_get(task->output_cb));
 			uc_vm_stack_push(task->vm, msg);
 
-			if (uc_vm_call(task->vm, true, 1) == EXCEPTION_NONE)
+			if (uc_vm_call(task->vm, true, 1) == EXCEPTION_NONE) {
 				ucv_put(uc_vm_stack_pop(task->vm));
+			}
+			else {
+				uloop_end();
+
+				return;
+			}
 		}
 	}
 
