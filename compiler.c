@@ -815,7 +815,6 @@ static void
 uc_compiler_backpatch(uc_compiler_t *compiler, size_t break_addr, size_t next_addr)
 {
 	uc_patchlist_t *pl = compiler->patchlist;
-	uc_patchlist_t *pp = pl->parent;
 	volatile ssize_t jmpaddr;
 	size_t i;
 
@@ -842,11 +841,8 @@ uc_compiler_backpatch(uc_compiler_t *compiler, size_t break_addr, size_t next_ad
 			break;
 		}
 
-		/* propagate unhandled patch instructions to parent patch list */
-		if (pp) {
-			uc_vector_grow(pp);
-			pp->entries[pp->count++] = pl->entries[i];
-		}
+		/* there should be no unhandled instructions */
+		assert(0);
 	}
 
 	free(pl->entries);
@@ -2153,7 +2149,7 @@ static void
 uc_compiler_compile_while(uc_compiler_t *compiler)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
-	uc_patchlist_t p = { .depth = compiler->scope_depth };
+	uc_patchlist_t p = { .depth = compiler->scope_depth, .token = TK_WHILE };
 	size_t cond_off, jmpz_off, end_off;
 
 	p.parent = compiler->patchlist;
@@ -2201,7 +2197,7 @@ static void
 uc_compiler_compile_for_in(uc_compiler_t *compiler, bool local, uc_token_t *kvar, uc_token_t *vvar)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
-	uc_patchlist_t p = { .depth = compiler->scope_depth + 1 };
+	uc_patchlist_t p = { .depth = compiler->scope_depth + 1, .token = TK_FOR };
 	size_t skip_jmp, test_jmp, key_slot, val_slot;
 
 	p.parent = compiler->patchlist;
@@ -2312,7 +2308,7 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t test_off = 0, incr_off, skip_off, cond_off = 0;
-	uc_patchlist_t p = { .depth = compiler->scope_depth + 1 };
+	uc_patchlist_t p = { .depth = compiler->scope_depth + 1, .token = TK_FOR };
 
 	p.parent = compiler->patchlist;
 	compiler->patchlist = &p;
@@ -2477,7 +2473,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 {
 	size_t i, test_jmp, skip_jmp, next_jmp = 0, value_slot, default_off = 0;
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
-	uc_patchlist_t p = { .depth = compiler->scope_depth };
+	uc_patchlist_t p = { .depth = compiler->scope_depth, .token = TK_SWITCH };
 	uc_locals_t *locals = &compiler->locals;
 	uc_jmplist_t cases = { 0 };
 
@@ -2736,6 +2732,15 @@ uc_compiler_compile_control(uc_compiler_t *compiler)
 	uc_locals_t *locals = &compiler->locals;
 	size_t i, pos = compiler->parser->prev.pos;
 
+	/* select applicable patchlist: for continue statements select the
+	 * first non-switch scope */
+	while (p) {
+		if (type != TK_CONTINUE || p->token != TK_SWITCH)
+			break;
+
+		p = p->parent;
+	}
+
 	if (!p) {
 		uc_compiler_syntax_error(compiler, pos,
 			(type == TK_BREAK)
@@ -2745,7 +2750,7 @@ uc_compiler_compile_control(uc_compiler_t *compiler)
 		return;
 	}
 
-	/* pop locals in scope up to this point */
+	/* pop locals in all scopes covered by the target patchlist */
 	for (i = locals->count; i > 0 && (size_t)locals->entries[i - 1].depth > p->depth; i--)
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 
