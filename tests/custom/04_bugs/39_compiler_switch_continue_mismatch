@@ -1,0 +1,31 @@
+When compiling continue statements nested in switches, the compiler only
+emitted pop statements for the local variables in the switch body scope,
+but not for the locals in the scope(s) leading up to the containing loop
+body.
+
+Depending on the context, this either led to infinite loops, wrong local
+variable values or segmentation faults.
+
+-- Testcase --
+{%
+	let n = 0;
+
+	while (true) {
+		let x = 1;
+
+		switch (n++) {
+		case 0:
+		case 1:
+			continue;
+		}
+
+		break;
+	}
+
+	print(n, '\n');
+%}
+-- End --
+
+-- Expect stdout --
+3
+-- End --
