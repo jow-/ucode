@@ -383,6 +383,7 @@ typedef enum {
 	DT_LINKINFO,
 	DT_MULTIPATH,
 	DT_NUMRANGE,
+	DT_AFSPEC,
 	DT_FLAGS,
 	DT_ENCAP,
 	DT_SRH,
@@ -654,23 +655,12 @@ static const uc_nl_nested_spec_t link_attrs_af_spec_inet6_rta = {
 	}
 };
 
-static const uc_nl_nested_spec_t link_attrs_bridge_vinfo_rta = {
-	.headsize = sizeof(struct  bridge_vlan_info),
-	.nattrs = 2,
-	.attrs = {
-		{ IFLA_UNSPEC, "flags", DT_U16, 0, MEMBER(bridge_vlan_info, flags) },
-		{ IFLA_UNSPEC, "vid", DT_U16, 0, MEMBER(bridge_vlan_info, vid) },
-	}
-};
-
 static const uc_nl_nested_spec_t link_attrs_af_spec_rta = {
 	.headsize = 0,
-	.nattrs = 4,
+	.nattrs = 2,
 	.attrs = {
 		{ AF_INET, "inet", DT_NESTED, DF_NO_SET, &link_attrs_af_spec_inet_rta },
 		{ AF_INET6, "inet6", DT_NESTED, 0, &link_attrs_af_spec_inet6_rta },
-		{ IFLA_BRIDGE_FLAGS, "bridge_flags", DT_U16, 0, NULL },
-		{ IFLA_BRIDGE_VLAN_INFO, "bridge_vlan_info", DT_NESTED, DF_MULTIPLE|DF_FLAT, &link_attrs_bridge_vinfo_rta },
 	}
 };
 
@@ -727,7 +717,7 @@ static const uc_nl_nested_spec_t link_msg = {
 		{ IFLA_OPERSTATE, "operstate", DT_U8, 0, NULL },
 		{ IFLA_NUM_TX_QUEUES, "num_tx_queues", DT_U32, 0, NULL },
 		{ IFLA_NUM_RX_QUEUES, "num_rx_queues", DT_U32, 0, NULL },
-		{ IFLA_AF_SPEC, "af_spec", DT_NESTED, 0, &link_attrs_af_spec_rta },
+		{ IFLA_AF_SPEC, "af_spec", DT_AFSPEC, 0, NULL },
 		{ IFLA_LINK_NETNSID, "link_netnsid", DT_U32, 0, NULL },
 		{ IFLA_PROTO_DOWN, "proto_down", DT_BOOL, 0, NULL },
 		{ IFLA_GROUP, "group", DT_U32, 0, NULL },
@@ -2344,6 +2334,197 @@ uc_nl_convert_rta_ipopts(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 }
 
 static bool
+uc_nl_parse_rta_afspec(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, uc_vm_t *vm, uc_value_t *val)
+{
+	struct rtgenmsg *rtg = nlmsg_data(nlmsg_hdr(msg));
+	struct bridge_vlan_info vinfo = { 0 };
+	uc_value_t *vlans, *vlan, *vv;
+	struct nlattr *nla, *af_nla;
+	uint32_t num;
+	size_t i;
+
+	nla = nla_reserve(msg, spec->attr, 0);
+
+	ucv_object_foreach(val, type, v) {
+		if (!strcmp(type, "bridge")) {
+			if (rtg->rtgen_family == AF_UNSPEC)
+				rtg->rtgen_family = AF_BRIDGE;
+
+			vv = ucv_object_get(v, "bridge_flags", NULL);
+
+			if (vv) {
+				if (!uc_nl_parse_u32(vv, &num) || num > 0xffff)
+					return nla_parse_error(spec, vm, vv, "field bridge.bridge_flags not an integer or out of range 0-65535");
+
+				nla_put_u16(msg, IFLA_BRIDGE_FLAGS, num);
+			}
+
+			vv = ucv_object_get(v, "bridge_mode", NULL);
+
+			if (vv) {
+				if (!uc_nl_parse_u32(vv, &num) || num > 0xffff)
+					return nla_parse_error(spec, vm, vv, "field bridge.bridge_mode not an integer or out of range 0-65535");
+
+				nla_put_u16(msg, IFLA_BRIDGE_MODE, num);
+			}
+
+			vlans = ucv_object_get(v, "bridge_vlan_info", NULL);
+
+			for (vlan = (ucv_type(vlans) == UC_ARRAY) ? ucv_array_get(vlans, 0) : vlans, i = 0;
+			     ucv_type(vlan) == UC_OBJECT;
+			     vlan = (ucv_type(vlans) == UC_ARRAY) ? ucv_array_get(vlans, ++i) : NULL) {
+
+				vinfo.vid = 0;
+				vinfo.flags = 0;
+
+				vv = ucv_object_get(vlan, "flags", NULL);
+
+				if (vv) {
+					if (!uc_nl_parse_u32(vv, &num) || num > 0xffff)
+						return nla_parse_error(spec, vm, vv, "field bridge.bridge_vlan_info.flags not an integer or out of range 0-65535");
+
+					vinfo.flags = num;
+				}
+
+				vv = ucv_object_get(vlan, "vid", NULL);
+
+				if (!uc_nl_parse_u32(vv, &num) || num > 0xfff)
+					return nla_parse_error(spec, vm, vv, "field bridge.bridge_vlan_info.vid not an integer or out of range 0-4095");
+
+				vinfo.vid = num;
+
+				vv = ucv_object_get(vlan, "vid_end", NULL);
+
+				if (vv) {
+					if (!uc_nl_parse_u32(vv, &num) || num > 0xfff)
+						return nla_parse_error(spec, vm, vv, "field bridge.bridge_vlan_info.vid_end not an integer or out of range 0-4095");
+
+					vinfo.flags &= ~BRIDGE_VLAN_INFO_RANGE_END;
+					vinfo.flags |= BRIDGE_VLAN_INFO_RANGE_BEGIN;
+					nla_put(msg, IFLA_BRIDGE_VLAN_INFO, sizeof(vinfo), &vinfo);
+
+					vinfo.vid = num;
+					vinfo.flags &= ~BRIDGE_VLAN_INFO_RANGE_BEGIN;
+					vinfo.flags |= BRIDGE_VLAN_INFO_RANGE_END;
+					nla_put(msg, IFLA_BRIDGE_VLAN_INFO, sizeof(vinfo), &vinfo);
+				}
+				else {
+					vinfo.flags &= ~(BRIDGE_VLAN_INFO_RANGE_BEGIN|BRIDGE_VLAN_INFO_RANGE_END);
+					nla_put(msg, IFLA_BRIDGE_VLAN_INFO, sizeof(vinfo), &vinfo);
+				}
+			}
+		}
+		else if (!strcmp(type, "inet")) {
+			af_nla = nla_reserve(msg, AF_INET, link_attrs_af_spec_inet_rta.headsize);
+
+			if (!uc_nl_parse_attrs(msg, nla_data(af_nla),
+			                       link_attrs_af_spec_inet_rta.attrs,
+			                       link_attrs_af_spec_inet_rta.nattrs,
+			                       vm, v))
+				return false;
+
+			nla_nest_end(msg, af_nla);
+		}
+		else if (!strcmp(type, "inet6")) {
+			af_nla = nla_reserve(msg, AF_INET6, link_attrs_af_spec_inet6_rta.headsize);
+
+			if (!uc_nl_parse_attrs(msg, nla_data(af_nla),
+			                       link_attrs_af_spec_inet6_rta.attrs,
+			                       link_attrs_af_spec_inet6_rta.nattrs,
+			                       vm, v))
+				return false;
+
+			nla_nest_end(msg, af_nla);
+		}
+		else {
+			return nla_parse_error(spec, vm, val, "unknown address family specified");
+		}
+	}
+
+	nla_nest_end(msg, nla);
+
+	return true;
+}
+
+static uc_value_t *
+uc_nl_convert_rta_afspec(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr **tb, uc_vm_t *vm)
+{
+	struct rtgenmsg *rtg = nlmsg_data(nlmsg_hdr(msg));
+	uc_value_t *obj, *bridge, *vlans = NULL, *vlan;
+	struct bridge_vlan_info vinfo;
+	struct nlattr *nla;
+	uint16_t vid = 0;
+	int rem;
+
+	if (!tb[spec->attr])
+		return NULL;
+
+	obj = ucv_object_new(vm);
+
+	if (rtg->rtgen_family == AF_BRIDGE) {
+		bridge = ucv_object_new(vm);
+
+		nla_for_each_attr(nla, nla_data(tb[spec->attr]), nla_len(tb[spec->attr]), rem) {
+			switch (nla_type(nla)) {
+			case IFLA_BRIDGE_FLAGS:
+				if (nla_check_len(nla, sizeof(uint16_t)))
+					ucv_object_add(bridge, "bridge_flags", ucv_uint64_new(nla_get_u16(nla)));
+
+				break;
+
+			case IFLA_BRIDGE_MODE:
+				if (nla_check_len(nla, sizeof(uint16_t)))
+					ucv_object_add(bridge, "bridge_mode", ucv_uint64_new(nla_get_u16(nla)));
+
+				break;
+
+			case IFLA_BRIDGE_VLAN_INFO:
+				if (nla_check_len(nla, sizeof(vinfo))) {
+					memcpy(&vinfo, nla_data(nla), sizeof(vinfo));
+
+					if (!(vinfo.flags & BRIDGE_VLAN_INFO_RANGE_END))
+						vid = vinfo.vid;
+
+					if (vinfo.flags & BRIDGE_VLAN_INFO_RANGE_BEGIN)
+						continue;
+
+					if (!vlans) {
+						vlans = ucv_array_new(vm);
+						ucv_object_add(bridge, "bridge_vlan_info", vlans);
+					}
+
+					vlan = ucv_object_new(vm);
+
+					ucv_object_add(vlan, "vid", ucv_uint64_new(vid));
+
+					if (vid != vinfo.vid)
+						ucv_object_add(vlan, "vid_end", ucv_uint64_new(vinfo.vid));
+
+					ucv_object_add(vlan, "flags", ucv_uint64_new(vinfo.flags & ~BRIDGE_VLAN_INFO_RANGE_END));
+
+					ucv_array_push(vlans, vlan);
+				}
+
+				break;
+			}
+		}
+
+		ucv_object_add(obj, "bridge", bridge);
+	}
+	else {
+		if (!uc_nl_convert_attrs(msg, nla_data(tb[spec->attr]), nla_len(tb[spec->attr]),
+		                         link_attrs_af_spec_rta.headsize, link_attrs_af_spec_rta.attrs,
+		                         link_attrs_af_spec_rta.nattrs, vm, obj)) {
+			ucv_put(obj);
+
+			return NULL;
+		}
+	}
+
+	return obj;
+}
+
+static bool
 uc_nl_parse_rta_u32_or_member(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, uc_vm_t *vm, uc_value_t *val)
 {
 	uint32_t u32;
@@ -2754,6 +2935,12 @@ uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, 
 
 		break;
 
+	case DT_AFSPEC:
+		if (!uc_nl_parse_rta_afspec(spec, msg, base, vm, val))
+			return false;
+
+		break;
+
 	case DT_U32_OR_MEMBER:
 		if (!uc_nl_parse_rta_u32_or_member(spec, msg, base, vm, val))
 			return false;
@@ -2996,6 +3183,9 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 
 	case DT_IPOPTS:
 		return uc_nl_convert_rta_ipopts(spec, msg, tb, vm);
+
+	case DT_AFSPEC:
+		return uc_nl_convert_rta_afspec(spec, msg, tb, vm);
 
 	case DT_U32_OR_MEMBER:
 		return uc_nl_convert_rta_u32_or_member(spec, msg, base, tb, vm);
@@ -3622,6 +3812,13 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 
 	ADD_CONST(NETCONFA_IFINDEX_ALL);
 	ADD_CONST(NETCONFA_IFINDEX_DEFAULT);
+
+	ADD_CONST(BRIDGE_FLAGS_MASTER);
+	ADD_CONST(BRIDGE_FLAGS_SELF);
+
+	ADD_CONST(BRIDGE_MODE_VEB);
+	ADD_CONST(BRIDGE_MODE_VEPA);
+	ADD_CONST(BRIDGE_MODE_UNDEF);
 
 	ADD_CONST(BRIDGE_VLAN_INFO_MASTER);
 	ADD_CONST(BRIDGE_VLAN_INFO_PVID);
