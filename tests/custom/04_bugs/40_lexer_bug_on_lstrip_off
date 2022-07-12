@@ -1,0 +1,20 @@
+When a template was parsed with global block left stripping disabled,
+then any text preceding an expression or statement block start tag was
+incorrectly prepended to the first token value of the block, leading
+to syntax errors in the compiler.
+
+-- Testcase --
+{% for (let x in [1, 2, 3]): %}
+{{ x }}
+{% endfor %}
+-- End --
+
+-- Args --
+-Tno-lstrip
+-- End --
+
+-- Expect stdout --
+1
+2
+3
+-- End --

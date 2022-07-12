@@ -887,9 +887,12 @@ lex_step(uc_lexer_t *lex, FILE *fp)
 				buf_consume(lex, 1);
 			}
 
-			/* global block lstrip */
-			else if (lex->config && lex->config->lstrip_blocks) {
-				rv = lookbehind_to_text(lex, lex->source->off, TK_TEXT, " \t\v\f\r");
+			/* put out text leading up to the opening tag and potentially
+			 * strip trailing white space from it depending on the global
+			 * block lstrip setting */
+			else {
+				rv = lookbehind_to_text(lex, lex->source->off, TK_TEXT,
+					(lex->config && lex->config->lstrip_blocks) ? " \t\v\f\r" : NULL);
 			}
 		}
 		else {
