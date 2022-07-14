@@ -224,7 +224,7 @@ enum {
 static void
 write_chunk(uc_chunk_t *chunk, FILE *file, uint32_t flags)
 {
-	size_t i;
+	size_t i, slot;
 
 	/* write bytecode data */
 	write_vector(chunk, file);
@@ -246,9 +246,14 @@ write_chunk(uc_chunk_t *chunk, FILE *file, uint32_t flags)
 		write_u32(chunk->debuginfo.variables.count, file);
 
 		for (i = 0; i < chunk->debuginfo.variables.count; i++) {
+			slot = chunk->debuginfo.variables.entries[i].slot;
+
+			if (slot >= ((size_t)-1 / 2))
+				slot = ((uint32_t)-1 / 2) + (slot - ((size_t)-1 / 2));
+
 			write_u32(chunk->debuginfo.variables.entries[i].from,    file);
 			write_u32(chunk->debuginfo.variables.entries[i].to,      file);
-			write_u32(chunk->debuginfo.variables.entries[i].slot,    file);
+			write_u32(slot,                                          file);
 			write_u32(chunk->debuginfo.variables.entries[i].nameidx, file);
 		}
 
@@ -657,6 +662,9 @@ read_chunk(FILE *file, uc_chunk_t *chunk, uint32_t flags, const char *subj, char
 			    !read_size_t(file, &varrange->slot,    sizeof(uint32_t), subjbuf, errp) ||
 			    !read_size_t(file, &varrange->nameidx, sizeof(uint32_t), subjbuf, errp))
 			    goto out;
+
+			if (varrange->slot >= ((uint32_t)-1 / 2))
+				varrange->slot = ((size_t)-1 / 2) + (varrange->slot - ((uint32_t)-1 / 2));
 		}
 
 		snprintf(subjbuf, sizeof(subjbuf), "%s variable names", subj);
