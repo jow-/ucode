@@ -1,0 +1,28 @@
+When multiple imports refer to the same module, the module will only be
+executed once. The equivalence of module paths is tested after canonicalizing
+the requested path.
+
+-- Testcase --
+import { counter as counter1 } from "./files/test/example.uc";
+import { counter as counter2 } from "files/test/example.uc";
+import { counter as counter3 } from "test.example";
+
+print([ counter1, counter2, counter3 ], "\n");
+-- End --
+
+-- File test/example.uc --
+print("This is the test module running\n");
+
+export let counter = 0;
+
+counter++;
+-- End --
+
+-- Args --
+-R -L ./files
+-- End --
+
+-- Expect stdout --
+This is the test module running
+[ 1, 1, 1 ]
+-- End --

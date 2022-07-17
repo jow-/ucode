@@ -1,0 +1,29 @@
+Variable declarations can be prepended with `export` to automatically
+export each variable using the same name as the variable itself.
+
+Updates to the variable after the export are reflected properly in
+the including scope.
+
+-- File test-var-decl.uc --
+export let a, b, c;
+export let d = 4, e = 5, f = 6;
+export const g = 7, h = 8, i = 9;
+
+a = 1;
+b = 2;
+c = 3;
+-- End --
+
+-- Testcase --
+import { a, b, c, d, e, f, g, h, i } from "./files/test-var-decl.uc";
+
+print([ a, b, c, d, e, f, g, h, i ], "\n");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+[ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
+-- End --

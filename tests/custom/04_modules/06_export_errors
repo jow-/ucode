@@ -1,0 +1,89 @@
+Export statements are only allowed at the toplevel of a module.
+
+-- Testcase --
+export let x = 1;
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Syntax error: Exports may only appear at top level of a module
+
+ `export let x = 1;`
+  ^-- Near here
+
+
+-- End --
+
+
+Export statements are not allowed within functions or nested blocks.
+
+-- Testcase --
+import "./files/test.uc";
+-- End --
+
+-- File test.uc --
+{
+	export let x = 1;
+}
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Syntax error: Unable to compile module './files/test.uc':
+Syntax error: Exports may only appear at top level of a module
+In line 2, byte 2:
+
+ `    export let x = 1;`
+      ^-- Near here
+
+
+
+In line 1, byte 25:
+
+ `import "./files/test.uc";`
+  Near here --------------^
+
+
+-- End --
+
+
+Duplicate export names should result in an error.
+
+-- Testcase --
+import "./files/test-duplicate.uc";
+-- End --
+
+-- File test-duplicate.uc --
+let x = 1, y = 2;
+
+export { x };
+export { y as x };
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Syntax error: Unable to compile module './files/test-duplicate.uc':
+Syntax error: Duplicate export 'x' for module './files/test-duplicate.uc'
+In line 4, byte 15:
+
+ `export { y as x };`
+  Near here ----^
+
+
+
+In line 1, byte 35:
+
+ `import "./files/test-duplicate.uc";`
+  Near here ------------------------^
+
+
+-- End --

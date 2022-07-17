@@ -46,6 +46,8 @@ uc_program_put(uc_program_t *prog) {
 	     fn = fn##_tmp, 								\
 	     fn##_tmp = (uc_function_t *)fn##_tmp->progref.prev)
 
+#define uc_program_function_last(prog) (uc_function_t *)prog->functions.next
+
 uc_function_t *uc_program_function_new(uc_program_t *, const char *, uc_source_t *, size_t);
 size_t uc_program_function_id(uc_program_t *, uc_function_t *);
 uc_function_t *uc_program_function_load(uc_program_t *, size_t);

@@ -1,0 +1,22 @@
+A named function declaration can be prepended with `export` to
+automatically export the function.
+
+-- File test-func-decl.uc --
+export function func() {
+	print("Hello, world!\n");
+};
+-- End --
+
+-- Testcase --
+import { func } from "./files/test-func-decl.uc";
+
+func();
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+Hello, world!
+-- End --

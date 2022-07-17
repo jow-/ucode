@@ -1,0 +1,18 @@
+An `import` statement may omit a default name, wildcard expression or name
+lsit entirely to execute a module code solely for its side effects.
+
+-- Testcase --
+import "./files/test.uc";
+-- End --
+
+-- File test.uc --
+print("This is the test module running\n");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+This is the test module running
+-- End --

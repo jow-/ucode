@@ -1,0 +1,38 @@
+The `export default` statement can be used to declare a default export
+value for a module. The value for `export default` can be an arbitrary
+expression, it must not refer to a local variable.
+
+When using the export list syntax, the alias "default" can be used to
+designate the default export.
+
+-- File test-default-expr.uc --
+export default 7 * 21;
+-- End --
+
+-- File test-default-func.uc --
+export default function() {
+	return "Hello, world!";
+};
+-- End --
+
+-- File test-default-alias.uc --
+let a = 1, b = 2, c = 3;
+
+export { a, b as default, c };
+-- End --
+
+-- Testcase --
+import def1 from "./files/test-default-expr.uc";
+import def2 from "./files/test-default-func.uc";
+import def3 from "./files/test-default-alias.uc";
+
+print([ def1, def2(), def3 ], "\n");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+[ 147, "Hello, world!", 2 ]
+-- End --

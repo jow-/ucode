@@ -497,12 +497,23 @@ uc_compiler_set_u32(uc_compiler_t *compiler, size_t off, uint32_t n)
 }
 
 static size_t
-uc_compiler_emit_constant(uc_compiler_t *compiler, size_t srcpos, uc_value_t *val)
+uc_compiler_emit_constant_index(uc_compiler_t *compiler, size_t srcpos, uc_value_t *val)
 {
 	size_t cidx = uc_program_add_constant(compiler->program, val);
 
+	uc_compiler_emit_u32(compiler, srcpos, cidx);
+
+	return cidx;
+}
+
+static size_t
+uc_compiler_emit_constant(uc_compiler_t *compiler, size_t srcpos, uc_value_t *val)
+{
+	size_t cidx;
+
 	uc_compiler_emit_insn(compiler, srcpos, I_LOAD);
-	uc_compiler_emit_u32(compiler, 0, cidx);
+
+	cidx = uc_compiler_emit_constant_index(compiler, srcpos, val);
 
 	return cidx;
 }
@@ -2924,13 +2935,516 @@ uc_compiler_compile_statement(uc_compiler_t *compiler)
 }
 
 static void
+uc_compiler_export_add(uc_compiler_t *compiler, uc_value_t *name, ssize_t slot)
+{
+	uc_source_t *source = uc_compiler_current_source(compiler);
+
+	if (!uc_source_export_add(source, name)) {
+		if (name)
+			uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+				"Duplicate export '%s' for module '%s'", ucv_string_get(name), source->filename);
+		else
+			uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+				"Duplicate default export for module '%s'", source->filename);
+	}
+	else {
+		uc_compiler_emit_insn(compiler, 0, I_EXPORT);
+		uc_compiler_emit_u32(compiler, 0, slot);
+	}
+}
+
+static void
+uc_compiler_compile_exportlist(uc_compiler_t *compiler)
+{
+	uc_value_t *label, *name;
+	bool constant;
+	ssize_t slot;
+
+	/* parse export symbols */
+	do {
+		uc_compiler_parse_consume(compiler, TK_LABEL);
+
+		label = ucv_get(compiler->parser->prev.uv);
+		name = NULL;
+
+		slot = uc_compiler_resolve_local(compiler, label, &constant);
+
+		if (slot == -1) {
+			uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+				"Attempt to export undeclared or non-local variable '%s'",
+				ucv_string_get(label));
+		}
+
+		if (uc_compiler_parse_match(compiler, TK_AS)) {
+			if (uc_compiler_parse_match(compiler, TK_LABEL) || uc_compiler_parse_match(compiler, TK_STRING)) {
+				name = ucv_get(compiler->parser->prev.uv);
+			}
+			else if (!uc_compiler_parse_match(compiler, TK_DEFAULT)) {
+				uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+					"Unexpected token\nExpecting Label, String or 'default'");
+			}
+		}
+		else {
+			name = ucv_get(label);
+		}
+
+		uc_compiler_export_add(compiler, name, slot);
+
+		ucv_put(label);
+		ucv_put(name);
+
+		if (uc_compiler_parse_match(compiler, TK_RBRACE))
+			break;
+	}
+	while (uc_compiler_parse_match(compiler, TK_COMMA));
+
+	uc_compiler_parse_consume(compiler, TK_SCOL);
+}
+
+static void
+uc_compiler_compile_export(uc_compiler_t *compiler)
+{
+	uc_locals_t *locals = &compiler->locals;
+	size_t off = locals->count;
+	uc_value_t *name;
+	ssize_t slot;
+
+	if (compiler->program->sources.count == 1 || compiler->scope_depth) {
+		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+			"Exports may only appear at top level of a module");
+
+		return;
+	}
+
+	if (uc_compiler_parse_match(compiler, TK_LBRACE)) {
+		uc_compiler_compile_exportlist(compiler);
+
+		return;
+	}
+
+	if (uc_compiler_parse_match(compiler, TK_LOCAL))
+		uc_compiler_compile_declexpr(compiler, false);
+	else if (uc_compiler_parse_match(compiler, TK_CONST))
+		uc_compiler_compile_declexpr(compiler, true);
+	else if (uc_compiler_parse_match(compiler, TK_FUNC))
+		uc_compiler_compile_funcdecl(compiler);
+	else if (uc_compiler_parse_match(compiler, TK_DEFAULT))
+		uc_compiler_compile_expression(compiler);
+	else
+		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+			"Unexpected token\nExpecting 'let', 'const', 'function', 'default' or '{'");
+
+	if (off == locals->count) {
+		name = ucv_string_new("(module default export)");
+		slot = uc_compiler_declare_local(compiler, name, true);
+		ucv_put(name);
+
+		if (slot != -1)
+			uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+				"Duplicate default export statement");
+		else
+			uc_compiler_export_add(compiler, NULL, compiler->locals.count - 1);
+	}
+	else {
+		for (; off < locals->count; off++)
+			uc_compiler_export_add(compiler, locals->entries[off].name, off);
+	}
+
+	uc_compiler_parse_consume(compiler, TK_SCOL);
+}
+
+static uc_program_t *
+uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_program_t *prog, char **errp);
+
+static bool
+uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, uc_value_t *imports, char **errp)
+{
+	uc_parse_config_t config = {
+		.raw_mode = true,
+		.strict_declarations = true,
+		.module_search_path = compiler->parser->lex.config->module_search_path
+	};
+
+	size_t i, load_idx = 0, n_imports = 0;
+	bool loaded = false;
+	uc_value_t *import;
+	ssize_t slot;
+
+	uc_program_function_foreach(compiler->program, fn) {
+		if (uc_program_function_source(fn) == source) {
+			loaded = true;
+			break;
+		}
+	}
+
+	if (!loaded) {
+		load_idx = uc_program_function_id(compiler->program,
+			uc_program_function_last(compiler->program)) + 1;
+
+		if (!uc_compile_from_source(&config, source, compiler->program, errp))
+			return false;
+
+		/* emit load, call & pop instructions */
+		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_CLFN);
+		uc_compiler_emit_u32(compiler, 0, load_idx);
+
+		uc_compiler_emit_insn(compiler, 0, I_CALL);
+		uc_compiler_emit_u32(compiler, 0, 0);
+
+		uc_compiler_emit_insn(compiler, 0, I_POP);
+	}
+
+	/* count imports, handle wildcard imports */
+	for (i = 0; i < ucv_array_length(imports); i++) {
+		if (ucv_boolean_get(ucv_array_get(imports, i))) {
+			/* find index of first module export */
+			slot = uc_program_export_lookup(compiler->program, source, source->exports.entries[0]);
+
+			if (slot > 0xffff || source->exports.count > 0xffff) {
+				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+					"Too many module exports");
+			}
+
+			/* emit import instruction... */
+			uc_compiler_emit_insn(compiler, 0, I_IMPORT);
+			uc_compiler_emit_u32(compiler, 0, source->exports.count | (0xffff << 16));
+
+			/* ... followed by first module export offset ... */
+			uc_compiler_emit_u16(compiler, 0, slot);
+
+			/* ... and constant indexes for all exported names */
+			for (load_idx = 0; load_idx < source->exports.count; load_idx++) {
+				if (source->exports.entries[load_idx])
+					import = ucv_get(source->exports.entries[load_idx]);
+				else
+					import = ucv_string_new("default");
+
+				uc_compiler_emit_constant_index(compiler, 0, import);
+				ucv_put(import);
+			}
+
+		}
+		else {
+			n_imports++;
+		}
+	}
+
+	/* 0xffff is reserved for wildcard import */
+	if (n_imports > 0xfffe)
+		uc_compiler_syntax_error(compiler, 0, "Too many imports");
+
+	/* emit non-wilcard import instructions */
+	for (i = 0; i < ucv_array_length(imports); i++) {
+		import = ucv_array_get(imports, i);
+
+		if (!ucv_boolean_get(import)) {
+			slot = uc_program_export_lookup(compiler->program, source, import);
+
+			if (slot == -1) {
+				if (import)
+					uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+						"Module %s does not export '%s'", source->filename, ucv_string_get(import));
+				else
+					uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+						"Module %s has no default export", source->filename);
+			}
+			else if (slot > 0xffff) {
+				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+					"Too many module exports");
+			}
+			else {
+				uc_compiler_emit_insn(compiler, 0, I_IMPORT);
+				uc_compiler_emit_u32(compiler, 0, slot | ((compiler->upvals.count - n_imports + i) << 16));
+			}
+		}
+	}
+
+	return true;
+}
+
+static char *
+uc_compiler_canonicalize_path(const char *path, const char *basedir)
+{
+	char *p, *resolved;
+
+	if (*path == '/')
+		xasprintf(&p, "%s", path);
+	else if (basedir)
+		xasprintf(&p, "%s/%s", basedir, path);
+	else
+		xasprintf(&p, "./%s", path);
+
+	resolved = realpath(p, NULL);
+
+	free(p);
+
+	return resolved;
+}
+
+static char *
+uc_compiler_expand_module_path(const char *name, const char *basedir, const char *template)
+{
+	int namelen, prefixlen;
+	char *path, *p;
+
+	p = strchr(template, '*');
+
+	if (!p)
+		return NULL;
+
+	prefixlen = p - template;
+	namelen = strlen(name);
+
+	xasprintf(&path, "%.*s%.*s%s", prefixlen, template, namelen, name, p + 1);
+
+	for (p = path + prefixlen; namelen > 0; namelen--, p++)
+		if (*p == '.')
+			*p = '/';
+
+	p = uc_compiler_canonicalize_path(path, basedir);
+
+	free(path);
+
+	return p;
+}
+
+static char *
+uc_compiler_resolve_module_path(uc_compiler_t *compiler, const char *name)
+{
+	uc_search_path_t *search = &compiler->parser->lex.config->module_search_path;
+	uc_source_t *source = uc_compiler_current_source(compiler);
+	char *path = NULL;
+	size_t i;
+
+	if (strchr(name, '/'))
+		return uc_compiler_canonicalize_path(name, source->runpath);
+
+	for (i = 0; i < search->count && !path; i++)
+		path = uc_compiler_expand_module_path(name, source->runpath, search->entries[i]);
+
+	return path;
+}
+
+static uc_source_t *
+uc_compiler_acquire_source(uc_compiler_t *compiler, const char *path)
+{
+	size_t i;
+
+	for (i = 0; i < compiler->program->sources.count; i++)
+		if (!strcmp(compiler->program->sources.entries[i]->filename, path))
+			return uc_source_get(compiler->program->sources.entries[i]);
+
+	return uc_source_new_file(path);
+}
+
+static bool
+uc_compiler_compile_module(uc_compiler_t *compiler, const char *name, uc_value_t *imports)
+{
+	uc_source_t *source;
+	char *path, *err;
+	bool res;
+
+	if (!name)
+		return false;
+
+	path = uc_compiler_resolve_module_path(compiler, name);
+
+	if (path) {
+		source = uc_compiler_acquire_source(compiler, path);
+
+		if (source) {
+			err = NULL;
+			res = uc_compiler_compile_module_source(compiler, source, imports, &err);
+
+			if (!res)
+				uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+					"Unable to compile module '%s':\n%s", source->filename, err);
+
+			free(err);
+		}
+		else {
+			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+				"Unable to open module '%s': %s",
+				path, strerror(errno));
+
+			res = false;
+		}
+	}
+	else {
+		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+			"Unable to resolve path for module '%s'", name);
+
+		return false;
+	}
+
+	uc_source_put(source);
+	free(path);
+
+	return res;
+}
+
+static void
+uc_compiler_import_add(uc_compiler_t *compiler, uc_value_t *name)
+{
+	bool constant;
+	ssize_t slot;
+
+	slot = uc_compiler_resolve_local(compiler, name, &constant);
+
+	if (slot != -1) {
+		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+			"Import name '%s' is already declared as local variable",
+			ucv_string_get(name));
+
+		return;
+	}
+
+	slot = uc_compiler_resolve_upval(compiler, name, &constant);
+
+	if (slot != -1) {
+		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+			"Import name '%s' is already used",
+			ucv_string_get(name));
+
+		return;
+	}
+
+	uc_compiler_add_upval(compiler, (2 << 14) + compiler->upvals.count, false, name, true);
+}
+
+static void
+uc_compiler_compile_importlist(uc_compiler_t *compiler, uc_value_t *namelist)
+{
+	uc_value_t *label, *name;
+
+	/* parse export symbols */
+	do {
+		name = NULL;
+		label = NULL;
+
+		if (uc_compiler_parse_match(compiler, TK_DEFAULT)) {
+			uc_compiler_parse_consume(compiler, TK_AS);
+			uc_compiler_parse_consume(compiler, TK_LABEL);
+
+			label = ucv_get(compiler->parser->prev.uv);
+		}
+		else if (uc_compiler_parse_match(compiler, TK_STRING)) {
+			name = ucv_get(compiler->parser->prev.uv);
+
+			uc_compiler_parse_consume(compiler, TK_AS);
+			uc_compiler_parse_consume(compiler, TK_LABEL);
+
+			label = ucv_get(compiler->parser->prev.uv);
+		}
+		else if (uc_compiler_parse_match(compiler, TK_LABEL)) {
+			name = ucv_get(compiler->parser->prev.uv);
+
+			if (uc_compiler_parse_match(compiler, TK_AS)) {
+				uc_compiler_parse_consume(compiler, TK_LABEL);
+
+				label = ucv_get(compiler->parser->prev.uv);
+			}
+			else {
+				label = ucv_get(name);
+			}
+		}
+		else {
+			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+				"Unexpected token\nExpecting Label, String or 'default'");
+		}
+
+		uc_compiler_import_add(compiler, label);
+		ucv_array_push(namelist, name);
+		ucv_put(label);
+
+		if (uc_compiler_parse_match(compiler, TK_RBRACE))
+			break;
+	}
+	while (uc_compiler_parse_match(compiler, TK_COMMA));
+}
+
+static void
+uc_compiler_compile_import(uc_compiler_t *compiler)
+{
+	uc_value_t *namelist = ucv_array_new(NULL);
+
+	if (compiler->scope_depth) {
+		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+			"Imports may only appear at top level");
+
+		return;
+	}
+
+	/* import { ... } from */
+	if (uc_compiler_parse_match(compiler, TK_LBRACE)) {
+		uc_compiler_compile_importlist(compiler, namelist);
+		uc_compiler_parse_consume(compiler, TK_FROM);
+	}
+
+	/* import * as name from */
+	else if (uc_compiler_parse_match(compiler, TK_MUL)) {
+		uc_compiler_parse_consume(compiler, TK_AS);
+		uc_compiler_parse_consume(compiler, TK_LABEL);
+
+		uc_compiler_declare_local(compiler, compiler->parser->prev.uv, true);
+		uc_compiler_initialize_local(compiler);
+		ucv_array_push(namelist, ucv_boolean_new(true));
+
+		uc_compiler_parse_consume(compiler, TK_FROM);
+	}
+
+	/* import defaultExport [, ... ] from */
+	else if (uc_compiler_parse_match(compiler, TK_LABEL)) {
+		uc_compiler_import_add(compiler, compiler->parser->prev.uv);
+		ucv_array_push(namelist, NULL);
+
+		/* import defaultExport, ... from */
+		if (uc_compiler_parse_match(compiler, TK_COMMA)) {
+			/* import defaultExport, { ... } from */
+			if (uc_compiler_parse_match(compiler, TK_LBRACE)) {
+				uc_compiler_compile_importlist(compiler, namelist);
+			}
+
+			/* import defaultExport, * as name from */
+			else if (uc_compiler_parse_match(compiler, TK_MUL)) {
+				uc_compiler_parse_consume(compiler, TK_AS);
+				uc_compiler_parse_consume(compiler, TK_LABEL);
+
+				uc_compiler_declare_local(compiler, compiler->parser->prev.uv, true);
+				uc_compiler_initialize_local(compiler);
+				ucv_array_push(namelist, ucv_boolean_new(true));
+			}
+
+			/* error */
+			else {
+				uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+					"Unexpected token\nExpecting '{' or '*'");
+			}
+		}
+
+		uc_compiler_parse_consume(compiler, TK_FROM);
+	}
+
+	uc_compiler_parse_consume(compiler, TK_STRING);
+
+	uc_compiler_compile_module(compiler, ucv_string_get(compiler->parser->prev.uv), namelist);
+
+	uc_compiler_parse_consume(compiler, TK_SCOL);
+
+	ucv_put(namelist);
+}
+
+static void
 uc_compiler_compile_declaration(uc_compiler_t *compiler)
 {
-
 	if (uc_compiler_parse_match(compiler, TK_LOCAL))
 		uc_compiler_compile_local(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_CONST))
 		uc_compiler_compile_const(compiler);
+	else if (uc_compiler_parse_match(compiler, TK_EXPORT))
+		uc_compiler_compile_export(compiler);
+	else if (uc_compiler_parse_match(compiler, TK_IMPORT))
+		uc_compiler_compile_import(compiler);
 	else
 		uc_compiler_compile_statement(compiler);
 
@@ -2942,7 +3456,7 @@ uc_compiler_compile_declaration(uc_compiler_t *compiler)
 
 
 static uc_program_t *
-uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, char **errp)
+uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_program_t *prog, char **errp)
 {
 #ifdef NO_COMPILE
 	if (errp)
@@ -2953,13 +3467,21 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, char **er
 	uc_exprstack_t expr = { .token = TK_EOF };
 	uc_parser_t parser = { .config = config };
 	uc_compiler_t compiler = { .parser = &parser, .exprstack = &expr };
-	uc_program_t *prog;
+	uc_program_t *progptr;
 	uc_function_t *fn;
+	const char *name;
 
-	prog = uc_program_new();
+	if (!prog) {
+		progptr = uc_program_new();
+		name = "main";
+	}
+	else {
+		progptr = prog;
+		name = "module";
+	}
 
 	uc_lexer_init(&parser.lex, config, source);
-	uc_compiler_init(&compiler, "main", source, 0, prog,
+	uc_compiler_init(&compiler, name, source, 0, progptr,
 		config && config->strict_declarations);
 
 	uc_compiler_parse_advance(&compiler);
@@ -2980,12 +3502,13 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, char **er
 	uc_lexer_free(&parser.lex);
 
 	if (!fn) {
-		ucv_put(&prog->header);
+		if (progptr != prog)
+			ucv_put(&progptr->header);
 
 		return NULL;
 	}
 
-	return prog;
+	return progptr;
 #endif
 }
 
@@ -3011,9 +3534,12 @@ uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp)
 {
 	uc_program_t *prog = NULL;
 
+	if (!config)
+		config = &uc_default_parse_config;
+
 	switch (uc_source_type_test(source)) {
 	case UC_SOURCE_TYPE_PLAIN:
-		prog = uc_compile_from_source(config, source, errp);
+		prog = uc_compile_from_source(config, source, NULL, errp);
 		break;
 
 	case UC_SOURCE_TYPE_PRECOMPILED:

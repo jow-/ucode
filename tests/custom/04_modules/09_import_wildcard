@@ -1,0 +1,73 @@
+By specifying `*` instead of a label or an import list after an `import`
+keyword, all of the modules exports are aggregated into an object whose
+keys and values refer to the exported names and their corresponding
+values respectively.
+
+-- Testcase --
+import * as mod from "./files/test1.uc";
+
+print(mod, "\n");
+-- End --
+
+-- File test1.uc --
+export const a = 1, b = 2, c = 3;
+export default a + b + c;
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+{ "a": 1, "b": 2, "c": 3, "default": 6 }
+-- End --
+
+
+When using the wildcard import syntax, assigning a name using the `as`
+expression is mandatory.
+
+-- Testcase --
+import * from "./files/test2.uc";
+-- End --
+
+-- File test2.uc --
+export const x = "This is a test";
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Syntax error: Unexpected token
+Expecting 'as'
+In line 1, byte 10:
+
+ `import * from "./files/test2.uc";`
+           ^-- Near here
+
+
+-- End --
+
+
+A wildcard expression may follow a default import expression in an `import`
+statment.
+
+-- Testcase --
+import defVal, * as mod from "./files/test3.uc";
+
+print([defVal, mod], "\n");
+-- End --
+
+-- File test3.uc --
+export const a = 1, b = 2, c = 3;
+export default a + b + c;
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+[ 6, { "a": 1, "b": 2, "c": 3, "default": 6 } ]
+-- End --

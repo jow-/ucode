@@ -1,0 +1,99 @@
+An `import` statement with a sole label will import the modules default
+export and bind it to a local variable named after the label.
+
+-- Testcase --
+import defVal from "./files/test1.uc";
+
+print(defVal, "\n");
+-- End --
+
+-- File test1.uc --
+export default "This is the default export";
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+This is the default export
+-- End --
+
+
+Attemping to import a default export from a module without default
+export will raise an error.
+
+-- Testcase --
+import defVal from "./files/test2.uc";
+
+print(defVal, "\n");
+-- End --
+
+-- File test2.uc --
+export const x = "This is a non-default export";
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Syntax error: Module ./files/test2.uc has no default export
+In line 1, byte 20:
+
+ `import defVal from "./files/test2.uc";`
+  Near here ---------^
+
+
+-- End --
+
+
+In import statements usign the list syntax, the `default` keyword can be
+used to refer to default exports.
+
+-- Testcase --
+import { default as defVal } from "./files/test3.uc";
+
+print(defVal, "\n");
+-- End --
+
+-- File test3.uc --
+export default "This is the default export";
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+This is the default export
+-- End --
+
+
+When using the default keyword within the list syntax, the `as` keyword is
+mandatory to assign a non-reserved keyword as name.
+
+-- Testcase --
+import { default } from "./files/test4.uc";
+
+print(defVal, "\n");
+-- End --
+
+-- File test4.uc --
+export default "This is the default export";
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Syntax error: Unexpected token
+Expecting 'as'
+In line 1, byte 18:
+
+ `import { default } from "./files/test4.uc";`
+  Near here -------^
+
+
+-- End --

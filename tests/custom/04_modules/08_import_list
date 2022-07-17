@@ -1,0 +1,105 @@
+An `import` statement followed by a curly brace enclosed list of names
+will import the corresponding exports from the module.
+
+-- Testcase --
+import { a, b, c } from "./files/test1.uc";
+
+print([ a, b, c ], "\n");
+-- End --
+
+-- File test1.uc --
+export const a = 1, b = 2, c = 3;
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+[ 1, 2, 3 ]
+-- End --
+
+
+Attemping to import a not exported name will raise an error.
+
+-- Testcase --
+import y from "./files/test2.uc";
+
+print(y, "\n");
+-- End --
+
+-- File test2.uc --
+export const x = "This is a test";
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Syntax error: Module ./files/test2.uc has no default export
+In line 1, byte 15:
+
+ `import y from "./files/test2.uc";`
+  Near here ----^
+
+
+-- End --
+
+
+Imports may be renamed to assign an alternative local name to the
+exported module symbols. Renaming is also required for string export
+names which are no valid variable identifiers.
+
+-- Testcase --
+import { a as var1, bool as var2, "my function" as var3 } from "./files/test3.uc";
+
+print([ var1, var2, var3 ], "\n");
+-- End --
+
+-- File test3.uc --
+const a = "A string";
+
+let b = 123;
+
+function c() {
+	return "A function"
+}
+
+export {
+	a,
+	b as bool,
+	c as "my function"
+};
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+[ "A string", 123, "function c() { ... }" ]
+-- End --
+
+
+A list expression may follow a default import expression in an `import`
+statment.
+
+-- Testcase --
+import defVal, { a as x, b as y, c as z } from "./files/test4.uc";
+
+print([defVal, x, y, z], "\n");
+-- End --
+
+-- File test4.uc --
+export const a = 1, b = 2, c = 3;
+export default a + b + c;
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+[ 6, 1, 2, 3 ]
+-- End --

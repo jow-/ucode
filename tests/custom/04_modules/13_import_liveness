@@ -1,0 +1,29 @@
+Imported bindings to exported module variables are live, they'll reflect
+every change to the exported variable values.
+
+-- Testcase --
+import { counter, count } from "./files/test.uc";
+
+print(counter, "\n");
+count();
+print(counter, "\n");
+-- End --
+
+-- File test.uc --
+let counter = 1;
+
+function count() {
+	counter++;
+}
+
+export { counter, count };
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+1
+2
+-- End --
