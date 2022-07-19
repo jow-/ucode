@@ -191,8 +191,8 @@ ucv_gc_mark(uc_value_t *uv)
 	case UC_PROGRAM:
 		program = (uc_program_t *)uv;
 
-		if (program->source)
-			ucv_gc_mark(&program->source->header);
+		for (i = 0; i < program->sources.count; i++)
+			ucv_gc_mark(&program->sources.entries[i]->header);
 
 		break;
 
@@ -283,7 +283,11 @@ ucv_free(uc_value_t *uv, bool retain)
 			uc_program_function_free(func);
 
 		uc_vallist_free(&program->constants);
-		ucv_put_value(&program->source->header, retain);
+
+		for (i = 0; i < program->sources.count; i++)
+			ucv_put_value(&program->sources.entries[i]->header, retain);
+
+		uc_vector_clear(&program->sources);
 		break;
 
 	case UC_SOURCE:

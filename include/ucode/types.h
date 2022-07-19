@@ -115,6 +115,7 @@ typedef struct uc_function {
 	bool arrow, vararg, strict;
 	size_t nargs;
 	size_t nupvals;
+	size_t srcidx;
 	size_t srcpos;
 	uc_chunk_t chunk;
 	struct uc_program *program;
@@ -204,11 +205,13 @@ uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
 
 /* Program structure definitions */
 
+uc_declare_vector(uc_sources_t, uc_source_t *);
+
 typedef struct uc_program {
 	uc_value_t header;
 	uc_value_list_t constants;
 	uc_weakref_t functions;
-	uc_source_t *source;
+	uc_sources_t sources;
 } uc_program_t;
 
 

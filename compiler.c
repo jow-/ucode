@@ -121,7 +121,7 @@ uc_compiler_exprstack_is(uc_compiler_t *compiler, uc_exprflag_t flag)
 }
 
 static void
-uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_program_t *program, bool strict)
+uc_compiler_init(uc_compiler_t *compiler, const char *name, uc_source_t *source, size_t srcpos, uc_program_t *program, bool strict)
 {
 	uc_value_t *varname = ucv_string_new("(callee)");
 	uc_function_t *fn;
@@ -129,7 +129,7 @@ uc_compiler_init(uc_compiler_t *compiler, const char *name, size_t srcpos, uc_pr
 	compiler->scope_depth = 0;
 
 	compiler->program = program;
-	compiler->function = uc_program_function_new(program, name, srcpos);
+	compiler->function = uc_program_function_new(program, name, source, srcpos);
 
 	compiler->locals.count = 0;
 	compiler->locals.entries = NULL;
@@ -163,7 +163,7 @@ uc_compiler_current_chunk(uc_compiler_t *compiler)
 static uc_source_t *
 uc_compiler_current_source(uc_compiler_t *compiler)
 {
-	return compiler->program->source;
+	return uc_program_function_source(compiler->function);
 }
 
 __attribute__((format(printf, 3, 0))) static void
@@ -1110,7 +1110,8 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 
 	pos = compiler->parser->prev.pos;
 
-	uc_compiler_init(&fncompiler, NULL, compiler->parser->prev.pos,
+	uc_compiler_init(&fncompiler, NULL, uc_compiler_current_source(compiler),
+		compiler->parser->prev.pos,
 		compiler->program,
 		uc_compiler_is_strict(compiler));
 
@@ -1561,7 +1562,9 @@ uc_compiler_compile_function(uc_compiler_t *compiler)
 	}
 
 	uc_compiler_init(&fncompiler,
-		name ? ucv_string_get(name) : NULL, compiler->parser->prev.pos,
+		name ? ucv_string_get(name) : NULL,
+		uc_compiler_current_source(compiler),
+		compiler->parser->prev.pos,
 		compiler->program,
 		uc_compiler_is_strict(compiler));
 
@@ -2926,10 +2929,10 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, char **er
 	uc_program_t *prog;
 	uc_function_t *fn;
 
-	prog = uc_program_new(source);
+	prog = uc_program_new();
 
 	uc_lexer_init(&parser.lex, config, source);
-	uc_compiler_init(&compiler, "main", 0, prog,
+	uc_compiler_init(&compiler, "main", source, 0, prog,
 		config && config->strict_declarations);
 
 	uc_compiler_parse_advance(&compiler);

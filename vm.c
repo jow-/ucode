@@ -211,7 +211,7 @@ uc_vm_frame_program(uc_callframe_t *frame)
 static uc_source_t *
 uc_vm_frame_source(uc_callframe_t *frame)
 {
-	return frame->closure ? frame->closure->function->program->source : NULL;
+	return frame->closure ? uc_program_function_source(frame->closure->function) : NULL;
 }
 
 static uc_callframe_t *
@@ -829,7 +829,7 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 
 		if (frame->closure) {
 			function = frame->closure->function;
-			source = function->program->source;
+			source = uc_program_function_source(function);
 
 			off = (frame->ip - uc_vm_frame_chunk(frame)->entries) - 1;
 			srcpos = uc_program_function_srcpos(function, off);
