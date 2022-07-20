@@ -790,10 +790,22 @@ uc_compiler_add_upval(uc_compiler_t *compiler, size_t idx, bool local, uc_value_
 static ssize_t
 uc_compiler_resolve_upval(uc_compiler_t *compiler, uc_value_t *name, bool *constant)
 {
+	uc_upvals_t *upvals = &compiler->upvals;
+	uc_upval_t *uv;
 	ssize_t idx;
+	size_t i;
 
-	if (!compiler->parent)
+	if (!compiler->parent) {
+		for (i = 0, uv = upvals->entries; i < upvals->count; i++, uv = upvals->entries + i) {
+			if (ucv_is_equal(uv->name, name) && uv->local == false) {
+				*constant = uv->constant;
+
+				return i;
+			}
+		}
+
 		return -1;
+	}
 
 	idx = uc_compiler_resolve_local(compiler->parent, name, constant);
 
