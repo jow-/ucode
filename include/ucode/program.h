@@ -53,6 +53,7 @@ uc_source_t *uc_program_function_source(uc_function_t *);
 size_t uc_program_function_srcpos(uc_function_t *, size_t);
 void uc_program_function_free(uc_function_t *);
 
+ssize_t uc_program_export_lookup(uc_program_t *, uc_source_t *, uc_value_t *);
 
 uc_value_t *uc_program_get_constant(uc_program_t *, size_t);
 ssize_t uc_program_add_constant(uc_program_t *, uc_value_t *);
