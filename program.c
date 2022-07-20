@@ -100,14 +100,10 @@ uc_program_function_load(uc_program_t *prog, size_t id)
 size_t
 uc_program_function_srcpos(uc_function_t *fn, size_t off)
 {
-	size_t pos;
-
 	if (!fn)
 		return 0;
 
-	pos = uc_chunk_debug_get_srcpos(&fn->chunk, off);
-
-	return pos ? fn->srcpos + pos : 0;
+	return fn->srcpos + uc_chunk_debug_get_srcpos(&fn->chunk, off);
 }
 
 void
