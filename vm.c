@@ -345,7 +345,10 @@ uc_vm_frame_dump(uc_vm_t *vm, uc_callframe_t *frame)
 			fprintf(stderr, "     [%zu] <%p> %s ",
 				i, (void *)ref, uc_vm_format_val(vm, v));
 
-			if (ref->closed) {
+			if (!ref) {
+				fprintf(stderr, "{unresolved}\n");
+			}
+			else if (ref->closed) {
 				fprintf(stderr, "{closed} %s\n",
 					uc_vm_format_val(vm, ref->value));
 			}
