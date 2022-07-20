@@ -65,6 +65,7 @@ typedef struct {
 /* Source buffer defintions */
 
 uc_declare_vector(uc_lineinfo_t, uint8_t);
+uc_declare_vector(uc_exports_t, uc_value_t *);
 
 typedef struct {
 	uc_value_t header;
@@ -72,6 +73,7 @@ typedef struct {
 	FILE *fp;
 	size_t off;
 	uc_lineinfo_t lineinfo;
+	uc_exports_t exports;
 } uc_source_t;
 
 

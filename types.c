@@ -292,7 +292,11 @@ ucv_free(uc_value_t *uv, bool retain)
 		if (source->runpath != source->filename)
 			free(source->runpath);
 
+		for (i = 0; i < source->exports.count; i++)
+			ucv_put(source->exports.entries[i]);
+
 		uc_vector_clear(&source->lineinfo);
+		uc_vector_clear(&source->exports);
 		fclose(source->fp);
 		free(source->buffer);
 		break;

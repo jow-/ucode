@@ -54,4 +54,7 @@ void uc_source_line_update(uc_source_t *source, size_t off);
 
 void uc_source_runpath_set(uc_source_t *source, const char *runpath);
 
+bool uc_source_export_add(uc_source_t *source, uc_value_t *name);
+ssize_t uc_source_export_lookup(uc_source_t *source, uc_value_t *name);
+
 #endif /* UCODE_SOURCE_H */
