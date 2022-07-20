@@ -36,7 +36,7 @@ static void uc_compiler_compile_constant(uc_compiler_t *compiler);
 static void uc_compiler_compile_template(uc_compiler_t *compiler);
 static void uc_compiler_compile_comma(uc_compiler_t *compiler);
 static void uc_compiler_compile_labelexpr(uc_compiler_t *compiler);
-static void uc_compiler_compile_function(uc_compiler_t *compiler);
+static void uc_compiler_compile_funcexpr(uc_compiler_t *compiler);
 static void uc_compiler_compile_and(uc_compiler_t *compiler);
 static void uc_compiler_compile_or(uc_compiler_t *compiler);
 static void uc_compiler_compile_nullish(uc_compiler_t *compiler);
@@ -76,7 +76,7 @@ uc_compiler_parse_rules[TK_ERROR + 1] = {
 	[TK_TEMPLATE]	= { uc_compiler_compile_template, NULL, P_NONE },
 	[TK_COMMA]		= { NULL, uc_compiler_compile_comma, P_COMMA },
 	[TK_LABEL]		= { uc_compiler_compile_labelexpr, NULL, P_NONE },
-	[TK_FUNC]		= { uc_compiler_compile_function, NULL, P_NONE },
+	[TK_FUNC]		= { uc_compiler_compile_funcexpr, NULL, P_NONE },
 	[TK_AND]		= { NULL, uc_compiler_compile_and, P_AND },
 	[TK_OR]			= { NULL, uc_compiler_compile_or, P_OR },
 	[TK_NULLISH]	= { NULL, uc_compiler_compile_nullish, P_OR },
@@ -1537,7 +1537,7 @@ uc_compiler_compile_delimitted_block(uc_compiler_t *compiler, uc_tokentype_t end
 }
 
 static void
-uc_compiler_compile_function(uc_compiler_t *compiler)
+uc_compiler_compile_funcexpr_common(uc_compiler_t *compiler, bool require_name)
 {
 	uc_compiler_t fncompiler = { 0 };
 	uc_value_t *name = NULL;
@@ -1559,6 +1559,9 @@ uc_compiler_compile_function(uc_compiler_t *compiler)
 
 		if (slot == -1)
 			uc_compiler_initialize_local(compiler);
+	}
+	else if (require_name) {
+		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos, "Expecting function name");
 	}
 
 	uc_compiler_init(&fncompiler,
@@ -1644,6 +1647,18 @@ uc_compiler_compile_function(uc_compiler_t *compiler)
 		uc_compiler_emit_u32(compiler, 0, slot);
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 	}
+}
+
+static void
+uc_compiler_compile_funcexpr(uc_compiler_t *compiler)
+{
+	return uc_compiler_compile_funcexpr_common(compiler, false);
+}
+
+static void
+uc_compiler_compile_funcdecl(uc_compiler_t *compiler)
+{
+	return uc_compiler_compile_funcexpr_common(compiler, true);
 }
 
 static void
@@ -2877,7 +2892,7 @@ uc_compiler_compile_statement(uc_compiler_t *compiler)
 	else if (uc_compiler_parse_match(compiler, TK_TRY))
 		uc_compiler_compile_try(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_FUNC))
-		uc_compiler_compile_function(compiler);
+		uc_compiler_compile_funcdecl(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_BREAK))
 		uc_compiler_compile_control(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_CONTINUE))
