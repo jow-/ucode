@@ -54,6 +54,8 @@ static const struct keyword reserved_words[] = {
 	{ TK_RETURN,	"return", 6 },
 	{ TK_ENDFOR,	"endfor", 6 },
 	{ TK_SWITCH,	"switch", 6 },
+	{ TK_IMPORT,	"import", 6 },
+	{ TK_EXPORT,	"export", 6 },
 	{ TK_ENDIF,		"endif", 5 },
 	{ TK_WHILE,		"while", 5 },
 	{ TK_BREAK,		"break", 5 },
@@ -66,11 +68,13 @@ static const struct keyword reserved_words[] = {
 	{ TK_THIS,		"this",  4 },
 	{ TK_NULL,		"null",  4 },
 	{ TK_CASE,		"case",  4 },
+	{ TK_FROM,		"from",  4 },
 	{ TK_TRY,		"try",   3 },
 	{ TK_FOR,		"for",   3 },
 	{ TK_LOCAL,		"let",   3 },
 	{ TK_IF,		"if",    2 },
 	{ TK_IN,		"in",    2 },
+	{ TK_AS,		"as",    2 },
 };
 
 
