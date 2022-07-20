@@ -73,6 +73,9 @@ static const int8_t insn_operand_bytes[__I_MAX] = {
 	[I_MCALL] = 4,
 	[I_QCALL] = 4,
 	[I_QMCALL] = 4,
+
+	[I_IMPORT] = 4,
+	[I_EXPORT] = 4
 };
 
 static const char *exception_type_strings[] = {
@@ -181,6 +184,9 @@ void uc_vm_free(uc_vm_t *vm)
 	for (i = 0; i < vm->restypes.count; i++)
 		ucv_put(vm->restypes.entries[i]->proto);
 
+	for (i = 0; i < vm->exports.count; i++)
+		ucv_put(&vm->exports.entries[i]->header);
+
 	uc_vm_reset_callframes(vm);
 	uc_vm_reset_stack(vm);
 	uc_vector_clear(&vm->stack);
@@ -194,6 +200,7 @@ void uc_vm_free(uc_vm_t *vm)
 		free(vm->restypes.entries[i]);
 
 	uc_vector_clear(&vm->restypes);
+	uc_vector_clear(&vm->exports);
 }
 
 static uc_chunk_t *
@@ -2345,6 +2352,74 @@ uc_vm_insn_delete(uc_vm_t *vm, uc_vm_insn_t insn)
 	ucv_put(v);
 }
 
+static void
+uc_vm_insn_import(uc_vm_t *vm, uc_vm_insn_t insn)
+{
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uint16_t from = vm->arg.u32 & 0xffff;
+	uint16_t to = vm->arg.u32 >> 16;
+	uc_value_t *name, *modobj;
+	uint32_t cidx;
+
+	/* is a wildcard import * from ... */
+	if (to == 0xffff) {
+		to = from;
+		modobj = ucv_object_new(vm);
+
+		/* instruction is followed by u16 containing the offset of the
+		 * first module export and `from` times u32 values containing
+		 * the constant indexes of the names */
+		for (from = frame->ip[0] * 0x100 + frame->ip[1], frame->ip += 2;
+		     from < to && from < vm->exports.count;
+		     from++) {
+
+			cidx = (
+				frame->ip[0] * 0x1000000UL +
+				frame->ip[1] * 0x10000UL +
+				frame->ip[2] * 0x100UL +
+				frame->ip[3]
+			);
+
+			frame->ip += 4;
+
+			name = uc_program_get_constant(uc_vm_current_program(vm), cidx);
+
+			if (ucv_type(name) == UC_STRING && vm->exports.entries[from])
+				ucv_object_add(modobj, ucv_string_get(name),
+					ucv_get(&vm->exports.entries[from]->header));
+
+			ucv_put(name);
+		}
+
+		ucv_set_constant(modobj, true);
+
+		uc_vm_stack_push(vm, modobj);
+	}
+
+	/* module export available, patch into upvalue */
+	else if (from < vm->exports.count && vm->exports.entries[from]) {
+		frame->closure->upvals[to] = vm->exports.entries[from];
+		ucv_get(&vm->exports.entries[from]->header);
+	}
+
+	/* module export missing, e.g. due to premature return in module,
+	 * patch up dummy upvalue ref with `null` value */
+	else {
+		frame->closure->upvals[to] = (uc_upvalref_t *)ucv_upvalref_new(0);
+		frame->closure->upvals[to]->closed = true;
+	}
+}
+
+static void
+uc_vm_insn_export(uc_vm_t *vm, uc_vm_insn_t insn)
+{
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_upvalref_t *ref = uc_vm_capture_upval(vm, frame->stackframe + vm->arg.u32);
+
+	uc_vector_push(&vm->exports, ref);
+	ucv_get(&ref->header);
+}
+
 static uc_value_t *
 uc_vm_callframe_pop(uc_vm_t *vm)
 {
@@ -2630,6 +2705,14 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 
 		case I_DELETE:
 			uc_vm_insn_delete(vm, insn);
+			break;
+
+		case I_IMPORT:
+			uc_vm_insn_import(vm, insn);
+			break;
+
+		case I_EXPORT:
+			uc_vm_insn_export(vm, insn);
 			break;
 
 		default:

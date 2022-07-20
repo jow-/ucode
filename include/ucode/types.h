@@ -254,6 +254,7 @@ typedef struct {
 
 uc_declare_vector(uc_callframes_t, uc_callframe_t);
 uc_declare_vector(uc_stack_t, uc_value_t *);
+uc_declare_vector(uc_modexports_t, uc_upvalref_t *);
 
 typedef struct printbuf uc_stringbuf_t;
 
@@ -270,6 +271,7 @@ struct uc_vm {
 	uc_source_t *sources;
 	uc_weakref_t values;
 	uc_resource_types_t restypes;
+	uc_modexports_t exports;
 	union {
 		uint32_t u32;
 		int32_t s32;
