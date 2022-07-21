@@ -387,14 +387,13 @@ parse_define_string(char *opt, uc_value_t *globals)
 }
 
 static void
-parse_search_path(char *pattern, uc_value_t *globals)
+parse_search_path(char *pattern, uc_parse_config_t *config)
 {
-	uc_value_t *rsp = ucv_object_get(globals, "REQUIRE_SEARCH_PATH", NULL);
 	size_t len;
 	char *p;
 
 	if (strchr(pattern, '*')) {
-		ucv_array_push(rsp, ucv_string_new(pattern));
+		uc_search_path_add(&config->module_search_path, pattern);
 		return;
 	}
 
@@ -407,11 +406,11 @@ parse_search_path(char *pattern, uc_value_t *globals)
 		pattern[--len] = 0;
 
 	xasprintf(&p, "%s/*.so", pattern);
-	ucv_array_push(rsp, ucv_string_new(p));
+	uc_search_path_add(&config->module_search_path, p);
 	free(p);
 
 	xasprintf(&p, "%s/*.uc", pattern);
-	ucv_array_push(rsp, ucv_string_new(p));
+	uc_search_path_add(&config->module_search_path, p);
 	free(p);
 }
 
@@ -462,6 +461,7 @@ appname(const char *argv0)
 int
 main(int argc, char **argv)
 {
+	const char *optspec = "he:tST::RD:F:U:l:L:c::o:s";
 	char *interp = "/usr/bin/env ucode";
 	uc_source_t *source = NULL;
 	FILE *precompile = NULL;
@@ -480,6 +480,8 @@ main(int argc, char **argv)
 		.raw_mode = true
 	};
 
+	uc_search_path_init(&config.module_search_path);
+
 	app = appname(argv[0]);
 
 	if (argc == 1) {
@@ -494,30 +496,12 @@ main(int argc, char **argv)
 
 	stdin_unused = stdin;
 
-	uc_vm_init(&vm, &config);
-
-	/* load std functions into global scope */
-	uc_stdlib_load(uc_vm_scope_get(&vm));
-
-	/* register ARGV array but populate it later (to allow for -U ARGV) */
-	o = ucv_array_new(&vm);
-
-	ucv_object_add(uc_vm_scope_get(&vm), "ARGV", ucv_get(o));
-
-	/* parse options */
-	while ((opt = getopt(argc, argv, "he:tST::RD:F:U:l:L:c::o:s")) != -1)
+	/* parse options iteration 1: parse config related options */
+	while ((opt = getopt(argc, argv, optspec)) != -1)
 	{
 		switch (opt) {
-		case 'h':
-			print_usage(argv[0]);
-			goto out;
-
-		case 'e':
-			source = uc_source_new_buffer("[-e argument]", xstrdup(optarg), strlen(optarg));
-			break;
-
-		case 't':
-			uc_vm_trace_set(&vm, 1);
+		case 'L':
+			parse_search_path(optarg, &config);
 			break;
 
 		case 'S':
@@ -531,6 +515,36 @@ main(int argc, char **argv)
 		case 'T':
 			config.raw_mode = false;
 			parse_template_modeflags(optarg, &config);
+			break;
+		}
+	}
+
+	optind = 1;
+
+	uc_vm_init(&vm, &config);
+
+	/* load std functions into global scope */
+	uc_stdlib_load(uc_vm_scope_get(&vm));
+
+	/* register ARGV array but populate it later (to allow for -U ARGV) */
+	o = ucv_array_new(&vm);
+
+	ucv_object_add(uc_vm_scope_get(&vm), "ARGV", ucv_get(o));
+
+	/* parse options iteration 2: process remaining options */
+	while ((opt = getopt(argc, argv, optspec)) != -1)
+	{
+		switch (opt) {
+		case 'h':
+			print_usage(argv[0]);
+			goto out;
+
+		case 'e':
+			source = uc_source_new_buffer("[-e argument]", xstrdup(optarg), strlen(optarg));
+			break;
+
+		case 't':
+			uc_vm_trace_set(&vm, 1);
 			break;
 
 		case 'D':
@@ -551,10 +565,6 @@ main(int argc, char **argv)
 
 		case 'U':
 			ucv_object_delete(uc_vm_scope_get(&vm), optarg);
-			break;
-
-		case 'L':
-			parse_search_path(optarg, uc_vm_scope_get(&vm));
 			break;
 
 		case 'l':
@@ -629,6 +639,8 @@ main(int argc, char **argv)
 	rv = compile(&vm, source, precompile, strip, interp);
 
 out:
+	uc_search_path_free(&config.module_search_path);
+
 	uc_source_put(source);
 
 	uc_vm_free(&vm);

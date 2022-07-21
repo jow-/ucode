@@ -111,7 +111,6 @@ uc_vm_reset_callframes(uc_vm_t *vm)
 static uc_value_t *
 uc_vm_alloc_global_scope(uc_vm_t *vm)
 {
-	const char *path[] = { LIB_SEARCH_PATH };
 	uc_value_t *scope, *arr;
 	size_t i;
 
@@ -120,8 +119,8 @@ uc_vm_alloc_global_scope(uc_vm_t *vm)
 	/* build default require() search path */
 	arr = ucv_array_new(vm);
 
-	for (i = 0; i < ARRAY_SIZE(path); i++)
-		ucv_array_push(arr, ucv_string_new(path[i]));
+	for (i = 0; i < vm->config->module_search_path.count; i++)
+		ucv_array_push(arr, ucv_string_new(vm->config->module_search_path.entries[i]));
 
 	/* register module related constants */
 	ucv_object_add(scope, "REQUIRE_SEARCH_PATH", arr);
@@ -147,7 +146,7 @@ void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 	vm->exception.type = EXCEPTION_NONE;
 	vm->exception.message = NULL;
 
-	vm->config = config;
+	vm->config = config ? config : &uc_default_parse_config;
 
 	vm->open_upvals = NULL;
 

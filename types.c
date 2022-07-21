@@ -30,6 +30,15 @@
 #include "ucode/vm.h"
 #include "ucode/program.h"
 
+static char *uc_default_search_path[] = { LIB_SEARCH_PATH };
+
+uc_parse_config_t uc_default_parse_config = {
+	.module_search_path = {
+		.count = ARRAY_SIZE(uc_default_search_path),
+		.entries = uc_default_search_path
+	}
+};
+
 uc_type_t
 ucv_type(uc_value_t *uv)
 {
@@ -2244,4 +2253,13 @@ void
 ucv_freeall(uc_vm_t *vm)
 {
 	ucv_gc_common(vm, true);
+}
+
+void
+uc_search_path_init(uc_search_path_t *search_path)
+{
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(uc_default_search_path); i++)
+		uc_vector_push(search_path, xstrdup(uc_default_search_path[i]));
 }

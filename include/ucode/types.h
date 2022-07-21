@@ -217,12 +217,32 @@ typedef struct uc_program {
 
 /* Parser definitions */
 
+uc_declare_vector(uc_search_path_t, char *);
+
 typedef struct {
 	bool lstrip_blocks;
 	bool trim_blocks;
 	bool strict_declarations;
 	bool raw_mode;
+	uc_search_path_t module_search_path;
 } uc_parse_config_t;
+
+extern uc_parse_config_t uc_default_parse_config;
+
+void uc_search_path_init(uc_search_path_t *search_path);
+
+static inline void
+uc_search_path_add(uc_search_path_t *search_path, char *path) {
+	uc_vector_push(search_path, xstrdup(path));
+}
+
+static inline void
+uc_search_path_free(uc_search_path_t *search_path) {
+	while (search_path->count > 0)
+		free(search_path->entries[--search_path->count]);
+
+	uc_vector_clear(search_path);
+}
 
 
 /* VM definitions */
