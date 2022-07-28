@@ -363,20 +363,43 @@ uc_vm_frame_dump(uc_vm_t *vm, uc_callframe_t *frame)
 	}
 }
 
+static uc_value_t *
+uc_vm_resolve_upval(uc_vm_t *vm, uc_value_t *value)
+{
+	uc_upvalref_t *ref;
+
+#ifdef __clang_analyzer__
+	/* Clang static analyzer does not understand that ucv_type(NULL) can't
+	 * possibly yield UC_UPVALUE. Nudge it. */
+	if (value != NULL && ucv_type(value) == UC_UPVALUE)
+#else
+	if (ucv_type(value) == UC_UPVALUE)
+#endif
+	{
+		ref = (uc_upvalref_t *)value;
+
+		if (ref->closed)
+			return ucv_get(ref->value);
+		else
+			return ucv_get(vm->stack.entries[ref->slot]);
+	}
+
+	return value;
+}
+
 void
 uc_vm_stack_push(uc_vm_t *vm, uc_value_t *value)
 {
 	uc_vector_grow(&vm->stack);
 
 	ucv_put(vm->stack.entries[vm->stack.count]);
-
-	vm->stack.entries[vm->stack.count] = value;
+	vm->stack.entries[vm->stack.count] = uc_vm_resolve_upval(vm, value);
 	vm->stack.count++;
 
 	if (vm->trace) {
 		fprintf(stderr, "  [+%zd] %s\n",
 			vm->stack.count - 1,
-			uc_vm_format_val(vm, value));
+			uc_vm_format_val(vm, vm->stack.entries[vm->stack.count - 1]));
 	}
 }
 
@@ -2230,7 +2253,7 @@ uc_vm_insn_mcall(uc_vm_t *vm, uc_vm_insn_t insn)
 	size_t key_slot = vm->stack.count - (vm->arg.u32 & 0xffff) - 1;
 	uc_value_t *ctx = vm->stack.entries[key_slot - 1];
 	uc_value_t *key = vm->stack.entries[key_slot];
-	uc_value_t *fno = ucv_key_get(vm, ctx, key);
+	uc_value_t *fno = uc_vm_resolve_upval(vm, ucv_key_get(vm, ctx, key));
 
 	if (!ucv_is_callable(fno) && insn == I_QMCALL)
 		return uc_vm_skip_call(vm, true);
