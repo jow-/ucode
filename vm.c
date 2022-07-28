@@ -1230,6 +1230,21 @@ uc_vm_insn_store_var(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_vm_stack_push(vm, v);
 }
 
+static bool
+assert_mutable_value(uc_vm_t *vm, uc_value_t *val)
+{
+	if (ucv_is_constant(val)) {
+		uc_vm_stack_push(vm, NULL);
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+		                      "%s value is immutable",
+		                      ucv_typename(val));
+
+		return false;
+	}
+
+	return true;
+}
+
 static void
 uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 {
@@ -1240,7 +1255,9 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(o)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
-		uc_vm_stack_push(vm, ucv_key_set(vm, o, k, v));
+		if (assert_mutable_value(vm, o))
+			uc_vm_stack_push(vm, ucv_key_set(vm, o, k, v));
+
 		break;
 
 	default:
@@ -1710,8 +1727,11 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
-		val = ucv_key_get(vm, v, k);
-		uc_vm_stack_push(vm, ucv_key_set(vm, v, k, uc_vm_value_arith(vm, vm->arg.u8, val, inc)));
+		if (assert_mutable_value(vm, v)) {
+			val = ucv_key_get(vm, v, k);
+			uc_vm_stack_push(vm, ucv_key_set(vm, v, k, uc_vm_value_arith(vm, vm->arg.u8, val, inc)));
+		}
+
 		break;
 
 	default:
@@ -2306,8 +2326,11 @@ uc_vm_insn_delete(uc_vm_t *vm, uc_vm_insn_t insn)
 
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
-		rv = ucv_key_delete(vm, v, k);
-		uc_vm_stack_push(vm, ucv_boolean_new(rv));
+		if (assert_mutable_value(vm, v)) {
+			rv = ucv_key_delete(vm, v, k);
+			uc_vm_stack_push(vm, ucv_boolean_new(rv));
+		}
+
 		break;
 
 	default:
