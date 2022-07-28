@@ -31,8 +31,8 @@ extern const uc_function_list_t uc_stdlib_functions[];
 void uc_stdlib_load(uc_value_t *scope);
 uc_cfn_ptr_t uc_stdlib_function(const char *name);
 
-bool uc_source_context_format(uc_stringbuf_t *buf, uc_source_t *src, size_t off, bool compact);
-bool uc_error_context_format(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stacktrace, size_t off);
+__hidden bool uc_source_context_format(uc_stringbuf_t *buf, uc_source_t *src, size_t off, bool compact);
+__hidden bool uc_error_context_format(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stacktrace, size_t off);
 
 
 /* vm helper */

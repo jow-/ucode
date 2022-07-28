@@ -26,6 +26,11 @@
 #include <json-c/json.h>
 
 
+#ifndef __hidden
+#define __hidden __attribute__((visibility("hidden")))
+#endif
+
+
 /* alignment & array size */
 
 #ifndef ALIGN

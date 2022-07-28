@@ -24,14 +24,14 @@
 #include "util.h"
 #include "types.h"
 
-void uc_chunk_init(uc_chunk_t *chunk);
-void uc_chunk_free(uc_chunk_t *chunk);
-size_t uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t line);
+__hidden void uc_chunk_init(uc_chunk_t *chunk);
+__hidden void uc_chunk_free(uc_chunk_t *chunk);
+__hidden size_t uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t line);
 
-void uc_chunk_pop(uc_chunk_t *chunk);
+__hidden void uc_chunk_pop(uc_chunk_t *chunk);
 
-size_t uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t off);
-void uc_chunk_debug_add_variable(uc_chunk_t *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name);
-uc_value_t *uc_chunk_debug_get_variable(uc_chunk_t *chunk, size_t off, size_t slot, bool upval);
+__hidden size_t uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t off);
+__hidden void uc_chunk_debug_add_variable(uc_chunk_t *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name);
+__hidden uc_value_t *uc_chunk_debug_get_variable(uc_chunk_t *chunk, size_t off, size_t slot, bool upval);
 
 #endif /* UCODE_CHUNK_H */

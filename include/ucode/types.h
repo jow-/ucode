@@ -310,13 +310,12 @@ struct uc_vm {
 
 /* Value API */
 
-void ucv_free(uc_value_t *, bool);
-void ucv_put(uc_value_t *);
-
-void ucv_unref(uc_weakref_t *);
-void ucv_ref(uc_weakref_t *, uc_weakref_t *);
+__hidden void ucv_free(uc_value_t *, bool);
+__hidden void ucv_unref(uc_weakref_t *);
+__hidden void ucv_ref(uc_weakref_t *, uc_weakref_t *);
 
 uc_value_t *ucv_get(uc_value_t *uv);
+void ucv_put(uc_value_t *);
 
 uc_type_t ucv_type(uc_value_t *);
 const char *ucv_typename(uc_value_t *);
@@ -547,6 +546,6 @@ ucv_clear_mark(uc_value_t *uv)
 
 void ucv_gc(uc_vm_t *);
 
-void ucv_freeall(uc_vm_t *);
+__hidden void ucv_freeall(uc_vm_t *);
 
 #endif /* UCODE_TYPES_H */

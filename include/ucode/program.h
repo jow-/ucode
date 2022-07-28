@@ -48,17 +48,17 @@ uc_program_put(uc_program_t *prog) {
 
 #define uc_program_function_last(prog) (uc_function_t *)prog->functions.next
 
-uc_function_t *uc_program_function_new(uc_program_t *, const char *, uc_source_t *, size_t);
-size_t uc_program_function_id(uc_program_t *, uc_function_t *);
-uc_function_t *uc_program_function_load(uc_program_t *, size_t);
-uc_source_t *uc_program_function_source(uc_function_t *);
-size_t uc_program_function_srcpos(uc_function_t *, size_t);
-void uc_program_function_free(uc_function_t *);
+__hidden uc_function_t *uc_program_function_new(uc_program_t *, const char *, uc_source_t *, size_t);
+__hidden size_t uc_program_function_id(uc_program_t *, uc_function_t *);
+__hidden uc_function_t *uc_program_function_load(uc_program_t *, size_t);
+__hidden uc_source_t *uc_program_function_source(uc_function_t *);
+__hidden size_t uc_program_function_srcpos(uc_function_t *, size_t);
+__hidden void uc_program_function_free(uc_function_t *);
 
-ssize_t uc_program_export_lookup(uc_program_t *, uc_source_t *, uc_value_t *);
+__hidden ssize_t uc_program_export_lookup(uc_program_t *, uc_source_t *, uc_value_t *);
 
-uc_value_t *uc_program_get_constant(uc_program_t *, size_t);
-ssize_t uc_program_add_constant(uc_program_t *, uc_value_t *);
+__hidden uc_value_t *uc_program_get_constant(uc_program_t *, size_t);
+__hidden ssize_t uc_program_add_constant(uc_program_t *, uc_value_t *);
 
 void uc_program_write(uc_program_t *, FILE *, bool);
 uc_program_t *uc_program_load(uc_source_t *, char **);
