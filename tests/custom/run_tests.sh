@@ -105,6 +105,8 @@ run_testcase() {
 	printf "%d\n" $? > "$dir/res.code"
 	touch "$dir/empty"
 
+	sed -i -e "s#$dir#.#g" "$dir/res.out" "$dir/res.err"
+
 	if ! cmp -s "$dir/res.err" "${err:-$dir/empty}"; then
 		[ $fail = 0 ] && printf "!\n"
 		printf "Testcase #%d: Expected stderr did not match:\n" $num
