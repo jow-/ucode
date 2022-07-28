@@ -47,7 +47,7 @@ typedef enum uc_type {
 typedef struct uc_value {
 	uint32_t type:4;
 	uint32_t mark:1;
-	uint32_t u64:1;
+	uint32_t u64_or_constant:1;
 	uint32_t refcount:26;
 } uc_value_t;
 
@@ -448,7 +448,28 @@ ucv_is_arrowfn(uc_value_t *uv)
 static inline bool
 ucv_is_u64(uc_value_t *uv)
 {
-	return (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64 == true);
+	return (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64_or_constant == true &&
+		    uv->type == UC_INTEGER);
+}
+
+static inline bool
+ucv_is_constant(uc_value_t *uv)
+{
+	return (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64_or_constant == true &&
+	        (uv->type == UC_ARRAY || uv->type == UC_OBJECT));
+}
+
+static inline bool
+ucv_set_constant(uc_value_t *uv, bool constant)
+{
+	if (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64_or_constant != constant &&
+	    (uv->type == UC_ARRAY || uv->type == UC_OBJECT)) {
+		uv->u64_or_constant = constant;
+
+		return true;
+	}
+
+	return false;
 }
 
 static inline bool

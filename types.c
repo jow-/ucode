@@ -470,7 +470,7 @@ ucv_int64_new(int64_t n)
 	integer = xalloc(sizeof(*integer));
 	integer->header.type = UC_INTEGER;
 	integer->header.refcount = 1;
-	integer->header.u64 = 0;
+	integer->header.u64_or_constant = 0;
 	integer->i.s64 = n;
 
 	return &integer->header;
@@ -492,7 +492,7 @@ ucv_uint64_new(uint64_t n)
 	integer = xalloc(sizeof(*integer));
 	integer->header.type = UC_INTEGER;
 	integer->header.refcount = 1;
-	integer->header.u64 = 1;
+	integer->header.u64_or_constant = 1;
 	integer->i.u64 = n;
 
 	return &integer->header;
@@ -520,7 +520,7 @@ ucv_uint64_get(uc_value_t *uv)
 	case UC_INTEGER:
 		integer = (uc_integer_t *)uv;
 
-		if (integer->header.u64)
+		if (integer->header.u64_or_constant)
 			return integer->i.u64;
 
 		if (integer->i.s64 >= 0)
@@ -574,10 +574,10 @@ ucv_int64_get(uc_value_t *uv)
 	case UC_INTEGER:
 		integer = (uc_integer_t *)uv;
 
-		if (integer->header.u64 && integer->i.u64 <= (uint64_t)INT64_MAX)
+		if (integer->header.u64_or_constant && integer->i.u64 <= (uint64_t)INT64_MAX)
 			return (int64_t)integer->i.u64;
 
-		if (!integer->header.u64)
+		if (!integer->header.u64_or_constant)
 			return integer->i.s64;
 
 		errno = ERANGE;
@@ -715,7 +715,7 @@ ucv_array_push(uc_value_t *uv, uc_value_t *item)
 {
 	uc_array_t *array = (uc_array_t *)uv;
 
-	if (ucv_type(uv) != UC_ARRAY)
+	if (ucv_type(uv) != UC_ARRAY || uv->u64_or_constant)
 		return NULL;
 
 	ucv_array_set(uv, array->count, item);
@@ -899,7 +899,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 	unsigned long hash;
 	void *k;
 
-	if (ucv_type(uv) != UC_OBJECT)
+	if (ucv_type(uv) != UC_OBJECT || uv->u64_or_constant)
 		return false;
 
 	hash = lh_get_hash(object->table, (const void *)key);
@@ -932,7 +932,7 @@ ucv_object_delete(uc_value_t *uv, const char *key)
 {
 	uc_object_t *object = (uc_object_t *)uv;
 
-	if (ucv_type(uv) != UC_OBJECT)
+	if (ucv_type(uv) != UC_OBJECT || uv->u64_or_constant)
 		return false;
 
 	return (lh_table_delete(object->table, key) == 0);
