@@ -871,7 +871,7 @@ uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool i
 			varname = compiler->upvals.entries[cidx].name;
 
 		if (varname)
-			uc_compiler_syntax_error(compiler, 0,
+			uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 				"Invalid increment/decrement of constant '%s'",
 				ucv_string_get(varname));
 
