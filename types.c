@@ -1487,6 +1487,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 	uc_closure_t *closure;
 	uc_regexp_t *regexp;
 	uc_value_t *argname;
+	uc_upvalref_t *ref;
 	uc_array_t *array;
 	size_t i, l;
 	double d;
@@ -1686,10 +1687,17 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		break;
 
 	case UC_UPVALUE:
-		ucv_stringbuf_printf(pb, "%s<upvalref %p>%s",
-			json ? "\"" : "",
-			uv,
-			json ? "\"" : "");
+		ref = (uc_upvalref_t *)uv;
+
+		if (ref->closed)
+			ucv_to_stringbuf_formatted(vm, pb, ref->value, depth, pad_char, pad_size);
+		else if (vm != NULL && ref->slot < vm->stack.count)
+			ucv_to_stringbuf_formatted(vm, pb, vm->stack.entries[ref->slot], depth, pad_char, pad_size);
+		else
+			ucv_stringbuf_printf(pb, "%s<upvalref %p>%s",
+				json ? "\"" : "",
+				uv,
+				json ? "\"" : "");
 
 		break;
 
