@@ -369,6 +369,23 @@ uc_rindex(uc_vm_t *vm, size_t nargs)
 	return uc_index(vm, nargs, true);
 }
 
+static bool
+assert_mutable_array(uc_vm_t *vm, uc_value_t *val)
+{
+	if (ucv_type(val) != UC_ARRAY)
+		return false;
+
+	if (ucv_is_constant(val)) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+		                      "%s value is immutable",
+		                      ucv_typename(val));
+
+		return false;
+	}
+
+	return true;
+}
+
 static uc_value_t *
 uc_push(uc_vm_t *vm, size_t nargs)
 {
@@ -376,7 +393,7 @@ uc_push(uc_vm_t *vm, size_t nargs)
 	uc_value_t *item = NULL;
 	size_t arridx;
 
-	if (ucv_type(arr) != UC_ARRAY)
+	if (!assert_mutable_array(vm, arr))
 		return NULL;
 
 	for (arridx = 1; arridx < nargs; arridx++) {
@@ -392,6 +409,9 @@ uc_pop(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arr = uc_fn_arg(0);
 
+	if (!assert_mutable_array(vm, arr))
+		return NULL;
+
 	return ucv_array_pop(arr);
 }
 
@@ -399,6 +419,9 @@ static uc_value_t *
 uc_shift(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arr = uc_fn_arg(0);
+
+	if (!assert_mutable_array(vm, arr))
+		return NULL;
 
 	return ucv_array_shift(arr);
 }
@@ -410,7 +433,7 @@ uc_unshift(uc_vm_t *vm, size_t nargs)
 	uc_value_t *item = NULL;
 	size_t i;
 
-	if (ucv_type(arr) != UC_ARRAY)
+	if (!assert_mutable_array(vm, arr))
 		return NULL;
 
 	for (i = 1; i < nargs; i++) {
@@ -755,6 +778,9 @@ uc_reverse(uc_vm_t *vm, size_t nargs)
 	char *dup, *p;
 
 	if (ucv_type(obj) == UC_ARRAY) {
+		if (!assert_mutable_array(vm, obj))
+			return NULL;
+
 		rv = ucv_array_new(vm);
 
 		for (arridx = ucv_array_length(obj); arridx > 0; arridx--)
@@ -851,7 +877,7 @@ uc_sort(uc_vm_t *vm, size_t nargs)
 	uc_value_t *arr = uc_fn_arg(0);
 	uc_value_t *fn = uc_fn_arg(1);
 
-	if (ucv_type(arr) != UC_ARRAY)
+	if (!assert_mutable_array(vm, arr))
 		return NULL;
 
 	sort_ctx.vm = vm;
@@ -870,7 +896,7 @@ uc_splice(uc_vm_t *vm, size_t nargs)
 	int64_t remlen = ucv_to_integer(uc_fn_arg(2));
 	size_t arrlen, addlen, idx;
 
-	if (ucv_type(arr) != UC_ARRAY)
+	if (!assert_mutable_array(vm, arr))
 		return NULL;
 
 	arrlen = ucv_array_length(arr);
@@ -2352,7 +2378,7 @@ uc_include_common(uc_vm_t *vm, size_t nargs, bool raw_mode)
 	if (!closure)
 		return NULL;
 
-	p = include_path(closure->function->program->source->runpath, ucv_string_get(path));
+	p = include_path(uc_program_function_source(closure->function)->runpath, ucv_string_get(path));
 
 	if (!p) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
@@ -2870,7 +2896,7 @@ uc_sourcepath(uc_vm_t *vm, size_t nargs)
 			continue;
 		}
 
-		path = realpath(frame->closure->function->program->source->runpath, NULL);
+		path = realpath(uc_program_function_source(frame->closure->function)->runpath, NULL);
 		break;
 	}
 

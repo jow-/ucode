@@ -73,6 +73,9 @@ static const int8_t insn_operand_bytes[__I_MAX] = {
 	[I_MCALL] = 4,
 	[I_QCALL] = 4,
 	[I_QMCALL] = 4,
+
+	[I_IMPORT] = 4,
+	[I_EXPORT] = 4
 };
 
 static const char *exception_type_strings[] = {
@@ -108,7 +111,6 @@ uc_vm_reset_callframes(uc_vm_t *vm)
 static uc_value_t *
 uc_vm_alloc_global_scope(uc_vm_t *vm)
 {
-	const char *path[] = { LIB_SEARCH_PATH };
 	uc_value_t *scope, *arr;
 	size_t i;
 
@@ -117,8 +119,8 @@ uc_vm_alloc_global_scope(uc_vm_t *vm)
 	/* build default require() search path */
 	arr = ucv_array_new(vm);
 
-	for (i = 0; i < ARRAY_SIZE(path); i++)
-		ucv_array_push(arr, ucv_string_new(path[i]));
+	for (i = 0; i < vm->config->module_search_path.count; i++)
+		ucv_array_push(arr, ucv_string_new(vm->config->module_search_path.entries[i]));
 
 	/* register module related constants */
 	ucv_object_add(scope, "REQUIRE_SEARCH_PATH", arr);
@@ -144,7 +146,7 @@ void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 	vm->exception.type = EXCEPTION_NONE;
 	vm->exception.message = NULL;
 
-	vm->config = config;
+	vm->config = config ? config : &uc_default_parse_config;
 
 	vm->open_upvals = NULL;
 
@@ -181,6 +183,9 @@ void uc_vm_free(uc_vm_t *vm)
 	for (i = 0; i < vm->restypes.count; i++)
 		ucv_put(vm->restypes.entries[i]->proto);
 
+	for (i = 0; i < vm->exports.count; i++)
+		ucv_put(&vm->exports.entries[i]->header);
+
 	uc_vm_reset_callframes(vm);
 	uc_vm_reset_stack(vm);
 	uc_vector_clear(&vm->stack);
@@ -194,6 +199,7 @@ void uc_vm_free(uc_vm_t *vm)
 		free(vm->restypes.entries[i]);
 
 	uc_vector_clear(&vm->restypes);
+	uc_vector_clear(&vm->exports);
 }
 
 static uc_chunk_t *
@@ -211,7 +217,7 @@ uc_vm_frame_program(uc_callframe_t *frame)
 static uc_source_t *
 uc_vm_frame_source(uc_callframe_t *frame)
 {
-	return frame->closure ? frame->closure->function->program->source : NULL;
+	return frame->closure ? uc_program_function_source(frame->closure->function) : NULL;
 }
 
 static uc_callframe_t *
@@ -345,7 +351,10 @@ uc_vm_frame_dump(uc_vm_t *vm, uc_callframe_t *frame)
 			fprintf(stderr, "     [%zu] <%p> %s ",
 				i, (void *)ref, uc_vm_format_val(vm, v));
 
-			if (ref->closed) {
+			if (!ref) {
+				fprintf(stderr, "{unresolved}\n");
+			}
+			else if (ref->closed) {
 				fprintf(stderr, "{closed} %s\n",
 					uc_vm_format_val(vm, ref->value));
 			}
@@ -360,20 +369,43 @@ uc_vm_frame_dump(uc_vm_t *vm, uc_callframe_t *frame)
 	}
 }
 
+static uc_value_t *
+uc_vm_resolve_upval(uc_vm_t *vm, uc_value_t *value)
+{
+	uc_upvalref_t *ref;
+
+#ifdef __clang_analyzer__
+	/* Clang static analyzer does not understand that ucv_type(NULL) can't
+	 * possibly yield UC_UPVALUE. Nudge it. */
+	if (value != NULL && ucv_type(value) == UC_UPVALUE)
+#else
+	if (ucv_type(value) == UC_UPVALUE)
+#endif
+	{
+		ref = (uc_upvalref_t *)value;
+
+		if (ref->closed)
+			return ucv_get(ref->value);
+		else
+			return ucv_get(vm->stack.entries[ref->slot]);
+	}
+
+	return value;
+}
+
 void
 uc_vm_stack_push(uc_vm_t *vm, uc_value_t *value)
 {
 	uc_vector_grow(&vm->stack);
 
 	ucv_put(vm->stack.entries[vm->stack.count]);
-
-	vm->stack.entries[vm->stack.count] = value;
+	vm->stack.entries[vm->stack.count] = uc_vm_resolve_upval(vm, value);
 	vm->stack.count++;
 
 	if (vm->trace) {
 		fprintf(stderr, "  [+%zd] %s\n",
 			vm->stack.count - 1,
-			uc_vm_format_val(vm, value));
+			uc_vm_format_val(vm, vm->stack.entries[vm->stack.count - 1]));
 	}
 }
 
@@ -829,7 +861,7 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 
 		if (frame->closure) {
 			function = frame->closure->function;
-			source = function->program->source;
+			source = uc_program_function_source(function);
 
 			off = (frame->ip - uc_vm_frame_chunk(frame)->entries) - 1;
 			srcpos = uc_program_function_srcpos(function, off);
@@ -1204,6 +1236,21 @@ uc_vm_insn_store_var(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_vm_stack_push(vm, v);
 }
 
+static bool
+assert_mutable_value(uc_vm_t *vm, uc_value_t *val)
+{
+	if (ucv_is_constant(val)) {
+		uc_vm_stack_push(vm, NULL);
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+		                      "%s value is immutable",
+		                      ucv_typename(val));
+
+		return false;
+	}
+
+	return true;
+}
+
 static void
 uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 {
@@ -1214,7 +1261,9 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(o)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
-		uc_vm_stack_push(vm, ucv_key_set(vm, o, k, v));
+		if (assert_mutable_value(vm, o))
+			uc_vm_stack_push(vm, ucv_key_set(vm, o, k, v));
+
 		break;
 
 	default:
@@ -1684,8 +1733,11 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
-		val = ucv_key_get(vm, v, k);
-		uc_vm_stack_push(vm, ucv_key_set(vm, v, k, uc_vm_value_arith(vm, vm->arg.u8, val, inc)));
+		if (assert_mutable_value(vm, v)) {
+			val = ucv_key_get(vm, v, k);
+			uc_vm_stack_push(vm, ucv_key_set(vm, v, k, uc_vm_value_arith(vm, vm->arg.u8, val, inc)));
+		}
+
 		break;
 
 	default:
@@ -2227,7 +2279,7 @@ uc_vm_insn_mcall(uc_vm_t *vm, uc_vm_insn_t insn)
 	size_t key_slot = vm->stack.count - (vm->arg.u32 & 0xffff) - 1;
 	uc_value_t *ctx = vm->stack.entries[key_slot - 1];
 	uc_value_t *key = vm->stack.entries[key_slot];
-	uc_value_t *fno = ucv_key_get(vm, ctx, key);
+	uc_value_t *fno = uc_vm_resolve_upval(vm, ucv_key_get(vm, ctx, key));
 
 	if (!ucv_is_callable(fno) && insn == I_QMCALL)
 		return uc_vm_skip_call(vm, true);
@@ -2280,8 +2332,11 @@ uc_vm_insn_delete(uc_vm_t *vm, uc_vm_insn_t insn)
 
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
-		rv = ucv_key_delete(vm, v, k);
-		uc_vm_stack_push(vm, ucv_boolean_new(rv));
+		if (assert_mutable_value(vm, v)) {
+			rv = ucv_key_delete(vm, v, k);
+			uc_vm_stack_push(vm, ucv_boolean_new(rv));
+		}
+
 		break;
 
 	default:
@@ -2294,6 +2349,74 @@ uc_vm_insn_delete(uc_vm_t *vm, uc_vm_insn_t insn)
 
 	ucv_put(k);
 	ucv_put(v);
+}
+
+static void
+uc_vm_insn_import(uc_vm_t *vm, uc_vm_insn_t insn)
+{
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uint16_t from = vm->arg.u32 & 0xffff;
+	uint16_t to = vm->arg.u32 >> 16;
+	uc_value_t *name, *modobj;
+	uint32_t cidx;
+
+	/* is a wildcard import * from ... */
+	if (to == 0xffff) {
+		to = from;
+		modobj = ucv_object_new(vm);
+
+		/* instruction is followed by u16 containing the offset of the
+		 * first module export and `from` times u32 values containing
+		 * the constant indexes of the names */
+		for (from = frame->ip[0] * 0x100 + frame->ip[1], frame->ip += 2;
+		     from < to && from < vm->exports.count;
+		     from++) {
+
+			cidx = (
+				frame->ip[0] * 0x1000000UL +
+				frame->ip[1] * 0x10000UL +
+				frame->ip[2] * 0x100UL +
+				frame->ip[3]
+			);
+
+			frame->ip += 4;
+
+			name = uc_program_get_constant(uc_vm_current_program(vm), cidx);
+
+			if (ucv_type(name) == UC_STRING && vm->exports.entries[from])
+				ucv_object_add(modobj, ucv_string_get(name),
+					ucv_get(&vm->exports.entries[from]->header));
+
+			ucv_put(name);
+		}
+
+		ucv_set_constant(modobj, true);
+
+		uc_vm_stack_push(vm, modobj);
+	}
+
+	/* module export available, patch into upvalue */
+	else if (from < vm->exports.count && vm->exports.entries[from]) {
+		frame->closure->upvals[to] = vm->exports.entries[from];
+		ucv_get(&vm->exports.entries[from]->header);
+	}
+
+	/* module export missing, e.g. due to premature return in module,
+	 * patch up dummy upvalue ref with `null` value */
+	else {
+		frame->closure->upvals[to] = (uc_upvalref_t *)ucv_upvalref_new(0);
+		frame->closure->upvals[to]->closed = true;
+	}
+}
+
+static void
+uc_vm_insn_export(uc_vm_t *vm, uc_vm_insn_t insn)
+{
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_upvalref_t *ref = uc_vm_capture_upval(vm, frame->stackframe + vm->arg.u32);
+
+	uc_vector_push(&vm->exports, ref);
+	ucv_get(&ref->header);
 }
 
 static uc_value_t *
@@ -2581,6 +2704,14 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 
 		case I_DELETE:
 			uc_vm_insn_delete(vm, insn);
+			break;
+
+		case I_IMPORT:
+			uc_vm_insn_import(vm, insn);
+			break;
+
+		case I_EXPORT:
+			uc_vm_insn_export(vm, insn);
 			break;
 
 		default:

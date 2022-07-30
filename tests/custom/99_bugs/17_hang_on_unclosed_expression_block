@@ -3,7 +3,7 @@ infinite loop.
 
 -- Expect stderr --
 Syntax error: Unterminated template block
-In line 1, byte 6:
+In line 1, byte 5:
 
  `{{ 1`
       ^-- Near here

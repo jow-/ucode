@@ -33,17 +33,17 @@ typedef enum {
 	TAG_LSTR = 5
 } uc_value_type_t;
 
-uc_value_t *uc_number_parse(const char *buf, char **end);
-uc_value_t *uc_number_parse_octal(const char *buf, char **end);
+__hidden uc_value_t *uc_number_parse(const char *buf, char **end);
+__hidden uc_value_t *uc_number_parse_octal(const char *buf, char **end);
 
 bool uc_double_pack(double d, char *buf, bool little_endian);
 double uc_double_unpack(const char *buf, bool little_endian);
 
-void uc_vallist_init(uc_value_list_t *list);
-void uc_vallist_free(uc_value_list_t *list);
+__hidden void uc_vallist_init(uc_value_list_t *list);
+__hidden void uc_vallist_free(uc_value_list_t *list);
 
-ssize_t uc_vallist_add(uc_value_list_t *list, uc_value_t *value);
-uc_value_type_t uc_vallist_type(uc_value_list_t *list, size_t idx);
-uc_value_t *uc_vallist_get(uc_value_list_t *list, size_t idx);
+__hidden ssize_t uc_vallist_add(uc_value_list_t *list, uc_value_t *value);
+__hidden uc_value_type_t uc_vallist_type(uc_value_list_t *list, size_t idx);
+__hidden uc_value_t *uc_vallist_get(uc_value_list_t *list, size_t idx);
 
 #endif /* UCODE_VALUE_H */

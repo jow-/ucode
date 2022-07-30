@@ -1,0 +1,28 @@
+By using the `as` keyword, exports may be renamed when using the export
+list syntax. It is also possible to specify string aliases which are not
+valid variable names, in this case a rename on import is mandatory.
+
+-- File test.uc --
+let testvar = 123;
+const testconst = "Test";
+
+function testfunc() {
+	print("Hello, world!\n");
+}
+
+export { testvar as modvar, testconst as 'define', testfunc as "module-function" };
+-- End --
+
+-- Testcase --
+import { modvar, define, "module-function" as func } from "./files/test.uc";
+
+print([ modvar, define, func ], "\n");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+[ 123, "Test", "function testfunc() { ... }" ]
+-- End --

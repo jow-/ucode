@@ -95,7 +95,9 @@ __insn(QMCALL) \
 __insn(PRINT) \
 __insn(NEXTK) \
 __insn(NEXTKV) \
-__insn(DELETE)
+__insn(DELETE) \
+__insn(IMPORT) \
+__insn(EXPORT)
 
 
 #undef __insn

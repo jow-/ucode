@@ -35,7 +35,7 @@ typedef enum {
 uc_source_t *uc_source_new_file(const char *path);
 uc_source_t *uc_source_new_buffer(const char *name, char *buf, size_t len);
 
-size_t uc_source_get_line(uc_source_t *source, size_t *offset);
+__hidden size_t uc_source_get_line(uc_source_t *source, size_t *offset);
 
 static inline uc_source_t *
 uc_source_get(uc_source_t *source) {
@@ -47,11 +47,14 @@ uc_source_put(uc_source_t *source) {
 	ucv_put(source ? &source->header : NULL);
 }
 
-uc_source_type_t uc_source_type_test(uc_source_t *source);
+__hidden uc_source_type_t uc_source_type_test(uc_source_t *source);
 
-void uc_source_line_next(uc_source_t *source);
-void uc_source_line_update(uc_source_t *source, size_t off);
+__hidden void uc_source_line_next(uc_source_t *source);
+__hidden void uc_source_line_update(uc_source_t *source, size_t off);
 
-void uc_source_runpath_set(uc_source_t *source, const char *runpath);
+__hidden void uc_source_runpath_set(uc_source_t *source, const char *runpath);
+
+__hidden bool uc_source_export_add(uc_source_t *source, uc_value_t *name);
+__hidden ssize_t uc_source_export_lookup(uc_source_t *source, uc_value_t *name);
 
 #endif /* UCODE_SOURCE_H */

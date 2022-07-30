@@ -1,0 +1,27 @@
+Already declared local variables and functions may be exported using the
+curly brace export list syntax.
+
+-- File test-var-decl.uc --
+let testvar = 123;
+const testconst = "Test";
+
+function testfunc() {
+	print("Hello, world!\n");
+}
+
+export { testvar, testconst, testfunc };
+-- End --
+
+-- Testcase --
+import { testvar, testconst, testfunc } from "./files/test-var-decl.uc";
+
+print([ testvar, testconst, testfunc ], "\n");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+[ 123, "Test", "function testfunc() { ... }" ]
+-- End --

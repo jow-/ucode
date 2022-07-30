@@ -47,7 +47,7 @@ typedef enum uc_type {
 typedef struct uc_value {
 	uint32_t type:4;
 	uint32_t mark:1;
-	uint32_t u64:1;
+	uint32_t u64_or_constant:1;
 	uint32_t refcount:26;
 } uc_value_t;
 
@@ -65,6 +65,7 @@ typedef struct {
 /* Source buffer defintions */
 
 uc_declare_vector(uc_lineinfo_t, uint8_t);
+uc_declare_vector(uc_exports_t, uc_value_t *);
 
 typedef struct {
 	uc_value_t header;
@@ -72,6 +73,7 @@ typedef struct {
 	FILE *fp;
 	size_t off;
 	uc_lineinfo_t lineinfo;
+	uc_exports_t exports;
 } uc_source_t;
 
 
@@ -113,6 +115,7 @@ typedef struct uc_function {
 	bool arrow, vararg, strict;
 	size_t nargs;
 	size_t nupvals;
+	size_t srcidx;
 	size_t srcpos;
 	uc_chunk_t chunk;
 	struct uc_program *program;
@@ -202,22 +205,44 @@ uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
 
 /* Program structure definitions */
 
+uc_declare_vector(uc_sources_t, uc_source_t *);
+
 typedef struct uc_program {
 	uc_value_t header;
 	uc_value_list_t constants;
 	uc_weakref_t functions;
-	uc_source_t *source;
+	uc_sources_t sources;
 } uc_program_t;
 
 
 /* Parser definitions */
+
+uc_declare_vector(uc_search_path_t, char *);
 
 typedef struct {
 	bool lstrip_blocks;
 	bool trim_blocks;
 	bool strict_declarations;
 	bool raw_mode;
+	uc_search_path_t module_search_path;
 } uc_parse_config_t;
+
+extern uc_parse_config_t uc_default_parse_config;
+
+void uc_search_path_init(uc_search_path_t *search_path);
+
+static inline void
+uc_search_path_add(uc_search_path_t *search_path, char *path) {
+	uc_vector_push(search_path, xstrdup(path));
+}
+
+static inline void
+uc_search_path_free(uc_search_path_t *search_path) {
+	while (search_path->count > 0)
+		free(search_path->entries[--search_path->count]);
+
+	uc_vector_clear(search_path);
+}
 
 
 /* VM definitions */
@@ -249,6 +274,7 @@ typedef struct {
 
 uc_declare_vector(uc_callframes_t, uc_callframe_t);
 uc_declare_vector(uc_stack_t, uc_value_t *);
+uc_declare_vector(uc_modexports_t, uc_upvalref_t *);
 
 typedef struct printbuf uc_stringbuf_t;
 
@@ -265,6 +291,7 @@ struct uc_vm {
 	uc_source_t *sources;
 	uc_weakref_t values;
 	uc_resource_types_t restypes;
+	uc_modexports_t exports;
 	union {
 		uint32_t u32;
 		int32_t s32;
@@ -283,13 +310,12 @@ struct uc_vm {
 
 /* Value API */
 
-void ucv_free(uc_value_t *, bool);
-void ucv_put(uc_value_t *);
-
-void ucv_unref(uc_weakref_t *);
-void ucv_ref(uc_weakref_t *, uc_weakref_t *);
+__hidden void ucv_free(uc_value_t *, bool);
+__hidden void ucv_unref(uc_weakref_t *);
+__hidden void ucv_ref(uc_weakref_t *, uc_weakref_t *);
 
 uc_value_t *ucv_get(uc_value_t *uv);
+void ucv_put(uc_value_t *);
 
 uc_type_t ucv_type(uc_value_t *);
 const char *ucv_typename(uc_value_t *);
@@ -448,7 +474,28 @@ ucv_is_arrowfn(uc_value_t *uv)
 static inline bool
 ucv_is_u64(uc_value_t *uv)
 {
-	return (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64 == true);
+	return (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64_or_constant == true &&
+		    uv->type == UC_INTEGER);
+}
+
+static inline bool
+ucv_is_constant(uc_value_t *uv)
+{
+	return (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64_or_constant == true &&
+	        (uv->type == UC_ARRAY || uv->type == UC_OBJECT));
+}
+
+static inline bool
+ucv_set_constant(uc_value_t *uv, bool constant)
+{
+	if (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64_or_constant != constant &&
+	    (uv->type == UC_ARRAY || uv->type == UC_OBJECT)) {
+		uv->u64_or_constant = constant;
+
+		return true;
+	}
+
+	return false;
 }
 
 static inline bool
@@ -499,6 +546,6 @@ ucv_clear_mark(uc_value_t *uv)
 
 void ucv_gc(uc_vm_t *);
 
-void ucv_freeall(uc_vm_t *);
+__hidden void ucv_freeall(uc_vm_t *);
 
 #endif /* UCODE_TYPES_H */

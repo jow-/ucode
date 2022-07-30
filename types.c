@@ -30,6 +30,15 @@
 #include "ucode/vm.h"
 #include "ucode/program.h"
 
+static char *uc_default_search_path[] = { LIB_SEARCH_PATH };
+
+uc_parse_config_t uc_default_parse_config = {
+	.module_search_path = {
+		.count = ARRAY_SIZE(uc_default_search_path),
+		.entries = uc_default_search_path
+	}
+};
+
 uc_type_t
 ucv_type(uc_value_t *uv)
 {
@@ -191,8 +200,8 @@ ucv_gc_mark(uc_value_t *uv)
 	case UC_PROGRAM:
 		program = (uc_program_t *)uv;
 
-		if (program->source)
-			ucv_gc_mark(&program->source->header);
+		for (i = 0; i < program->sources.count; i++)
+			ucv_gc_mark(&program->sources.entries[i]->header);
 
 		break;
 
@@ -283,7 +292,11 @@ ucv_free(uc_value_t *uv, bool retain)
 			uc_program_function_free(func);
 
 		uc_vallist_free(&program->constants);
-		ucv_put_value(&program->source->header, retain);
+
+		for (i = 0; i < program->sources.count; i++)
+			ucv_put_value(&program->sources.entries[i]->header, retain);
+
+		uc_vector_clear(&program->sources);
 		break;
 
 	case UC_SOURCE:
@@ -292,7 +305,11 @@ ucv_free(uc_value_t *uv, bool retain)
 		if (source->runpath != source->filename)
 			free(source->runpath);
 
+		for (i = 0; i < source->exports.count; i++)
+			ucv_put(source->exports.entries[i]);
+
 		uc_vector_clear(&source->lineinfo);
+		uc_vector_clear(&source->exports);
 		fclose(source->fp);
 		free(source->buffer);
 		break;
@@ -470,7 +487,7 @@ ucv_int64_new(int64_t n)
 	integer = xalloc(sizeof(*integer));
 	integer->header.type = UC_INTEGER;
 	integer->header.refcount = 1;
-	integer->header.u64 = 0;
+	integer->header.u64_or_constant = 0;
 	integer->i.s64 = n;
 
 	return &integer->header;
@@ -492,7 +509,7 @@ ucv_uint64_new(uint64_t n)
 	integer = xalloc(sizeof(*integer));
 	integer->header.type = UC_INTEGER;
 	integer->header.refcount = 1;
-	integer->header.u64 = 1;
+	integer->header.u64_or_constant = 1;
 	integer->i.u64 = n;
 
 	return &integer->header;
@@ -520,7 +537,7 @@ ucv_uint64_get(uc_value_t *uv)
 	case UC_INTEGER:
 		integer = (uc_integer_t *)uv;
 
-		if (integer->header.u64)
+		if (integer->header.u64_or_constant)
 			return integer->i.u64;
 
 		if (integer->i.s64 >= 0)
@@ -574,10 +591,10 @@ ucv_int64_get(uc_value_t *uv)
 	case UC_INTEGER:
 		integer = (uc_integer_t *)uv;
 
-		if (integer->header.u64 && integer->i.u64 <= (uint64_t)INT64_MAX)
+		if (integer->header.u64_or_constant && integer->i.u64 <= (uint64_t)INT64_MAX)
 			return (int64_t)integer->i.u64;
 
-		if (!integer->header.u64)
+		if (!integer->header.u64_or_constant)
 			return integer->i.s64;
 
 		errno = ERANGE;
@@ -715,7 +732,7 @@ ucv_array_push(uc_value_t *uv, uc_value_t *item)
 {
 	uc_array_t *array = (uc_array_t *)uv;
 
-	if (ucv_type(uv) != UC_ARRAY)
+	if (ucv_type(uv) != UC_ARRAY || uv->u64_or_constant)
 		return NULL;
 
 	ucv_array_set(uv, array->count, item);
@@ -899,7 +916,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 	unsigned long hash;
 	void *k;
 
-	if (ucv_type(uv) != UC_OBJECT)
+	if (ucv_type(uv) != UC_OBJECT || uv->u64_or_constant)
 		return false;
 
 	hash = lh_get_hash(object->table, (const void *)key);
@@ -932,7 +949,7 @@ ucv_object_delete(uc_value_t *uv, const char *key)
 {
 	uc_object_t *object = (uc_object_t *)uv;
 
-	if (ucv_type(uv) != UC_OBJECT)
+	if (ucv_type(uv) != UC_OBJECT || uv->u64_or_constant)
 		return false;
 
 	return (lh_table_delete(object->table, key) == 0);
@@ -1487,6 +1504,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 	uc_closure_t *closure;
 	uc_regexp_t *regexp;
 	uc_value_t *argname;
+	uc_upvalref_t *ref;
 	uc_array_t *array;
 	size_t i, l;
 	double d;
@@ -1686,10 +1704,17 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		break;
 
 	case UC_UPVALUE:
-		ucv_stringbuf_printf(pb, "%s<upvalref %p>%s",
-			json ? "\"" : "",
-			uv,
-			json ? "\"" : "");
+		ref = (uc_upvalref_t *)uv;
+
+		if (ref->closed)
+			ucv_to_stringbuf_formatted(vm, pb, ref->value, depth, pad_char, pad_size);
+		else if (vm != NULL && ref->slot < vm->stack.count)
+			ucv_to_stringbuf_formatted(vm, pb, vm->stack.entries[ref->slot], depth, pad_char, pad_size);
+		else
+			ucv_stringbuf_printf(pb, "%s<upvalref %p>%s",
+				json ? "\"" : "",
+				uv,
+				json ? "\"" : "");
 
 		break;
 
@@ -2228,4 +2253,13 @@ void
 ucv_freeall(uc_vm_t *vm)
 {
 	ucv_gc_common(vm, true);
+}
+
+void
+uc_search_path_init(uc_search_path_t *search_path)
+{
+	size_t i;
+
+	for (i = 0; i < ARRAY_SIZE(uc_default_search_path); i++)
+		uc_vector_push(search_path, xstrdup(uc_default_search_path[i]));
 }

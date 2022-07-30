@@ -2,7 +2,7 @@ When parsing a comment near EOF, or a comment escaping the end
 of an expression block, the lexer did end up in an infinite loop.
 
 -- Expect stderr --
-Syntax error: Expecting expression
+Syntax error: Unterminated template block
 In line 1, byte 9:
 
  `{{ // }}`

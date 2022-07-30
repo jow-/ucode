@@ -25,7 +25,7 @@
 
 
 uc_program_t *
-uc_program_new(uc_source_t *source)
+uc_program_new(void)
 {
 	uc_program_t *prog;
 
@@ -37,15 +37,13 @@ uc_program_new(uc_source_t *source)
 	prog->functions.next = &prog->functions;
 	prog->functions.prev = &prog->functions;
 
-	prog->source = uc_source_get(source);
-
 	uc_vallist_init(&prog->constants);
 
 	return prog;
 }
 
 uc_function_t *
-uc_program_function_new(uc_program_t *prog, const char *name, size_t srcpos)
+uc_program_function_new(uc_program_t *prog, const char *name, uc_source_t *source, size_t srcpos)
 {
 	uc_function_t *func;
 	size_t namelen = 0;
@@ -57,6 +55,13 @@ uc_program_function_new(uc_program_t *prog, const char *name, size_t srcpos)
 
 	if (name)
 		strcpy(func->name, name);
+
+	for (func->srcidx = 0; func->srcidx < prog->sources.count; func->srcidx++)
+		if (prog->sources.entries[func->srcidx] == source)
+			break;
+
+	if (func->srcidx >= prog->sources.count)
+		uc_vector_push(&prog->sources, uc_source_get(source));
 
 	func->nargs = 0;
 	func->nupvals = 0;
@@ -97,17 +102,21 @@ uc_program_function_load(uc_program_t *prog, size_t id)
 	return NULL;
 }
 
+uc_source_t *
+uc_program_function_source(uc_function_t *fn)
+{
+	assert(fn->srcidx < fn->program->sources.count);
+
+	return fn->program->sources.entries[fn->srcidx];
+}
+
 size_t
 uc_program_function_srcpos(uc_function_t *fn, size_t off)
 {
-	size_t pos;
-
 	if (!fn)
 		return 0;
 
-	pos = uc_chunk_debug_get_srcpos(&fn->chunk, off);
-
-	return pos ? fn->srcpos + pos : 0;
+	return fn->srcpos + uc_chunk_debug_get_srcpos(&fn->chunk, off);
 }
 
 void
@@ -224,7 +233,7 @@ enum {
 static void
 write_chunk(uc_chunk_t *chunk, FILE *file, uint32_t flags)
 {
-	size_t i;
+	size_t i, slot;
 
 	/* write bytecode data */
 	write_vector(chunk, file);
@@ -246,9 +255,14 @@ write_chunk(uc_chunk_t *chunk, FILE *file, uint32_t flags)
 		write_u32(chunk->debuginfo.variables.count, file);
 
 		for (i = 0; i < chunk->debuginfo.variables.count; i++) {
+			slot = chunk->debuginfo.variables.entries[i].slot;
+
+			if (slot >= ((size_t)-1 / 2))
+				slot = ((uint32_t)-1 / 2) + (slot - ((size_t)-1 / 2));
+
 			write_u32(chunk->debuginfo.variables.entries[i].from,    file);
 			write_u32(chunk->debuginfo.variables.entries[i].to,      file);
-			write_u32(chunk->debuginfo.variables.entries[i].slot,    file);
+			write_u32(slot,                                          file);
 			write_u32(chunk->debuginfo.variables.entries[i].nameidx, file);
 		}
 
@@ -293,6 +307,7 @@ write_function(uc_function_t *func, FILE *file, bool debug)
 
 	write_u16(func->nargs, file);
 	write_u16(func->nupvals, file);
+	write_u32(func->srcidx, file);
 	write_u32(func->srcpos, file);
 
 	write_chunk(&func->chunk, file, flags);
@@ -307,33 +322,38 @@ uc_program_write(uc_program_t *prog, FILE *file, bool debug)
 	if (debug)
 		flags |= UC_PROGRAM_F_DEBUG;
 
-	if (debug && prog->source) {
+	if (debug && prog->sources.count)
 		flags |= UC_PROGRAM_F_SOURCEINFO;
-
-		if (prog->source->buffer)
-			flags |= UC_PROGRAM_F_SOURCEBUF;
-	}
 
 	/* magic word + flags */
 	write_u32(UC_PRECOMPILED_BYTECODE_MAGIC, file);
 	write_u32(flags, file);
 
+	/* write source information */
 	if (flags & UC_PROGRAM_F_SOURCEINFO) {
-		/* write source file name */
-		write_string(prog->source->filename, file);
+		write_u32(prog->sources.count, file);
 
-		/* include source buffer if program was compiled from stdin */
-		if (flags & UC_PROGRAM_F_SOURCEBUF)
-			write_string(prog->source->buffer, file);
+		for (i = 0; i < prog->sources.count; i++) {
+			/* write source file name */
+			write_string(prog->sources.entries[i]->filename, file);
 
-		/* write lineinfo data */
-		write_vector(&prog->source->lineinfo, file);
+			/* include source buffer if program was compiled from stdin */
+			if (prog->sources.entries[i]->buffer)
+				write_string(prog->sources.entries[i]->buffer, file);
+			else
+				//write_string("", file);
+				write_u32(0, file);
+
+			/* write lineinfo data */
+			write_vector(&prog->sources.entries[i]->lineinfo, file);
+		}
 	}
 
 	/* write constants */
 	write_vallist(&prog->constants, file);
 
 	/* write program sections */
+	i = 0;
 	uc_program_function_foreach(prog, fn1) {
 		(void)fn1;
 		i++;
@@ -541,57 +561,73 @@ out:
 }
 
 static uc_source_t *
-read_sourceinfo(uc_source_t *input, uint32_t flags, char **errp)
+read_sourceinfo(uc_source_t *input, uint32_t flags, char **errp, uc_program_t *program)
 {
 	char *path = NULL, *code = NULL;
 	uc_source_t *source = NULL;
-	size_t len;
+	size_t len, count;
 
 	if (flags & UC_PROGRAM_F_SOURCEINFO) {
-		if (!read_size_t(input->fp, &len, sizeof(uint32_t), "sourceinfo filename length", errp))
-			goto out;
+		if (!read_size_t(input->fp, &count, sizeof(uint32_t), "amount of source entries", errp))
+			return NULL;
 
-		path = xalloc(len);
+		while (count > 0) {
+			if (!read_size_t(input->fp, &len, sizeof(uint32_t), "sourceinfo filename length", errp))
+				return NULL;
 
-		if (!read_string(input->fp, path, len, "sourceinfo filename", errp))
-			goto out;
+			path = xalloc(len);
 
-		if (flags & UC_PROGRAM_F_SOURCEBUF) {
+			if (!read_string(input->fp, path, len, "sourceinfo filename", errp)) {
+				free(path);
+
+				return NULL;
+			}
+
 			if (!read_size_t(input->fp, &len, sizeof(uint32_t), "sourceinfo code buffer length", errp))
-				goto out;
+				return NULL;
 
-			code = xalloc(len);
+			if (len > 0) {
+				code = xalloc(len);
 
-			if (!read_string(input->fp, code, len, "sourceinfo code buffer data", errp)) {
-				free(code);
-				goto out;
+				if (!read_string(input->fp, code, len, "sourceinfo code buffer data", errp)) {
+					free(code);
+					free(path);
+
+					return NULL;
+				}
+
+				source = uc_source_new_buffer(path, code, len);
+			}
+			else {
+				source = uc_source_new_file(path);
+
+				if (!source) {
+					fprintf(stderr, "Unable to open source file %s: %s\n", path, strerror(errno));
+					source = uc_source_new_buffer(path, xstrdup(""), 0);
+				}
 			}
 
-			source = uc_source_new_buffer(path, code, len);
-		}
-		else {
-			source = uc_source_new_file(path);
+			if (!read_vector(input->fp, &source->lineinfo, "sourceinfo lineinfo", errp)) {
+				uc_source_put(source);
+				free(path);
 
-			if (!source) {
-				fprintf(stderr, "Unable to open source file %s: %s\n", path, strerror(errno));
-				source = uc_source_new_buffer(path, xstrdup(""), 0);
+				return NULL;
 			}
-		}
 
-		if (!read_vector(input->fp, &source->lineinfo, "sourceinfo lineinfo", errp)) {
-			uc_source_put(source);
-			source = NULL;
-			goto out;
+			uc_source_runpath_set(source, input->runpath);
+			uc_vector_push(&program->sources, source);
+
+			free(path);
+
+			count--;
 		}
 	}
 	else {
 		source = uc_source_new_buffer("[no source]", xstrdup(""), 0);
+
+		uc_source_runpath_set(source, input->runpath);
+		uc_vector_push(&program->sources, source);
 	}
-
-	uc_source_runpath_set(source, input->runpath);
-
-out:
-	free(path);
 
 	return source;
 }
@@ -657,6 +693,9 @@ read_chunk(FILE *file, uc_chunk_t *chunk, uint32_t flags, const char *subj, char
 			    !read_size_t(file, &varrange->slot,    sizeof(uint32_t), subjbuf, errp) ||
 			    !read_size_t(file, &varrange->nameidx, sizeof(uint32_t), subjbuf, errp))
 			    goto out;
+
+			if (varrange->slot >= ((uint32_t)-1 / 2))
+				varrange->slot = ((size_t)-1 / 2) + (varrange->slot - ((uint32_t)-1 / 2));
 		}
 
 		snprintf(subjbuf, sizeof(subjbuf), "%s variable names", subj);
@@ -697,8 +736,10 @@ out:
 static bool
 read_function(FILE *file, uc_program_t *program, size_t idx, char **errp)
 {
+	size_t nargs, nupvals, srcidx, srcpos;
 	char subjbuf[64], *name = NULL;
 	uc_function_t *func = NULL;
+	uc_source_t *source;
 	uint32_t flags, u32;
 
 	snprintf(subjbuf, sizeof(subjbuf), "function #%zu flags", idx);
@@ -722,15 +763,25 @@ read_function(FILE *file, uc_program_t *program, size_t idx, char **errp)
 
 	snprintf(subjbuf, sizeof(subjbuf), "function #%zu (%s) arg count and offset", idx, name ? name : "-");
 
-	func = (uc_function_t *)uc_program_function_new(program, name, 0);
+	if (!read_size_t(file, &nargs,   sizeof(uint16_t), subjbuf, errp) ||
+	    !read_size_t(file, &nupvals, sizeof(uint16_t), subjbuf, errp) ||
+	    !read_size_t(file, &srcidx,  sizeof(uint32_t), subjbuf, errp) ||
+	    !read_size_t(file, &srcpos,  sizeof(uint32_t), subjbuf, errp)) {
+		goto out;
+	}
+
+	// FIXME
+	if (srcidx < program->sources.count)
+		source = program->sources.entries[srcidx];
+	else
+		source = program->sources.entries[0];
+
+	func = (uc_function_t *)uc_program_function_new(program, name, source, srcpos);
 	func->arrow   = (flags & UC_FUNCTION_F_IS_ARROW);
 	func->vararg  = (flags & UC_FUNCTION_F_IS_VARARG);
 	func->strict  = (flags & UC_FUNCTION_F_IS_STRICT);
-
-	if (!read_size_t(file, &func->nargs,   sizeof(uint16_t), subjbuf, errp) ||
-	    !read_size_t(file, &func->nupvals, sizeof(uint16_t), subjbuf, errp) ||
-	    !read_size_t(file, &func->srcpos,  sizeof(uint32_t), subjbuf, errp))
-		goto out;
+	func->nargs   = nargs;
+	func->nupvals = nupvals;
 
 	snprintf(subjbuf, sizeof(subjbuf), "function #%zu (%s) body", idx, name ? name : "-");
 
@@ -751,7 +802,6 @@ uc_program_t *
 uc_program_load(uc_source_t *input, char **errp)
 {
 	uc_program_t *program = NULL;
-	uc_source_t *source = NULL;
 	uint32_t flags, nfuncs, i;
 
 	if (!read_u32(input->fp, &i, "file magic", errp))
@@ -765,14 +815,10 @@ uc_program_load(uc_source_t *input, char **errp)
 	if (!read_u32(input->fp, &flags, "program flags", errp))
 		goto out;
 
-	source = read_sourceinfo(input, flags, errp);
+	program = uc_program_new();
 
-	if (!source)
+	if (!read_sourceinfo(input, flags, errp, program))
 		goto out;
-
-	program = uc_program_new(source);
-
-	uc_source_put(source);
 
 	if (!read_vallist(input->fp, &program->constants, "constants", errp))
 		goto out;
@@ -799,4 +845,25 @@ uc_program_entry(uc_program_t *program)
 		return NULL;
 
 	return (uc_function_t *)program->functions.prev;
+}
+
+ssize_t
+uc_program_export_lookup(uc_program_t *program, uc_source_t *source, uc_value_t *name)
+{
+	size_t i, off;
+	ssize_t slot;
+
+	for (i = 0, off = 0; i < program->sources.count; i++) {
+		if (program->sources.entries[i] != source) {
+			off += program->sources.entries[i]->exports.count;
+			continue;
+		}
+
+		slot = uc_source_export_lookup(source, name);
+
+		if (slot > -1)
+			return off + slot;
+	}
+
+	return -1;
 }

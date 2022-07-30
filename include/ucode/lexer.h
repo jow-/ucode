@@ -117,6 +117,10 @@ typedef enum {
 	TK_NULLISH,
 	TK_PLACEH,
 	TK_TEMPLATE,
+	TK_IMPORT,
+	TK_EXPORT,
+	TK_FROM,
+	TK_AS,
 
 	TK_EOF,
 	TK_ERROR
@@ -124,14 +128,11 @@ typedef enum {
 
 typedef enum {
 	UC_LEX_IDENTIFY_BLOCK,
-	UC_LEX_BLOCK_COMMENT_START,
-	UC_LEX_BLOCK_EXPRESSION_START,
 	UC_LEX_BLOCK_EXPRESSION_EMIT_TAG,
-	UC_LEX_BLOCK_STATEMENT_START,
 	UC_LEX_BLOCK_COMMENT,
 	UC_LEX_IDENTIFY_TOKEN,
-	UC_LEX_PARSE_TOKEN,
-	UC_LEX_PLACEHOLDER,
+	UC_LEX_PLACEHOLDER_START,
+	UC_LEX_PLACEHOLDER_END,
 	UC_LEX_EOF
 } uc_lex_state_t;
 
@@ -145,19 +146,9 @@ typedef struct {
 	uc_lex_state_t state;
 	uc_parse_config_t *config;
 	uc_source_t *source;
-	uint8_t eof:1;
-	uint8_t is_escape:1;
-	uint8_t is_placeholder:1;
 	uint8_t no_regexp:1;
 	uint8_t no_keyword:1;
-	size_t buflen;
-	char *buf, *bufstart, *bufend;
-	size_t lookbehindlen;
-	char *lookbehind;
-	const void *tok;
 	uc_token_t curr;
-	char esc[5];
-	uint8_t esclen;
 	int lead_surrogate;
 	size_t lastoff;
 	enum {
@@ -176,19 +167,24 @@ typedef struct {
 		size_t count;
 		size_t *entries;
 	} templates;
+	struct {
+		size_t count;
+		char *entries;
+	} buffer;
+	unsigned char *rbuf;
+	size_t rlen, rpos;
 } uc_lexer_t;
 
 
-void uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source);
-void uc_lexer_free(uc_lexer_t *lex);
+__hidden void uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source);
+__hidden void uc_lexer_free(uc_lexer_t *lex);
 
-uc_token_t *uc_lexer_next_token(uc_lexer_t *lex);
+__hidden uc_token_t *uc_lexer_next_token(uc_lexer_t *lex);
 
-bool uc_lexer_is_keyword(uc_value_t *label);
+__hidden bool uc_lexer_is_keyword(uc_value_t *label);
 
-bool utf8enc(char **out, int *rem, int code);
+__hidden bool utf8enc(char **out, int *rem, int code);
 
-const char *
-uc_tokenname(unsigned type);
+__hidden const char *uc_tokenname(unsigned type);
 
 #endif /* UCODE_LEXER_H */

@@ -1,0 +1,52 @@
+Module imports are read-only bindings to the exported module variables.
+
+-- Testcase --
+import { a } from "./files/test.uc";
+
+a = 2;
+-- End --
+
+-- File test.uc --
+export let a = 1;
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Syntax error: Invalid assignment to constant 'a'
+In line 3, byte 5:
+
+ `a = 2;`
+      ^-- Near here
+
+
+-- End --
+
+
+Aggregated module objects are read-only as well.
+
+-- Testcase --
+import * as mod from "./files/test.uc";
+
+mod.a = 2;
+-- End --
+
+-- File test.uc --
+export let a = 1;
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Type error: object value is immutable
+In line 3, byte 9:
+
+ `mod.a = 2;`
+          ^-- Near here
+
+
+-- End --
