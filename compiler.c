@@ -3169,14 +3169,14 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, 
 }
 
 static char *
-uc_compiler_canonicalize_path(const char *path, const char *basedir)
+uc_compiler_canonicalize_path(const char *path, const char *runpath)
 {
 	char *p, *resolved;
 
 	if (*path == '/')
 		xasprintf(&p, "%s", path);
-	else if (basedir)
-		xasprintf(&p, "%s/%s", basedir, path);
+	else if (runpath && (p = strrchr(runpath, '/')) != NULL)
+		xasprintf(&p, "%.*s/%s", (int)(p - runpath), runpath, path);
 	else
 		xasprintf(&p, "./%s", path);
 
@@ -3188,7 +3188,7 @@ uc_compiler_canonicalize_path(const char *path, const char *basedir)
 }
 
 static char *
-uc_compiler_expand_module_path(const char *name, const char *basedir, const char *template)
+uc_compiler_expand_module_path(const char *name, const char *runpath, const char *template)
 {
 	int namelen, prefixlen;
 	char *path, *p;
@@ -3207,7 +3207,7 @@ uc_compiler_expand_module_path(const char *name, const char *basedir, const char
 		if (*p == '.')
 			*p = '/';
 
-	p = uc_compiler_canonicalize_path(path, basedir);
+	p = uc_compiler_canonicalize_path(path, runpath);
 
 	free(path);
 
