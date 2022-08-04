@@ -3484,6 +3484,10 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_progra
 	uc_compiler_init(&compiler, name, source, 0, progptr,
 		config && config->strict_declarations);
 
+	if (progptr == prog) {
+		compiler.function->module = true;
+	}
+
 	uc_compiler_parse_advance(&compiler);
 
 	while (!uc_compiler_parse_match(&compiler, TK_EOF))

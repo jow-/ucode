@@ -112,7 +112,7 @@ typedef struct uc_weakref {
 
 typedef struct uc_function {
 	uc_weakref_t progref;
-	bool arrow, vararg, strict;
+	bool arrow, vararg, strict, module;
 	size_t nargs;
 	size_t nupvals;
 	size_t srcidx;
