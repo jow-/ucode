@@ -593,6 +593,45 @@ uc_compiler_set_jmpaddr(uc_compiler_t *compiler, size_t off, uint32_t dest)
 	chunk->entries[off + 4] = addr % 0x100;
 }
 
+static void
+uc_compiler_inc_exportnum(uc_compiler_t *compiler)
+{
+	uc_source_t *root = uc_program_function_source(uc_program_entry(compiler->program));
+	uint64_t u;
+
+	if (root->exports.count == 0) {
+		uc_vector_push(&root->exports, ucv_uint64_new(1));
+	}
+	else {
+		u = ucv_uint64_get(root->exports.entries[0]);
+
+		ucv_put(root->exports.entries[0]);
+
+		root->exports.entries[0] = ucv_uint64_new(u + 1);
+	}
+}
+
+static size_t
+uc_compiler_get_exportnum(uc_compiler_t *compiler)
+{
+	uc_source_t *root = uc_program_function_source(uc_program_entry(compiler->program));
+
+	return root->exports.count ? ucv_uint64_get(root->exports.entries[0]) : 0;
+}
+
+static void
+uc_compiler_emit_exports(uc_compiler_t *compiler) {
+	size_t i;
+
+	if (!compiler->patchlist || compiler->patchlist->token != TK_EXPORT)
+		return;
+
+	for (i = 0; i < compiler->patchlist->count; i++) {
+		uc_compiler_emit_insn(compiler, 0, I_EXPORT);
+		uc_compiler_emit_u32(compiler, 0, compiler->patchlist->entries[i]);
+	}
+}
+
 static uc_function_t *
 uc_compiler_finish(uc_compiler_t *compiler)
 {
@@ -600,6 +639,9 @@ uc_compiler_finish(uc_compiler_t *compiler)
 	uc_locals_t *locals = &compiler->locals;
 	uc_upvals_t *upvals = &compiler->upvals;
 	size_t i;
+
+	if (compiler->function->module)
+		uc_compiler_emit_exports(compiler);
 
 	uc_compiler_emit_insn(compiler, 0, I_LNULL);
 	uc_compiler_emit_insn(compiler, 0, I_RETURN);
@@ -2782,7 +2824,7 @@ uc_compiler_compile_control(uc_compiler_t *compiler)
 		p = p->parent;
 	}
 
-	if (!p) {
+	if (!p || p->token == TK_EXPORT) {
 		uc_compiler_syntax_error(compiler, pos,
 			(type == TK_BREAK)
 				? "break must be inside loop or switch"
@@ -2954,8 +2996,8 @@ uc_compiler_export_add(uc_compiler_t *compiler, uc_value_t *name, ssize_t slot)
 				"Duplicate default export for module '%s'", source->filename);
 	}
 	else {
-		uc_compiler_emit_insn(compiler, 0, I_EXPORT);
-		uc_compiler_emit_u32(compiler, 0, slot);
+		uc_vector_push(compiler->patchlist, slot);
+		uc_compiler_inc_exportnum(compiler);
 	}
 }
 
@@ -3078,6 +3120,10 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, 
 
 	uc_program_function_foreach(compiler->program, fn) {
 		if (uc_program_function_source(fn) == source) {
+			if (source->exports.offset == (size_t)-1)
+				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+					"Circular dependency");
+
 			loaded = true;
 			break;
 		}
@@ -3087,8 +3133,13 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, 
 		load_idx = uc_program_function_id(compiler->program,
 			uc_program_function_last(compiler->program)) + 1;
 
+		source->exports.offset = (size_t)-1;
+
 		if (!uc_compile_from_source(&config, source, compiler->program, errp))
 			return false;
+
+		source->exports.offset = uc_compiler_get_exportnum(compiler) - source->exports.count;
+		uc_compiler_current_source(compiler)->exports.offset += source->exports.count;
 
 		/* emit load, call & pop instructions */
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_CLFN);
@@ -3103,20 +3154,17 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, 
 	/* count imports, handle wildcard imports */
 	for (i = 0; i < ucv_array_length(imports); i++) {
 		if (ucv_boolean_get(ucv_array_get(imports, i))) {
-			/* find index of first module export */
-			slot = uc_program_export_lookup(compiler->program, source, source->exports.entries[0]);
-
-			if (slot > 0xffff || source->exports.count > 0xffff) {
+			if (source->exports.offset > 0xffff || source->exports.count > 0xffff) {
 				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 					"Too many module exports");
 			}
 
 			/* emit import instruction... */
-			uc_compiler_emit_insn(compiler, 0, I_IMPORT);
+			uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_IMPORT);
 			uc_compiler_emit_u32(compiler, 0, source->exports.count | (0xffff << 16));
 
 			/* ... followed by first module export offset ... */
-			uc_compiler_emit_u16(compiler, 0, slot);
+			uc_compiler_emit_u16(compiler, 0, source->exports.offset);
 
 			/* ... and constant indexes for all exported names */
 			for (load_idx = 0; load_idx < source->exports.count; load_idx++) {
@@ -3144,7 +3192,7 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, 
 		import = ucv_array_get(imports, i);
 
 		if (!ucv_boolean_get(import)) {
-			slot = uc_program_export_lookup(compiler->program, source, import);
+			slot = uc_source_export_lookup(source, import);
 
 			if (slot == -1) {
 				if (import)
@@ -3159,8 +3207,9 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, 
 					"Too many module exports");
 			}
 			else {
-				uc_compiler_emit_insn(compiler, 0, I_IMPORT);
-				uc_compiler_emit_u32(compiler, 0, slot | ((compiler->upvals.count - n_imports + i) << 16));
+				uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_IMPORT);
+				uc_compiler_emit_u32(compiler, 0,
+					(source->exports.offset + slot) | ((compiler->upvals.count - n_imports + i) << 16));
 			}
 		}
 	}
@@ -3470,6 +3519,7 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_progra
 
 	return NULL;
 #else
+	uc_patchlist_t exports = { .token = TK_EXPORT };
 	uc_exprstack_t expr = { .token = TK_EOF };
 	uc_parser_t parser = { .config = config };
 	uc_compiler_t compiler = { .parser = &parser, .exprstack = &expr };
@@ -3491,6 +3541,7 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_progra
 		config && config->strict_declarations);
 
 	if (progptr == prog) {
+		compiler.patchlist = &exports;
 		compiler.function->module = true;
 	}
 
@@ -3510,6 +3561,7 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_progra
 	}
 
 	uc_lexer_free(&parser.lex);
+	uc_vector_clear(&exports);
 
 	if (!fn) {
 		if (progptr != prog)

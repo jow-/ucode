@@ -1,0 +1,43 @@
+Circular imports are not possible and will lead to a compilation error.
+
+-- Testcase --
+import a_val from "./files/a.uc";
+-- End --
+
+-- File a.uc --
+import b_val from "./b.uc";
+export default "a";
+-- End --
+
+-- File b.uc --
+import a_val from "./a.uc";
+export default "b";
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stderr --
+Syntax error: Unable to compile module './files/a.uc':
+
+  | Syntax error: Unable to compile module './files/b.uc':
+  |
+  |   | Syntax error: Circular dependency
+  |   | In ./files/b.uc, line 1, byte 19:
+  |   |
+  |   |  `import a_val from "./a.uc";`
+  |   |   Near here --------^
+  |
+  | In ./files/a.uc, line 1, byte 27:
+  |
+  |  `import b_val from "./b.uc";`
+  |   Near here ----------------^
+
+In [stdin], line 1, byte 33:
+
+ `import a_val from "./files/a.uc";`
+  Near here ----------------------^
+
+
+-- End --
