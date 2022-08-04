@@ -2809,6 +2809,12 @@ uc_compiler_compile_return(uc_compiler_t *compiler)
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t off = chunk->count;
 
+	if (compiler->function->module) {
+		uc_compiler_syntax_error(compiler, 0, "return must be inside function body");
+
+		return;
+	}
+
 	uc_compiler_compile_expstmt(compiler);
 
 	/* if we compiled an empty expression statement (`;`), load implicit null */
@@ -3009,7 +3015,7 @@ uc_compiler_compile_export(uc_compiler_t *compiler)
 	uc_value_t *name;
 	ssize_t slot;
 
-	if (compiler->program->sources.count == 1 || compiler->scope_depth) {
+	if (!compiler->function->module || compiler->scope_depth) {
 		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 			"Exports may only appear at top level of a module");
 
