@@ -169,10 +169,11 @@ uc_compiler_current_source(uc_compiler_t *compiler)
 __attribute__((format(printf, 3, 0))) static void
 uc_compiler_syntax_error(uc_compiler_t *compiler, size_t off, const char *fmt, ...)
 {
+	uc_source_t *source = uc_compiler_current_source(compiler);
 	uc_stringbuf_t *buf = compiler->parser->error;
 	size_t line = 0, byte = 0, len = 0;
+	char *s, *p, *nl;
 	va_list ap;
-	char *s;
 
 	if (compiler->parser->synchronizing)
 		return;
@@ -188,7 +189,7 @@ uc_compiler_syntax_error(uc_compiler_t *compiler, size_t off, const char *fmt, .
 
 	if (off) {
 		byte = off;
-		line = uc_source_get_line(uc_compiler_current_source(compiler), &byte);
+		line = uc_source_get_line(source, &byte);
 	}
 
 	va_start(ap, fmt);
@@ -196,15 +197,53 @@ uc_compiler_syntax_error(uc_compiler_t *compiler, size_t off, const char *fmt, .
 	va_end(ap);
 
 	ucv_stringbuf_append(buf, "Syntax error: ");
-	ucv_stringbuf_addstr(buf, s, len);
-	ucv_stringbuf_append(buf, "\n");
+
+	p = strstr(s, "\nSyntax error: ");
+
+	if (!p) {
+		ucv_stringbuf_addstr(buf, s, len);
+		ucv_stringbuf_append(buf, "\n");
+	}
+	else {
+		ucv_stringbuf_printf(buf, "%.*s\n\n", (int)(p - s), s);
+
+		while (len > 0 && s[len-1] == '\n')
+			s[--len] = 0;
+
+		for (p++, nl = strchr(p, '\n'); p != NULL;
+		     p = nl ? nl + 1 : NULL, nl = p ? strchr(p, '\n') : NULL)
+		{
+			if (!nl)
+				ucv_stringbuf_printf(buf, "  | %s", p);
+			else if (nl != p)
+				ucv_stringbuf_printf(buf, "  | %.*s\n", (int)(nl - p), p);
+			else
+				ucv_stringbuf_append(buf, "  |\n");
+		}
+
+		ucv_stringbuf_append(buf, "\n\n");
+	}
 
 	free(s);
 
-	if (line)
-		ucv_stringbuf_printf(buf, "In line %zu, byte %zu:\n", line, byte);
+	if (line) {
+		ucv_stringbuf_append(buf, "In ");
 
-	if (uc_error_context_format(buf, uc_compiler_current_source(compiler), NULL, off))
+		if (compiler->program->sources.count > 1) {
+			len = strlen(source->filename);
+
+			if (len > 48)
+				ucv_stringbuf_printf(buf, "...%s", source->filename + len - 45);
+			else
+				ucv_stringbuf_addstr(buf, source->filename, len);
+
+			ucv_stringbuf_append(buf, ", ");
+		}
+
+		ucv_stringbuf_printf(buf, "line %zu, byte %zu:\n", line, byte);
+	}
+
+	if (uc_error_context_format(buf, source, NULL, off))
 		ucv_stringbuf_append(buf, "\n\n");
 }
 
