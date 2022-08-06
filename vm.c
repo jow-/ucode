@@ -902,11 +902,11 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 static uc_value_t *
 uc_vm_get_error_context(uc_vm_t *vm)
 {
+	size_t offset, i, byte, line;
 	uc_value_t *stacktrace;
 	uc_callframe_t *frame;
 	uc_stringbuf_t *buf;
 	uc_chunk_t *chunk;
-	size_t offset, i;
 
 	/* skip to first non-native function call frame */
 	for (i = vm->callframes.count; i > 1; i--)
@@ -924,7 +924,10 @@ uc_vm_get_error_context(uc_vm_t *vm)
 
 	buf = ucv_stringbuf_new();
 
-	if (offset)
+	byte = offset;
+	line = uc_source_get_line(uc_program_function_source(frame->closure->function), &byte);
+
+	if (line)
 		uc_error_context_format(buf, uc_vm_frame_source(frame), stacktrace, offset);
 	else if (frame->ip != chunk->entries)
 		ucv_stringbuf_printf(buf, "At instruction %zu", (frame->ip - chunk->entries) - 1);
