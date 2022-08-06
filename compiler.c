@@ -187,10 +187,8 @@ uc_compiler_syntax_error(uc_compiler_t *compiler, size_t off, const char *fmt, .
 		off = uc_program_function_srcpos(compiler->function,
 			uc_compiler_current_chunk(compiler)->count);
 
-	if (off) {
-		byte = off;
-		line = uc_source_get_line(source, &byte);
-	}
+	byte = off;
+	line = uc_source_get_line(source, &byte);
 
 	va_start(ap, fmt);
 	len = xvasprintf(&s, fmt, ap);
