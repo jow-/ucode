@@ -1674,7 +1674,7 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 }
 
 static bool
-uc_require_path(uc_vm_t *vm, const char *path_template, const char *name, uc_value_t **res)
+uc_require_path(uc_vm_t *vm, const char *path_template, const char *name, uc_value_t **res, bool so_only)
 {
 	uc_stringbuf_t *buf = xprintbuf_new();
 	const char *p, *q, *last;
@@ -1715,7 +1715,7 @@ uc_require_path(uc_vm_t *vm, const char *path_template, const char *name, uc_val
 
 	if (!strcmp(p + 1, ".so"))
 		rv = uc_require_so(vm, buf->buf, res);
-	else if (!strcmp(p + 1, ".uc"))
+	else if (!strcmp(p + 1, ".uc") && !so_only)
 		rv = uc_require_ucode(vm, buf->buf, NULL, res, true);
 
 	if (rv)
@@ -1727,18 +1727,17 @@ out:
 	return rv;
 }
 
-static uc_value_t *
-uc_require(uc_vm_t *vm, size_t nargs)
+uc_value_t *
+uc_require_library(uc_vm_t *vm, uc_value_t *nameval, bool so_only)
 {
-	uc_value_t *val = uc_fn_arg(0);
 	uc_value_t *search, *se, *res;
 	size_t arridx, arrlen;
 	const char *name;
 
-	if (ucv_type(val) != UC_STRING)
+	if (ucv_type(nameval) != UC_STRING)
 		return NULL;
 
-	name = ucv_string_get(val);
+	name = ucv_string_get(nameval);
 	search = ucv_property_get(uc_vm_scope_get(vm), "REQUIRE_SEARCH_PATH");
 
 	if (ucv_type(search) != UC_ARRAY) {
@@ -1754,7 +1753,7 @@ uc_require(uc_vm_t *vm, size_t nargs)
 		if (ucv_type(se) != UC_STRING)
 			continue;
 
-		if (uc_require_path(vm, ucv_string_get(se), name, &res))
+		if (uc_require_path(vm, ucv_string_get(se), name, &res, so_only))
 			return res;
 	}
 
@@ -1762,6 +1761,12 @@ uc_require(uc_vm_t *vm, size_t nargs)
 	                      "No module named '%s' could be found", name);
 
 	return NULL;
+}
+
+static uc_value_t *
+uc_require(uc_vm_t *vm, size_t nargs)
+{
+	return uc_require_library(vm, uc_fn_arg(0), false);
 }
 
 static uc_value_t *
