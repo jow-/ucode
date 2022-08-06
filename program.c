@@ -228,6 +228,7 @@ enum {
 	UC_FUNCTION_F_HAS_NAME       = (1 << 4),
 	UC_FUNCTION_F_HAS_VARDBG     = (1 << 5),
 	UC_FUNCTION_F_HAS_OFFSETDBG  = (1 << 6),
+	UC_FUNCTION_F_IS_MODULE      = (1 << 7),
 };
 
 static void
@@ -287,6 +288,9 @@ write_function(uc_function_t *func, FILE *file, bool debug)
 
 	if (func->strict)
 		flags |= UC_FUNCTION_F_IS_STRICT;
+
+	if (func->module)
+		flags |= UC_FUNCTION_F_IS_MODULE;
 
 	if (func->chunk.ehranges.count)
 		flags |= UC_FUNCTION_F_HAS_EXCEPTIONS;
@@ -780,6 +784,7 @@ read_function(FILE *file, uc_program_t *program, size_t idx, char **errp)
 	func->arrow   = (flags & UC_FUNCTION_F_IS_ARROW);
 	func->vararg  = (flags & UC_FUNCTION_F_IS_VARARG);
 	func->strict  = (flags & UC_FUNCTION_F_IS_STRICT);
+	func->module  = (flags & UC_FUNCTION_F_IS_MODULE);
 	func->nargs   = nargs;
 	func->nupvals = nupvals;
 
@@ -845,25 +850,4 @@ uc_program_entry(uc_program_t *program)
 		return NULL;
 
 	return (uc_function_t *)program->functions.prev;
-}
-
-ssize_t
-uc_program_export_lookup(uc_program_t *program, uc_source_t *source, uc_value_t *name)
-{
-	size_t i, off;
-	ssize_t slot;
-
-	for (i = 0, off = 0; i < program->sources.count; i++) {
-		if (program->sources.entries[i] != source) {
-			off += program->sources.entries[i]->exports.count;
-			continue;
-		}
-
-		slot = uc_source_export_lookup(source, name);
-
-		if (slot > -1)
-			return off + slot;
-	}
-
-	return -1;
 }

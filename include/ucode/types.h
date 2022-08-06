@@ -65,7 +65,6 @@ typedef struct {
 /* Source buffer defintions */
 
 uc_declare_vector(uc_lineinfo_t, uint8_t);
-uc_declare_vector(uc_exports_t, uc_value_t *);
 
 typedef struct {
 	uc_value_t header;
@@ -73,7 +72,10 @@ typedef struct {
 	FILE *fp;
 	size_t off;
 	uc_lineinfo_t lineinfo;
-	uc_exports_t exports;
+	struct {
+		size_t count, offset;
+		uc_value_t **entries;
+	} exports;
 } uc_source_t;
 
 
@@ -112,7 +114,7 @@ typedef struct uc_weakref {
 
 typedef struct uc_function {
 	uc_weakref_t progref;
-	bool arrow, vararg, strict;
+	bool arrow, vararg, strict, module;
 	size_t nargs;
 	size_t nupvals;
 	size_t srcidx;

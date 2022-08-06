@@ -1179,6 +1179,9 @@ uc_vm_insn_load_closure(uc_vm_t *vm, uc_vm_insn_t insn)
 
 	uc_vm_stack_push(vm, &closure->header);
 
+	if (function->module)
+		return;
+
 	for (i = 0; i < function->nupvals; i++) {
 		uv = (
 			frame->ip[0] * 0x1000000 +

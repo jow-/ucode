@@ -39,7 +39,7 @@ export const x = "This is a non-default export";
 
 -- Expect stderr --
 Syntax error: Module ./files/test2.uc has no default export
-In line 1, byte 20:
+In [stdin], line 1, byte 20:
 
  `import defVal from "./files/test2.uc";`
   Near here ---------^

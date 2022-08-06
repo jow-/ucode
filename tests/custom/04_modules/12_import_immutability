@@ -16,7 +16,7 @@ export let a = 1;
 
 -- Expect stderr --
 Syntax error: Invalid assignment to constant 'a'
-In line 3, byte 5:
+In [stdin], line 3, byte 5:
 
  `a = 2;`
       ^-- Near here

@@ -36,15 +36,14 @@ import "./files/test.uc";
 
 -- Expect stderr --
 Syntax error: Unable to compile module './files/test.uc':
-Syntax error: Exports may only appear at top level of a module
-In line 2, byte 2:
 
- `    export let x = 1;`
-      ^-- Near here
+  | Syntax error: Exports may only appear at top level of a module
+  | In ./files/test.uc, line 2, byte 2:
+  |
+  |  `    export let x = 1;`
+  |       ^-- Near here
 
-
-
-In line 1, byte 25:
+In [stdin], line 1, byte 25:
 
  `import "./files/test.uc";`
   Near here --------------^
@@ -72,15 +71,14 @@ export { y as x };
 
 -- Expect stderr --
 Syntax error: Unable to compile module './files/test-duplicate.uc':
-Syntax error: Duplicate export 'x' for module './files/test-duplicate.uc'
-In line 4, byte 15:
 
- `export { y as x };`
-  Near here ----^
+  | Syntax error: Duplicate export 'x' for module './files/test-duplicate.uc'
+  | In ./files/test-duplicate.uc, line 4, byte 15:
+  |
+  |  `export { y as x };`
+  |   Near here ----^
 
-
-
-In line 1, byte 35:
+In [stdin], line 1, byte 35:
 
  `import "./files/test-duplicate.uc";`
   Near here ------------------------^

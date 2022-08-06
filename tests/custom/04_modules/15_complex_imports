@@ -1,0 +1,151 @@
+This testcase implements a somewhat complex dependency chain to stress
+test the compiler module resolving.
+
+The dependency tree is:
+
+root
+ + mod1
+    + mod4
+    + mod8
+ + mod2
+    + mod4
+    + mod6
+    + mod8
+    + mod9
+ + mod3
+    + mod4
+    + mod6
+ + mod4
+ + mod5
+    + mod1
+       + mod4
+       + mod8
+    + mod2
+       + mod4
+       + mod6
+       + mod8
+       + mod9
+    + mod4
+    + mod6
+    + mod8
+    + mod9
+       + mod4
+       + mod6
+ + mod6
+ + mod7
+    + mod5
+       + mod1
+          + mod4
+          + mod8
+       + mod2
+          + mod4
+          + mod6
+          + mod8
+          + mod9
+       + mod4
+       + mod6
+       + mod8
+       + mod9
+          + mod4
+          + mod6
+    + mod6
+ + mod8
+
+-- Testcase --
+import mod1 from 'mod1';
+import mod2 from 'mod2';
+import mod3 from 'mod3';
+import mod4 from 'mod4';
+import mod5 from 'mod5';
+import mod6 from 'mod6';
+import mod7 from 'mod7';
+import mod8 from 'mod8';
+
+print("root: ", [ mod1, mod2, mod3, mod4, mod5, mod6, mod7, mod8 ], "\n");
+-- End --
+
+-- File mod1.uc --
+import mod4 from 'mod4';
+import mod8 from 'mod8';
+
+print("mod1: ", [ mod4, mod8 ], "\n");
+
+export default 'mod1';
+-- End --
+
+-- File mod2.uc --
+import mod9 from 'mod9';
+import mod4 from 'mod4';
+import mod8 from 'mod8';
+import mod6 from 'mod6';
+
+print("mod2: ", [ mod4, mod6, mod8, mod9 ], "\n");
+
+export default 'mod2';
+-- End --
+
+-- File mod3.uc --
+import mod4 from 'mod4';
+import mod6 from 'mod6';
+
+print("mod3: ", [ mod4, mod6 ], "\n");
+
+export default 'mod3';
+-- End --
+
+-- File mod4.uc --
+export default 'mod4';
+-- End --
+
+-- File mod5.uc --
+import mod1 from 'mod1';
+import mod4 from 'mod4';
+import mod2 from 'mod2';
+import mod9 from 'mod9';
+import mod8 from 'mod8';
+import mod6 from 'mod6';
+
+print("mod5: ", [ mod1, mod2, mod4, mod6, mod8, mod9 ], "\n");
+
+export default 'mod5';
+-- End --
+
+-- File mod6.uc --
+export default 'mod6';
+-- End --
+
+-- File mod7.uc --
+import mod6 from 'mod6';
+import mod5 from 'mod5';
+
+print("mod7: ", [ mod5, mod6 ], "\n");
+
+export default 'mod7';
+-- End --
+
+-- File mod8.uc --
+export default 'mod8';
+-- End --
+
+-- File mod9.uc --
+import mod4 from 'mod4';
+import mod6 from 'mod6';
+
+print("mod9: ", [ mod4, mod6 ], "\n");
+
+export default 'mod9';
+-- End --
+
+-- Args --
+-R -L files/
+-- End --
+
+-- Expect stdout --
+mod1: [ "mod4", "mod8" ]
+mod9: [ "mod4", "mod6" ]
+mod2: [ "mod4", "mod6", "mod8", "mod9" ]
+mod3: [ "mod4", "mod6" ]
+mod5: [ "mod1", "mod2", "mod4", "mod6", "mod8", "mod9" ]
+mod7: [ "mod5", "mod6" ]
+root: [ "mod1", "mod2", "mod3", "mod4", "mod5", "mod6", "mod7", "mod8" ]
+-- End --
