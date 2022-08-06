@@ -97,7 +97,8 @@ __insn(NEXTK) \
 __insn(NEXTKV) \
 __insn(DELETE) \
 __insn(IMPORT) \
-__insn(EXPORT)
+__insn(EXPORT) \
+__insn(DYNLOAD)
 
 
 #undef __insn
