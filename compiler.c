@@ -187,10 +187,8 @@ uc_compiler_syntax_error(uc_compiler_t *compiler, size_t off, const char *fmt, .
 		off = uc_program_function_srcpos(compiler->function,
 			uc_compiler_current_chunk(compiler)->count);
 
-	if (off) {
-		byte = off;
-		line = uc_source_get_line(source, &byte);
-	}
+	byte = off;
+	line = uc_source_get_line(source, &byte);
 
 	va_start(ap, fmt);
 	len = xvasprintf(&s, fmt, ap);
@@ -3332,6 +3330,68 @@ uc_compiler_acquire_source(uc_compiler_t *compiler, const char *path)
 }
 
 static bool
+uc_compiler_compile_dynload(uc_compiler_t *compiler, const char *name, uc_value_t *imports)
+{
+	uc_value_t *modname = ucv_string_new(name);
+	size_t i, n_imports;
+	uc_value_t *import;
+
+	for (i = 0, n_imports = 0; i < ucv_array_length(imports); i++) {
+		import = ucv_array_get(imports, i);
+
+		if (ucv_boolean_get(import)) {
+			uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
+			uc_compiler_emit_u32(compiler, 0, 0);
+			uc_compiler_emit_constant_index(compiler, 0, modname);
+		}
+		else {
+			n_imports++;
+		}
+	}
+
+	if (n_imports > 0) {
+		uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
+		uc_compiler_emit_u32(compiler, 0, n_imports | ((compiler->upvals.count - n_imports) << 16));
+		uc_compiler_emit_constant_index(compiler, 0, modname);
+
+		for (i = 0; i < ucv_array_length(imports); i++) {
+			import = ucv_get(ucv_array_get(imports, i));
+
+			if (!import)
+				import = ucv_string_new("default");
+
+			if (!ucv_boolean_get(import))
+				uc_compiler_emit_constant_index(compiler, 0, import);
+
+			ucv_put(import);
+		}
+	}
+
+	ucv_put(modname);
+
+	return true;
+}
+
+static bool
+uc_compiler_is_dynlink_module(uc_compiler_t *compiler, const char *name, const char *path)
+{
+	uc_search_path_t *dynlink_list = &compiler->parser->config->force_dynlink_list;
+	size_t i;
+	char *p;
+
+	for (i = 0; i < dynlink_list->count; i++)
+		if (!strcmp(dynlink_list->entries[i], name))
+			return true;
+
+	if (!path)
+		return false;
+
+	p = strrchr(path, '.');
+
+	return (p && !strcmp(p, ".so"));
+}
+
+static bool
 uc_compiler_compile_module(uc_compiler_t *compiler, const char *name, uc_value_t *imports)
 {
 	uc_source_t *source;
@@ -3343,7 +3403,10 @@ uc_compiler_compile_module(uc_compiler_t *compiler, const char *name, uc_value_t
 
 	path = uc_compiler_resolve_module_path(compiler, name);
 
-	if (path) {
+	if (uc_compiler_is_dynlink_module(compiler, name, path)) {
+		res = uc_compiler_compile_dynload(compiler, name, imports);
+	}
+	else if (path) {
 		source = uc_compiler_acquire_source(compiler, path);
 
 		if (source) {
@@ -3363,6 +3426,8 @@ uc_compiler_compile_module(uc_compiler_t *compiler, const char *name, uc_value_t
 
 			res = false;
 		}
+
+		uc_source_put(source);
 	}
 	else {
 		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
@@ -3371,7 +3436,6 @@ uc_compiler_compile_module(uc_compiler_t *compiler, const char *name, uc_value_t
 		return false;
 	}
 
-	uc_source_put(source);
 	free(path);
 
 	return res;

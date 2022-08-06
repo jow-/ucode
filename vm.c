@@ -75,7 +75,8 @@ static const int8_t insn_operand_bytes[__I_MAX] = {
 	[I_QMCALL] = 4,
 
 	[I_IMPORT] = 4,
-	[I_EXPORT] = 4
+	[I_EXPORT] = 4,
+	[I_DYNLOAD] = 4
 };
 
 static const char *exception_type_strings[] = {
@@ -902,11 +903,11 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 static uc_value_t *
 uc_vm_get_error_context(uc_vm_t *vm)
 {
+	size_t offset, i, byte, line;
 	uc_value_t *stacktrace;
 	uc_callframe_t *frame;
 	uc_stringbuf_t *buf;
 	uc_chunk_t *chunk;
-	size_t offset, i;
 
 	/* skip to first non-native function call frame */
 	for (i = vm->callframes.count; i > 1; i--)
@@ -924,7 +925,10 @@ uc_vm_get_error_context(uc_vm_t *vm)
 
 	buf = ucv_stringbuf_new();
 
-	if (offset)
+	byte = offset;
+	line = uc_source_get_line(uc_program_function_source(frame->closure->function), &byte);
+
+	if (line)
 		uc_error_context_format(buf, uc_vm_frame_source(frame), stacktrace, offset);
 	else if (frame->ip != chunk->entries)
 		ucv_stringbuf_printf(buf, "At instruction %zu", (frame->ip - chunk->entries) - 1);
@@ -2422,6 +2426,88 @@ uc_vm_insn_export(uc_vm_t *vm, uc_vm_insn_t insn)
 	ucv_get(&ref->header);
 }
 
+static void
+uc_vm_insn_dynload(uc_vm_t *vm, uc_vm_insn_t insn)
+{
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_value_t *name, *export, *modscope, *modobj;
+	uint16_t count = vm->arg.u32 & 0xffff;
+	uint16_t to = vm->arg.u32 >> 16;
+	uint32_t cidx;
+	bool found;
+
+	/* instruction is followed by u32 containing the constant index of the
+	 * module name string to import and `count` times u32 values containing
+	 * the import name constant indexes */
+
+	cidx = (
+		frame->ip[0] * 0x1000000UL +
+		frame->ip[1] * 0x10000UL +
+		frame->ip[2] * 0x100UL +
+		frame->ip[3]
+	);
+
+	frame->ip += 4;
+
+	/* push module name onto stack, then attempt to load module and pop
+	 * name value again. Will raise exception on error */
+	name = uc_program_get_constant(uc_vm_current_program(vm), cidx);
+	modscope = uc_require_library(vm, name, true);
+	ucv_put(name);
+
+	if (!modscope)
+		return;
+
+	/* If count is zero, we're doing a wildcard import. Shallow copy module
+	 * object, mark it constant and patch into the target upvalue. */
+	if (count == 0) {
+		modobj = ucv_object_new(vm);
+
+		ucv_object_foreach(modscope, k, v)
+			ucv_object_add(modobj, k, ucv_get(v));
+
+		ucv_set_constant(modobj, true);
+
+		uc_vm_stack_push(vm, modobj);
+	}
+
+	/* ... otherwise we're importing a specific list of names */
+	else {
+		while (count > 0) {
+			cidx = (
+				frame->ip[0] * 0x1000000UL +
+				frame->ip[1] * 0x10000UL +
+				frame->ip[2] * 0x100UL +
+				frame->ip[3]
+			);
+
+			frame->ip += 4;
+
+			name = uc_program_get_constant(uc_vm_current_program(vm), cidx);
+			export = ucv_object_get(modscope, ucv_string_get(name), &found);
+
+			if (!found) {
+				uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
+				                      "Module does not export %s",
+				                      ucv_string_get(name));
+
+				ucv_put(name);
+
+				return;
+			}
+
+			ucv_put(name);
+
+			frame->closure->upvals[to] = (uc_upvalref_t *)ucv_upvalref_new(0);
+			frame->closure->upvals[to]->closed = true;
+			frame->closure->upvals[to]->value = ucv_get(export);
+
+			count--;
+			to++;
+		}
+	}
+}
+
 static uc_value_t *
 uc_vm_callframe_pop(uc_vm_t *vm)
 {
@@ -2715,6 +2801,10 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 
 		case I_EXPORT:
 			uc_vm_insn_export(vm, insn);
+			break;
+
+		case I_DYNLOAD:
+			uc_vm_insn_dynload(vm, insn);
 			break;
 
 		default:

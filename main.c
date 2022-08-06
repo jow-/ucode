@@ -90,7 +90,8 @@ print_usage(const char *app)
 	"-c[flag,flag,...]\n"
 	"  Compile the given source file(s) to bytecode instead of executing them.\n"
 	"  Supported flags: no-interp (omit interpreter line), interp=... (over-\n"
-	"  ride interpreter line with ...)\n\n"
+	"  ride interpreter line with ...), dynlink=... (force import from ... to\n"
+	"  be treated as shared extensions loaded at runtime).\n\n"
 
 	"-o path\n"
 	"  Output file path when compiling. If omitted, the compiled byte code\n"
@@ -204,7 +205,7 @@ parse_template_modeflags(char *opt, uc_parse_config_t *config)
 }
 
 static void
-parse_compile_flags(char *opt, char **interp)
+parse_compile_flags(char *opt, char **interp, uc_search_path_t *dynlink_list)
 {
 	char *p, *k, *v;
 
@@ -229,6 +230,12 @@ parse_compile_flags(char *opt, char **interp)
 				fprintf(stderr, "Compile flag \"%s\" requires a value, ignoring\n", k);
 			else
 				*interp = v;
+		}
+		else if (!strcmp(k, "dynlink")) {
+			if (!v)
+				fprintf(stderr, "Compile flag \"%s\" requires a value, ignoring\n", k);
+			else
+				uc_vector_push(dynlink_list, v);
 		}
 		else {
 			fprintf(stderr, "Unrecognized -c flag \"%s\", ignoring\n", k);
@@ -577,7 +584,7 @@ main(int argc, char **argv)
 
 		case 'c':
 			outfile = "./uc.out";
-			parse_compile_flags(optarg, &interp);
+			parse_compile_flags(optarg, &interp, &config.force_dynlink_list);
 			break;
 
 		case 's':
@@ -640,6 +647,7 @@ main(int argc, char **argv)
 
 out:
 	uc_search_path_free(&config.module_search_path);
+	uc_vector_clear(&config.force_dynlink_list);
 
 	uc_source_put(source);
 
