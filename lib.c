@@ -3519,6 +3519,49 @@ uc_hexdec(uc_vm_t *vm, size_t nargs)
 	return ucv_stringbuf_finish(buf);
 }
 
+static uc_value_t *
+uc_gc(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *operation = uc_fn_arg(0);
+	uc_value_t *argument = uc_fn_arg(1);
+	const char *op = NULL;
+	uc_weakref_t *ref;
+	int64_t n;
+
+	if (operation != NULL && ucv_type(operation) != UC_STRING)
+		return NULL;
+
+	op = ucv_string_get(operation);
+
+	if (!op || !strcmp(op, "collect")) {
+		ucv_gc(vm);
+
+		return ucv_boolean_new(true);
+	}
+	else if (!strcmp(op, "start")) {
+		n = argument ? ucv_int64_get(argument) : 0;
+
+		if (errno || n < 0 || n > 0xFFFF)
+			return NULL;
+
+		if (n == 0)
+			n = GC_DEFAULT_INTERVAL;
+
+		return ucv_boolean_new(uc_vm_gc_start(vm, n));
+	}
+	else if (!strcmp(op, "stop")) {
+		return ucv_boolean_new(uc_vm_gc_stop(vm));
+	}
+	else if (!strcmp(op, "count")) {
+		for (n = 0, ref = vm->values.next; ref != &vm->values; ref = ref->next)
+			n++;
+
+		return ucv_uint64_new(n);
+	}
+
+	return NULL;
+}
+
 
 const uc_function_list_t uc_stdlib_functions[] = {
 	{ "chr",		uc_chr },
@@ -3586,6 +3629,7 @@ const uc_function_list_t uc_stdlib_functions[] = {
 	{ "clock",		uc_clock },
 	{ "hexdec",		uc_hexdec },
 	{ "hexenc",		uc_hexenc },
+	{ "gc",			uc_gc }
 };
 
 

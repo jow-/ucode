@@ -1,0 +1,107 @@
+The `gc()` function allows controlling the garbage collector of the VM.
+It takes the requested operation as first argument and an optional,
+operation specific second argument.
+
+Returns `null` if the given operation is invalid or if the operation
+specific argument is invalid.
+
+Returns `false` if the requested operation would not result in any
+changes.
+
+Returns `true` if the requested oepration succeeded (e.g. starting
+the GC when it was previously stopped).
+
+Returns an object count if the given operation is `count`.
+
+-- Testcase --
+{%
+	printf("Count #1: %d\n", gc("count"));
+
+	// create an unreachable cyclic structure
+	let o = {};
+	o.cycle = o;
+	o = null;
+
+	printf("Count #2: %d\n", gc("count"));
+
+	// invoking gc without any argument defaults to "collect"
+	gc();
+
+	printf("Count #3: %d\n", gc("count"));
+
+
+	// create another unreachable cyclic structure
+	o = {};
+	o.cycle = o;
+	o = null;
+
+	printf("Count #4: %d\n", gc("count"));
+
+	// invoking gc with explicit collect argument
+	gc("collect");
+
+	printf("Count #5: %d\n", gc("count"));
+%}
+-- End --
+
+-- Expect stdout --
+Count #1: 5
+Count #2: 6
+Count #3: 5
+Count #4: 6
+Count #5: 5
+-- End --
+
+
+Testing enabling the automatic collector.
+
+-- Testcase --
+{%
+	// start GC, trigger every 10 object allocations
+	gc("start", 10);
+
+	for (let i = 0; i < 100; i++) {
+		let o = {};
+		o.cyle = o;
+		o = null;
+
+		if ((i % 10) == 0)
+			printf("Count #%d: %d\n", (i / 10) + 1, gc("count"));
+	}
+
+	// stop GC
+	gc("stop");
+
+	for (let i = 100; i < 200; i++) {
+		let o = {};
+		o.cyle = o;
+		o = null;
+
+		if ((i % 10) == 0)
+			printf("Count #%d: %d\n", (i / 10) + 1, gc("count"));
+	}
+%}
+-- End --
+
+-- Expect stdout --
+Count #1: 6
+Count #2: 12
+Count #3: 12
+Count #4: 12
+Count #5: 12
+Count #6: 12
+Count #7: 12
+Count #8: 12
+Count #9: 12
+Count #10: 12
+Count #11: 12
+Count #12: 22
+Count #13: 32
+Count #14: 42
+Count #15: 52
+Count #16: 62
+Count #17: 72
+Count #18: 82
+Count #19: 92
+Count #20: 102
+-- End --
