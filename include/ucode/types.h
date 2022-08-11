@@ -303,8 +303,10 @@ struct uc_vm {
 		uint8_t u8;
 		int8_t s8;
 	} arg;
-	size_t spread_values;
+	size_t alloc_refs;
 	uint8_t trace;
+	uint8_t gc_flags;
+	uint16_t gc_interval;
 	uc_stringbuf_t *strbuf;
 	uc_exception_handler_t *exhandler;
 	FILE *output;

@@ -705,8 +705,10 @@ ucv_array_new_length(uc_vm_t *vm, size_t length)
 
 	uc_vector_grow(array);
 
-	if (vm)
+	if (vm) {
 		ucv_ref(&vm->values, &array->ref);
+		vm->alloc_refs++;
+	}
 
 	return &array->header;
 }
@@ -901,8 +903,10 @@ ucv_object_new(uc_vm_t *vm)
 	object->header.refcount = 1;
 	object->table = table;
 
-	if (vm)
+	if (vm) {
 		ucv_ref(&vm->values, &object->ref);
+		vm->alloc_refs++;
+	}
 
 	return &object->header;
 }
@@ -1022,8 +1026,10 @@ ucv_closure_new(uc_vm_t *vm, uc_function_t *function, bool arrow_fn)
 	closure->is_arrow = arrow_fn;
 	closure->upvals = function->nupvals ? (uc_upvalref_t **)((uintptr_t)closure + ALIGN(sizeof(*closure))) : NULL;
 
-	if (vm)
+	if (vm) {
 		ucv_ref(&vm->values, &closure->ref);
+		vm->alloc_refs++;
+	}
 
 	uc_program_get(function->program);
 
