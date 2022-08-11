@@ -2220,6 +2220,9 @@ ucv_gc_common(uc_vm_t *vm, bool final)
 
 		for (i = 0; i < vm->restypes.count; i++)
 			ucv_gc_mark(vm->restypes.entries[i]->proto);
+
+		for (i = 0; i < vm->exports.count; i++)
+			ucv_gc_mark(vm->exports.entries[i]->value);
 	}
 
 	/* unref unreachable objects */
