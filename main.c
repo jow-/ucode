@@ -54,6 +54,10 @@ print_usage(const char *app)
 	"-t\n"
 	"  Enable VM execution tracing.\n\n"
 
+	"-g interval\n"
+	"  Perform periodic garbage collection every `interval` object\n"
+	"  allocations.\n\n"
+
 	"-S\n"
 	"  Enable strict mode.\n\n"
 
@@ -129,6 +133,9 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *inter
 		fclose(precompile);
 		goto out;
 	}
+
+	if (vm->gc_interval)
+		uc_vm_gc_start(vm, vm->gc_interval);
 
 	rc = uc_vm_execute(vm, program, &res);
 
@@ -468,7 +475,7 @@ appname(const char *argv0)
 int
 main(int argc, char **argv)
 {
-	const char *optspec = "he:tST::RD:F:U:l:L:c::o:s";
+	const char *optspec = "he:tg:ST::RD:F:U:l:L:c::o:s";
 	char *interp = "/usr/bin/env ucode";
 	uc_source_t *source = NULL;
 	FILE *precompile = NULL;
@@ -552,6 +559,10 @@ main(int argc, char **argv)
 
 		case 't':
 			uc_vm_trace_set(&vm, 1);
+			break;
+
+		case 'g':
+			vm.gc_interval = atoi(optarg);
 			break;
 
 		case 'D':

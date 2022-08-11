@@ -25,6 +25,10 @@ check that ucode provides exepected help:
   -t
     Enable VM execution tracing.
   
+  -g interval
+    Perform periodic garbage collection every `interval` object
+    allocations.
+  
   -S
     Enable strict mode.
   
