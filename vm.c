@@ -2508,6 +2508,35 @@ uc_vm_insn_dynload(uc_vm_t *vm, uc_vm_insn_t insn)
 	}
 }
 
+static void
+uc_vm_gc_step(uc_vm_t *vm)
+{
+	size_t curr_count = 0, prev_count = 0;
+	uc_weakref_t *ref;
+
+	if (!(vm->gc_flags & GC_ENABLED))
+		return;
+
+	if (vm->alloc_refs >= vm->gc_interval) {
+		if (vm->trace) {
+			for (ref = vm->values.next; ref != &vm->values; ref = ref->next)
+				prev_count++;
+
+			ucv_gc(vm);
+
+			for (ref = vm->values.next; ref != &vm->values; ref = ref->next)
+				curr_count++;
+
+			fprintf(stderr, "! GC reclaimed %zu object(s)\n", prev_count - curr_count);
+		}
+		else {
+			ucv_gc(vm);
+		}
+
+		vm->alloc_refs = 0;
+	}
+}
+
 static uc_value_t *
 uc_vm_callframe_pop(uc_vm_t *vm)
 {
@@ -2755,6 +2784,7 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 
 		case I_POP:
 			ucv_put(uc_vm_stack_pop(vm));
+			uc_vm_gc_step(vm);
 			break;
 
 		case I_CUPV:
@@ -3027,4 +3057,33 @@ bool
 uc_vm_registry_delete(uc_vm_t *vm, const char *key)
 {
 	return ucv_object_delete(vm->registry, key);
+}
+
+bool
+uc_vm_gc_start(uc_vm_t *vm, uint16_t interval)
+{
+	bool changed = false;
+
+	if (vm->gc_interval != interval) {
+		vm->gc_interval = interval;
+		changed = true;
+	}
+
+	if (!(vm->gc_flags & GC_ENABLED)) {
+		vm->gc_flags |= GC_ENABLED;
+		changed = true;
+	}
+
+	return changed;
+}
+
+bool
+uc_vm_gc_stop(uc_vm_t *vm)
+{
+	if (!(vm->gc_flags & GC_ENABLED))
+		return false;
+
+	vm->gc_flags &= ~GC_ENABLED;
+
+	return true;
 }

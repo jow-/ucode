@@ -116,6 +116,12 @@ typedef enum {
 	ERROR_RUNTIME
 } uc_vm_status_t;
 
+typedef enum {
+	GC_ENABLED = (1 << 0)
+} uc_vm_gc_flags_t;
+
+#define GC_DEFAULT_INTERVAL 1000
+
 extern uint32_t insns[__I_MAX];
 
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config);
@@ -138,6 +144,9 @@ void uc_vm_exception_handler_set(uc_vm_t *vm, uc_exception_handler_t *exhandler)
 
 uint32_t uc_vm_trace_get(uc_vm_t *vm);
 void uc_vm_trace_set(uc_vm_t *vm, uint32_t level);
+
+bool uc_vm_gc_start(uc_vm_t *vm, uint16_t interval);
+bool uc_vm_gc_stop(uc_vm_t *vm);
 
 uc_exception_type_t uc_vm_call(uc_vm_t *vm, bool mcall, size_t nargs);
 
