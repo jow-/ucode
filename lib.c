@@ -208,6 +208,40 @@ uc_error_context_format(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stack
 	return uc_source_context_format(buf, src, off, false);
 }
 
+void
+uc_error_message_indent(char **msg) {
+	uc_stringbuf_t *buf = xprintbuf_new();
+	char *s, *p, *nl;
+	size_t len;
+
+	if (!msg || !*msg)
+		return;
+
+	s = *msg;
+	len = strlen(s);
+
+	while (len > 0 && s[len-1] == '\n')
+		s[--len] = 0;
+
+	for (p = s, nl = strchr(p, '\n'); p != NULL;
+	     p = nl ? nl + 1 : NULL, nl = p ? strchr(p, '\n') : NULL)
+	{
+		if (!nl)
+			ucv_stringbuf_printf(buf, "  | %s", p);
+		else if (nl != p)
+			ucv_stringbuf_printf(buf, "  | %.*s\n", (int)(nl - p), p);
+		else
+			ucv_stringbuf_append(buf, "  |\n");
+	}
+
+	ucv_stringbuf_append(buf, "\n");
+
+	*msg = buf->buf;
+
+	free(buf);
+	free(s);
+}
+
 static char *uc_cast_string(uc_vm_t *vm, uc_value_t **v, bool *freeable) {
 	if (ucv_type(*v) == UC_STRING) {
 		*freeable = false;
