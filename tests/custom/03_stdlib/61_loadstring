@@ -1,0 +1,153 @@
+The `loadstring()` function compiles the given string argument into a
+ucode program and returns the resulting entry function.
+
+Throws an exception on compilation failure.
+
+Returns the compiled program entry function.
+
+
+Compile a simple program with default options
+
+-- Testcase --
+{%
+	let fn = loadstring('return 1 + 1;\n');
+	fn();
+%}
+-- End --
+
+-- Expect stdout --
+return 1 + 1;
+-- End --
+
+
+Compile a program in raw mode
+
+-- Testcase --
+{%
+	let fn = loadstring('printf("%d\\n", 1 + 1);\n', { raw_mode: true });
+	fn();
+%}
+-- End --
+
+-- Expect stdout --
+2
+-- End --
+
+
+Compile a program in template mode
+
+-- Testcase --
+{%
+	let fn = loadstring('{{ 1 + 1 }}\n', { raw_mode: false });
+	fn();
+%}
+-- End --
+
+-- Expect stdout --
+2
+-- End --
+
+
+Override module search path during compilation (import should fail due to empty path)
+
+-- Testcase --
+{%
+	loadstring('import { readfile } from "fs";\n', {
+		raw_mode: true,
+		module_search_path: []
+	});
+%}
+-- End --
+
+-- Expect stderr --
+Runtime error: Unable to compile source string:
+
+  | Syntax error: Unable to resolve path for module 'fs'
+  | In line 1, byte 30:
+  |
+  |  `import { readfile } from "fs";`
+  |   Near here -------------------^
+
+In line 5, byte 3:
+
+ `    });`
+       ^-- Near here
+
+
+-- End --
+
+
+Force dynamic loading of unknown extensions at compile time (should succeed)
+
+-- Testcase --
+{%
+	loadstring('import foo from "doesnotexist";\n', {
+		raw_mode: true,
+		force_dynlink_list: [ "doesnotexist" ]
+	});
+
+	print("OK\n");
+%}
+-- End --
+
+-- Expect stdout --
+OK
+-- End --
+
+
+Compiling a syntax error (should fail with syntax error exception)
+
+-- Testcase --
+{%
+	loadstring('1 +', { raw_mode: true });
+%}
+-- End --
+
+-- Expect stderr --
+Runtime error: Unable to compile source string:
+
+  | Syntax error: Expecting expression
+  | In line 1, byte 4:
+  |
+  |  `1 +`
+  |      ^-- Near here
+
+In line 2, byte 38:
+
+ `    loadstring('1 +', { raw_mode: true });`
+  Near here ------------------------------^
+
+
+-- End --
+
+
+Test loading precompiled bytecode
+
+-- Testcase --
+{%
+	// utpl -c -o - -e $'Hello world\n' | hexdump -v -e '"" 16/1 "%02x " "\n"'
+	const program = hexdec(`
+		23 21 2f 75 73 72 2f 62 69 6e 2f 65 6e 76 20 75
+		63 6f 64 65 0a 1b 75 63 62 00 00 00 03 00 00 00
+		01 00 00 00 0e 5b 2d 65 20 61 72 67 75 6d 65 6e
+		74 5d 00 00 00 00 00 00 0d 48 65 6c 6c 6f 20 77
+		6f 72 6c 64 0a 00 00 00 00 00 00 00 03 8b 80 80
+		00 00 00 00 01 00 00 00 00 00 00 00 05 00 00 00
+		10 00 00 00 0c 48 65 6c 6c 6f 20 77 6f 72 6c 64
+		0a 00 00 00 01 00 00 00 70 00 00 00 05 6d 61 69
+		6e 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+		00 00 00 00 08 01 00 00 00 00 41 07 3c 00 00 00
+		01 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00
+		00 00 00 00 01 00 00 00 00 00 00 00 05 00 00 00
+		10 00 00 00 08 28 63 61 6c 6c 65 65 29 00 00 00
+		00 00 00 00 01 40 00 00 00
+	`);
+
+	let fn = loadstring(program);
+	fn();
+%}
+-- End --
+
+-- Expect stdout --
+Hello world
+-- End --

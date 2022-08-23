@@ -1,0 +1,102 @@
+The `call()` function allows invoking functions with a modified `this` context
+and global environment. It's main use case is binding global variables for
+dynamiclly loaded code at runtime.
+
+Returns `null` if the given function value is not callable.
+Returns the value returned by the invoked function in all other cases.
+
+
+Test modifying `this` context
+
+-- Testcase --
+{%
+	let o1 = {
+		name: "Object #1",
+		func: function() {
+			print(`This is ${this.name}\n`);
+		}
+	};
+
+	let o2 = {
+		name: "Object #2"
+	};
+
+	o1.func();
+	call(o1.func, o2);
+%}
+-- End --
+
+-- Expect stdout --
+This is Object #1
+This is Object #2
+-- End --
+
+
+Test modifying environment
+
+-- Testcase --
+{%
+	function fn() {
+		print("Hello world\n");
+	}
+
+	fn();
+	call(fn, null, { print: (s) => printf("Overridden print(): %s", s) });
+%}
+-- End --
+
+-- Expect stdout --
+Hello world
+Overridden print(): Hello world
+-- End --
+
+
+Test isolating environment
+
+-- Testcase --
+{%
+	function fn() {
+		print("Hello world\n");
+	}
+
+	fn();
+	call(fn, null, proto({}, {})); // should fail due to unavailable print
+%}
+-- End --
+
+-- Expect stdout --
+Hello world
+-- End --
+
+-- Expect stderr --
+Type error: left-hand side is not a function
+In fn(), line 3, byte 24:
+  called from function call ([C])
+  called from anonymous function ([stdin]:7:30)
+
+ `        print("Hello world\n");`
+  Near here -------------------^
+
+
+-- End --
+
+
+Test passing through arguments
+
+-- Testcase --
+{%
+	function fn(a, b) {
+		printf("The product of %d * %d is %d\n", a, b, a * b);
+	}
+
+	fn(3, 4);
+	call(fn, null, null, 5, 6);
+	call((...args) => printf("Args: %J\n", args), null, null, 1, 2, 3, 4, 5, 6);
+%}
+-- End --
+
+-- Expect stdout --
+The product of 3 * 4 is 12
+The product of 5 * 6 is 30
+Args: [ 1, 2, 3, 4, 5, 6 ]
+-- End --

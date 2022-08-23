@@ -1,0 +1,166 @@
+The `loadfile()` function operates similar to `loadstring()` but reads the
+input to compile from the specified file path instead.
+
+It compiles the given file name into a ucode program and returns the resulting
+entry function.
+
+Throws an exception on compilation or file i/o failure.
+
+Returns the compiled program entry function.
+
+
+Compile a simple program with default options
+
+-- Testcase --
+{%
+	let fn = loadfile('./files/test1.uc');
+	fn();
+%}
+-- End --
+
+-- File test1.uc --
+return 1 + 1;
+-- End --
+
+-- Expect stdout --
+return 1 + 1;
+-- End --
+
+
+Compile a program in raw mode
+
+-- Testcase --
+{%
+	let fn = loadfile('./files/test2.uc', { raw_mode: true });
+	fn();
+%}
+-- End --
+
+-- File test2.uc --
+printf("%d\n", 1 + 1);
+-- End --
+
+-- Expect stdout --
+2
+-- End --
+
+
+Compile a program in template mode
+
+-- Testcase --
+{%
+	let fn = loadfile('./files/test3.uc', { raw_mode: false });
+	fn();
+%}
+-- End --
+
+-- File test3.uc --
+{{ 1 + 1 }}
+-- End --
+
+-- Expect stdout --
+2
+-- End --
+
+
+Override module search path during compilation (import should fail due to empty path)
+
+-- Testcase --
+{%
+	loadfile('./files/test4.uc', {
+		raw_mode: true,
+		module_search_path: []
+	});
+%}
+-- End --
+
+-- File test4.uc --
+import { readfile } from "fs";
+-- End --
+
+-- Expect stderr --
+Runtime error: Unable to compile source file './files/test4.uc':
+
+  | Syntax error: Unable to resolve path for module 'fs'
+  | In line 1, byte 30:
+  |
+  |  `import { readfile } from "fs";`
+  |   Near here -------------------^
+
+In line 5, byte 3:
+
+ `    });`
+       ^-- Near here
+
+
+-- End --
+
+
+Force dynamic loading of unknown extensions at compile time (should succeed)
+
+-- Testcase --
+{%
+	loadfile('./files/test5.uc', {
+		raw_mode: true,
+		force_dynlink_list: [ "doesnotexist" ]
+	});
+
+	print("OK\n");
+%}
+-- End --
+
+-- File test5.uc --
+import foo from "doesnotexist";
+-- End --
+
+-- Expect stdout --
+OK
+-- End --
+
+
+Compiling a syntax error (should fail with syntax error exception)
+
+-- Testcase --
+{%
+	loadfile('./files/test6.uc', { raw_mode: true });
+%}
+-- End --
+
+-- File test6.uc --
+1 +
+-- End --
+
+-- Expect stderr --
+Runtime error: Unable to compile source file './files/test6.uc':
+
+  | Syntax error: Expecting expression
+  | In line 1, byte 5:
+  |
+  |  `1 +`
+  |      ^-- Near here
+
+In line 2, byte 49:
+
+ `    loadfile('./files/test6.uc', { raw_mode: true });`
+  Near here -----------------------------------------^
+
+
+-- End --
+
+
+Test loading precompiled bytecode
+
+-- Testcase --
+{%
+	import { readlink } from 'fs';
+
+	system(`${readlink('/proc/self/exe')} -T, -c -o ./files/test7.uc -e 'Hello world\n'`);
+
+	let fn = loadfile('./files/test7.uc');
+	fn();
+%}
+-- End --
+
+-- Expect stdout --
+Hello world
+-- End --

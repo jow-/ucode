@@ -119,20 +119,9 @@ A compilation error in the module triggers an exception.
 
 -- Testcase --
 {%
-	try {
-		push(REQUIRE_SEARCH_PATH, TESTFILES_PATH + '/*.uc');
+	push(REQUIRE_SEARCH_PATH, TESTFILES_PATH + '/*.uc');
 
-		require("require.test.broken");
-	}
-	catch (e) {
-		// Catch and rethrow exception with modified message to
-		// ensure stable test output.
-		e.message = replace(e.message,
-			/(compile module '.+require\/test\/broken\.uc')/,
-			"compile module '.../require/test/broken.uc'");
-
-		die(e);
-	}
+	require("require.test.broken");
 %}
 -- End --
 
@@ -142,19 +131,18 @@ return {
 -- End --
 
 -- Expect stderr --
-Unable to compile module '.../require/test/broken.uc':
-Syntax error: Expecting label
-In line 2, byte 10:
+Runtime error: Unable to compile source file './files/require/test/broken.uc':
 
- `return {`
-          ^-- Near here
+  | Syntax error: Expecting label
+  | In line 2, byte 10:
+  |
+  |  `return {`
+  |           ^-- Near here
 
+In line 4, byte 31:
 
-
-In line 14, byte 8:
-
- `        die(e);`
-  Near here ---^
+ `    require("require.test.broken");`
+  Near here -----------------------^
 
 
 -- End --
