@@ -1502,3 +1502,22 @@ Returns the encoded hexadecimal digit string.
 ```javascript
 hexenc("Hello world!\n");   // "48656c6c6f20776f726c64210a"
 ```
+
+#### 6.72. `gc([operation[, argument]])`
+
+The `gc()` function allows interaction with the mark and sweep garbage
+collector of the running ucode virtual machine.
+
+Depending on the given `operation` string argument, the meaning of
+`argument` and the function return value differs.
+
+The following operations are defined:
+
+ - `collect` - Perform a complete garbage collection cycle, returns `true`.
+ - `start` - (Re-)start periodic garbage collection, `argument` is an optional integer in the range 1..65535 specifying the interval. Defaults to `1000` if omitted. Returns `true` if the periodic GC was previously stopped and is now started or if the interval changed. Returns `false` otherwise.
+ - `stop` - Stop periodic garbage collection. Returns `true` if the periodic GC was previously started and is now stopped, `false` otherwise.
+ - `count` - Count the amount of active complex object references in the VM context, returns the counted amount.
+
+If the `operation` argument is omitted, the default is `collect`.
+
+Returns `null` if a non-string `operation` value is given.
