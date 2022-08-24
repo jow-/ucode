@@ -194,7 +194,7 @@ uc_source_runpath_set(uc_source_t *source, const char *runpath)
 	if (source->runpath != source->filename)
 		free(source->runpath);
 
-	source->runpath = xstrdup(runpath);
+	source->runpath = runpath ? xstrdup(runpath) : NULL;
 }
 
 bool
