@@ -2324,19 +2324,12 @@ include_path(const char *curpath, const char *incpath)
 	if (*incpath == '/')
 		return realpath(incpath, NULL);
 
-	if (curpath) {
-		dup = strdup(curpath);
+	dup = curpath ? strrchr(curpath, '/') : NULL;
 
-		if (!dup)
-			return NULL;
-
-		len = asprintf(&res, "%s/%s", dirname(dup), incpath);
-
-		free(dup);
-	}
-	else {
+	if (dup)
+		len = asprintf(&res, "%.*s/%s", (int)(dup - curpath), curpath, incpath);
+	else
 		len = asprintf(&res, "./%s", incpath);
-	}
 
 	if (len == -1)
 		return NULL;
