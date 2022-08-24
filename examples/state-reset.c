@@ -59,6 +59,9 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	/* initialize default module search path */
+	uc_search_path_init(&config.module_search_path);
+
 	/* execute compiled program function five times */
 	for (int i = 0; i < 5; i++) {
 		/* initialize VM context */
@@ -86,6 +89,9 @@ int main(int argc, char **argv)
 
 	/* release program function */
 	uc_program_put(program);
+
+	/* free search module path vector */
+	uc_search_path_free(&config.module_search_path);
 
 	return exit_code;
 }

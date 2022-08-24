@@ -74,6 +74,9 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	/* initialize default module search path */
+	uc_search_path_init(&config.module_search_path);
+
 	/* initialize VM context */
 	uc_vm_t vm = { 0 };
 	uc_vm_init(&vm, &config);
@@ -95,6 +98,9 @@ int main(int argc, char **argv)
 
 	/* free VM context */
 	uc_vm_free(&vm);
+
+	/* free search module path vector */
+	uc_search_path_free(&config.module_search_path);
 
 	return exit_code;
 }
