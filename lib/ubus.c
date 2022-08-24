@@ -1461,7 +1461,7 @@ uc_ubus_object_register(struct ubus_context *ctx, const char *ubus_object_name,
 	method = (struct ubus_method *)mptr;
 
 	obj = &uuobj->obj;
-	obj->name = strncpy(onptr, ubus_object_name, namelen);
+	obj->name = strncpy(onptr, ubus_object_name, namelen - 1);
 	obj->methods = method;
 
 	if (ubus_object_methods) {
