@@ -1502,3 +1502,138 @@ Returns the encoded hexadecimal digit string.
 ```javascript
 hexenc("Hello world!\n");   // "48656c6c6f20776f726c64210a"
 ```
+
+#### 6.72. `gc([operation[, argument]])`
+
+The `gc()` function allows interaction with the mark and sweep garbage
+collector of the running ucode virtual machine.
+
+Depending on the given `operation` string argument, the meaning of
+`argument` and the function return value differs.
+
+The following operations are defined:
+
+ - `collect` - Perform a complete garbage collection cycle, returns `true`.
+ - `start` - (Re-)start periodic garbage collection, `argument` is an optional
+             integer in the range 1..65535 specifying the interval. Defaults
+             to `1000` if omitted. Returns `true` if the periodic GC was
+             previously stopped and is now started or if the interval changed.
+             Returns `false` otherwise.
+ - `stop` - Stop periodic garbage collection. Returns `true` if the periodic GC
+            was previously started and is now stopped, `false` otherwise.
+ - `count` - Count the amount of active complex object references in the VM
+             context, returns the counted amount.
+
+If the `operation` argument is omitted, the default is `collect`.
+
+Returns `null` if a non-string `operation` value is given.
+
+#### 6.73. `loadstring(code[, options])`
+
+Compiles the given code string into a ucode program and returns the resulting
+program entry function. The optinal `options` dictionary allows overriding
+parse and compile options.
+
+If a non-string `code` argument is given, it is implicitly converted to a
+string value first.
+
+If `options` is omitted or a non-object value, the compile options of the
+running ucode program are reused.
+
+The following keys in the `options` dictionary are recognized:
+
+| Key                   | Type  | Description                                              |
+|-----------------------|-------|----------------------------------------------------------|
+| `lstrip_blocks`       | bool  | Strip leading whitespace before statement template blocks|
+| `trim_blocks`         | bool  | Strip newline after statement template blocks            |
+| `strict_declarations` | bool  | Treat access to undefined variables as fatal error       |
+| `raw_mode`            | bool  | Compile source in script mode, don't treat it as template|
+| `module_search_path`  | array | Override compile time module search path                 |
+| `force_dynlink_list`  | array | List of module names to treat as dynamic extensions      |
+
+Unrecognized keys are ignored, unspecified options default to those of the
+running program.
+
+Returns the compiled program entry function.
+
+Throws an exception on compilation errors.
+
+```javascript
+let fn1 = loadstring("Hello, {{ name }}", { raw_mode: false });
+
+global.name = "Alice";
+fn1(); // prints `Hello, Alice`
+
+
+let fn2 = loadstring("return 1 + 2;", { raw_mode: true });
+fn2(); // 3
+```
+
+#### 6.74. `loadfile(path[, options])`
+
+Compiles the given file into a ucode program and returns the resulting program
+entry function.
+
+See `loadfile()` for details.
+
+Returns the compiled program entry function.
+
+Throws an exception on compilation or file i/o errors.
+
+```javascript
+loadfile("./templates/example.uc");  // function main() { ... }
+```
+
+#### 6.75. `call(fn[, ctx[, scope[, arg1[, ...]]]])`
+
+Calls the given function value with a modified environment. The given `ctx`
+argument is used as `this` context for the invoked function and the given
+`scope` value as global environment. Any further arguments are passed to the
+invoked function as-is.
+
+When `ctx` is omitted or `null`, the function will get invoked with `this`
+being `null`.
+
+When `scope` is omitted or `null`, the function will get executed with the
+current global environment of the running program. When `scope` is set to a
+dictionary, the dictionary is used as global function environment.
+
+When the `scope` dictionary has no prototype, the current global environment
+will be set as prototype, means the scope will inherit from it. When a scope
+prototype is set, it is kept. This allows passing an isolated (sandboxed)
+function scope without access to the global environment.
+
+Any further argument is forwarded as-is to the invoked function as function
+call argument.
+
+Returns `null` if the given function value `fn` is not callable.
+
+Returns the return value of the invoked function in all other cases.
+
+Forwards exceptions thrown by the invoked function.
+
+```javascript
+// Override this context
+call(function() { printf("%J\n", this) });            // null
+call(function() { printf("%J\n", this) }, null);      // null
+call(function() { printf("%J\n", this) }, { x: 1 });  // { "x": 1 }
+call(function() { printf("%J\n", this) }, { x: 2 });  // { "x": 2 }
+
+// Run with default scope
+global.a = 1;
+call(function() { printf("%J\n", a) });                  // 1
+
+// Override scope, inherit from current global scope (implicit)
+call(function() { printf("%J\n", a) }, null, { a: 2 });  // 2
+
+// Override scope, inherit from current global scope (explicit)
+call(function() { printf("%J\n", a) }, null,
+        proto({ a: 2 }, global));                        // 2
+
+// Override scope, don't inherit (pass `printf()` but not `a`)
+call(function() { printf("%J\n", a) }, null,
+        proto({}, { printf }));                          // null
+
+// Forward arguments
+x = call((x, y, z) => x * y * z, null, null, 2, 3, 4);   // x = 24
+```

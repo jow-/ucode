@@ -266,7 +266,8 @@ ucv_free(uc_value_t *uv, bool retain)
 		ref = &closure->ref;
 
 		for (i = 0; i < function->nupvals; i++)
-			ucv_put_value(&closure->upvals[i]->header, retain);
+			if (closure->upvals[i])
+				ucv_put_value(&closure->upvals[i]->header, retain);
 
 		ucv_put_value(&function->program->header, retain);
 		break;

@@ -126,18 +126,7 @@ A compilation error in the file triggers an exception.
 
 -- Testcase --
 {%
-	try {
-		include("files/broken.uc");
-	}
-	catch (e) {
-		// Catch and rethrow exception with modified message to
-		// ensure stable test output.
-		e.message = replace(e.message,
-			/(compile module '.+broken\.uc')/,
-			"compile module '.../broken.uc'");
-
-		die(e);
-	}
+	include("files/broken.uc");
 %}
 -- End --
 
@@ -149,19 +138,18 @@ A compilation error in the file triggers an exception.
 -- End --
 
 -- Expect stderr --
-Unable to compile module '.../broken.uc':
-Syntax error: Expecting label
-In line 3, byte 11:
+Runtime error: Unable to compile source file './files/broken.uc':
 
- `    return {`
-  Near here --^
+  | Syntax error: Expecting label
+  | In line 3, byte 11:
+  |
+  |  `    return {`
+  |   Near here --^
 
+In line 2, byte 27:
 
-
-In line 12, byte 8:
-
- `        die(e);`
-  Near here ---^
+ `    include("files/broken.uc");`
+  Near here -------------------^
 
 
 -- End --

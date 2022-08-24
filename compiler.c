@@ -172,8 +172,8 @@ uc_compiler_syntax_error(uc_compiler_t *compiler, size_t off, const char *fmt, .
 	uc_source_t *source = uc_compiler_current_source(compiler);
 	uc_stringbuf_t *buf = compiler->parser->error;
 	size_t line = 0, byte = 0, len = 0;
-	char *s, *p, *nl;
 	va_list ap;
+	char *s;
 
 	if (compiler->parser->synchronizing)
 		return;
@@ -195,32 +195,8 @@ uc_compiler_syntax_error(uc_compiler_t *compiler, size_t off, const char *fmt, .
 	va_end(ap);
 
 	ucv_stringbuf_append(buf, "Syntax error: ");
-
-	p = strstr(s, "\nSyntax error: ");
-
-	if (!p) {
-		ucv_stringbuf_addstr(buf, s, len);
-		ucv_stringbuf_append(buf, "\n");
-	}
-	else {
-		ucv_stringbuf_printf(buf, "%.*s\n\n", (int)(p - s), s);
-
-		while (len > 0 && s[len-1] == '\n')
-			s[--len] = 0;
-
-		for (p++, nl = strchr(p, '\n'); p != NULL;
-		     p = nl ? nl + 1 : NULL, nl = p ? strchr(p, '\n') : NULL)
-		{
-			if (!nl)
-				ucv_stringbuf_printf(buf, "  | %s", p);
-			else if (nl != p)
-				ucv_stringbuf_printf(buf, "  | %.*s\n", (int)(nl - p), p);
-			else
-				ucv_stringbuf_append(buf, "  |\n");
-		}
-
-		ucv_stringbuf_append(buf, "\n\n");
-	}
+	ucv_stringbuf_addstr(buf, s, len);
+	ucv_stringbuf_append(buf, "\n");
 
 	free(s);
 
@@ -3413,9 +3389,11 @@ uc_compiler_compile_module(uc_compiler_t *compiler, const char *name, uc_value_t
 			err = NULL;
 			res = uc_compiler_compile_module_source(compiler, source, imports, &err);
 
-			if (!res)
+			if (!res) {
+				uc_error_message_indent(&err);
 				uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
-					"Unable to compile module '%s':\n%s", source->filename, err);
+					"Unable to compile module '%s':\n\n%s", source->filename, err);
+			}
 
 			free(err);
 		}

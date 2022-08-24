@@ -208,6 +208,40 @@ uc_error_context_format(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stack
 	return uc_source_context_format(buf, src, off, false);
 }
 
+void
+uc_error_message_indent(char **msg) {
+	uc_stringbuf_t *buf = xprintbuf_new();
+	char *s, *p, *nl;
+	size_t len;
+
+	if (!msg || !*msg)
+		return;
+
+	s = *msg;
+	len = strlen(s);
+
+	while (len > 0 && s[len-1] == '\n')
+		s[--len] = 0;
+
+	for (p = s, nl = strchr(p, '\n'); p != NULL;
+	     p = nl ? nl + 1 : NULL, nl = p ? strchr(p, '\n') : NULL)
+	{
+		if (!nl)
+			ucv_stringbuf_printf(buf, "  | %s", p);
+		else if (nl != p)
+			ucv_stringbuf_printf(buf, "  | %.*s\n", (int)(nl - p), p);
+		else
+			ucv_stringbuf_append(buf, "  |\n");
+	}
+
+	ucv_stringbuf_append(buf, "\n");
+
+	*msg = buf->buf;
+
+	free(buf);
+	free(s);
+}
+
 static char *uc_cast_string(uc_vm_t *vm, uc_value_t **v, bool *freeable) {
 	if (ucv_type(*v) == UC_STRING) {
 		*freeable = false;
@@ -1604,71 +1638,44 @@ uc_require_so(uc_vm_t *vm, const char *path, uc_value_t **res)
 	return true;
 }
 
+static uc_value_t *
+uc_loadfile(uc_vm_t *vm, size_t nargs);
+
+static uc_value_t *
+uc_callfunc(uc_vm_t *vm, size_t nargs);
+
 static bool
 uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **res, bool raw_mode)
 {
-	uc_parse_config_t config = { 0 };
-	uc_exception_type_t extype;
-	uc_program_t *program;
-	uc_value_t *prev_scope;
+	uc_parse_config_t config = *vm->config, *prev_config = vm->config;
 	uc_value_t *closure;
-	uc_source_t *source;
 	struct stat st;
-	bool prev_mode;
-	char *err;
 
 	if (stat(path, &st))
 		return false;
 
-	source = uc_source_new_file(path);
+	config.raw_mode = raw_mode;
+	vm->config = &config;
 
-	if (!source) {
-		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
-		                      "Unable to open file '%s': %s", path, strerror(errno));
+	uc_vm_stack_push(vm, ucv_string_new(path));
 
-		return true;
+	closure = uc_loadfile(vm, 1);
+
+	ucv_put(uc_vm_stack_pop(vm));
+
+	if (closure) {
+		uc_vm_stack_push(vm, closure);
+		uc_vm_stack_push(vm, NULL);
+		uc_vm_stack_push(vm, scope);
+
+		*res = uc_callfunc(vm, 3);
+
+		uc_vm_stack_pop(vm);
+		uc_vm_stack_pop(vm);
+		uc_vm_stack_pop(vm);
 	}
 
-	if (!vm->config)
-		vm->config = &config;
-
-	prev_mode = vm->config->raw_mode;
-	vm->config->raw_mode = raw_mode;
-
-	program = uc_compile(vm->config, source, &err);
-
-	uc_source_put(source);
-
-	if (!program) {
-		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
-		                      "Unable to compile module '%s':\n%s", path, err);
-
-		free(err);
-
-		vm->config->raw_mode = prev_mode;
-
-		return true;
-	}
-
-	closure = ucv_closure_new(vm, uc_program_entry(program), false);
-
-	uc_vm_stack_push(vm, closure);
-	uc_program_put(program);
-
-	if (scope) {
-		prev_scope = ucv_get(uc_vm_scope_get(vm));
-		uc_vm_scope_set(vm, ucv_get(scope));
-	}
-
-	extype = uc_vm_call(vm, false, 0);
-
-	if (scope)
-		uc_vm_scope_set(vm, prev_scope);
-
-	if (extype == EXCEPTION_NONE)
-		*res = uc_vm_stack_pop(vm);
-
-	vm->config->raw_mode = prev_mode;
+	vm->config = prev_config;
 
 	return true;
 }
@@ -2324,19 +2331,12 @@ include_path(const char *curpath, const char *incpath)
 	if (*incpath == '/')
 		return realpath(incpath, NULL);
 
-	if (curpath) {
-		dup = strdup(curpath);
+	dup = curpath ? strrchr(curpath, '/') : NULL;
 
-		if (!dup)
-			return NULL;
-
-		len = asprintf(&res, "%s/%s", dirname(dup), incpath);
-
-		free(dup);
-	}
-	else {
+	if (dup)
+		len = asprintf(&res, "%.*s/%s", (int)(dup - curpath), curpath, incpath);
+	else
 		len = asprintf(&res, "./%s", incpath);
-	}
 
 	if (len == -1)
 		return NULL;
@@ -3562,6 +3562,194 @@ uc_gc(uc_vm_t *vm, size_t nargs)
 	return NULL;
 }
 
+static void
+uc_compile_parse_config(uc_parse_config_t *config, uc_value_t *spec)
+{
+	uc_value_t *v, *p;
+	size_t i, j;
+	bool found;
+
+	struct {
+		const char *key;
+		bool *flag;
+		uc_search_path_t *path;
+	} fields[] = {
+		{ "lstrip_blocks",       &config->lstrip_blocks,       NULL },
+		{ "trim_blocks",         &config->trim_blocks,         NULL },
+		{ "strict_declarations", &config->strict_declarations, NULL },
+		{ "raw_mode",            &config->raw_mode,            NULL },
+		{ "module_search_path",  NULL, &config->module_search_path  },
+		{ "force_dynlink_list",  NULL, &config->force_dynlink_list  }
+	};
+
+	for (i = 0; i < ARRAY_SIZE(fields); i++) {
+		v = ucv_object_get(spec, fields[i].key, &found);
+
+		if (!found)
+			continue;
+
+		if (fields[i].flag) {
+			*fields[i].flag = ucv_is_truish(v);
+		}
+		else if (fields[i].path) {
+			fields[i].path->count = 0;
+			fields[i].path->entries = NULL;
+
+			for (j = 0; j < ucv_array_length(v); j++) {
+				p = ucv_array_get(v, j);
+
+				if (ucv_type(p) != UC_STRING)
+					continue;
+
+				uc_vector_push(fields[i].path, ucv_string_get(p));
+			}
+		}
+	}
+}
+
+static uc_value_t *
+uc_load_common(uc_vm_t *vm, size_t nargs, uc_source_t *source)
+{
+	uc_parse_config_t conf = *vm->config;
+	uc_program_t *program;
+	uc_value_t *closure;
+	char *err = NULL;
+
+	uc_compile_parse_config(&conf, uc_fn_arg(1));
+
+	program = uc_compile(&conf, source, &err);
+	closure = program ? ucv_closure_new(vm, uc_program_entry(program), false) : NULL;
+
+	uc_program_put(program);
+
+	if (!vm->config || conf.module_search_path.entries != vm->config->module_search_path.entries)
+		uc_vector_clear(&conf.module_search_path);
+
+	if (!vm->config || conf.force_dynlink_list.entries != vm->config->force_dynlink_list.entries)
+		uc_vector_clear(&conf.force_dynlink_list);
+
+	if (!closure) {
+		uc_error_message_indent(&err);
+
+		if (source->buffer)
+			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+				"Unable to compile source string:\n\n%s", err);
+		else
+			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+				"Unable to compile source file '%s':\n\n%s", source->filename, err);
+	}
+
+	uc_source_put(source);
+	free(err);
+
+	return closure;
+}
+
+static uc_value_t *
+uc_loadstring(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *code = uc_fn_arg(0);
+	uc_source_t *source;
+	size_t len;
+	char *s;
+
+	if (ucv_type(code) == UC_STRING) {
+		len = ucv_string_length(code);
+		s = xalloc(len);
+		memcpy(s, ucv_string_get(code), len);
+	}
+	else {
+		s = ucv_to_string(vm, code);
+		len = strlen(s);
+	}
+
+	source = uc_source_new_buffer("[loadstring argument]", s, len);
+
+	if (!source) {
+		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+			"Unable to allocate source buffer: %s",
+			strerror(errno));
+
+		return NULL;
+	}
+
+	return uc_load_common(vm, nargs, source);
+}
+
+static uc_value_t *
+uc_loadfile(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *path = uc_fn_arg(0);
+	uc_source_t *source;
+
+	if (ucv_type(path) != UC_STRING)
+		return NULL;
+
+	source = uc_source_new_file(ucv_string_get(path));
+
+	if (!source) {
+		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+			"Unable to open source file %s: %s",
+			ucv_string_get(path), strerror(errno));
+
+		return NULL;
+	}
+
+	return uc_load_common(vm, nargs, source);
+}
+
+static uc_value_t *
+uc_callfunc(uc_vm_t *vm, size_t nargs)
+{
+	size_t argoff = vm->stack.count - nargs, i;
+	uc_value_t *fn_scope, *prev_scope, *res;
+	uc_value_t *fn = uc_fn_arg(0);
+	uc_value_t *this = uc_fn_arg(1);
+	uc_value_t *scope = uc_fn_arg(2);
+
+	if (!ucv_is_callable(fn))
+		return NULL;
+
+	if (scope && ucv_type(scope) != UC_OBJECT)
+		return NULL;
+
+	if (ucv_prototype_get(scope)) {
+		fn_scope = ucv_get(scope);
+	}
+	else if (scope) {
+		fn_scope = ucv_object_new(vm);
+
+		ucv_object_foreach(scope, k, v)
+			ucv_object_add(fn_scope, k, ucv_get(v));
+
+		ucv_prototype_set(fn_scope, ucv_get(uc_vm_scope_get(vm)));
+	}
+	else {
+		fn_scope = NULL;
+	}
+
+	uc_vm_stack_push(vm, ucv_get(this));
+	uc_vm_stack_push(vm, ucv_get(fn));
+
+	for (i = 3; i < nargs; i++)
+		uc_vm_stack_push(vm, ucv_get(vm->stack.entries[3 + argoff++]));
+
+	if (fn_scope) {
+		prev_scope = ucv_get(uc_vm_scope_get(vm));
+		uc_vm_scope_set(vm, fn_scope);
+	}
+
+	if (uc_vm_call(vm, true, i - 3) == EXCEPTION_NONE)
+		res = uc_vm_stack_pop(vm);
+	else
+		res = NULL;
+
+	if (fn_scope)
+		uc_vm_scope_set(vm, prev_scope);
+
+	return res;
+}
+
 
 const uc_function_list_t uc_stdlib_functions[] = {
 	{ "chr",		uc_chr },
@@ -3629,7 +3817,10 @@ const uc_function_list_t uc_stdlib_functions[] = {
 	{ "clock",		uc_clock },
 	{ "hexdec",		uc_hexdec },
 	{ "hexenc",		uc_hexenc },
-	{ "gc",			uc_gc }
+	{ "gc",			uc_gc },
+	{ "loadstring",	uc_loadstring },
+	{ "loadfile",	uc_loadfile },
+	{ "call",		uc_callfunc },
 };
 
 
