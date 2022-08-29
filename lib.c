@@ -560,11 +560,34 @@ uc_exit(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_getenv(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *key = uc_fn_arg(0);
-	char *k = ucv_string_get(key);
-	char *val = k ? getenv(k) : NULL;
+	uc_value_t *key = uc_fn_arg(0), *rv = NULL;
+	extern char **environ;
+	char *k, *v;
 
-	return val ? ucv_string_new(val) : NULL;
+	if (!key) {
+		rv = ucv_object_new(vm);
+
+		while (*environ) {
+			v = strchr(*environ, '=');
+
+			if (v) {
+				xasprintf(&k, "%.*s", (int)(v - *environ), *environ);
+				ucv_object_add(rv, k, ucv_string_new(v + 1));
+				free(k);
+			}
+
+			environ++;
+		}
+	}
+	else if (ucv_type(key) == UC_STRING) {
+		k = ucv_string_get(key);
+		v = getenv(k);
+
+		if (v)
+			rv = ucv_string_new(v);
+	}
+
+	return rv;
 }
 
 static uc_value_t *
@@ -1002,16 +1025,17 @@ uc_split(uc_vm_t *vm, size_t nargs)
 	uc_value_t *sep = uc_fn_arg(1);
 	uc_value_t *arr = NULL;
 	const char *p, *sepstr, *splitstr;
+	size_t seplen, splitlen;
 	int eflags = 0, res;
 	regmatch_t pmatch;
 	uc_regexp_t *re;
-	size_t seplen;
 
 	if (!sep || ucv_type(str) != UC_STRING)
 		return NULL;
 
 	arr = ucv_array_new(vm);
-	splitstr = ucv_string_get(str);
+	splitlen = ucv_string_length(str);
+	p = splitstr = ucv_string_get(str);
 
 	if (ucv_type(sep) == UC_REGEXP) {
 		re = (uc_regexp_t *)sep;
@@ -1041,18 +1065,35 @@ uc_split(uc_vm_t *vm, size_t nargs)
 	}
 	else if (ucv_type(sep) == UC_STRING) {
 		sepstr = ucv_string_get(sep);
+		seplen = ucv_string_length(sep);
 
-		for (p = splitstr, seplen = strlen(sepstr); *p; p++) {
-			if (!strncmp(p, sepstr, seplen)) {
-				if (*sepstr || p > splitstr)
-					ucv_array_push(arr, ucv_string_new_length(splitstr, p - splitstr));
+		if (splitlen == 0) {
+			ucv_array_push(arr, ucv_string_new_length("", 0));
+		}
+		else if (seplen == 0) {
+			while (splitlen > 0) {
+				ucv_array_push(arr, ucv_string_new_length(p, 1));
 
-				splitstr = p + seplen;
-				p = splitstr - (*sepstr ? 1 : 0);
+				splitlen--;
+				p++;
 			}
 		}
+		else {
+			while (splitlen >= seplen) {
+				if (!memcmp(p, sepstr, seplen)) {
+					ucv_array_push(arr, ucv_string_new_length(splitstr, p - splitstr));
 
-		ucv_array_push(arr, ucv_string_new_length(splitstr, p - splitstr));
+					p = splitstr = p + seplen;
+					splitlen -= seplen;
+					continue;
+				}
+
+				splitlen--;
+				p++;
+			}
+
+			ucv_array_push(arr, ucv_string_new_length(splitstr, p - splitstr + splitlen));
+		}
 	}
 	else {
 		ucv_put(arr);

@@ -2,6 +2,9 @@ The `getenv()` function returns the value of the given environment variable
 or `null` if either the given variable does not exist or if the given name
 argument is not a string.
 
+If the variable name argument is omitted, getenv() returns a dictionary
+containing all environment variables.
+
 -- Testcase --
 {%
 	printf("%.J\n", [
@@ -9,7 +12,7 @@ argument is not a string.
 		getenv("EMPTY_VARIABLE"),
 		getenv("THIS_LIKELY_DOES_NOT_EXIST"),
 		getenv(123),
-		getenv(null)
+		type(getenv())
 	]);
 %}
 -- End --
@@ -25,6 +28,6 @@ EMPTY_VARIABLE=
 	"",
 	null,
 	null,
-	null
+	"object"
 ]
 -- End --

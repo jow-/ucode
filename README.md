@@ -736,9 +736,10 @@ a = filter(["foo", 1, true, null, 2.2], function(v) {
 // a = [1, 2.2]
 ```
 
-#### 6.10. `getenv(name)`
+#### 6.10. `getenv([name])`
 
-Return the value of the given environment variable.
+Return the value of the given environment variable. If the variable name is
+omitted, returns a dictionary containing all environment variables.
 
 #### 6.11. `hex(x)`
 

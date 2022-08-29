@@ -40,6 +40,9 @@ argument is neither a string nor a regular expression.
 		// leading and trailing empty substrings are retained
 		split("|abc|def|", "|"),
 		split(",foo;bar:", /[,;:]/),
+
+		// subject and split strings handle embedded \0
+		split("foo=1\0bar=2\0baz=3", "\0"),
 	]), "\n");
 %}
 -- End --
@@ -58,6 +61,7 @@ argument is neither a string nor a regular expression.
 [ "foo", "bar", "", "baz" ]
 [ "", "abc", "def", "" ]
 [ "", "foo", "bar", "" ]
+[ "foo=1", "bar=2", "baz=3" ]
 -- End --
 
 
