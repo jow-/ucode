@@ -1254,11 +1254,18 @@ an invalid value was passed, otherwise `true`.
 Raise an exception with the given `message` parameter if the value in `cond`
 is not truish. When `message` is omitted, the default value is `Assertion failed`.
 
-#### 6.56. `render(path[, scope])`
+#### 6.56. `render(path_or_func[, scope_or_fnarg1 [, fnarg2 [, ...]]])`
 
-Like `include()` but capture output of included file as string and return it.
+When invoked with a string value as first argument, the function acts like
+like `include()` but captures the output of the included file as string and
+returns the captured contents. The second argument is treated as scope. See
+`include()` for details on scoping.
 
-See `include()` for details on scoping.
+When invoked with a function value as first argument, `render()` calls the
+given function and passes all subsequent arguments to it. Any output
+(through print(), template text instructions and the like) produced by the
+called function is captured and returned as string. The return value of the
+called function is discarded.
 
 #### 6.57. `regexp(source[, flags])`
 

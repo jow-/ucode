@@ -2484,8 +2484,13 @@ uc_render(uc_vm_t *vm, size_t nargs)
 	prev = vm->output;
 	vm->output = mem;
 
+	/* execute function */
+	if (ucv_is_callable(uc_fn_arg(0)))
+		(void) uc_vm_call(vm, false, nargs - 1);
+
 	/* execute include */
-	(void) uc_include_common(vm, nargs, false);
+	else
+		(void) uc_include_common(vm, nargs, false);
 
 	/* restore previous VM output */
 	vm->output = prev;

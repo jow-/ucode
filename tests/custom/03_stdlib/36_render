@@ -1,6 +1,7 @@
-The `render()` function executes the specified path as ucode script,
-optionally setting a different execution scope for the invoked file,
-and captures the produced output in a string.
+When invoked with a file path argment, the `render()` function executes
+the specified path as ucode script, optionally setting a different
+execution scope for the invoked file, and captures the produced output
+in a string.
 
 If the specified path is relative, it is treated as being relative to the
 source file currently being executed or the current working directory in
@@ -14,7 +15,11 @@ Throws an exception if the given path could not be found or opened.
 
 Throws an exception if the given file could not be compiled.
 
-Returns a string containing the captured output of the executed file.
+When invoked with a function value, `render()` invokes the function, passes
+all remaining arugments to it and captures any produces output in a string.
+
+Returns a string containing the captured output of the executed file or
+function.
 
 -- Testcase --
 {%
@@ -69,16 +74,16 @@ An invalid path value triggers an exception.
 
 -- Testcase --
 {%
-	include(true);
+	render(true);
 %}
 -- End --
 
 -- Expect stderr --
 Type error: Passed filename is not a string
-In line 2, byte 14:
+In line 2, byte 13:
 
- `    include(true);`
-  Near here ------^
+ `    render(true);`
+  Near here -----^
 
 
 -- End --
@@ -88,16 +93,16 @@ An invalid scope value triggers an exception.
 
 -- Testcase --
 {%
-	include("test", true);
+	render("test", true);
 %}
 -- End --
 
 -- Expect stderr --
 Type error: Passed scope value is not an object
-In line 2, byte 22:
+In line 2, byte 21:
 
- `    include("test", true);`
-  Near here --------------^
+ `    render("test", true);`
+  Near here -------------^
 
 
 -- End --
@@ -107,16 +112,16 @@ A not found file triggers an exception.
 
 -- Testcase --
 {%
-	include("files/doesnotexist.uc");
+	render("files/doesnotexist.uc");
 %}
 -- End --
 
 -- Expect stderr --
 Runtime error: Include file not found
-In line 2, byte 33:
+In line 2, byte 32:
 
- `    include("files/doesnotexist.uc");`
-  Near here -------------------------^
+ `    render("files/doesnotexist.uc");`
+  Near here ------------------------^
 
 
 -- End --
@@ -126,7 +131,7 @@ A compilation error in the file triggers an exception.
 
 -- Testcase --
 {%
-	include("files/broken.uc");
+	render("files/broken.uc");
 %}
 -- End --
 
@@ -146,10 +151,39 @@ Runtime error: Unable to compile source file './files/broken.uc':
   |  `    return {`
   |   Near here --^
 
-In line 2, byte 27:
+In line 2, byte 26:
 
- `    include("files/broken.uc");`
-  Near here -------------------^
+ `    render("files/broken.uc");`
+  Near here ------------------^
 
 
+-- End --
+
+
+Rendering a function value will capture it's output.
+
+-- Testcase --
+{%
+	name = "world";
+
+	printf("%.J\n", [
+		render(print, "Test"),
+		render(loadstring("Hello, {{ name }}!")),
+		render(function(name) {
+			include("files/greeting.uc", { name })
+		}, "Bob")
+	]);
+%}
+-- End --
+
+-- File greeting.uc --
+Hello, {{ name }}
+-- End --
+
+-- Expect stdout --
+[
+	"Test",
+	"Hello, world!",
+	"Hello, Bob\n"
+]
 -- End --
