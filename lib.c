@@ -1924,7 +1924,7 @@ uc_match(uc_vm_t *vm, size_t nargs)
 	uc_value_t *subject = uc_fn_arg(0);
 	uc_value_t *pattern = uc_fn_arg(1);
 	uc_value_t *rv = NULL, *m;
-	regmatch_t pmatch[10];
+	regmatch_t *pmatch = NULL;
 	int eflags = 0, res;
 	uc_regexp_t *re;
 	bool freeable;
@@ -1934,21 +1934,30 @@ uc_match(uc_vm_t *vm, size_t nargs)
 	if (ucv_type(pattern) != UC_REGEXP || !subject)
 		return NULL;
 
-	p = uc_cast_string(vm, &subject, &freeable);
 	re = (uc_regexp_t *)pattern;
 
+	pmatch = calloc(1 + re->regexp.re_nsub, sizeof(regmatch_t));
+
+	if (!pmatch)
+		return NULL;
+
+	p = uc_cast_string(vm, &subject, &freeable);
+
 	while (true) {
-		res = regexec(&re->regexp, p, ARRAY_SIZE(pmatch), pmatch, eflags);
+		res = regexec(&re->regexp, p, 1 + re->regexp.re_nsub, pmatch, eflags);
 
 		if (res == REG_NOMATCH)
 			break;
 
 		m = ucv_array_new(vm);
 
-		for (i = 0; i < ARRAY_SIZE(pmatch) && pmatch[i].rm_so != -1; i++) {
-			ucv_array_push(m,
-				ucv_string_new_length(p + pmatch[i].rm_so,
-				                      pmatch[i].rm_eo - pmatch[i].rm_so));
+		for (i = 0; i < 1 + re->regexp.re_nsub; i++) {
+			if (pmatch[i].rm_so != -1)
+				ucv_array_push(m,
+					ucv_string_new_length(p + pmatch[i].rm_so,
+					                      pmatch[i].rm_eo - pmatch[i].rm_so));
+			else
+				ucv_array_push(m, NULL);
 		}
 
 		if (re->global) {
@@ -1972,13 +1981,15 @@ uc_match(uc_vm_t *vm, size_t nargs)
 		}
 	}
 
+	free(pmatch);
+
 	if (freeable)
 		free(p);
 
 	return rv;
 }
 
-static uc_value_t *
+static void
 uc_replace_cb(uc_vm_t *vm, uc_value_t *func,
               const char *subject, regmatch_t *pmatch, size_t plen,
               uc_stringbuf_t *resbuf)
@@ -1989,22 +2000,22 @@ uc_replace_cb(uc_vm_t *vm, uc_value_t *func,
 	uc_vm_ctx_push(vm);
 	uc_vm_stack_push(vm, ucv_get(func));
 
-	for (i = 0; i < plen && pmatch[i].rm_so != -1; i++) {
-		uc_vm_stack_push(vm,
-			ucv_string_new_length(subject + pmatch[i].rm_so,
-			                      pmatch[i].rm_eo - pmatch[i].rm_so));
+	for (i = 0; i < plen; i++) {
+		if (pmatch[i].rm_so != -1)
+			uc_vm_stack_push(vm,
+				ucv_string_new_length(subject + pmatch[i].rm_so,
+				                      pmatch[i].rm_eo - pmatch[i].rm_so));
+		else
+			uc_vm_stack_push(vm, NULL);
 	}
 
-	if (uc_vm_call(vm, true, i))
-		return NULL;
+	if (uc_vm_call(vm, true, i) == EXCEPTION_NONE) {
+		rv = uc_vm_stack_pop(vm);
 
-	rv = uc_vm_stack_pop(vm);
+		ucv_to_stringbuf(vm, resbuf, rv, false);
 
-	ucv_to_stringbuf(vm, resbuf, rv, false);
-
-	ucv_put(rv);
-
-	return NULL;
+		ucv_put(rv);
+	}
 }
 
 static void
@@ -2089,44 +2100,45 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 	uc_value_t *pattern = uc_fn_arg(1);
 	uc_value_t *replace = uc_fn_arg(2);
 	bool sb_freeable, pt_freeable;
-	uc_value_t *rv = NULL;
+	regmatch_t *pmatch = NULL;
+	uc_regexp_t *re = NULL;
 	uc_stringbuf_t *resbuf;
-	regmatch_t pmatch[10];
 	int eflags = 0, res;
-	uc_regexp_t *re;
-	size_t pl;
+	size_t pl, nmatch;
 
 	if (!pattern || !subject || !replace)
+		return NULL;
+
+	nmatch = 1;
+
+	if (ucv_type(pattern) == UC_REGEXP) {
+		re = (uc_regexp_t *)pattern;
+		nmatch += re->regexp.re_nsub;
+	}
+
+	pmatch = calloc(nmatch, sizeof(regmatch_t));
+
+	if (!pmatch)
 		return NULL;
 
 	sb = uc_cast_string(vm, &subject, &sb_freeable);
 	resbuf = ucv_stringbuf_new();
 
-	if (ucv_type(pattern) == UC_REGEXP) {
-		re = (uc_regexp_t *)pattern;
+	if (re) {
 		p = sb;
 
 		while (true) {
-			res = regexec(&re->regexp, p, ARRAY_SIZE(pmatch), pmatch, eflags);
+			res = regexec(&re->regexp, p, nmatch, pmatch, eflags);
 
 			if (res == REG_NOMATCH)
 				break;
 
 			ucv_stringbuf_addstr(resbuf, p, pmatch[0].rm_so);
 
-			if (ucv_is_callable(replace)) {
-				rv = uc_replace_cb(vm, replace, p, pmatch, ARRAY_SIZE(pmatch), resbuf);
-
-				if (rv) {
-					if (sb_freeable)
-						free(sb);
-
-					return rv;
-				}
-			}
-			else {
-				uc_replace_str(vm, replace, p, pmatch, ARRAY_SIZE(pmatch), resbuf);
-			}
+			if (ucv_is_callable(replace))
+				uc_replace_cb(vm, replace, p, pmatch, nmatch, resbuf);
+			else
+				uc_replace_str(vm, replace, p, pmatch, nmatch, resbuf);
 
 			if (pmatch[0].rm_so != pmatch[0].rm_eo)
 				p += pmatch[0].rm_eo;
@@ -2156,22 +2168,10 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 				pmatch[0].rm_so = p - l;
 				pmatch[0].rm_eo = pmatch[0].rm_so + pl;
 
-				if (ucv_is_callable(replace)) {
-					rv = uc_replace_cb(vm, replace, l, pmatch, 1, resbuf);
-
-					if (rv) {
-						if (sb_freeable)
-							free(sb);
-
-						if (pt_freeable)
-							free(pt);
-
-						return rv;
-					}
-				}
-				else {
+				if (ucv_is_callable(replace))
+					uc_replace_cb(vm, replace, l, pmatch, 1, resbuf);
+				else
 					uc_replace_str(vm, replace, l, pmatch, 1, resbuf);
-				}
 
 				if (pl) {
 					l = p + pl;
@@ -2191,6 +2191,8 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 		if (pt_freeable)
 			free(pt);
 	}
+
+	free(pmatch);
 
 	if (sb_freeable)
 		free(sb);
