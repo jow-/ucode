@@ -26,6 +26,7 @@
 #include <glob.h>
 #include <fnmatch.h>
 #include <limits.h>
+#include <fcntl.h>
 
 #ifndef __APPLE__
 #include <sys/sysmacros.h> /* major(), minor() */
@@ -370,18 +371,72 @@ uc_fs_fileno(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_open(uc_vm_t *vm, size_t nargs)
 {
+	int open_mode, open_flags, fd, i;
 	uc_value_t *path = uc_fn_arg(0);
 	uc_value_t *mode = uc_fn_arg(1);
+	uc_value_t *perm = uc_fn_arg(2);
+	mode_t open_perm = 0666;
 	FILE *fp;
+	char *m;
 
 	if (ucv_type(path) != UC_STRING)
 		err_return(EINVAL);
 
-	fp = fopen(ucv_string_get(path),
-		ucv_type(mode) == UC_STRING ? ucv_string_get(mode) : "r");
+	m = (ucv_type(mode) == UC_STRING) ? ucv_string_get(mode) : "r";
 
-	if (!fp)
-		err_return(errno);
+	switch (*m) {
+	case 'r':
+		open_mode = O_RDONLY;
+		open_flags = 0;
+		break;
+
+	case 'w':
+		open_mode = O_WRONLY;
+		open_flags = O_CREAT | O_TRUNC;
+		break;
+
+	case 'a':
+		open_mode = O_WRONLY;
+		open_flags = O_CREAT | O_APPEND;
+		break;
+
+	default:
+		err_return(EINVAL);
+	}
+
+	for (i = 1; m[i]; i++) {
+		switch (m[i]) {
+		case '+': open_mode = O_RDWR;      break;
+		case 'x': open_flags |= O_EXCL;    break;
+		case 'e': open_flags |= O_CLOEXEC; break;
+		}
+	}
+
+	if (perm) {
+		if (ucv_type(perm) != UC_INTEGER)
+			err_return(EINVAL);
+
+		open_perm = ucv_int64_get(perm);
+	}
+
+#ifdef O_LARGEFILE
+	open_flags |= open_mode | O_LARGEFILE;
+#else
+	open_flags |= open_mode;
+#endif
+
+	fd = open(ucv_string_get(path), open_flags, open_perm);
+
+	if (fd < 0)
+		return NULL;
+
+	fp = fdopen(fd, m);
+
+	if (!fp) {
+		i = errno;
+		close(fd);
+		err_return(i);
+	}
 
 	return uc_resource_new(file_type, fp);
 }
