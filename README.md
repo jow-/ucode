@@ -934,10 +934,14 @@ If `off` is negative then it starts that far from the end of the array. If
 removes the elements from `off` onward except for `-len` elements at the end of
 the array. If both `off` and `len` are omitted, removes everything.
 
-#### 6.33. `split(str, sep)`
+#### 6.33. `split(str, sep[, limit])`
 
 Split the given string using the separator passed as second argument and return
 an array containing the resulting pieces.
+
+If a limit argument is supplied, the resulting array contains no more than the
+given amount of entries, that means the string is split at most `limit - 1`
+times total.
 
 The separator may either be a plain string or a regular expression.
 
@@ -945,6 +949,7 @@ The separator may either be a plain string or a regular expression.
 split("foo,bar,baz", ",")     // ["foo", "bar", "baz"]
 split("foobar", "")           // ["f", "o", "o", "b", "a", "r"]
 split("foo,bar,baz", /[ao]/)  // ["f", "", ",b", "r,b", "z"]
+split("foo=bar=baz", "=", 2)  // ["foo", "bar=baz"]
 ```
 
 #### 6.34. `sqrt(x)`
@@ -1095,13 +1100,16 @@ match("foobarbaz", /b.(.)/)   // ["bar", "r"]
 match("foobarbaz", /b.(.)/g)  // [["bar", "r"], ["baz", "z"]]
 ```
 
-#### 6.47. `replace(str, /pattern/, replace)`
+#### 6.47. `replace(str, /pattern/, replace[, limit])`
 
 Replace occurences of the specified pattern in the string passed as first
 argument. The pattern value may be either a regular expression or a plain
 string. The replace value may be a function which is invoked for each found
 pattern or any other value which is converted into a plain string and used as
 replacement.
+
+When an optional limit is specified, substitutions are performed only that
+many times.
 
 If the pattern is a regular expression and not using the `g` flag, then only the
 first occurence in the string is replaced, if the `g` flag is used or if the
@@ -1126,6 +1134,8 @@ replace("barfoobaz", "a", "X")                              // bXrfoobXz
 replace("barfoobaz", /(.)(.)(.)/g, function(m, c1, c2, c3) {
     return c3 + c2 + c1;
 })                                                          // raboofzab
+replace("aaaaa", "a", "x", 3)                               // xxxaa
+replace("foo bar baz", /[ao]/g, "x", 3)                     // fxx bxr baz
 ```
 
 #### 6.48. `json(str)`

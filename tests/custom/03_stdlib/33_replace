@@ -205,3 +205,37 @@ In [anonymous function](), line 2, byte 40:
 
 
 -- End --
+
+
+An optional limit parameter controls the maximum amount of replacements.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		// negative limit performs no substitution
+		replace("aaaaa", "a", "x", -1),
+
+		// zero limit performs no substitution
+		replace("aaaaa", "a", "x", 0),
+
+		// positive limit
+		replace("aaaaa", "a", "x", 3),
+
+		// same rules apply to regex replaces:
+		replace("foo bar baz", /[ao]/g, "x", -1),
+		replace("foo bar baz", /[ao]/g, "x", 0),
+		replace("foo bar baz", /[ao]/g, "x", 3),
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"aaaaa",
+	"aaaaa",
+	"xxxaa",
+	"foo bar baz",
+	"foo bar baz",
+	"fxx bxr baz"
+]
+-- End --

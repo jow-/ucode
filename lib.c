@@ -1023,9 +1023,10 @@ uc_split(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *str = uc_fn_arg(0);
 	uc_value_t *sep = uc_fn_arg(1);
+	uc_value_t *lim = uc_fn_arg(2);
 	uc_value_t *arr = NULL;
 	const char *p, *sepstr, *splitstr;
-	size_t seplen, splitlen;
+	size_t seplen, splitlen, limit;
 	int eflags = 0, res;
 	regmatch_t pmatch;
 	uc_regexp_t *re;
@@ -1036,11 +1037,15 @@ uc_split(uc_vm_t *vm, size_t nargs)
 	arr = ucv_array_new(vm);
 	splitlen = ucv_string_length(str);
 	p = splitstr = ucv_string_get(str);
+	limit = lim ? ucv_uint64_get(lim) : SIZE_MAX;
+
+	if (limit == 0)
+		goto out;
 
 	if (ucv_type(sep) == UC_REGEXP) {
 		re = (uc_regexp_t *)sep;
 
-		while (true) {
+		while (limit > 1) {
 			res = regexec(&re->regexp, splitstr, 1, &pmatch, eflags);
 
 			if (res == REG_NOMATCH)
@@ -1059,6 +1064,7 @@ uc_split(uc_vm_t *vm, size_t nargs)
 			}
 
 			eflags |= REG_NOTBOL;
+			limit--;
 		}
 
 		ucv_array_push(arr, ucv_string_new(splitstr));
@@ -1071,20 +1077,25 @@ uc_split(uc_vm_t *vm, size_t nargs)
 			ucv_array_push(arr, ucv_string_new_length("", 0));
 		}
 		else if (seplen == 0) {
-			while (splitlen > 0) {
+			while (limit > 1 && splitlen > 0) {
 				ucv_array_push(arr, ucv_string_new_length(p, 1));
 
+				limit--;
 				splitlen--;
 				p++;
 			}
+
+			if (splitlen > 0)
+				ucv_array_push(arr, ucv_string_new_length(p, splitlen));
 		}
 		else {
-			while (splitlen >= seplen) {
+			while (limit > 1 && splitlen >= seplen) {
 				if (!memcmp(p, sepstr, seplen)) {
 					ucv_array_push(arr, ucv_string_new_length(splitstr, p - splitstr));
 
 					p = splitstr = p + seplen;
 					splitlen -= seplen;
+					limit--;
 					continue;
 				}
 
@@ -2099,12 +2110,13 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 	uc_value_t *subject = uc_fn_arg(0);
 	uc_value_t *pattern = uc_fn_arg(1);
 	uc_value_t *replace = uc_fn_arg(2);
+	uc_value_t *limitval = uc_fn_arg(3);
 	bool sb_freeable, pt_freeable;
 	regmatch_t *pmatch = NULL;
+	size_t pl, nmatch, limit;
 	uc_regexp_t *re = NULL;
 	uc_stringbuf_t *resbuf;
 	int eflags = 0, res;
-	size_t pl, nmatch;
 
 	if (!pattern || !subject || !replace)
 		return NULL;
@@ -2123,11 +2135,12 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 
 	sb = uc_cast_string(vm, &subject, &sb_freeable);
 	resbuf = ucv_stringbuf_new();
+	limit = limitval ? ucv_uint64_get(limitval) : SIZE_MAX;
 
 	if (re) {
 		p = sb;
 
-		while (true) {
+		while (limit > 0) {
 			res = regexec(&re->regexp, p, nmatch, pmatch, eflags);
 
 			if (res == REG_NOMATCH)
@@ -2151,6 +2164,8 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 				eflags |= REG_NOTBOL;
 			else
 				break;
+
+			limit--;
 		}
 
 		ucv_stringbuf_addstr(resbuf, p, strlen(p));
@@ -2161,7 +2176,7 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 
 		l = p = sb;
 
-		while (true) {
+		while (limit > 0) {
 			if (pl == 0 || !strncmp(p, pt, pl)) {
 				ucv_stringbuf_addstr(resbuf, l, p - l);
 
@@ -2180,6 +2195,8 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 				else {
 					l = p;
 				}
+
+				limit--;
 			}
 
 			if (!*p++)
