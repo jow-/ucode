@@ -176,29 +176,37 @@ typedef struct {
 static uc_value_t *
 uc_ubus_error(uc_vm_t *vm, size_t nargs)
 {
+	uc_value_t *numeric = uc_fn_arg(0), *rv;
 	uc_stringbuf_t *buf;
 	const char *s;
 
 	if (last_error.code == 0)
 		return NULL;
 
-	buf = ucv_stringbuf_new();
-
-	if (last_error.code == UBUS_STATUS_UNKNOWN_ERROR && last_error.msg) {
-		ucv_stringbuf_addstr(buf, last_error.msg, strlen(last_error.msg));
+	if (ucv_is_truish(numeric)) {
+		rv = ucv_int64_new(last_error.code);
 	}
 	else {
-		s = ubus_strerror(last_error.code);
+		buf = ucv_stringbuf_new();
 
-		ucv_stringbuf_addstr(buf, s, strlen(s));
+		if (last_error.code == UBUS_STATUS_UNKNOWN_ERROR && last_error.msg) {
+			ucv_stringbuf_addstr(buf, last_error.msg, strlen(last_error.msg));
+		}
+		else {
+			s = ubus_strerror(last_error.code);
 
-		if (last_error.msg)
-			ucv_stringbuf_printf(buf, ": %s", last_error.msg);
+			ucv_stringbuf_addstr(buf, s, strlen(s));
+
+			if (last_error.msg)
+				ucv_stringbuf_printf(buf, ": %s", last_error.msg);
+		}
+
+		rv = ucv_stringbuf_finish(buf);
 	}
 
 	set_error(0, NULL);
 
-	return ucv_stringbuf_finish(buf);
+	return rv;
 }
 
 static void
@@ -2052,6 +2060,25 @@ static void free_subscriber(void *ud) {
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
+
+#define ADD_CONST(x) ucv_object_add(scope, #x, ucv_int64_new(UBUS_##x))
+	ADD_CONST(STATUS_OK);
+	ADD_CONST(STATUS_INVALID_COMMAND);
+	ADD_CONST(STATUS_INVALID_ARGUMENT);
+	ADD_CONST(STATUS_METHOD_NOT_FOUND);
+	ADD_CONST(STATUS_NOT_FOUND);
+	ADD_CONST(STATUS_NO_DATA);
+	ADD_CONST(STATUS_PERMISSION_DENIED);
+	ADD_CONST(STATUS_TIMEOUT);
+	ADD_CONST(STATUS_NOT_SUPPORTED);
+	ADD_CONST(STATUS_UNKNOWN_ERROR);
+	ADD_CONST(STATUS_CONNECTION_FAILED);
+
+#ifdef HAVE_NEW_UBUS_STATUS_CODES
+	ADD_CONST(STATUS_NO_MEMORY);
+	ADD_CONST(STATUS_PARSE_ERROR);
+	ADD_CONST(STATUS_SYSTEM_ERROR);
+#endif
 
 	conn_type = uc_type_declare(vm, "ubus.connection", conn_fns, free_connection);
 	defer_type = uc_type_declare(vm, "ubus.deferred", defer_fns, free_deferred);
