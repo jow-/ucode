@@ -2053,6 +2053,25 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
 
+#define ADD_CONST(x) ucv_object_add(scope, #x, ucv_int64_new(UBUS_##x))
+	ADD_CONST(STATUS_OK);
+	ADD_CONST(STATUS_INVALID_COMMAND);
+	ADD_CONST(STATUS_INVALID_ARGUMENT);
+	ADD_CONST(STATUS_METHOD_NOT_FOUND);
+	ADD_CONST(STATUS_NOT_FOUND);
+	ADD_CONST(STATUS_NO_DATA);
+	ADD_CONST(STATUS_PERMISSION_DENIED);
+	ADD_CONST(STATUS_TIMEOUT);
+	ADD_CONST(STATUS_NOT_SUPPORTED);
+	ADD_CONST(STATUS_UNKNOWN_ERROR);
+	ADD_CONST(STATUS_CONNECTION_FAILED);
+
+#ifdef HAVE_NEW_UBUS_STATUS_CODES
+	ADD_CONST(STATUS_NO_MEMORY);
+	ADD_CONST(STATUS_PARSE_ERROR);
+	ADD_CONST(STATUS_SYSTEM_ERROR);
+#endif
+
 	conn_type = uc_type_declare(vm, "ubus.connection", conn_fns, free_connection);
 	defer_type = uc_type_declare(vm, "ubus.deferred", defer_fns, free_deferred);
 	object_type = uc_type_declare(vm, "ubus.object", object_fns, free_object);
