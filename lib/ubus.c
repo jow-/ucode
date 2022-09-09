@@ -1226,7 +1226,16 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 		 * returned and if reqobj.reply() hasn't been called, immediately
 		 * finish deferred request with UBUS_STATUS_NO_DATA. */
 		else if (!callctx->replied) {
-			ubus_complete_deferred_request(ctx, &callctx->req, UBUS_STATUS_NO_DATA);
+			rv = UBUS_STATUS_NO_DATA;
+
+			if (ucv_type(res) == UC_INTEGER) {
+				rv = (int)ucv_int64_get(res);
+
+				if (rv < 0 || rv > __UBUS_STATUS_LAST)
+					rv = UBUS_STATUS_UNKNOWN_ERROR;
+			}
+
+			ubus_complete_deferred_request(ctx, &callctx->req, rv);
 			callctx->replied = true;
 		}
 
