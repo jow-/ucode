@@ -176,29 +176,37 @@ typedef struct {
 static uc_value_t *
 uc_ubus_error(uc_vm_t *vm, size_t nargs)
 {
+	uc_value_t *numeric = uc_fn_arg(0), *rv;
 	uc_stringbuf_t *buf;
 	const char *s;
 
 	if (last_error.code == 0)
 		return NULL;
 
-	buf = ucv_stringbuf_new();
-
-	if (last_error.code == UBUS_STATUS_UNKNOWN_ERROR && last_error.msg) {
-		ucv_stringbuf_addstr(buf, last_error.msg, strlen(last_error.msg));
+	if (ucv_is_truish(numeric)) {
+		rv = ucv_int64_new(last_error.code);
 	}
 	else {
-		s = ubus_strerror(last_error.code);
+		buf = ucv_stringbuf_new();
 
-		ucv_stringbuf_addstr(buf, s, strlen(s));
+		if (last_error.code == UBUS_STATUS_UNKNOWN_ERROR && last_error.msg) {
+			ucv_stringbuf_addstr(buf, last_error.msg, strlen(last_error.msg));
+		}
+		else {
+			s = ubus_strerror(last_error.code);
 
-		if (last_error.msg)
-			ucv_stringbuf_printf(buf, ": %s", last_error.msg);
+			ucv_stringbuf_addstr(buf, s, strlen(s));
+
+			if (last_error.msg)
+				ucv_stringbuf_printf(buf, ": %s", last_error.msg);
+		}
+
+		rv = ucv_stringbuf_finish(buf);
 	}
 
 	set_error(0, NULL);
 
-	return ucv_stringbuf_finish(buf);
+	return rv;
 }
 
 static void
