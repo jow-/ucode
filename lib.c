@@ -2742,7 +2742,10 @@ uc_system(uc_vm_t *vm, size_t nargs)
 			}
 		}
 
-		if (waitpid(cld, &rc, 0) < 0) {
+		while (waitpid(cld, &rc, 0) < 0) {
+			if (errno == EINTR)
+				continue;
+
 			fn = "waitpid";
 			goto fail;
 		}
