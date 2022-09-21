@@ -268,14 +268,14 @@ _uc_reg_clear(uc_vm_t *vm, const char *key, size_t idx, size_t nptrs)
 }
 
 
-#define request_reg_add(vm, request, cb) \
-	_uc_reg_add(vm, "ubus.requests", 2, request, cb)
+#define request_reg_add(vm, request, cb, conn) \
+	_uc_reg_add(vm, "ubus.requests", 3, request, cb, conn)
 
 #define request_reg_get(vm, idx, request, cb) \
 	_uc_reg_get(vm, "ubus.requests", idx, 2, request, cb)
 
 #define request_reg_clear(vm, idx) \
-	_uc_reg_clear(vm, "ubus.requests", idx, 2)
+	_uc_reg_clear(vm, "ubus.requests", idx, 3)
 
 
 #define object_reg_add(vm, obj, msg, cb) \
@@ -692,7 +692,7 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *objname, *funname, *funargs, *replycb, *res = NULL;
+	uc_value_t *objname, *funname, *funargs, *replycb, *conn, *res = NULL;
 	uc_ubus_deferred_t *defer;
 	uc_ubus_connection_t **c;
 	enum ubus_msg_status rv;
@@ -734,8 +734,9 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 		uloop_timeout_set(&defer->timeout, (*c)->timeout * 1000);
 
 		res = uc_resource_new(defer_type, defer);
+		conn = uc_vector_last(&vm->callframes)->ctx;
 
-		defer->registry_index = request_reg_add(vm, ucv_get(res), ucv_get(replycb));
+		defer->registry_index = request_reg_add(vm, ucv_get(res), ucv_get(replycb), ucv_get(conn));
 
 		if (!uc_ubus_have_uloop()) {
 			have_own_uloop = true;
@@ -1216,7 +1217,7 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 
 			/* Add wrapped request context into registry to prevent GC'ing
 			 * until reply or timeout occurred */
-			callctx->registry_index = request_reg_add(vm, ucv_get(reqobj), NULL);
+			callctx->registry_index = request_reg_add(vm, ucv_get(reqobj), NULL, NULL);
 		}
 
 		/* Otherwise, when the function returned an object, treat it as
