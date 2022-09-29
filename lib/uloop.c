@@ -874,7 +874,7 @@ uc_uloop_task_output_cb(struct uloop_fd *fd, unsigned int flags)
 {
 	uc_uloop_task_t *task = container_of(fd, uc_uloop_task_t, output);
 	uc_value_t *obj = ucv_array_get(object_registry, task->registry_index);
-	uc_value_t *msg;
+	uc_value_t *msg = NULL;
 
 	if (flags & ULOOP_READ) {
 		while (true) {
@@ -901,17 +901,22 @@ uc_uloop_task_output_cb(struct uloop_fd *fd, unsigned int flags)
 				break;
 			}
 
-			uc_vm_stack_push(task->vm, ucv_get(obj));
-			uc_vm_stack_push(task->vm, ucv_get(task->output_cb));
-			uc_vm_stack_push(task->vm, msg);
+			if (task->output_cb) {
+				uc_vm_stack_push(task->vm, ucv_get(obj));
+				uc_vm_stack_push(task->vm, ucv_get(task->output_cb));
+				uc_vm_stack_push(task->vm, msg);
 
-			if (uc_vm_call(task->vm, true, 1) == EXCEPTION_NONE) {
-				ucv_put(uc_vm_stack_pop(task->vm));
+				if (uc_vm_call(task->vm, true, 1) == EXCEPTION_NONE) {
+					ucv_put(uc_vm_stack_pop(task->vm));
+				}
+				else {
+					uloop_end();
+
+					return;
+				}
 			}
 			else {
-				uloop_end();
-
-				return;
+				ucv_put(msg);
 			}
 		}
 	}
