@@ -203,6 +203,9 @@ ucv_gc_mark(uc_value_t *uv)
 		for (i = 0; i < program->sources.count; i++)
 			ucv_gc_mark(&program->sources.entries[i]->header);
 
+		for (i = 0; i < program->exports.count; i++)
+			ucv_gc_mark(&program->exports.entries[i]->header);
+
 		break;
 
 	default:
@@ -297,7 +300,11 @@ ucv_free(uc_value_t *uv, bool retain)
 		for (i = 0; i < program->sources.count; i++)
 			ucv_put_value(&program->sources.entries[i]->header, retain);
 
+		for (i = 0; i < program->exports.count; i++)
+			ucv_put_value(&program->exports.entries[i]->header, retain);
+
 		uc_vector_clear(&program->sources);
+		uc_vector_clear(&program->exports);
 		break;
 
 	case UC_SOURCE:
@@ -2227,9 +2234,6 @@ ucv_gc_common(uc_vm_t *vm, bool final)
 
 		for (i = 0; i < vm->restypes.count; i++)
 			ucv_gc_mark(vm->restypes.entries[i]->proto);
-
-		for (i = 0; i < vm->exports.count; i++)
-			ucv_gc_mark(vm->exports.entries[i]->value);
 	}
 
 	/* unref unreachable objects */

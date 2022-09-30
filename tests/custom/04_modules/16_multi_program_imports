@@ -1,0 +1,143 @@
+This testcase asserts that import/export symbols in runtime loaded code
+are properly dealt with.
+
+Since the compiler has no knowledge about runtime loaded code it cannot
+reserve slots in the export table, requiring the VM to maintain one export
+table per program instance.
+
+The dependency tree is:
+
+root
+ + import: mod1
+ + import: mod2
+ + require: mod3
+    + import: mod1
+    + import: mod2
+
+-- Testcase --
+import { mod2sym1, mod2sym2 } from 'mod2';
+import { mod1sym1, mod1sym2 } from 'mod1';
+
+mod3 = require('mod3');
+
+printf("root: %.J\n", { mod1sym1, mod1sym2, mod2sym1, mod2sym2, mod3 });
+-- End --
+
+-- File mod1.uc --
+export const mod1sym1 = "a";
+export const mod1sym2 = "b";
+-- End --
+
+-- File mod2.uc --
+export const mod2sym1 = "c";
+export const mod2sym2 = "d";
+-- End --
+
+-- File mod3.uc --
+import { mod1sym2, mod1sym1 } from 'mod1';
+import { mod2sym2, mod2sym1 } from 'mod2';
+
+printf("mod3: %.J\n", { mod1sym1, mod1sym2, mod2sym1, mod2sym2 });
+
+return { mod1sym1, mod1sym2, mod2sym1, mod2sym2 };
+-- End --
+
+-- Args --
+-R -L files/
+-- End --
+
+-- Expect stdout --
+mod3: {
+	"mod1sym1": "a",
+	"mod1sym2": "b",
+	"mod2sym1": "c",
+	"mod2sym2": "d"
+}
+root: {
+	"mod1sym1": "a",
+	"mod1sym2": "b",
+	"mod2sym1": "c",
+	"mod2sym2": "d",
+	"mod3": {
+		"mod1sym1": "a",
+		"mod1sym2": "b",
+		"mod2sym1": "c",
+		"mod2sym2": "d"
+	}
+}
+-- End --
+
+
+A variation of the above testcase using wildcard imports.
+
+root
+ + import: mod4
+ + import: mod5
+ + require: mod6
+    + import: mod4
+    + import: mod5
+
+-- Testcase --
+import * as mod5 from 'mod5';
+import * as mod4 from 'mod4';
+
+mod6 = require('mod6');
+
+printf("root: %.J\n", { mod4, mod5, mod6 });
+-- End --
+
+-- File mod4.uc --
+export const sym1 = "a";
+export const sym2 = "b";
+-- End --
+
+-- File mod5.uc --
+export const sym1 = "c";
+export const sym2 = "d";
+-- End --
+
+-- File mod6.uc --
+import * as mod4 from 'mod4';
+import * as mod5 from 'mod5';
+
+printf("mod6: %.J\n", { mod4, mod5 });
+
+return { mod4, mod5 };
+-- End --
+
+-- Args --
+-R -L files/
+-- End --
+
+-- Expect stdout --
+mod6: {
+	"mod4": {
+		"sym1": "a",
+		"sym2": "b"
+	},
+	"mod5": {
+		"sym1": "c",
+		"sym2": "d"
+	}
+}
+root: {
+	"mod4": {
+		"sym1": "a",
+		"sym2": "b"
+	},
+	"mod5": {
+		"sym1": "c",
+		"sym2": "d"
+	},
+	"mod6": {
+		"mod4": {
+			"sym1": "a",
+			"sym2": "b"
+		},
+		"mod5": {
+			"sym1": "c",
+			"sym2": "d"
+		}
+	}
+}
+-- End --
