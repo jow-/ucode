@@ -46,9 +46,9 @@ static void uc_compiler_compile_ternary(uc_compiler_t *compiler);
 static void uc_compiler_compile_array(uc_compiler_t *compiler);
 static void uc_compiler_compile_object(uc_compiler_t *compiler);
 
-static void uc_compiler_compile_declaration(uc_compiler_t *compiler);
-static void uc_compiler_compile_statement(uc_compiler_t *compiler);
-static void uc_compiler_compile_expstmt(uc_compiler_t *compiler);
+static uc_tokentype_t uc_compiler_compile_declaration(uc_compiler_t *compiler);
+static uc_tokentype_t uc_compiler_compile_statement(uc_compiler_t *compiler);
+static uc_tokentype_t uc_compiler_compile_expstmt(uc_compiler_t *compiler);
 
 static uc_parse_rule_t
 uc_compiler_parse_rules[TK_ERROR + 1] = {
@@ -646,7 +646,7 @@ uc_compiler_emit_exports(uc_compiler_t *compiler) {
 }
 
 static uc_function_t *
-uc_compiler_finish(uc_compiler_t *compiler)
+uc_compiler_finish(uc_compiler_t *compiler, uc_tokentype_t last_statement_type)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	uc_locals_t *locals = &compiler->locals;
@@ -1177,6 +1177,7 @@ uc_compiler_compile_assignment(uc_compiler_t *compiler, uc_value_t *var)
 static bool
 uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool restarg)
 {
+	uc_tokentype_t last_statement_type = TK_NULL;
 	bool array = (ucv_type(args) == UC_ARRAY);
 	uc_compiler_t fncompiler = { 0 };
 	size_t i, pos, load_off;
@@ -1220,15 +1221,19 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 	if (uc_compiler_parse_match(&fncompiler, TK_LBRACE)) {
 		while (!uc_compiler_parse_check(&fncompiler, TK_RBRACE) &&
 		       !uc_compiler_parse_check(&fncompiler, TK_EOF))
-			uc_compiler_compile_declaration(&fncompiler);
+			last_statement_type = uc_compiler_compile_declaration(&fncompiler);
 
 		uc_compiler_parse_consume(&fncompiler, TK_RBRACE);
 
 		/* overwrite last pop result with return */
-		if (fn->chunk.count) {
+		if (last_statement_type == TK_SCOL)
 			uc_chunk_pop(&fn->chunk);
-			uc_compiler_emit_insn(&fncompiler, 0, I_RETURN);
-		}
+
+		/* else load implicit null */
+		else
+			uc_compiler_emit_insn(&fncompiler, 0, I_LNULL);
+
+		uc_compiler_emit_insn(&fncompiler, 0, I_RETURN);
 	}
 	else {
 		uc_compiler_parse_precedence(&fncompiler, P_ASSIGN);
@@ -1247,7 +1252,7 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 				: fncompiler.upvals.entries[i].index);
 
 	/* finalize function compiler */
-	fn = uc_compiler_finish(&fncompiler);
+	fn = uc_compiler_finish(&fncompiler, TK_RETURN);
 
 	if (fn)
 		uc_compiler_set_u32(compiler, load_off,
@@ -1604,19 +1609,22 @@ uc_compiler_compile_labelexpr(uc_compiler_t *compiler)
 	ucv_put(label);
 }
 
-static bool
+static uc_tokentype_t
 uc_compiler_compile_delimitted_block(uc_compiler_t *compiler, uc_tokentype_t endtype)
 {
+	uc_tokentype_t last_statement_type = TK_NULL;
+
 	while (!uc_compiler_parse_check(compiler, endtype) &&
 	       !uc_compiler_parse_check(compiler, TK_EOF))
-		uc_compiler_compile_declaration(compiler);
+		last_statement_type = uc_compiler_compile_declaration(compiler);
 
-	return uc_compiler_parse_check(compiler, endtype);
+	return uc_compiler_parse_check(compiler, endtype) ? last_statement_type : TK_EOF;
 }
 
 static void
 uc_compiler_compile_funcexpr_common(uc_compiler_t *compiler, bool require_name)
 {
+	uc_tokentype_t last_statement_type = TK_NULL;
 	uc_compiler_t fncompiler = { 0 };
 	uc_value_t *name = NULL;
 	ssize_t slot = -1, pos;
@@ -1688,11 +1696,11 @@ uc_compiler_compile_funcexpr_common(uc_compiler_t *compiler, bool require_name)
 
 	/* parse and compile function body */
 	if (uc_compiler_parse_match(&fncompiler, TK_COLON)) {
-		uc_compiler_compile_delimitted_block(&fncompiler, TK_ENDFUNC);
+		last_statement_type = uc_compiler_compile_delimitted_block(&fncompiler, TK_ENDFUNC);
 		uc_compiler_parse_consume(&fncompiler, TK_ENDFUNC);
 	}
 	else if (uc_compiler_parse_match(&fncompiler, TK_LBRACE)) {
-		uc_compiler_compile_delimitted_block(&fncompiler, TK_RBRACE);
+		last_statement_type = uc_compiler_compile_delimitted_block(&fncompiler, TK_RBRACE);
 		uc_compiler_parse_consume(&fncompiler, TK_RBRACE);
 	}
 	else {
@@ -1712,7 +1720,7 @@ uc_compiler_compile_funcexpr_common(uc_compiler_t *compiler, bool require_name)
 				: fncompiler.upvals.entries[i].index);
 
 	/* finalize function compiler */
-	fn = uc_compiler_finish(&fncompiler);
+	fn = uc_compiler_finish(&fncompiler, last_statement_type);
 
 	if (fn)
 		uc_compiler_set_u32(compiler, load_off,
@@ -2265,7 +2273,7 @@ uc_compiler_compile_while(uc_compiler_t *compiler)
 	if (uc_compiler_parse_match(compiler, TK_COLON)) {
 		uc_compiler_enter_scope(compiler);
 
-		if (!uc_compiler_compile_delimitted_block(compiler, TK_ENDWHILE))
+		if (uc_compiler_compile_delimitted_block(compiler, TK_ENDWHILE) == TK_EOF)
 			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
 				"Expecting 'endwhile'");
 		else
@@ -2369,7 +2377,7 @@ uc_compiler_compile_for_in(uc_compiler_t *compiler, bool local, uc_token_t *kvar
 	if (uc_compiler_parse_match(compiler, TK_COLON)) {
 		uc_compiler_enter_scope(compiler);
 
-		if (!uc_compiler_compile_delimitted_block(compiler, TK_ENDFOR))
+		if (uc_compiler_compile_delimitted_block(compiler, TK_ENDFOR) == TK_EOF)
 			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
 				"Expecting 'endfor'");
 		else
@@ -2487,7 +2495,7 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 	if (uc_compiler_parse_match(compiler, TK_COLON)) {
 		uc_compiler_enter_scope(compiler);
 
-		if (!uc_compiler_compile_delimitted_block(compiler, TK_ENDFOR))
+		if (uc_compiler_compile_delimitted_block(compiler, TK_ENDFOR) == TK_EOF)
 			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
 				"Expecting 'endfor'");
 		else
@@ -2862,7 +2870,6 @@ static void
 uc_compiler_compile_return(uc_compiler_t *compiler)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
-	size_t off = chunk->count;
 
 	if (compiler->function->module) {
 		uc_compiler_syntax_error(compiler, 0, "return must be inside function body");
@@ -2870,11 +2877,10 @@ uc_compiler_compile_return(uc_compiler_t *compiler)
 		return;
 	}
 
-	uc_compiler_compile_expstmt(compiler);
-
 	/* if we compiled an empty expression statement (`;`), load implicit null */
-	if (chunk->count == off)
+	if (uc_compiler_compile_expstmt(compiler) == TK_NULL)
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LNULL);
+
 	/* otherwise overwrite the final I_POP instruction with I_RETURN */
 	else
 		uc_chunk_pop(chunk);
@@ -2906,26 +2912,30 @@ uc_compiler_compile_text(uc_compiler_t *compiler)
 	uc_compiler_emit_insn(compiler, 0, I_PRINT);
 }
 
-static void
+static uc_tokentype_t
 uc_compiler_compile_block(uc_compiler_t *compiler)
 {
+	uc_tokentype_t last_statement_type = TK_NULL;
+
 	uc_compiler_enter_scope(compiler);
 
 	while (!uc_compiler_parse_check(compiler, TK_RBRACE) &&
 	       !uc_compiler_parse_check(compiler, TK_EOF))
-		uc_compiler_compile_declaration(compiler);
+		last_statement_type = uc_compiler_compile_declaration(compiler);
 
 	uc_compiler_parse_consume(compiler, TK_RBRACE);
 
 	uc_compiler_leave_scope(compiler);
+
+	return last_statement_type;
 }
 
-static void
+static uc_tokentype_t
 uc_compiler_compile_expstmt(uc_compiler_t *compiler)
 {
 	/* empty statement */
 	if (uc_compiler_parse_match(compiler, TK_SCOL))
-		return;
+		return TK_NULL;
 
 	uc_compiler_compile_expression(compiler);
 
@@ -2953,11 +2963,14 @@ uc_compiler_compile_expstmt(uc_compiler_t *compiler)
 	}
 
 	uc_compiler_emit_insn(compiler, 0, I_POP);
+
+	return TK_SCOL;
 }
 
-static void
+static uc_tokentype_t
 uc_compiler_compile_statement(uc_compiler_t *compiler)
 {
+	uc_tokentype_t last_statement_type = compiler->parser->curr.type;
 	uc_exprstack_t expr = {
 		.token = compiler->parser->curr.type,
 		.parent = compiler->exprstack
@@ -2988,11 +3001,13 @@ uc_compiler_compile_statement(uc_compiler_t *compiler)
 	else if (uc_compiler_parse_match(compiler, TK_LEXP))
 		uc_compiler_compile_tplexp(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_LBRACE))
-		uc_compiler_compile_block(compiler);
+		last_statement_type = uc_compiler_compile_block(compiler);
 	else
-		uc_compiler_compile_expstmt(compiler);
+		last_statement_type = uc_compiler_compile_expstmt(compiler);
 
 	compiler->exprstack = expr.parent;
+
+	return last_statement_type;
 }
 
 static void
@@ -3570,9 +3585,11 @@ uc_compiler_compile_import(uc_compiler_t *compiler)
 	ucv_put(namelist);
 }
 
-static void
+static uc_tokentype_t
 uc_compiler_compile_declaration(uc_compiler_t *compiler)
 {
+	uc_tokentype_t last_statement_type = compiler->parser->curr.type;
+
 	if (uc_compiler_parse_match(compiler, TK_LOCAL))
 		uc_compiler_compile_local(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_CONST))
@@ -3582,10 +3599,12 @@ uc_compiler_compile_declaration(uc_compiler_t *compiler)
 	else if (uc_compiler_parse_match(compiler, TK_IMPORT))
 		uc_compiler_compile_import(compiler);
 	else
-		uc_compiler_compile_statement(compiler);
+		last_statement_type = uc_compiler_compile_statement(compiler);
 
 	if (compiler->parser->synchronizing)
 		uc_compiler_parse_synchronize(compiler);
+
+	return last_statement_type;
 }
 
 #endif /* NO_COMPILE */
@@ -3604,6 +3623,7 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_progra
 	uc_exprstack_t expr = { .token = TK_EOF };
 	uc_parser_t parser = { .config = config };
 	uc_compiler_t compiler = { .parser = &parser, .exprstack = &expr };
+	uc_tokentype_t last_statement_type = TK_NULL;
 	uc_program_t *progptr;
 	uc_function_t *fn;
 	const char *name;
@@ -3629,9 +3649,15 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_progra
 	uc_compiler_parse_advance(&compiler);
 
 	while (!uc_compiler_parse_match(&compiler, TK_EOF))
-		uc_compiler_compile_declaration(&compiler);
+		last_statement_type = uc_compiler_compile_declaration(&compiler);
 
-	fn = uc_compiler_finish(&compiler);
+	if (!compiler.function->module && last_statement_type == TK_SCOL) {
+		uc_chunk_pop(uc_compiler_current_chunk(&compiler));
+		uc_compiler_emit_insn(&compiler, 0, I_RETURN);
+		last_statement_type = TK_RETURN;
+	}
+
+	fn = uc_compiler_finish(&compiler, last_statement_type);
 
 	if (errp) {
 		*errp = parser.error ? parser.error->buf : NULL;
