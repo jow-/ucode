@@ -4,7 +4,7 @@ within regular expression literals is subject of the underlying
 regular expression engine.
 
 -- Expect stdout --
-[ "/Hello world/", "/test/gis", "/test/g", "/test1 \\\/ test2/", "/\\x31\n\\.\u0007\b\\c\\u2600\\\\/" ]
+[ "/Hello world/", "/test/gis", "/test/g", "/test1 / test2/", "/1\n\\.\u0007\bc☀\\\\/" ]
 -- End --
 
 -- Testcase --
@@ -91,5 +91,29 @@ In line 7, byte 30:
 		if (e.type == "Syntax error")
 			die("Catched syntax error");
 	}
+%}
+-- End --
+
+
+Testing that slashes within character classes are not treated as regex
+literal delimitters.
+
+-- Expect stdout --
+[
+	"/[/]/",
+	"/[[./.]/]/",
+	"/[[:alpha:]/]/",
+	"/[[=/=]/]/"
+]
+-- End --
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		/[/]/,
+		/[[./.]/]/,
+		/[[:alpha:]/]/,
+		/[[=/=]/]/
+	]);
 %}
 -- End --

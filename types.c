@@ -1431,9 +1431,6 @@ ucv_to_string_json_encoded(uc_stringbuf_t *pb, const char *s, size_t len, bool r
 			break;
 
 		case '/':
-			if (regexp)
-				ucv_stringbuf_append(pb, "\\");
-
 			ucv_stringbuf_append(pb, "/");
 			break;
 
