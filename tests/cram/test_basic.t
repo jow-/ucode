@@ -22,6 +22,9 @@ check that ucode provides exepected help:
   -e "expression"
     Execute the given expression as ucode program.
   
+  -p "expression"
+    Like `-e` but print the result of expression.
+  
   -t
     Enable VM execution tracing.
   
@@ -85,7 +88,7 @@ check that ucode prints greetings:
 check that ucode provides proper error messages:
 
   $ touch lib.uc; ucode -l lib
-  Require either -e expression or source file
+  Require either -e/-p expression or source file
   [1]
 
   $ ucode -l foo -e ' '
@@ -101,7 +104,7 @@ check that ucode provides proper error messages:
 check that ucode can load fs module:
 
   $ ucode -l fs
-  Require either -e expression or source file
+  Require either -e/-p expression or source file
   [1]
 
   $ ucode -l fs -e ' '

@@ -51,6 +51,9 @@ print_usage(const char *app)
 	"-e \"expression\"\n"
 	"  Execute the given expression as ucode program.\n\n"
 
+	"-p \"expression\"\n"
+	"  Like `-e` but print the result of expression.\n\n"
+
 	"-t\n"
 	"  Enable VM execution tracing.\n\n"
 
@@ -109,7 +112,7 @@ print_usage(const char *app)
 
 
 static int
-compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *interp)
+compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *interp, bool print_result)
 {
 	uc_value_t *res = NULL;
 	uc_program_t *program;
@@ -141,6 +144,14 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *inter
 
 	switch (rc) {
 	case STATUS_OK:
+		if (print_result) {
+			uc_vm_stack_push(vm, res);
+			uc_vm_stack_push(vm, ucv_string_new("\n"));
+			uc_stdlib_function("print")(vm, 2);
+			uc_vm_stack_pop(vm);
+			uc_vm_stack_pop(vm);
+		}
+
 		rc = 0;
 		break;
 
@@ -475,12 +486,12 @@ appname(const char *argv0)
 int
 main(int argc, char **argv)
 {
-	const char *optspec = "he:tg:ST::RD:F:U:l:L:c::o:s";
+	const char *optspec = "he:p:tg:ST::RD:F:U:l:L:c::o:s";
+	bool strip = false, print_result = false;
 	char *interp = "/usr/bin/env ucode";
 	uc_source_t *source = NULL;
 	FILE *precompile = NULL;
 	char *outfile = NULL;
-	bool strip = false;
 	uc_vm_t vm = { 0 };
 	int opt, rv = 0;
 	const char *app;
@@ -557,6 +568,11 @@ main(int argc, char **argv)
 			source = uc_source_new_buffer("[-e argument]", xstrdup(optarg), strlen(optarg));
 			break;
 
+		case 'p':
+			source = uc_source_new_buffer("[-p argument]", xstrdup(optarg), strlen(optarg));
+			print_result = true;
+			break;
+
 		case 't':
 			uc_vm_trace_set(&vm, 1);
 			break;
@@ -624,7 +640,7 @@ main(int argc, char **argv)
 	}
 
 	if (!source) {
-		fprintf(stderr, "Require either -e expression or source file\n");
+		fprintf(stderr, "Require either -e/-p expression or source file\n");
 		rv = 1;
 		goto out;
 	}
@@ -654,7 +670,7 @@ main(int argc, char **argv)
 
 	ucv_put(o);
 
-	rv = compile(&vm, source, precompile, strip, interp);
+	rv = compile(&vm, source, precompile, strip, interp, print_result);
 
 out:
 	uc_search_path_free(&config.module_search_path);
