@@ -1019,6 +1019,51 @@ uc_splice(uc_vm_t *vm, size_t nargs)
 }
 
 static uc_value_t *
+uc_slice(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *arr = uc_fn_arg(0);
+	uc_value_t *sv = uc_fn_arg(1);
+	uc_value_t *ev = uc_fn_arg(2);
+	uc_value_t *res = NULL;
+	int64_t off, end;
+	size_t len;
+
+	if (ucv_type(arr) != UC_ARRAY)
+		return NULL;
+
+	len = ucv_array_length(arr);
+	off = sv ? ucv_to_integer(sv) : 0;
+	end = ev ? ucv_to_integer(ev) : (int64_t)len;
+
+	if (off < 0) {
+		off = len + off;
+
+		if (off < 0)
+			off = 0;
+	}
+	else if ((uint64_t)off > len) {
+		off = len;
+	}
+
+	if (end < 0) {
+		end = len + end;
+
+		if (end < 0)
+			end = 0;
+	}
+	else if ((uint64_t)end > len) {
+		end = len;
+	}
+
+	res = ucv_array_new(vm);
+
+	while (off < end)
+		ucv_array_push(res, ucv_get(ucv_array_get(arr, off++)));
+
+	return res;
+}
+
+static uc_value_t *
 uc_split(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *str = uc_fn_arg(0);
@@ -3845,6 +3890,7 @@ const uc_function_list_t uc_stdlib_functions[] = {
 	{ "shift",		uc_shift },
 	{ "sort",		uc_sort },
 	{ "splice",		uc_splice },
+	{ "slice",		uc_slice },
 	{ "split",		uc_split },
 	{ "substr",		uc_substr },
 	{ "time",		uc_time },

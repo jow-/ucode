@@ -927,14 +927,45 @@ sort(["Bean", "Orange", "Apple"], function(a, b) {
 
 Removes the elements designated by `off` and `len` from  the given an array,
 and replaces them with the additional arguments passed, if any. Returns the
-last element removed, or `null` if no elements are removed. The array grows or shrinks as necessary.
+last element removed, or `null` if no elements are removed. The array grows
+or shrinks as necessary.
 
 If `off` is negative then it starts that far from the end of the array. If
 `len` is omitted, removes everything from `off` onward. If `len` is negative,
 removes the elements from `off` onward except for `-len` elements at the end of
 the array. If both `off` and `len` are omitted, removes everything.
 
-#### 6.33. `split(str, sep[, limit])`
+#### 6.33. `slice(arr[, off[, end]])`
+
+Performs a shallow copy of a portion of the source array, as specified by the
+start and end offsets. Returns a new array containing the copied elements.
+The original array is not modified.
+
+The `off` argument specifies the index of the first element to copy from the
+source array while he `end` argument specifies the index of the first element
+to exclude from the returned array, means the copied slice of the source array
+spans from `off` (inclusive) to `end - 1`.
+
+If either `off` or `end` is negative then it starts that far from the end of
+the array. If `off` is omitted it defaults to `0`, if end is omitted, it
+defaults to the length of the source array. Either value is capped to the length
+of the source array.
+
+Returns a new array containing the copied elements, if any.
+
+Returns `null` is the given source argument is not an array value.
+
+```javascript
+slice([1, 2, 3])          // [1, 2, 3]
+slice([1, 2, 3], 1)       // [2, 3]
+slice([1, 2, 3], -1)      // [3]
+slice([1, 2, 3], -3, -1)  // [1, 2]
+slice([1, 2, 3], 10)      // []
+slice([1, 2, 3], 2, 1)    // []
+slice("invalid", 1, 2)    // null
+```
+
+#### 6.34. `split(str, sep[, limit])`
 
 Split the given string using the separator passed as second argument and return
 an array containing the resulting pieces.
@@ -952,15 +983,15 @@ split("foo,bar,baz", /[ao]/)  // ["f", "", ",b", "r,b", "z"]
 split("foo=bar=baz", "=", 2)  // ["foo", "bar=baz"]
 ```
 
-#### 6.34. `sqrt(x)`
+#### 6.35. `sqrt(x)`
 
 Return the nonnegative square root of x.
 
-#### 6.35. `srand(n)`
+#### 6.36. `srand(n)`
 
 Seed the PRNG using the given number.
 
-#### 6.36. `substr(str, off, len)`
+#### 6.37. `substr(str, off, len)`
 
 Extracts a substring out of `str` and returns it. First character is at offset
 zero. If `off` is negative, starts that far back from the end of the string.
@@ -977,7 +1008,7 @@ substr(s, -4);        // tree
 substr(s, -4, 2);     // tr
 ```
 
-#### 6.37. `time()`
+#### 6.38. `time()`
 
 Returns the current UNIX epoch.
 
@@ -985,7 +1016,7 @@ Returns the current UNIX epoch.
 time();     // 1598043054
 ```
 
-#### 6.38. `trim()`
+#### 6.39. `trim()`
 
 Trim any of the specified characters in `c` from the start and end of `str`.
 If the second argument is omitted, trims the characters, ` ` (space), `\t`,
@@ -996,14 +1027,14 @@ ltrim("  foo  \n")     // "foo"
 ltrim("--bar--", "-")  // "bar"
 ```
 
-#### 6.39. `type(x)`
+#### 6.40. `type(x)`
 
 Returns the type of the given value as string which might be one of
 `"function"`, `"object"`, `"array"`, `"double"`, `"int"` or `"bool"`.
 
 Returns `null` when no value or `null` is passed.
 
-#### 6.40. `uchr(n1, ...)`
+#### 6.41. `uchr(n1, ...)`
 
 Converts each given numeric value to an utf8 escape sequence and returns the
 resulting string. Invalid numeric values or values outside the range `0` ..
@@ -1014,17 +1045,17 @@ uchr(0x2600, 0x26C6, 0x2601);  // "☀⛆☁"
 uchr(-1, 0x20ffff, "foo");     // "���"
 ```
 
-#### 6.41. `uc(str)`
+#### 6.42. `uc(str)`
 
 Converts the given string to uppercase and return the resulting string.
 Returns `null` if the given argument could not be converted to a string.
 
-#### 6.42. `unshift(arr, v1, ...)`
+#### 6.43. `unshift(arr, v1, ...)`
 
 Add the given values to the beginning of the array passed as first argument.
 Returns the last value added to the array.
 
-#### 6.43. `values(obj)`
+#### 6.44. `values(obj)`
 
 Returns an array containing all values of the given object. Returns `null` if
 no object was passed.
@@ -1033,7 +1064,7 @@ no object was passed.
 values({ foo: true, bar: false });   // [true, false]
 ```
 
-#### 6.44. `printf(fmt, ...)`
+#### 6.45. `printf(fmt, ...)`
 
 Formats the given arguments according to the given format string and outputs the
 result to stdout.
@@ -1077,14 +1108,14 @@ well.
 %}
 ```
 
-#### 6.45. `sprintf(fmt, ...)`
+#### 6.46. `sprintf(fmt, ...)`
 
 Formats the given arguments according to the given format string and returns the
 resulting string.
 
 See `printf()` for details.
 
-#### 6.46. `match(str, /pattern/)`
+#### 6.47. `match(str, /pattern/)`
 
 Match the given string against the regular expression pattern specified as
 second argument.
@@ -1100,7 +1131,7 @@ match("foobarbaz", /b.(.)/)   // ["bar", "r"]
 match("foobarbaz", /b.(.)/g)  // [["bar", "r"], ["baz", "z"]]
 ```
 
-#### 6.47. `replace(str, /pattern/, replace[, limit])`
+#### 6.48. `replace(str, /pattern/, replace[, limit])`
 
 Replace occurences of the specified pattern in the string passed as first
 argument. The pattern value may be either a regular expression or a plain
@@ -1138,7 +1169,7 @@ replace("aaaaa", "a", "x", 3)                               // xxxaa
 replace("foo bar baz", /[ao]/g, "x", 3)                     // fxx bxr baz
 ```
 
-#### 6.48. `json(str)`
+#### 6.49. `json(str)`
 
 Parse the given string as JSON and return the resulting value. Throws an
 exception on parse errors, trailing garbage or premature EOF.
@@ -1148,7 +1179,7 @@ json('{"a":true, "b":123}')   // { "a": true, "b": 123 }
 json('[1,2,')                 // Throws exception
 ```
 
-#### 6.49. `include(path[, scope])`
+#### 6.50. `include(path[, scope])`
 
 Evaluate and include the file at the given path and optionally override the
 execution scope with the given scope object.
@@ -1191,14 +1222,14 @@ include("./untrusted.uc", proto({
 }, {}))
 ```
 
-#### 6.50. `warn(x, ...)`
+#### 6.51. `warn(x, ...)`
 
 Print any of the given values to stderr. Arrays and objects are converted to
 their JSON representation.
 
 Returns the amount of bytes printed.
 
-#### 6.51. `system(command, timeout)`
+#### 6.52. `system(command, timeout)`
 
 Executes the given command, waits for completion and returns the resulting
 exit code.
@@ -1228,7 +1259,7 @@ system(["/usr/bin/date", "+%s"]);          // prints the UNIX timestamp to stdou
 system("sleep 3 && echo 'Success'", 1000); // returns -9
 ```
 
-#### 6.52. `trace(level)`
+#### 6.53. `trace(level)`
 
 Enables or disables VM opcode tracing. When invoked with a positive non-zero
 level, opcode tracing is enabled and debug information is printed to stderr
@@ -1241,7 +1272,7 @@ implementation might provide different different verbosity levels or treat
 the level argument as bit mask to enable or disable individual debug
 elements.
 
-#### 6.53. `proto(val[, proto])`
+#### 6.54. `proto(val[, proto])`
 
 Get or set the prototype of the array or object value `val`.
 
@@ -1254,17 +1285,17 @@ set as prototype on the array or object in `val`.
 
 Throws an exception if the given prototype value is not an object.
 
-#### 6.54. `sleep(milliseconds)`
+#### 6.55. `sleep(milliseconds)`
 
 Pause execution for the given amount of milliseconds. Returns `false` if
 an invalid value was passed, otherwise `true`.
 
-#### 6.55. `assert(cond[, message])`
+#### 6.56. `assert(cond[, message])`
 
 Raise an exception with the given `message` parameter if the value in `cond`
 is not truish. When `message` is omitted, the default value is `Assertion failed`.
 
-#### 6.56. `render(path_or_func[, scope_or_fnarg1 [, fnarg2 [, ...]]])`
+#### 6.57. `render(path_or_func[, scope_or_fnarg1 [, fnarg2 [, ...]]])`
 
 When invoked with a string value as first argument, the function acts like
 like `include()` but captures the output of the included file as string and
@@ -1277,7 +1308,7 @@ given function and passes all subsequent arguments to it. Any output
 called function is captured and returned as string. The return value of the
 called function is discarded.
 
-#### 6.57. `regexp(source[, flags])`
+#### 6.58. `regexp(source[, flags])`
 
 Construct a regular expression instance from the given `source` pattern string
 and any flags optionally specified by the `flags` argument.
@@ -1296,7 +1327,7 @@ regexp('foo.*bar', 'x');    // throws "Type error: Unrecognized flag character '
 regexp('foo.*(');           // throws "Syntax error: Unmatched ( or \("
 ```
 
-#### 6.58. `wildcard(subject, pattern[, nocase])`
+#### 6.59. `wildcard(subject, pattern[, nocase])`
 
 Match the given subject against the supplied wildcard (file glob) pattern.
 
@@ -1306,7 +1337,7 @@ a string before being matched.
 
 Returns `true` when the subject matches the pattern or `false` when not.
 
-#### 6.59. `sourcepath([depth [, dironly]])`
+#### 6.60. `sourcepath([depth [, dironly]])`
 
 Determine the path of the source file currently being executed by ucode.
 
@@ -1325,7 +1356,7 @@ file path.
 If `depth` exceeds the size of the call stack, the function returns `null`
 as well.
 
-#### 6.60. `min([val1 [, val2 [, ...]]])`
+#### 6.61. `min([val1 [, val2 [, ...]]])`
 
 Return the smallest value among all parameters passed to the function.
 The function does a `val1 < val2` comparison internally, which means that
@@ -1342,7 +1373,7 @@ min("def", "abc", "ghi");     // "abc"
 min(true, false);             // false
 ```
 
-#### 6.61. `max([val1 [, val2 [, ...]]])`
+#### 6.62. `max([val1 [, val2 [, ...]]])`
 
 Return the largest value among all parameters passed to the function.
 The function does a `val1 > val2` comparison internally, which means that
@@ -1359,7 +1390,7 @@ max("def", "abc", "ghi");     // "ghi"
 max(true, false);             // true
 ```
 
-#### 6.62. `b64dec(str)`
+#### 6.63. `b64dec(str)`
 
 Decodes the given base64 encoded string and returns the decoded result, any
 whitespace in the input string is ignored.
@@ -1375,7 +1406,7 @@ b64dec(123);                      // null
 b64dec("XXX");                    // null
 ```
 
-#### 6.63. `b64enc(str)`
+#### 6.64. `b64enc(str)`
 
 Encodes the given string into base64 and returns the resulting encoded
 string.
@@ -1387,7 +1418,7 @@ b64enc("This is a test");         // "VGhpcyBpcyBhIHRlc3Q="
 b64enc(123);                      // null
 ```
 
-#### 6.64. `uniq(array)`
+#### 6.65. `uniq(array)`
 
 Returns a new array containing all unique values of the given input
 array. The order is preserved, that is subsequent duplicate values
@@ -1400,7 +1431,7 @@ uniq([ 1, true, "foo", 2, true, "bar", "foo" ]); // [ 1, true, "foo", 2, "bar" ]
 uniq("test");                                    // null
 ```
 
-#### 6.65. `localtime([epoch])`
+#### 6.66. `localtime([epoch])`
 
 Return the given epoch timestamp (or now, if omitted) as a dictionary
 containing broken-down date and time information according to the local
@@ -1437,13 +1468,13 @@ localtime(1647953502);
 // }
 ```
 
-#### 6.66. `gmtime([epoch])`
+#### 6.67. `gmtime([epoch])`
 
 Like `localtime()` but interpreting the given epoch value as UTC time.
 
 See `localtime()` for details on the return value.
 
-#### 6.67. `timelocal(datetimespec)`
+#### 6.68. `timelocal(datetimespec)`
 
 Performs the inverse operation of `localtime()` by taking a broken-down
 date and time dictionary and transforming it into an epoch value according
@@ -1462,14 +1493,14 @@ timelocal({ "sec": 42, "min": 51, "hour": 13, "mday": 22, "mon": 3, "year": 2022
 // 1647953502
 ```
 
-#### 6.68. `timegm(datetimespec)`
+#### 6.69. `timegm(datetimespec)`
 
 Like `timelocal()` but interpreting the given date time specification as
 UTC time.
 
 See `timelocal()` for details.
 
-#### 6.69. `clock([monotonic])`
+#### 6.70. `clock([monotonic])`
 
 Reads the current second and microsecond value of the system clock.
 
@@ -1492,7 +1523,7 @@ clock();        // [ 1647954926, 798269464 ]
 clock(true);    // [ 474751, 527959975 ]
 ```
 
-#### 6.70. `hexdec(hexstring[, skipchars])`
+#### 6.71. `hexdec(hexstring[, skipchars])`
 
 The `hexdec()` function decodes the given hexadecimal digit string into
 a byte string, optionally skipping specified characters.
@@ -1510,7 +1541,7 @@ hexdec("48656c6c6f20776f726c64210a");  // "Hello world!\n"
 hexdec("44:55:66:77:33:44", ":");      // "DUfw3D"
 ```
 
-#### 6.71. `hexenc(val)`
+#### 6.72. `hexenc(val)`
 
 The `hexenc()` function encodes the given byte string into a hexadecimal
 digit string, converting the input value to a string if needed.
@@ -1521,7 +1552,7 @@ Returns the encoded hexadecimal digit string.
 hexenc("Hello world!\n");   // "48656c6c6f20776f726c64210a"
 ```
 
-#### 6.72. `gc([operation[, argument]])`
+#### 6.73. `gc([operation[, argument]])`
 
 The `gc()` function allows interaction with the mark and sweep garbage
 collector of the running ucode virtual machine.
@@ -1546,7 +1577,7 @@ If the `operation` argument is omitted, the default is `collect`.
 
 Returns `null` if a non-string `operation` value is given.
 
-#### 6.73. `loadstring(code[, options])`
+#### 6.74. `loadstring(code[, options])`
 
 Compiles the given code string into a ucode program and returns the resulting
 program entry function. The optinal `options` dictionary allows overriding
@@ -1587,7 +1618,7 @@ let fn2 = loadstring("return 1 + 2;", { raw_mode: true });
 fn2(); // 3
 ```
 
-#### 6.74. `loadfile(path[, options])`
+#### 6.75. `loadfile(path[, options])`
 
 Compiles the given file into a ucode program and returns the resulting program
 entry function.
@@ -1602,7 +1633,7 @@ Throws an exception on compilation or file i/o errors.
 loadfile("./templates/example.uc");  // function main() { ... }
 ```
 
-#### 6.75. `call(fn[, ctx[, scope[, arg1[, ...]]]])`
+#### 6.76. `call(fn[, ctx[, scope[, arg1[, ...]]]])`
 
 Calls the given function value with a modified environment. The given `ctx`
 argument is used as `this` context for the invoked function and the given
