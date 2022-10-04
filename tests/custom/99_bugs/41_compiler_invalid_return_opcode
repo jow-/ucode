@@ -1,0 +1,20 @@
+When compiling an arrow function body with a trailing loop or conditional
+statement having an empty body, the emitted return code incorrectly
+overwrote the target address of the jump instruction.
+
+-- Testcase --
+(() => {
+	if(0)
+		;
+})();
+
+print("OK\n");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+OK
+-- End --

@@ -209,10 +209,118 @@ append_utf8(uc_lexer_t *lex, int code) {
 }
 
 static uc_token_t *
-parse_string(uc_lexer_t *lex, int kind)
+parse_escape(uc_lexer_t *lex, const char *retain)
 {
 	int code, ch, i;
+
+	/* unicode escape sequence */
+	if (check_char(lex, 'u')) {
+		for (i = 0, code = 0; i < 4; i++) {
+			ch = next_char(lex);
+
+			if (!isxdigit(ch))
+				return emit_op(lex, -1, TK_ERROR, ucv_string_new("Invalid escape sequence"));
+
+			code = code * 16 + hex(ch);
+		}
+
+		/* is a leading surrogate value */
+		if ((code & 0xFC00) == 0xD800) {
+			/* found a subsequent leading surrogate, ignore and emit replacement char for previous one */
+			if (lex->lead_surrogate)
+				append_utf8(lex, 0xFFFD);
+
+			/* store surrogate value and advance to next escape sequence */
+			lex->lead_surrogate = code;
+		}
+
+		/* is a trailing surrogate value */
+		else if ((code & 0xFC00) == 0xDC00) {
+			/* found a trailing surrogate following a leading one, combine and encode */
+			if (lex->lead_surrogate) {
+				code = 0x10000 + ((lex->lead_surrogate & 0x3FF) << 10) + (code & 0x3FF);
+				lex->lead_surrogate = 0;
+			}
+
+			/* trailing surrogate not following a leading one, ignore and use replacement char */
+			else {
+				code = 0xFFFD;
+			}
+
+			append_utf8(lex, code);
+		}
+
+		/* is a normal codepoint */
+		else {
+			append_utf8(lex, code);
+		}
+	}
+
+	/* hex escape sequence */
+	else if (check_char(lex, 'x')) {
+		for (i = 0, code = 0; i < 2; i++) {
+			ch = next_char(lex);
+
+			if (!isxdigit(ch))
+				return emit_op(lex, -1, TK_ERROR, ucv_string_new("Invalid escape sequence"));
+
+			code = code * 16 + hex(ch);
+		}
+
+		append_utf8(lex, code);
+	}
+
+	/* octal or letter */
+	else {
+		/* try to parse octal sequence... */
+		for (i = 0, code = 0, ch = lookahead_char(lex);
+		     i < 3 && ch >= '0' && ch <= '7';
+		     i++, next_char(lex), ch = lookahead_char(lex)) {
+			code = code * 8 + dec(ch);
+		}
+
+		if (i) {
+			if (code > 255)
+				return emit_op(lex, -3, TK_ERROR, ucv_string_new("Invalid escape sequence"));
+
+			append_utf8(lex, code);
+		}
+
+		/* ... no octal sequence, handle other escape */
+		else {
+			ch = next_char(lex);
+
+			switch (ch) {
+			case 'a': uc_vector_push(&lex->buffer, '\a'); break;
+			case 'b': uc_vector_push(&lex->buffer, '\b'); break;
+			case 'e': uc_vector_push(&lex->buffer, '\033'); break;
+			case 'f': uc_vector_push(&lex->buffer, '\f'); break;
+			case 'n': uc_vector_push(&lex->buffer, '\n'); break;
+			case 'r': uc_vector_push(&lex->buffer, '\r'); break;
+			case 't': uc_vector_push(&lex->buffer, '\t'); break;
+			case 'v': uc_vector_push(&lex->buffer, '\v'); break;
+
+			case EOF:
+				return emit_op(lex, -2, TK_ERROR, ucv_string_new("Unterminated string"));
+
+			default:
+				if (strchr(retain, ch))
+					uc_vector_push(&lex->buffer, '\\');
+
+				uc_vector_push(&lex->buffer, ch);
+			}
+		}
+	}
+
+	return NULL;
+}
+
+static uc_token_t *
+parse_string(uc_lexer_t *lex, int kind)
+{
+	uc_token_t *err;
 	unsigned type;
+	int code, ch;
 	size_t off;
 
 	if (kind == '`')
@@ -237,107 +345,74 @@ parse_string(uc_lexer_t *lex, int kind)
 			uc_vector_push(&lex->buffer, '$');
 			break;
 
+		/* regexp bracket expression */
+		case '[':
+			uc_vector_push(&lex->buffer, '[');
+
+			if (type == TK_REGEXP) {
+				/* skip leading negation (^) */
+				if (check_char(lex, '^'))
+					uc_vector_push(&lex->buffer, '^');
+
+				/* skip leading `]` - it is literal and not closing the bracket expr */
+				if (check_char(lex, ']'))
+					uc_vector_push(&lex->buffer, ']');
+
+				/* read until closing `]` */
+				for (ch = next_char(lex); ch != EOF; ch = next_char(lex)) {
+					if (ch == '\\') {
+						err = parse_escape(lex, "^");
+
+						if (err)
+							return err;
+
+						continue;
+					}
+
+					uc_vector_push(&lex->buffer, ch);
+
+					if (ch == ']')
+						break;
+
+					/* skip nested char classes / equivalence classes / collating chars */
+					if (ch == '[') {
+						code = lookahead_char(lex);
+
+						if (code == ':' || code == '.' || code == '=') {
+							uc_vector_push(&lex->buffer, code);
+							next_char(lex);
+
+							for (ch = next_char(lex); ch != EOF; ch = next_char(lex)) {
+								if (ch == '\\') {
+									err = parse_escape(lex, "");
+
+									if (err)
+										return err;
+
+									continue;
+								}
+
+								uc_vector_push(&lex->buffer, ch);
+
+								if (ch == code && check_char(lex, ']')) {
+									uc_vector_push(&lex->buffer, ']');
+									break;
+								}
+							}
+						}
+					}
+				}
+			}
+
+			break;
+
 		/* escape sequence */
 		case '\\':
-			/* unicode escape sequence */
-			if (type != TK_REGEXP && check_char(lex, 'u')) {
-				for (i = 0, code = 0; i < 4; i++) {
-					ch = next_char(lex);
+			err = parse_escape(lex,
+				(type == TK_REGEXP) ? "^.[$()|*+?{\\" : "");
 
-					if (!isxdigit(ch))
-						return emit_op(lex, -1, TK_ERROR, ucv_string_new("Invalid escape sequence"));
-
-					code = code * 16 + hex(ch);
-				}
-
-				/* is a leading surrogate value */
-				if ((code & 0xFC00) == 0xD800) {
-					/* found a subsequent leading surrogate, ignore and emit replacement char for previous one */
-					if (lex->lead_surrogate)
-						append_utf8(lex, 0xFFFD);
-
-					/* store surrogate value and advance to next escape sequence */
-					lex->lead_surrogate = code;
-				}
-
-				/* is a trailing surrogate value */
-				else if ((code & 0xFC00) == 0xDC00) {
-					/* found a trailing surrogate following a leading one, combine and encode */
-					if (lex->lead_surrogate) {
-						code = 0x10000 + ((lex->lead_surrogate & 0x3FF) << 10) + (code & 0x3FF);
-						lex->lead_surrogate = 0;
-					}
-
-					/* trailing surrogate not following a leading one, ignore and use replacement char */
-					else {
-						code = 0xFFFD;
-					}
-
-					append_utf8(lex, code);
-				}
-
-				/* is a normal codepoint */
-				else {
-					append_utf8(lex, code);
-				}
-			}
-
-			/* hex escape sequence */
-			else if (type != TK_REGEXP && check_char(lex, 'x')) {
-				for (i = 0, code = 0; i < 2; i++) {
-					ch = next_char(lex);
-
-					if (!isxdigit(ch))
-						return emit_op(lex, -1, TK_ERROR, ucv_string_new("Invalid escape sequence"));
-
-					code = code * 16 + hex(ch);
-				}
-
-				append_utf8(lex, code);
-			}
-
-			/* octal or letter */
-			else {
-				/* try to parse octal sequence... */
-				for (i = 0, code = 0, ch = lookahead_char(lex);
-				     kind != '/' && i < 3 && ch >= '0' && ch <= '7';
-				     i++, next_char(lex), ch = lookahead_char(lex)) {
-					code = code * 8 + dec(ch);
-				}
-
-				if (i) {
-					if (code > 255)
-						return emit_op(lex, -3, TK_ERROR, ucv_string_new("Invalid escape sequence"));
-
-					append_utf8(lex, code);
-				}
-
-				/* ... no octal sequence, handle other escape */
-				else {
-					ch = next_char(lex);
-
-					switch (ch) {
-					case 'a': uc_vector_push(&lex->buffer, '\a'); break;
-					case 'b': uc_vector_push(&lex->buffer, '\b'); break;
-					case 'e': uc_vector_push(&lex->buffer, '\033'); break;
-					case 'f': uc_vector_push(&lex->buffer, '\f'); break;
-					case 'n': uc_vector_push(&lex->buffer, '\n'); break;
-					case 'r': uc_vector_push(&lex->buffer, '\r'); break;
-					case 't': uc_vector_push(&lex->buffer, '\t'); break;
-					case 'v': uc_vector_push(&lex->buffer, '\v'); break;
-
-					case EOF:
-						return emit_op(lex, -2, TK_ERROR, ucv_string_new("Unterminated string"));
-
-					default:
-						/* regex mode => retain backslash */
-						if (type == TK_REGEXP)
-							uc_vector_push(&lex->buffer, '\\');
-
-						uc_vector_push(&lex->buffer, ch);
-					}
-				}
-			}
+			if (err)
+				return err;
 
 			break;
 
