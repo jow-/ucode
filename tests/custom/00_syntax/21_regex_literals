@@ -4,7 +4,7 @@ within regular expression literals is subject of the underlying
 regular expression engine.
 
 -- Expect stdout --
-[ "/Hello world/", "/test/gis", "/test/g", "/test1 / test2/", "/1\n\\.\u0007\bc☀\\\\/" ]
+[ "/Hello world/", "/test/gis", "/test/g", "/test1 / test2/", "/1\n\\.\u0007\\bc☀\\\\/" ]
 -- End --
 
 -- Testcase --
@@ -114,6 +114,33 @@ literal delimitters.
 		/[[./.]/]/,
 		/[[:alpha:]/]/,
 		/[[=/=]/]/
+	]);
+%}
+-- End --
+
+
+Testing that regex extension macros are substituted only outside of
+bracket set expressions.
+
+-- Expect stdout --
+[
+	"/ \\b \\B [\b B] /",
+	"/ \\< \\> [< >] /",
+	"/ [[:digit:]] [^[:digit:]] [d D] /",
+	"/ [[:space:]] [^[:space:]] [s S] /",
+	"/ [[:alnum:]_] [^[:alnum:]_] [w W] /"
+]
+-- End --
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		/ \b \B [\b \B] /,   // \b outside brackets is a word boundary,
+		                     // \b within brackets is backspace
+		/ \< \> [\< \>] /,
+		/ \d \D [\d \D] /,
+		/ \s \S [\s \S] /,
+		/ \w \W [\w \W] /
 	]);
 %}
 -- End --
