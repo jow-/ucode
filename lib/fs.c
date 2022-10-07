@@ -64,6 +64,7 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 	size_t rlen, len = 0;
 	const char *lstr;
 	int64_t lsize;
+	ssize_t llen;
 
 	FILE **fp = uc_fn_this(type);
 
@@ -74,26 +75,12 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 		lstr = ucv_string_get(limit);
 
 		if (!strcmp(lstr, "line")) {
-			while (true) {
-				if (!fgets(buf, sizeof(buf), *fp))
-					break;
+			llen = getline(&p, &rlen, *fp);
 
-				rlen = strlen(buf);
-				tmp = realloc(p, len + rlen + 1);
+			if (llen == -1)
+				err_return(errno);
 
-				if (!tmp) {
-					free(p);
-					err_return(ENOMEM);
-				}
-
-				snprintf(tmp + len, rlen + 1, "%s", buf);
-
-				p = tmp;
-				len += rlen;
-
-				if (rlen > 0 && buf[rlen - 1] == '\n')
-					break;
-			}
+			len = (size_t)llen;
 		}
 		else if (!strcmp(lstr, "all")) {
 			while (true) {
