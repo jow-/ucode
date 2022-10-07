@@ -209,9 +209,10 @@ append_utf8(uc_lexer_t *lex, int code) {
 }
 
 static uc_token_t *
-parse_escape(uc_lexer_t *lex, const char *retain)
+parse_escape(uc_lexer_t *lex, const char *regex_macros)
 {
 	int code, ch, i;
+	const char *p;
 
 	/* unicode escape sequence */
 	if (check_char(lex, 'u')) {
@@ -286,7 +287,31 @@ parse_escape(uc_lexer_t *lex, const char *retain)
 			append_utf8(lex, code);
 		}
 
-		/* ... no octal sequence, handle other escape */
+		/* ... no octal sequence, handle potential regex macros */
+		else if (strchr(regex_macros, ch)) {
+			ch = next_char(lex);
+
+			switch (ch) {
+			case 'd': p = "[[:digit:]]";   break;
+			case 'D': p = "[^[:digit:]]";  break;
+			case 'w': p = "[[:alnum:]_]";  break;
+			case 'W': p = "[^[:alnum:]_]"; break;
+			case 's': p = "[[:space:]]";   break;
+			case 'S': p = "[^[:space:]]";  break;
+			default:  p = NULL;
+			}
+
+			if (p) {
+				while (*p)
+					uc_vector_push(&lex->buffer, *p++);
+			}
+			else {
+				uc_vector_push(&lex->buffer, '\\');
+				uc_vector_push(&lex->buffer, ch);
+			}
+		}
+
+		/* ... handle other escape */
 		else {
 			ch = next_char(lex);
 
@@ -304,9 +329,6 @@ parse_escape(uc_lexer_t *lex, const char *retain)
 				return emit_op(lex, -2, TK_ERROR, ucv_string_new("Unterminated string"));
 
 			default:
-				if (strchr(retain, ch))
-					uc_vector_push(&lex->buffer, '\\');
-
 				uc_vector_push(&lex->buffer, ch);
 			}
 		}
@@ -409,7 +431,7 @@ parse_string(uc_lexer_t *lex, int kind)
 		/* escape sequence */
 		case '\\':
 			err = parse_escape(lex,
-				(type == TK_REGEXP) ? "^.[$()|*+?{\\" : "");
+				(type == TK_REGEXP) ? "^bBdDsSwW<>.[$()|*+?{\\" : "");
 
 			if (err)
 				return err;
