@@ -73,8 +73,9 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 
 	if (ucv_type(limit) == UC_STRING) {
 		lstr = ucv_string_get(limit);
+		llen = ucv_string_length(limit);
 
-		if (!strcmp(lstr, "line")) {
+		if (llen == 4 && !strcmp(lstr, "line")) {
 			llen = getline(&p, &rlen, *fp);
 
 			if (llen == -1)
@@ -82,7 +83,7 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 
 			len = (size_t)llen;
 		}
-		else if (!strcmp(lstr, "all")) {
+		else if (llen == 3 && !strcmp(lstr, "all")) {
 			while (true) {
 				rlen = fread(buf, 1, sizeof(buf), *fp);
 
@@ -101,6 +102,14 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 				if (rlen == 0)
 					break;
 			}
+		}
+		else if (llen == 1) {
+			llen = getdelim(&p, &rlen, *lstr, *fp);
+
+			if (llen == -1)
+				err_return(errno);
+
+			len = (size_t)llen;
 		}
 		else {
 			return NULL;
