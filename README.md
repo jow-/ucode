@@ -87,7 +87,7 @@ packages for local installation, first install required development packages,
 then clone the repository and invoke *dpkg-buildpackage* to produce the binary
 package files:
 
-    $ sudo apt-get install build-essential devscripts debhelper libjson-c-dev
+    $ sudo apt-get install build-essential devscripts debhelper libjson-c-dev cmake
     $ git clone https://github.com/jow-/ucode.git
     $ cd ucode/
     $ dpkg-buildpackage -b -us -uc
