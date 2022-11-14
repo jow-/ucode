@@ -1409,31 +1409,6 @@ uc_vm_value_bitop(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 }
 
 static uc_value_t *
-uc_vm_value_logical(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_value_t *operand)
-{
-	uc_value_t *rv = NULL;
-
-	switch (operation) {
-	case I_LTRUE:
-		rv = ucv_get(ucv_is_truish(value) ? operand : value);
-		break;
-
-	case I_LFALSE:
-		rv = ucv_get(ucv_is_truish(value) ? value : operand);
-		break;
-
-	case I_LNULL:
-		rv = ucv_get(value == NULL ? operand : value);
-		break;
-
-	default:
-		break;
-	}
-
-	return rv;
-}
-
-static uc_value_t *
 uc_vm_string_concat(uc_vm_t *vm, uc_value_t *v1, uc_value_t *v2)
 {
 	char buf[sizeof(void *)], *s1, *s2;
@@ -1491,9 +1466,6 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 	if (operation == I_LSHIFT || operation == I_RSHIFT ||
 	    operation == I_BAND || operation == I_BXOR || operation == I_BOR)
 		return uc_vm_value_bitop(vm, operation, value, operand);
-
-	if (operation == I_LTRUE || operation == I_LFALSE || operation == I_LNULL)
-		return uc_vm_value_logical(vm, operation, value, operand);
 
 	if (operation == I_ADD && (ucv_type(value) == UC_STRING || ucv_type(operand) == UC_STRING))
 		return uc_vm_string_concat(vm, value, operand);
