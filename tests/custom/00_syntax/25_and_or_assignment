@@ -53,3 +53,33 @@ expression result if the lhs is falsy.
 	printf("%.J\n", [ x, y, z ]);
 %}
 -- End --
+
+
+3. Ensure that the assignment value expression is not evaluated if the
+assignment condition is false.
+
+-- Expect stdout --
+[
+	0,
+	0,
+	0
+]
+-- End --
+
+-- Testcase --
+{%
+	a = 0;
+	b = 0;
+	c = 0;
+
+	x = false;
+	y = false;
+	z = true;
+
+	x ??= a++;
+	y &&= b++;
+	z ||= c++;
+
+	printf("%.J\n", [ a, b, c ]);
+%}
+-- End --
