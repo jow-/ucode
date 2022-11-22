@@ -38,7 +38,7 @@ test
 
 	// parentheses may be omitted if arrow function takes only one argument
 	test4_fn = a => {
-		a * 2;
+		return a * 2;
 	};
 
 	// curly braces may be omitted if function body is a single expression
@@ -120,5 +120,28 @@ In line 2, byte 10:
 -- Testcase --
 {%
 	(a + 1) => { print("test\n") }
+%}
+-- End --
+
+
+Arrow functions consisting of a single expression implicitly return the expression
+results. Arrow functions having a statement block as body do not return any result
+by default but may return explictly.
+
+-- Expect stdout --
+[
+	4,
+	null,
+	4
+]
+-- End --
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		(() => 2 * 2)(),
+		(() => { 2 * 2 })(),
+		(() => { return 2 * 2 })()
+	]);
 %}
 -- End --
