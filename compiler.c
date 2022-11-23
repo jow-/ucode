@@ -1330,19 +1330,15 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 	if (uc_compiler_parse_match(&fncompiler, TK_LBRACE)) {
 		while (!uc_compiler_parse_check(&fncompiler, TK_RBRACE) &&
 		       !uc_compiler_parse_check(&fncompiler, TK_EOF))
-			last_statement_type = uc_compiler_compile_declaration(&fncompiler);
+			uc_compiler_compile_declaration(&fncompiler);
 
 		uc_compiler_parse_consume(&fncompiler, TK_RBRACE);
 
-		/* overwrite last pop result with return */
-		if (last_statement_type == TK_SCOL)
-			uc_chunk_pop(&fn->chunk);
-
-		/* else load implicit null */
-		else
+		/* emit final return */
+		if (last_statement_type != TK_RETURN) {
 			uc_compiler_emit_insn(&fncompiler, 0, I_LNULL);
-
-		uc_compiler_emit_insn(&fncompiler, 0, I_RETURN);
+			uc_compiler_emit_insn(&fncompiler, 0, I_RETURN);
+		}
 	}
 	else {
 		uc_compiler_parse_precedence(&fncompiler, P_ASSIGN);
