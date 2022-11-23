@@ -346,8 +346,8 @@ uc_uci_get_first(uc_vm_t *vm, size_t nargs)
 		break;
 	}
 
-	if (!p)
-		err_return(UCI_ERR_NOTFOUND);
+	if (!p && uci_load(*c, ucv_string_get(conf), &p))
+		err_return((*c)->err);
 
 	uci_foreach_element(&p->sections, e) {
 		sc = uci_to_section(e);
@@ -917,8 +917,8 @@ uc_uci_foreach(uc_vm_t *vm, size_t nargs)
 		break;
 	}
 
-	if (!p)
-		err_return(UCI_ERR_NOTFOUND);
+	if (!p && uci_load(*c, ucv_string_get(conf), &p))
+		err_return((*c)->err);
 
 	uci_foreach_element_safe(&p->sections, tmp, e) {
 		sc = uci_to_section(e);
@@ -945,8 +945,6 @@ uc_uci_foreach(uc_vm_t *vm, size_t nargs)
 		if (stop)
 			break;
 	}
-
-	/* XXX: rethrow */
 
 	return ucv_boolean_new(ret);
 }
