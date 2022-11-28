@@ -2354,20 +2354,28 @@ static struct json_tokener *
 uc_json_from_string(uc_vm_t *vm, uc_value_t *str, json_object **jso)
 {
 	struct json_tokener *tok = xjs_new_tokener();
+	size_t i;
+	char *p;
 
 	/* NB: the len + 1 here is intentional to pass the terminating \0 byte
 	 * to the json-c parser. This is required to work-around upstream
 	 * issue #681 <https://github.com/json-c/json-c/issues/681> */
 	*jso = json_tokener_parse_ex(tok, ucv_string_get(str), ucv_string_length(str) + 1);
 
-	if (json_tokener_get_error(tok) == json_tokener_success &&
-	    json_tokener_get_parse_end(tok) < ucv_string_length(str)) {
-		uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
-		                      "Trailing garbage after JSON data");
+	if (json_tokener_get_error(tok) == json_tokener_success) {
+		p = ucv_string_get(str);
 
-		json_tokener_free(tok);
+		for (i = json_tokener_get_parse_end(tok); i < ucv_string_length(str); i++) {
+			if (!isspace(p[i])) {
+				uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
+				                      "Trailing garbage after JSON data");
 
-		return NULL;
+
+				json_tokener_free(tok);
+
+				return NULL;
+			}
+		}
 	}
 
 	return tok;
