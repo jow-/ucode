@@ -14,12 +14,15 @@ negative or zero.
 
 	let t2 = time();
 
-	printf("Slept for %d second(s).\n", t2 - t1);
+	if (t2 > t1)
+		printf("Slept for at least one second.\n");
+	else
+		printf("Unexpected time delta: %d\n", t2 - t1);
 %}
 -- End --
 
 -- Expect stdout --
-Slept for 1 second(s).
+Slept for at least one second.
 -- End --
 
 
