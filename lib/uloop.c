@@ -976,6 +976,8 @@ uc_uloop_task(uc_vm_t *vm, size_t nargs)
 		err_return(errno);
 
 	if (pid == 0) {
+		uloop_done();
+
 		patch_devnull(0, false);
 		patch_devnull(1, true);
 		patch_devnull(2, true);
