@@ -10,6 +10,9 @@ expression result if the lhs is truish.
 [
 	null,
 	false,
+	"is truish",
+	null,
+	false,
 	"is truish"
 ]
 -- End --
@@ -20,11 +23,23 @@ expression result if the lhs is truish.
 	y = false;
 	z = true;
 
-	x &&= "is truish";
-	y &&= "is truish";
-	z &&= "is truish";
+	o = {
+		a: null,
+		b: false,
+		c: true
+	};
 
-	printf("%.J\n", [ x, y, z ]);
+	res = [];
+
+	push(res, x &&= "is truish");
+	push(res, y &&= "is truish");
+	push(res, z &&= "is truish");
+
+	push(res, o.a &&= "is truish");
+	push(res, o.b &&= "is truish");
+	push(res, o.c &&= "is truish");
+
+	printf("%.J\n", res);
 %}
 -- End --
 
@@ -34,6 +49,9 @@ expression result if the lhs is falsy.
 
 -- Expect stdout --
 [
+	"is falsy",
+	"is falsy",
+	true,
 	"is falsy",
 	"is falsy",
 	true
@@ -46,11 +64,23 @@ expression result if the lhs is falsy.
 	y = false;
 	z = true;
 
-	x ||= "is falsy";
-	y ||= "is falsy";
-	z ||= "is falsy";
+	o = {
+		a: null,
+		b: false,
+		c: true
+	};
 
-	printf("%.J\n", [ x, y, z ]);
+	res = [];
+
+	push(res, x ||= "is falsy");
+	push(res, y ||= "is falsy");
+	push(res, z ||= "is falsy");
+
+	push(res, o.a ||= "is falsy");
+	push(res, o.b ||= "is falsy");
+	push(res, o.c ||= "is falsy");
+
+	printf("%.J\n", res);
 %}
 -- End --
 
@@ -60,6 +90,15 @@ assignment condition is false.
 
 -- Expect stdout --
 [
+	false,
+	false,
+	true,
+	false,
+	false,
+	true,
+	0,
+	0,
+	0,
 	0,
 	0,
 	0
@@ -71,15 +110,30 @@ assignment condition is false.
 	a = 0;
 	b = 0;
 	c = 0;
+	d = 0;
+	e = 0;
+	f = 0;
+
+	o = {
+		a: false,
+		b: false,
+		c: true
+	};
 
 	x = false;
 	y = false;
 	z = true;
 
-	x ??= a++;
-	y &&= b++;
-	z ||= c++;
+	res = [];
 
-	printf("%.J\n", [ a, b, c ]);
+	push(res, x ??= a++);
+	push(res, y &&= b++);
+	push(res, z ||= c++);
+
+	push(res, o.a ??= d++);
+	push(res, o.b &&= e++);
+	push(res, o.c ||= f++);
+
+	printf("%.J\n", [ ...res, a, b, c, d, e, f ]);
 %}
 -- End --

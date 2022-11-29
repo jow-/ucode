@@ -575,6 +575,17 @@ uc_compiler_emit_jmp_dest(uc_compiler_t *compiler, size_t srcpos, uint32_t dest)
 	return chunk->count - 5;
 }
 
+static size_t
+uc_compiler_emit_copy(uc_compiler_t *compiler, size_t srcpos, uint8_t depth)
+{
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+
+	uc_compiler_emit_insn(compiler, srcpos, I_COPY);
+	uc_compiler_emit_u8(compiler, 0, depth);
+
+	return chunk->count - 2;
+}
+
 static ssize_t
 uc_compiler_get_jmpaddr(uc_compiler_t *compiler, size_t off)
 {
@@ -1153,93 +1164,104 @@ static void
 uc_compiler_emit_variable_copy(uc_compiler_t *compiler, uc_value_t *var)
 {
 	if (!var) {
-		uc_compiler_emit_insn(compiler, 0, I_COPY);
-		uc_compiler_emit_u8(compiler, 0, 1);
-		uc_compiler_emit_insn(compiler, 0, I_COPY);
-		uc_compiler_emit_u8(compiler, 0, 1);
+		uc_compiler_emit_copy(compiler, 0, 1);
+		uc_compiler_emit_copy(compiler, 0, 1);
 	}
 
 	uc_compiler_emit_variable_rw(compiler, var, 0);
 }
 
 static void
-uc_compiler_compile_and_common(uc_compiler_t *compiler, bool assignment, uc_value_t *var)
+uc_compiler_compile_and(uc_compiler_t *compiler)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off;
 
-	if (assignment)
-		uc_compiler_emit_variable_copy(compiler, var);
-
-	uc_compiler_emit_insn(compiler, 0, I_COPY);
-	uc_compiler_emit_u8(compiler, 0, 0);
+	uc_compiler_emit_copy(compiler, 0, 0);
 	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
 	uc_compiler_emit_insn(compiler, 0, I_POP);
-
-	if (assignment) {
-		uc_compiler_parse_precedence(compiler, P_ASSIGN);
-		uc_compiler_emit_variable_rw(compiler, var, TK_ASSIGN);
-	}
-	else {
-		uc_compiler_parse_precedence(compiler, P_AND);
-	}
-
+	uc_compiler_parse_precedence(compiler, P_AND);
 	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
 }
 
 static void
-uc_compiler_compile_or_common(uc_compiler_t *compiler, bool assignment, uc_value_t *var)
+uc_compiler_compile_and_assignment(uc_compiler_t *compiler, uc_value_t *var)
+{
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	size_t jmpz_off;
+
+	uc_compiler_emit_variable_copy(compiler, var);
+	uc_compiler_emit_copy(compiler, 0, 0);
+	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
+	uc_compiler_emit_insn(compiler, 0, I_POP);
+	uc_compiler_parse_precedence(compiler, P_ASSIGN);
+	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
+	uc_compiler_emit_variable_rw(compiler, var, TK_ASSIGN);
+}
+
+static void
+uc_compiler_compile_or(uc_compiler_t *compiler)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off, jmp_off;
 
-	if (assignment)
-		uc_compiler_emit_variable_copy(compiler, var);
-
-	uc_compiler_emit_insn(compiler, 0, I_COPY);
-	uc_compiler_emit_u8(compiler, 0, 0);
+	uc_compiler_emit_copy(compiler, 0, 0);
 	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
 	jmp_off = uc_compiler_emit_jmp(compiler, 0);
 	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
 	uc_compiler_emit_insn(compiler, 0, I_POP);
-
-	if (assignment) {
-		uc_compiler_parse_precedence(compiler, P_ASSIGN);
-		uc_compiler_emit_variable_rw(compiler, var, TK_ASSIGN);
-	}
-	else {
-		uc_compiler_parse_precedence(compiler, P_OR);
-	}
-
+	uc_compiler_parse_precedence(compiler, P_OR);
 	uc_compiler_set_jmpaddr(compiler, jmp_off, chunk->count);
 }
 
 static void
-uc_compiler_compile_nullish_common(uc_compiler_t *compiler, bool assignment, uc_value_t *var)
+uc_compiler_compile_or_assignment(uc_compiler_t *compiler, uc_value_t *var)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t jmpz_off, jmp_off;
 
-	if (assignment)
-		uc_compiler_emit_variable_copy(compiler, var);
+	uc_compiler_emit_variable_copy(compiler, var);
+	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
+	uc_compiler_emit_variable_rw(compiler, var, 0);
+	jmp_off = uc_compiler_emit_jmp(compiler, 0);
+	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
+	uc_compiler_parse_precedence(compiler, P_ASSIGN);
+	uc_compiler_emit_variable_rw(compiler, var, TK_ASSIGN);
+	uc_compiler_set_jmpaddr(compiler, jmp_off, chunk->count);
+}
 
-	uc_compiler_emit_insn(compiler, 0, I_COPY);
-	uc_compiler_emit_u8(compiler, 0, 0);
+static void
+uc_compiler_compile_nullish(uc_compiler_t *compiler)
+{
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	size_t jmpz_off, jmp_off;
+
+	uc_compiler_emit_copy(compiler, 0, 0);
 	uc_compiler_emit_insn(compiler, 0, I_LNULL);
 	uc_compiler_emit_insn(compiler, 0, I_NES);
 	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
 	jmp_off = uc_compiler_emit_jmp(compiler, 0);
 	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
 	uc_compiler_emit_insn(compiler, 0, I_POP);
+	uc_compiler_parse_precedence(compiler, P_OR);
+	uc_compiler_set_jmpaddr(compiler, jmp_off, chunk->count);
+}
 
-	if (assignment) {
-		uc_compiler_parse_precedence(compiler, P_ASSIGN);
-		uc_compiler_emit_variable_rw(compiler, var, TK_ASSIGN);
-	}
-	else {
-		uc_compiler_parse_precedence(compiler, P_OR);
-	}
+static void
+uc_compiler_compile_nullish_assignment(uc_compiler_t *compiler, uc_value_t *var)
+{
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	size_t jmpz_off, jmp_off;
 
+	uc_compiler_emit_variable_copy(compiler, var);
+	uc_compiler_emit_insn(compiler, 0, I_LNULL);
+	uc_compiler_emit_insn(compiler, 0, I_NES);
+	jmpz_off = uc_compiler_emit_jmpz(compiler, 0);
+	uc_compiler_emit_variable_rw(compiler, var, 0);
+	jmp_off = uc_compiler_emit_jmp(compiler, 0);
+	uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
+	uc_compiler_parse_precedence(compiler, P_ASSIGN);
+	uc_compiler_emit_variable_rw(compiler, var, TK_ASSIGN);
 	uc_compiler_set_jmpaddr(compiler, jmp_off, chunk->count);
 }
 
@@ -1256,19 +1278,19 @@ uc_compiler_compile_assignment(uc_compiler_t *compiler, uc_value_t *var)
 
 	if (type == TK_ASNULLISH) {
 		uc_compiler_parse_advance(compiler);
-		uc_compiler_compile_nullish_common(compiler, true, var);
+		uc_compiler_compile_nullish_assignment(compiler, var);
 
 		return true;
 	}
 	else if (type == TK_ASOR) {
 		uc_compiler_parse_advance(compiler);
-		uc_compiler_compile_or_common(compiler, true, var);
+		uc_compiler_compile_or_assignment(compiler, var);
 
 		return true;
 	}
 	else if (type == TK_ASAND) {
 		uc_compiler_parse_advance(compiler);
-		uc_compiler_compile_and_common(compiler, true, var);
+		uc_compiler_compile_and_assignment(compiler, var);
 
 		return true;
 	}
@@ -1850,24 +1872,6 @@ static void
 uc_compiler_compile_funcdecl(uc_compiler_t *compiler)
 {
 	return uc_compiler_compile_funcexpr_common(compiler, true);
-}
-
-static void
-uc_compiler_compile_and(uc_compiler_t *compiler)
-{
-	return uc_compiler_compile_and_common(compiler, false, NULL);
-}
-
-static void
-uc_compiler_compile_or(uc_compiler_t *compiler)
-{
-	return uc_compiler_compile_or_common(compiler, false, NULL);
-}
-
-static void
-uc_compiler_compile_nullish(uc_compiler_t *compiler)
-{
-	return uc_compiler_compile_nullish_common(compiler, false, NULL);
 }
 
 static void
