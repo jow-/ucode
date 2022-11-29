@@ -1316,6 +1316,27 @@ uc_fs_writefile(uc_vm_t *vm, size_t nargs)
 	return ucv_uint64_new(wlen);
 }
 
+static uc_value_t *
+uc_fs_realpath(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *path = uc_fn_arg(0), *rv;
+	char *resolved;
+
+	if (ucv_type(path) != UC_STRING)
+		err_return(EINVAL);
+
+	resolved = realpath(ucv_string_get(path), NULL);
+
+	if (!resolved)
+		err_return(errno);
+
+	rv = ucv_string_new(resolved);
+
+	free(resolved);
+
+	return rv;
+}
+
 
 static const uc_function_list_t proc_fns[] = {
 	{ "read",		uc_fs_pread },
@@ -1371,6 +1392,7 @@ static const uc_function_list_t global_fns[] = {
 	{ "access",		uc_fs_access },
 	{ "readfile",	uc_fs_readfile },
 	{ "writefile",	uc_fs_writefile },
+	{ "realpath",	uc_fs_realpath },
 };
 
 
