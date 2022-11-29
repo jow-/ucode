@@ -169,6 +169,14 @@ uc_srand(uc_vm_t *vm, size_t nargs)
 	return NULL;
 }
 
+static uc_value_t *
+uc_isnan(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *v = uc_fn_arg(0);
+
+	return ucv_boolean_new(ucv_type(v) == UC_DOUBLE && isnan(ucv_double_get(v)));
+}
+
 static const uc_function_list_t math_fns[] = {
 	{ "abs",	uc_abs },
 	{ "atan2",	uc_atan2 },
@@ -180,6 +188,7 @@ static const uc_function_list_t math_fns[] = {
 	{ "pow",	uc_pow },
 	{ "rand",	uc_rand },
 	{ "srand",	uc_srand },
+	{ "isnan",	uc_isnan },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
