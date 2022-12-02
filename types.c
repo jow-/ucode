@@ -1567,7 +1567,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		else if (d == -INFINITY)
 			ucv_stringbuf_append(pb, "-Infinity");
 		else
-			ucv_stringbuf_printf(pb, "%g", d);
+			ucv_stringbuf_printf(pb, "%.14g", d);
 
 		break;
 
