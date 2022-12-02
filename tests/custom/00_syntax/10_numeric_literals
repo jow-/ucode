@@ -11,8 +11,8 @@ Float literals: 10, 10.3, 1.23456e-65, 16.0625
 Octal literals: 63, 118
 Binary literals: 7, 11
 Special values: Infinity, Infinity, NaN, NaN
-Minimum values: -9223372036854775808, -1.79769e+308
-Maximum values: 9223372036854775807, 1.79769e+308
+Minimum values: -9223372036854775808, -1.7976931348623e+308
+Maximum values: 9223372036854775807, 1.7976931348623e+308
 Minimum truncation: -9223372036854775808, -Infinity
 Maximum truncation: 18446744073709551615, Infinity
 -- End --

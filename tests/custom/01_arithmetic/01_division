@@ -23,8 +23,8 @@ If both operands are integers, integer division is performed:
 10 / 3 = 3
 
 If either operand is a double, double division is performed:
-10.0 / 3 = 3.33333
-10 / 3.0 = 3.33333
+10.0 / 3 = 3.3333333333333
+10 / 3.0 = 3.3333333333333
 -- End --
 
 -- Testcase --
