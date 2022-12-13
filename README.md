@@ -309,7 +309,7 @@ control execution flow.
 
 #### 3.1. Conditional statement
 
-If/else blocks can be used execute statements depending on a condition.
+If/else blocks can be used to execute statements depending on a condition.
 
 ```javascript
 {%
@@ -586,13 +586,13 @@ The result of the relational operation is a boolean indicating truishness.
 
 #### 5.4. Logical operations
 
-The operators `&&`, `||` and `!` test whether their operands are all true,
-partially true or false respectively.
+The operators `&&`, `||`, `??` and `!` test whether their operands are all true,
+partially true, null or false respectively.
 
 In the case of `&&` the rightmost value is returned while `||` results in the
-first truish value.
+first truish and `??` in the first non-null value.
 
-The unary `!` operator will result in `true` if the operand is not treish,
+The unary `!` operator will result in `true` if the operand is not trueish,
 otherwise it will result in `false`.
 
 Operands are evaluated from left to right while testing truishness, which means
@@ -601,11 +601,13 @@ if the preceeding condition was satisifed.
 
 ```javascript
 {%
-  print(1 && 2 && 3);    // 3
-  print(1 || 2 || 3);    // 1
-  print(2 > 1 && 3 < 4); // true
-  print(!false);         // true
-  print(!true);          // false
+  print(1 && 2 && 3);                 // 3
+  print(1 || 2 || 3);                 // 1
+  print(2 > 1 && 3 < 4);              // true
+  print(doesnotexist ?? null ?? 42);  // 42
+  print(1 ?? 2 ?? 3);                 // 1
+  print(!false);                      // true
+  print(!true);                       // false
 
   res = test1() && test2();  // test2() is only called if test1() returns true
 %}
@@ -632,6 +634,9 @@ The result of assignment expressions is the assigned value.
   a ^= 9;    // a = a ^ 9;
   a <<= 10;  // a = a << 10;
   a >>= 11;  // a = a >> 11;
+  a &&= 12;  // a = a && 12;
+  a ||= 13;  // a = a || 13;
+  a ??= 14;  // a = a ?? 14;
 
   print(a = 2);  // 2
 %}
@@ -801,7 +806,7 @@ Return the natural logarithm of x.
 #### 6.19. `ltrim(s, c)`
 
 Trim any of the specified characters in `c` from the start of `str`.
-If the second argument is omitted, trims the characters, ` ` (space), `\t`,
+If the second argument is omitted, trims the characters ` ` (space), `\t`,
 `\r` and `\n`.
 
 ```javascript
@@ -953,7 +958,7 @@ of the source array.
 
 Returns a new array containing the copied elements, if any.
 
-Returns `null` is the given source argument is not an array value.
+Returns `null` if the given source argument is not an array value.
 
 ```javascript
 slice([1, 2, 3])          // [1, 2, 3]
@@ -1023,8 +1028,8 @@ If the second argument is omitted, trims the characters, ` ` (space), `\t`,
 `\r` and `\n`.
 
 ```javascript
-ltrim("  foo  \n")     // "foo"
-ltrim("--bar--", "-")  // "bar"
+trim("  foo  \n")     // "foo"
+trim("--bar--", "-")  // "bar"
 ```
 
 #### 6.40. `type(x)`
@@ -1081,7 +1086,7 @@ precision will use that many spaces for indentation while a negative or omitted
 precision specifier will turn off pretty printing.
 
 Other format specifiers such as `n` or `z` are not accepted and returned
-verbatim. Format specifiers including `*` and `$` directives are rejected as
+verbatim. Format specifiers including `*` directives are rejected as
 well.
 
 ```javascript
@@ -1090,6 +1095,7 @@ well.
   printf("%08x\n", 123);          // 0000007b
   printf("%c%c%c\n", 65, 98, 99); // Abc
   printf("%g\n", 10 / 3.0);       // 3.33333
+  printf("%2$d %1$d\n", 12, 34);  // 34 12
   printf("%J", [1,2,3]);          // [ 1, 2, 3 ]
 
   printf("%.J", [1,2,3]);
@@ -1623,7 +1629,7 @@ fn2(); // 3
 Compiles the given file into a ucode program and returns the resulting program
 entry function.
 
-See `loadfile()` for details.
+See `loadstring()` for details.
 
 Returns the compiled program entry function.
 
