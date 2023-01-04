@@ -1096,8 +1096,8 @@ ucv_resource_new(uc_resource_type_t *type, void *data)
 	return &res->header;
 }
 
-void **
-ucv_resource_dataptr(uc_value_t *uv, const char *name)
+static uc_resource_t *
+ucv_resource_check(uc_value_t *uv, const char *name)
 {
 	uc_resource_t *res = (uc_resource_t *)uv;
 
@@ -1109,7 +1109,23 @@ ucv_resource_dataptr(uc_value_t *uv, const char *name)
 			return NULL;
 	}
 
-	return &res->data;
+	return res;
+}
+
+void *
+ucv_resource_data(uc_value_t *uv, const char *name)
+{
+	uc_resource_t *res = ucv_resource_check(uv, name);
+
+	return res ? res->data : NULL;
+}
+
+void **
+ucv_resource_dataptr(uc_value_t *uv, const char *name)
+{
+	uc_resource_t *res = ucv_resource_check(uv, name);
+
+	return res ? &res->data : NULL;
 }
 
 

@@ -45,7 +45,14 @@ _uc_fn_this(uc_vm_t *vm, const char *expected_type)
 	return ucv_resource_dataptr(vm->callframes.entries[vm->callframes.count - 1].ctx, expected_type);
 }
 
+static inline void *
+_uc_fn_thisval(uc_vm_t *vm, const char *expected_type)
+{
+	return ucv_resource_data(vm->callframes.entries[vm->callframes.count - 1].ctx, expected_type);
+}
+
 #define uc_fn_this(...) _uc_fn_this(vm, __VA_ARGS__)
+#define uc_fn_thisval(...) _uc_fn_thisval(vm, __VA_ARGS__)
 
 static inline uc_value_t *
 _uc_fn_arg(uc_vm_t *vm, size_t nargs, size_t n)
