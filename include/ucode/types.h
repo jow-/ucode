@@ -392,6 +392,7 @@ uc_resource_type_t *ucv_resource_type_add(uc_vm_t *, const char *, uc_value_t *,
 uc_resource_type_t *ucv_resource_type_lookup(uc_vm_t *, const char *);
 
 uc_value_t *ucv_resource_new(uc_resource_type_t *, void *);
+void *ucv_resource_data(uc_value_t *uv, const char *);
 void **ucv_resource_dataptr(uc_value_t *, const char *);
 
 uc_value_t *ucv_regexp_new(const char *, bool, bool, bool, char **);
