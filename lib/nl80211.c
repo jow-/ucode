@@ -776,6 +776,21 @@ static const uc_nl_nested_spec_t nl80211_survey_info_nla = {
 	}
 };
 
+static const uc_nl_nested_spec_t nl80211_mpath_info_nla = {
+	.headsize = 0,
+	.nattrs = 8,
+	.attrs = {
+		{ NL80211_MPATH_INFO_SN, "sn", DT_U32, 0, NULL },
+		{ NL80211_MPATH_INFO_METRIC, "metric", DT_U32, 0, NULL },
+		{ NL80211_MPATH_INFO_EXPTIME, "expire", DT_U32, 0, NULL },
+		{ NL80211_MPATH_INFO_DISCOVERY_TIMEOUT, "discovery_timeout", DT_U32, 0, NULL },
+		{ NL80211_MPATH_INFO_DISCOVERY_RETRIES, "discovery_retries", DT_U8, 0, NULL },
+		{ NL80211_MPATH_INFO_FLAGS, "flags", DT_U8, 0, NULL },
+		{ NL80211_MPATH_INFO_HOP_COUNT, "hop_count", DT_U8, 0, NULL },
+		{ NL80211_MPATH_INFO_PATH_CHANGE, "path_change", DT_U32, 0, NULL },
+	}
+};
+
 static const uc_nl_nested_spec_t nl80211_msg = {
 	.headsize = 0,
 	.nattrs = 126,
@@ -834,6 +849,7 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_MGMT_SUBTYPE, "mgmt_subtype", DT_U8, 0, NULL },
 		{ NL80211_ATTR_MNTR_FLAGS, "mntr_flags", DT_NESTED, 0, &nl80211_mntr_flags_nla },
 		{ NL80211_ATTR_MPATH_NEXT_HOP, "mpath_next_hop", DT_LLADDR, 0, NULL },
+		{ NL80211_ATTR_MPATH_INFO, "mpath_info", DT_NESTED, 0, &nl80211_mpath_info_nla },
 		{ NL80211_ATTR_MU_MIMO_FOLLOW_MAC_ADDR, "mu_mimo_follow_mac_addr", DT_LLADDR, 0, NULL },
 		{ NL80211_ATTR_NAN_FUNC, "nan_func", DT_NESTED, 0, &nl80211_nan_func_nla },
 		{ NL80211_ATTR_NAN_MASTER_PREF, "nan_master_pref", DT_U8, 0, NULL },
