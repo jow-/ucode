@@ -353,6 +353,23 @@ uc_fs_tell(uc_vm_t *vm, size_t nargs)
 }
 
 static uc_value_t *
+uc_fs_isatty(uc_vm_t *vm, size_t nargs)
+{
+	FILE **fp = uc_fn_this("fs.file");
+	int fd;
+
+	if (!fp || !*fp)
+		err_return(EBADF);
+
+	fd = fileno(*fp);
+
+	if (fd == -1)
+		err_return(errno);
+
+	return ucv_boolean_new(isatty(fd));
+}
+
+static uc_value_t *
 uc_fs_flush(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_flush_common(vm, nargs, "fs.file");
@@ -1356,6 +1373,7 @@ static const uc_function_list_t file_fns[] = {
 	{ "flush",		uc_fs_flush },
 	{ "fileno",		uc_fs_fileno },
 	{ "error",		uc_fs_error },
+	{ "isatty",		uc_fs_isatty },
 };
 
 static const uc_function_list_t dir_fns[] = {
