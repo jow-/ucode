@@ -2012,7 +2012,7 @@ optimize_functions(void)
 static formatstate_t *
 parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 {
-	ssize_t size, len, num, itemsize;
+	ssize_t size, num, itemsize;
 	const formatdef_t *e, *f;
 	const char *fmt, *s;
 	formatstate_t *state;
@@ -2040,7 +2040,6 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 
 	s = fmt;
 	size = 0;
-	len = 0;
 	ncodes = 0;
 
 	while ((c = *s++) != '\0') {
@@ -2080,7 +2079,6 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 		case '*': /* fall through */
 		case 's':
 		case 'p':
-			len++;
 			ncodes++;
 			break;
 
@@ -2088,8 +2086,6 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 			break;
 
 		default:
-			len += num;
-
 			if (num)
 				ncodes++;
 
@@ -2117,7 +2113,6 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 	}
 
 	state = xalloc(sizeof(*state) + ncodes * sizeof(formatcode_t));
-	state->len = len;
 	state->size = size;
 	state->ncodes = ncodes;
 
