@@ -43,6 +43,8 @@ limitations under the License.
 
 #include "ucode/module.h"
 
+#define DIV_ROUND_UP(n, d)      (((n) + (d) - 1) / (d))
+
 #define err_return(code, ...) do { set_error(code, __VA_ARGS__); return NULL; } while(0)
 
 /* Modified downstream nl80211.h headers may disable certain unsupported
@@ -50,6 +52,8 @@ limitations under the License.
  * to patch the attribute dictionaries within this file. */
 
 #define NL80211_ATTR_NOT_IMPLEMENTED 0x10000
+
+#define NL80211_CMDS_BITMAP_SIZE	DIV_ROUND_UP(NL80211_CMD_MAX + 1, 32)
 
 static struct {
 	int code;
@@ -2149,7 +2153,7 @@ struct waitfor_ctx {
 	uint8_t cmd;
 	uc_vm_t *vm;
 	uc_value_t *res;
-	uint32_t cmds[8];
+	uint32_t cmds[NL80211_CMDS_BITMAP_SIZE];
 };
 
 static int
@@ -2158,28 +2162,25 @@ cb_event(struct nl_msg *msg, void *arg)
 	struct nlmsghdr *hdr = nlmsg_hdr(msg);
 	struct genlmsghdr *gnlh = nlmsg_data(hdr);
 	struct waitfor_ctx *s = arg;
-	bool rv, match = true;
+	bool rv;
 	uc_value_t *o;
 
-	if (s->cmds[0] || s->cmds[1] || s->cmds[2] || s->cmds[3] ||
-	    s->cmds[4] || s->cmds[5] || s->cmds[6] || s->cmds[7]) {
-		match = (s->cmds[gnlh->cmd / 32] & (1 << (gnlh->cmd % 32)));
-	}
+	if (gnlh->cmd > NL80211_CMD_MAX ||
+	    !(s->cmds[gnlh->cmd / 32] & (1 << (gnlh->cmd % 32))))
+		return NL_SKIP;
 
-	if (match) {
-		o = ucv_object_new(s->vm);
+	o = ucv_object_new(s->vm);
 
-		rv = uc_nl_convert_attrs(msg,
-			genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
-			0, nl80211_msg.attrs, nl80211_msg.nattrs, s->vm, o);
+	rv = uc_nl_convert_attrs(msg,
+		genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
+		0, nl80211_msg.attrs, nl80211_msg.nattrs, s->vm, o);
 
-		if (rv)
-			s->res = o;
-		else
-			ucv_put(o);
+	if (rv)
+		s->res = o;
+	else
+		ucv_put(o);
 
-		s->cmd = gnlh->cmd;
-	}
+	s->cmd = gnlh->cmd;
 
 	return NL_SKIP;
 }
@@ -2188,6 +2189,35 @@ static int
 cb_seq(struct nl_msg *msg, void *arg)
 {
 	return NL_OK;
+}
+
+static bool
+uc_nl_fill_cmds(uint32_t *cmd_bits, uc_value_t *cmds)
+{
+	if (ucv_type(cmds) == UC_ARRAY) {
+		for (size_t i = 0; i < ucv_array_length(cmds); i++) {
+			int64_t n = ucv_int64_get(ucv_array_get(cmds, i));
+
+			if (errno || n < 0 || n > NL80211_CMD_MAX)
+				return false;
+
+			cmd_bits[n / 32] |= (1 << (n % 32));
+		}
+	}
+	else if (ucv_type(cmds) == UC_INTEGER) {
+		int64_t n = ucv_int64_get(cmds);
+
+		if (errno || n < 0 || n > 255)
+			return false;
+
+		cmd_bits[n / 32] |= (1 << (n % 32));
+	}
+	else if (!cmds)
+		memset(cmd_bits, 0xff, NL80211_CMDS_BITMAP_SIZE * sizeof(*cmd_bits));
+	else
+		return false;
+
+	return true;
 }
 
 static uc_value_t *
@@ -2200,11 +2230,9 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 	struct waitfor_ctx ctx = { .vm = vm };
 	struct nl_cb *cb;
 	int ms = -1, err;
-	int64_t n;
-	size_t i;
 
 	if (timeout) {
-		n = ucv_int64_get(timeout);
+		int64_t n = ucv_int64_get(timeout);
 
 		if (ucv_type(timeout) != UC_INTEGER || n < INT32_MIN || n > INT32_MAX)
 			err_return(NLE_INVAL, "Invalid timeout specified");
@@ -2212,24 +2240,8 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 		ms = (int)n;
 	}
 
-	if (ucv_type(cmds) == UC_ARRAY) {
-		for (i = 0; i < ucv_array_length(cmds); i++) {
-			n = ucv_int64_get(ucv_array_get(cmds, i));
-
-			if (n < 0 || n > 255)
-				err_return(NLE_INVAL, "Invalid command ID specified");
-
-			ctx.cmds[n / 32] |= (1 << (n % 32));
-		}
-	}
-	else if (ucv_type(cmds) == UC_INTEGER) {
-		n = ucv_int64_get(cmds);
-
-		if (n < 0 || n > 255)
-			err_return(NLE_INVAL, "Invalid command ID specified");
-
-		ctx.cmds[n / 32] |= (1 << (n % 32));
-	}
+	if (!uc_nl_fill_cmds(ctx.cmds, cmds))
+		err_return(NLE_INVAL, "Invalid command ID specified");
 
 	if (!nl80211_conn.evsock) {
 		if (!uc_nl_connect_sock(&nl80211_conn.evsock, true) ||
