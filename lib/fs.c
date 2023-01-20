@@ -1354,6 +1354,42 @@ uc_fs_realpath(uc_vm_t *vm, size_t nargs)
 	return rv;
 }
 
+static uc_value_t *
+uc_fs_pipe(uc_vm_t *vm, size_t nargs)
+{
+	int pfds[2], err;
+	FILE *rfp, *wfp;
+	uc_value_t *rv;
+
+	if (pipe(pfds) == -1)
+		err_return(errno);
+
+	rfp = fdopen(pfds[0], "r");
+
+	if (!rfp) {
+		err = errno;
+		close(pfds[0]);
+		close(pfds[1]);
+		err_return(err);
+	}
+
+	wfp = fdopen(pfds[1], "w");
+
+	if (!wfp) {
+		err = errno;
+		fclose(rfp);
+		close(pfds[1]);
+		err_return(err);
+	}
+
+	rv = ucv_array_new_length(vm, 2);
+
+	ucv_array_push(rv, uc_resource_new(file_type, rfp));
+	ucv_array_push(rv, uc_resource_new(file_type, wfp));
+
+	return rv;
+}
+
 
 static const uc_function_list_t proc_fns[] = {
 	{ "read",		uc_fs_pread },
@@ -1411,6 +1447,7 @@ static const uc_function_list_t global_fns[] = {
 	{ "readfile",	uc_fs_readfile },
 	{ "writefile",	uc_fs_writefile },
 	{ "realpath",	uc_fs_realpath },
+	{ "pipe",		uc_fs_pipe },
 };
 
 
