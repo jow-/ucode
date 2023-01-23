@@ -1,0 +1,37 @@
+The `shift()` function removes the first element of the given source array.
+
+Returns the removed value.
+
+Returns `null` if the given source argment is not an array.
+
+Throws a type exception if the given array is immuatable.
+
+-- Testcase --
+{%
+	let arr = [ 1, null, 3 ];
+
+	printf("%.J\n", [
+		// remove one element
+		shift(arr),
+
+		// remove a null element
+		shift(arr),
+
+		// invalid source
+		shift({ test: true })
+	]);
+
+	printf("%.J\n", arr);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	1,
+	null,
+	null
+]
+[
+	3
+]
+-- End --

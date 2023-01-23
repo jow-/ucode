@@ -1,0 +1,52 @@
+The `push()` function appends the given argument(s) to the end of the given array
+while maintaining their order.
+
+Returns the last pushed value.
+
+Returns `null` if the given destination argment is not an array.
+
+Throws a type exception if the given array is immuatable.
+
+-- Testcase --
+{%
+	let arr = [];
+
+	printf("%.J\n", [
+		// push one element
+		push(arr, 123),
+
+		// push multiple elements
+		push(arr, 1, 2, 3),
+
+		// push null values
+		push(arr, null, null, 4),
+
+		// push no-op
+		push(arr),
+
+		// push with invalid destination
+		push({}, 1, 2, 3)
+	]);
+
+	printf("%.J\n", arr);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	123,
+	3,
+	4,
+	null,
+	null
+]
+[
+	123,
+	1,
+	2,
+	3,
+	null,
+	null,
+	4
+]
+-- End --

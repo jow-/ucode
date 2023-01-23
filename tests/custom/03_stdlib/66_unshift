@@ -1,0 +1,52 @@
+The `unshift()` function places the given argument(s) at the begin of the
+given array while maintaining their order.
+
+Returns the last added value.
+
+Returns `null` if the given destination argment is not an array.
+
+Throws a type exception if the given array is immuatable.
+
+-- Testcase --
+{%
+	let arr = [];
+
+	printf("%.J\n", [
+		// add one element
+		unshift(arr, 123),
+
+		// add multiple elements
+		unshift(arr, 1, 2, 3),
+
+		// add null values
+		unshift(arr, null, null, 4),
+
+		// no-op
+		unshift(arr),
+
+		// invalid destination
+		unshift({}, 1, 2, 3)
+	]);
+
+	printf("%.J\n", arr);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	123,
+	3,
+	4,
+	null,
+	null
+]
+[
+	null,
+	null,
+	4,
+	1,
+	2,
+	3,
+	123
+]
+-- End --

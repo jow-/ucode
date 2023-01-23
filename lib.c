@@ -464,18 +464,18 @@ static uc_value_t *
 uc_unshift(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *arr = uc_fn_arg(0);
-	uc_value_t *item = NULL;
+	uc_value_t *item;
 	size_t i;
 
 	if (!assert_mutable_array(vm, arr))
 		return NULL;
 
 	for (i = 1; i < nargs; i++) {
-		item = uc_fn_arg(i);
+		item = uc_fn_arg(nargs - i);
 		ucv_array_unshift(arr, ucv_get(item));
 	}
 
-	return ucv_get(item);
+	return (nargs > 1) ? ucv_get(uc_fn_arg(nargs - 1)) : NULL;
 }
 
 static uc_value_t *

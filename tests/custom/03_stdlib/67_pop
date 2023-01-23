@@ -1,0 +1,37 @@
+The `pop()` function removes the last element of the given source array.
+
+Returns the removed value.
+
+Returns `null` if the given source argment is not an array.
+
+Throws a type exception if the given array is immuatable.
+
+-- Testcase --
+{%
+	let arr = [ 1, null, 3 ];
+
+	printf("%.J\n", [
+		// remove one element
+		pop(arr),
+
+		// remove a null element
+		pop(arr),
+
+		// invalid source
+		pop({ test: true })
+	]);
+
+	printf("%.J\n", arr);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	3,
+	null,
+	null
+]
+[
+	1
+]
+-- End --

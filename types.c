@@ -772,7 +772,7 @@ ucv_array_unshift(uc_value_t *uv, uc_value_t *item)
 	uc_array_t *array = (uc_array_t *)uv;
 	size_t i;
 
-	if (ucv_type(uv) != UC_ARRAY || array->count == 0)
+	if (ucv_type(uv) != UC_ARRAY)
 		return NULL;
 
 	array->count++;
