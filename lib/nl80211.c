@@ -40,8 +40,11 @@ limitations under the License.
 
 #include <linux/nl80211.h>
 #include <linux/ieee80211.h>
+#include <libubox/uloop.h>
 
 #include "ucode/module.h"
+
+#define DIV_ROUND_UP(n, d)      (((n) + (d) - 1) / (d))
 
 #define err_return(code, ...) do { set_error(code, __VA_ARGS__); return NULL; } while(0)
 
@@ -50,6 +53,8 @@ limitations under the License.
  * to patch the attribute dictionaries within this file. */
 
 #define NL80211_ATTR_NOT_IMPLEMENTED 0x10000
+
+#define NL80211_CMDS_BITMAP_SIZE	DIV_ROUND_UP(NL80211_CMD_MAX + 1, 32)
 
 static struct {
 	int code;
@@ -71,6 +76,15 @@ set_error(int errcode, const char *fmt, ...) {
 		va_end(ap);
 	}
 }
+
+static uc_resource_type_t *listener_type;
+static uc_value_t *listener_registry;
+static uc_vm_t *listener_vm;
+
+typedef struct {
+	uint32_t cmds[NL80211_CMDS_BITMAP_SIZE];
+	size_t index;
+} uc_nl_listener_t;
 
 static bool
 uc_nl_parse_u32(uc_value_t *val, uint32_t *n)
@@ -1813,6 +1827,8 @@ static struct {
 	struct nl_cache *cache;
 	struct genl_family *nl80211;
 	struct genl_family *nlctrl;
+	struct uloop_fd evsock_fd;
+	struct nl_cb *evsock_cb;
 } nl80211_conn;
 
 typedef enum {
@@ -2149,8 +2165,75 @@ struct waitfor_ctx {
 	uint8_t cmd;
 	uc_vm_t *vm;
 	uc_value_t *res;
-	uint32_t cmds[8];
+	uint32_t cmds[NL80211_CMDS_BITMAP_SIZE];
 };
+
+static uc_value_t *
+uc_nl_prepare_event(uc_vm_t *vm, struct nl_msg *msg)
+{
+	struct nlmsghdr *hdr = nlmsg_hdr(msg);
+	struct genlmsghdr *gnlh = nlmsg_data(hdr);
+	uc_value_t *o = ucv_object_new(vm);
+
+	if (!uc_nl_convert_attrs(msg, genlmsg_attrdata(gnlh, 0),
+		genlmsg_attrlen(gnlh, 0), 0,
+		nl80211_msg.attrs, nl80211_msg.nattrs, vm, o)) {
+		ucv_put(o);
+		return NULL;
+	}
+
+	return o;
+}
+
+static int
+cb_listener_event(struct nl_msg *msg, void *arg)
+{
+	struct nlmsghdr *hdr = nlmsg_hdr(msg);
+	struct genlmsghdr *gnlh = nlmsg_data(hdr);
+	uc_vm_t *vm = listener_vm;
+
+	if (!nl80211_conn.evsock_fd.registered || !vm)
+		return NL_SKIP;
+
+	for (size_t i = 0; i < ucv_array_length(listener_registry); i += 2) {
+		uc_value_t *this = ucv_array_get(listener_registry, i);
+		uc_value_t *func = ucv_array_get(listener_registry, i + 1);
+		uc_nl_listener_t *l;
+		uc_value_t *o, *data;
+
+		l = ucv_resource_data(this, "nl80211.listener");
+		if (!l)
+			continue;
+
+		if (gnlh->cmd > NL80211_CMD_MAX ||
+			!(l->cmds[gnlh->cmd / 32] & (1 << (gnlh->cmd % 32))))
+			continue;
+
+		if (!ucv_is_callable(func))
+			continue;
+
+		data = uc_nl_prepare_event(vm, msg);
+		if (!data)
+			return NL_SKIP;
+
+		o = ucv_object_new(vm);
+		ucv_object_add(o, "cmd", ucv_int64_new(gnlh->cmd));
+		ucv_object_add(o, "msg", data);
+
+		uc_vm_stack_push(vm, ucv_get(this));
+		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, o);
+
+		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE) {
+			uloop_end();
+			return NL_STOP;
+		}
+
+		ucv_put(uc_vm_stack_pop(vm));
+	}
+
+	return NL_SKIP;
+}
 
 static int
 cb_event(struct nl_msg *msg, void *arg)
@@ -2158,28 +2241,19 @@ cb_event(struct nl_msg *msg, void *arg)
 	struct nlmsghdr *hdr = nlmsg_hdr(msg);
 	struct genlmsghdr *gnlh = nlmsg_data(hdr);
 	struct waitfor_ctx *s = arg;
-	bool rv, match = true;
 	uc_value_t *o;
 
-	if (s->cmds[0] || s->cmds[1] || s->cmds[2] || s->cmds[3] ||
-	    s->cmds[4] || s->cmds[5] || s->cmds[6] || s->cmds[7]) {
-		match = (s->cmds[gnlh->cmd / 32] & (1 << (gnlh->cmd % 32)));
-	}
+	cb_listener_event(msg, arg);
 
-	if (match) {
-		o = ucv_object_new(s->vm);
+	if (gnlh->cmd > NL80211_CMD_MAX ||
+	    !(s->cmds[gnlh->cmd / 32] & (1 << (gnlh->cmd % 32))))
+		return NL_SKIP;
 
-		rv = uc_nl_convert_attrs(msg,
-			genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
-			0, nl80211_msg.attrs, nl80211_msg.nattrs, s->vm, o);
+	o = uc_nl_prepare_event(s->vm, msg);
+	if (o)
+		s->res = o;
 
-		if (rv)
-			s->res = o;
-		else
-			ucv_put(o);
-
-		s->cmd = gnlh->cmd;
-	}
+	s->cmd = gnlh->cmd;
 
 	return NL_SKIP;
 }
@@ -2188,6 +2262,58 @@ static int
 cb_seq(struct nl_msg *msg, void *arg)
 {
 	return NL_OK;
+}
+
+static bool
+uc_nl_fill_cmds(uint32_t *cmd_bits, uc_value_t *cmds)
+{
+	if (ucv_type(cmds) == UC_ARRAY) {
+		for (size_t i = 0; i < ucv_array_length(cmds); i++) {
+			int64_t n = ucv_int64_get(ucv_array_get(cmds, i));
+
+			if (errno || n < 0 || n > NL80211_CMD_MAX)
+				return false;
+
+			cmd_bits[n / 32] |= (1 << (n % 32));
+		}
+	}
+	else if (ucv_type(cmds) == UC_INTEGER) {
+		int64_t n = ucv_int64_get(cmds);
+
+		if (errno || n < 0 || n > 255)
+			return false;
+
+		cmd_bits[n / 32] |= (1 << (n % 32));
+	}
+	else if (!cmds)
+		memset(cmd_bits, 0xff, NL80211_CMDS_BITMAP_SIZE * sizeof(*cmd_bits));
+	else
+		return false;
+
+	return true;
+}
+
+static bool
+uc_nl_evsock_init(void)
+{
+	if (nl80211_conn.evsock)
+		return true;
+
+	if (!uc_nl_connect_sock(&nl80211_conn.evsock, true))
+		return false;
+
+	if (!uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "config") ||
+	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "scan") ||
+	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "regulatory") ||
+	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "mlme") ||
+	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "vendor") ||
+	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "nan")) {
+		nl_socket_free(nl80211_conn.evsock);
+		nl80211_conn.evsock = NULL;
+		return false;
+	}
+
+	return true;
 }
 
 static uc_value_t *
@@ -2200,11 +2326,9 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 	struct waitfor_ctx ctx = { .vm = vm };
 	struct nl_cb *cb;
 	int ms = -1, err;
-	int64_t n;
-	size_t i;
 
 	if (timeout) {
-		n = ucv_int64_get(timeout);
+		int64_t n = ucv_int64_get(timeout);
 
 		if (ucv_type(timeout) != UC_INTEGER || n < INT32_MIN || n > INT32_MAX)
 			err_return(NLE_INVAL, "Invalid timeout specified");
@@ -2212,35 +2336,11 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 		ms = (int)n;
 	}
 
-	if (ucv_type(cmds) == UC_ARRAY) {
-		for (i = 0; i < ucv_array_length(cmds); i++) {
-			n = ucv_int64_get(ucv_array_get(cmds, i));
+	if (!uc_nl_fill_cmds(ctx.cmds, cmds))
+		err_return(NLE_INVAL, "Invalid command ID specified");
 
-			if (n < 0 || n > 255)
-				err_return(NLE_INVAL, "Invalid command ID specified");
-
-			ctx.cmds[n / 32] |= (1 << (n % 32));
-		}
-	}
-	else if (ucv_type(cmds) == UC_INTEGER) {
-		n = ucv_int64_get(cmds);
-
-		if (n < 0 || n > 255)
-			err_return(NLE_INVAL, "Invalid command ID specified");
-
-		ctx.cmds[n / 32] |= (1 << (n % 32));
-	}
-
-	if (!nl80211_conn.evsock) {
-		if (!uc_nl_connect_sock(&nl80211_conn.evsock, true) ||
-		    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "config") ||
-		    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "scan") ||
-		    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "regulatory") ||
-		    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "mlme") ||
-		    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "vendor") ||
-		    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "nan"))
-			return NULL;
-	}
+	if (!uc_nl_evsock_init())
+		return NULL;
 
 	cb = nl_cb_alloc(NL_CB_DEFAULT);
 
@@ -2366,6 +2466,113 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 
 		return ucv_boolean_new(false);
 	}
+}
+
+static void
+uc_nl_listener_cb(struct uloop_fd *fd, unsigned int events)
+{
+	nl_recvmsgs(nl80211_conn.evsock, nl80211_conn.evsock_cb);
+}
+
+static uc_value_t *
+uc_nl_listener(uc_vm_t *vm, size_t nargs)
+{
+	struct uloop_fd *fd = &nl80211_conn.evsock_fd;
+	uc_nl_listener_t *l;
+	uc_value_t *cb_func = uc_fn_arg(0);
+	uc_value_t *cmds = uc_fn_arg(1);
+	uc_value_t *rv;
+	size_t i;
+
+	if (!ucv_is_callable(cb_func)) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid callback");
+		return NULL;
+	}
+
+	if (!uc_nl_evsock_init())
+		return NULL;
+
+	if (!fd->registered) {
+		fd->fd = nl_socket_get_fd(nl80211_conn.evsock);
+		fd->cb = uc_nl_listener_cb;
+		uloop_fd_add(fd, ULOOP_READ);
+	}
+
+	if (!nl80211_conn.evsock_cb) {
+		struct nl_cb *cb = nl_cb_alloc(NL_CB_DEFAULT);
+
+		if (!cb)
+			err_return(NLE_NOMEM, NULL);
+
+		nl_cb_set(cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, cb_seq, NULL);
+		nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_listener_event, NULL);
+		nl80211_conn.evsock_cb = cb;
+	}
+
+	for (i = 0; i < ucv_array_length(listener_registry); i += 2) {
+		if (!ucv_array_get(listener_registry, i))
+			break;
+	}
+
+	ucv_array_set(listener_registry, i + 1, cb_func);
+	l = xalloc(sizeof(*l));
+	l->index = i;
+	if (!uc_nl_fill_cmds(l->cmds, cmds)) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid command ID");
+		free(l);
+		return NULL;
+	}
+
+	rv = uc_resource_new(listener_type, l);
+	ucv_array_set(listener_registry, i, rv);
+	listener_vm = vm;
+
+	return rv;
+}
+
+static void
+uc_nl_listener_free(void *arg)
+{
+	uc_nl_listener_t *l = arg;
+
+	ucv_array_set(listener_registry, l->index, NULL);
+	ucv_array_set(listener_registry, l->index + 1, NULL);
+	free(l);
+}
+
+static uc_value_t *
+uc_nl_listener_set_commands(uc_vm_t *vm, size_t nargs)
+{
+	uc_nl_listener_t *l = uc_fn_thisval("nl80211.listener");
+	uc_value_t *cmds = uc_fn_arg(0);
+
+	if (!l)
+		return NULL;
+
+	memset(l->cmds, 0, sizeof(l->cmds));
+	if (!uc_nl_fill_cmds(l->cmds, cmds))
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid command ID");
+
+	return NULL;
+}
+
+static uc_value_t *
+uc_nl_listener_close(uc_vm_t *vm, size_t nargs)
+{
+	uc_nl_listener_t **lptr = uc_fn_this("nl80211.listener");
+	uc_nl_listener_t *l;
+
+	if (!lptr)
+		return NULL;
+
+	l = *lptr;
+	if (!l)
+		return NULL;
+
+	*lptr = NULL;
+	uc_nl_listener_free(l);
+
+	return NULL;
 }
 
 
@@ -2518,12 +2725,23 @@ static const uc_function_list_t global_fns[] = {
 	{ "error",		uc_nl_error },
 	{ "request",	uc_nl_request },
 	{ "waitfor",	uc_nl_waitfor },
+	{ "listener",	uc_nl_listener },
 };
 
+
+static const uc_function_list_t listener_fns[] = {
+	{ "set_commands",	uc_nl_listener_set_commands },
+	{ "close",			uc_nl_listener_close },
+};
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
+
+	listener_type = uc_type_declare(vm, "nl80211.listener", listener_fns, uc_nl_listener_free);
+	listener_registry = ucv_array_new(vm);
+
+	uc_vm_registry_set(vm, "nl80211.registry", listener_registry);
 
 	register_constants(vm, scope);
 }
