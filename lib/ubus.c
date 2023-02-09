@@ -173,6 +173,11 @@ typedef struct {
 	uc_vm_t *vm;
 } uc_ubus_subscriber_t;
 
+typedef struct {
+	bool mret;
+	uc_value_t *res;
+} uc_ubus_call_res_t;
+
 static uc_value_t *
 uc_ubus_error(uc_vm_t *vm, size_t nargs)
 {
@@ -557,9 +562,20 @@ uc_ubus_list(uc_vm_t *vm, size_t nargs)
 static void
 uc_ubus_call_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 {
-	uc_value_t **res = (uc_value_t **)req->priv;
+	uc_ubus_call_res_t *res = req->priv;
+	uc_value_t *val;
 
-	*res = msg ? blob_array_to_ucv(NULL, blob_data(msg), blob_len(msg), true) : NULL;
+	val = msg ? blob_array_to_ucv(NULL, blob_data(msg), blob_len(msg), true) : NULL;
+
+	if (res->mret) {
+		if (!res->res)
+			res->res = ucv_array_new(NULL);
+
+		ucv_array_push(res->res, val);
+	}
+	else if (!res->res) {
+		res->res = val;
+	}
 }
 
 static void
@@ -656,7 +672,8 @@ _conn_get(uc_vm_t *vm, uc_ubus_connection_t ***conn)
 static uc_value_t *
 uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *objname, *funname, *funargs, *res = NULL;
+	uc_value_t *objname, *funname, *funargs, *mret = NULL;
+	uc_ubus_call_res_t res = { 0 };
 	uc_ubus_connection_t **c;
 	enum ubus_msg_status rv;
 	uint32_t id;
@@ -666,7 +683,8 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 	args_get(vm, nargs,
 	         "object name", UC_STRING, false, &objname,
 	         "function name", UC_STRING, false, &funname,
-	         "function arguments", UC_OBJECT, true, &funargs);
+	         "function arguments", UC_OBJECT, true, &funargs,
+	         "multiple return", UC_BOOLEAN, true, &mret);
 
 	blob_buf_init(&(*c)->buf, 0);
 
@@ -679,6 +697,8 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 		err_return(rv, "Failed to resolve object name '%s'",
 		           ucv_string_get(objname));
 
+	res.mret = ucv_is_truish(mret);
+
 	rv = ubus_invoke((*c)->ctx, id, ucv_string_get(funname), (*c)->buf.head,
 	                 uc_ubus_call_cb, &res, (*c)->timeout * 1000);
 
@@ -686,7 +706,7 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 		err_return(rv, "Failed to invoke function '%s' on object '%s'",
 		           ucv_string_get(funname), ucv_string_get(objname));
 
-	return res;
+	return res.res;
 }
 
 static uc_value_t *
