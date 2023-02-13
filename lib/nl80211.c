@@ -2514,7 +2514,7 @@ uc_nl_listener(uc_vm_t *vm, size_t nargs)
 			break;
 	}
 
-	ucv_array_set(listener_registry, i + 1, cb_func);
+	ucv_array_set(listener_registry, i + 1, ucv_get(cb_func));
 	l = xalloc(sizeof(*l));
 	l->index = i;
 	if (!uc_nl_fill_cmds(l->cmds, cmds)) {
@@ -2524,7 +2524,7 @@ uc_nl_listener(uc_vm_t *vm, size_t nargs)
 	}
 
 	rv = uc_resource_new(listener_type, l);
-	ucv_array_set(listener_registry, i, rv);
+	ucv_array_set(listener_registry, i, ucv_get(rv));
 	listener_vm = vm;
 
 	return rv;
