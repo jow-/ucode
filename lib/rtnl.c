@@ -4150,5 +4150,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	listener_type = uc_type_declare(vm, "rtnl.listener", listener_fns, uc_nl_listener_free);
 	listener_registry = ucv_array_new(vm);
 
+	uc_vm_registry_set(vm, "rtnl.registry", listener_registry);
+
 	register_constants(vm, scope);
 }
