@@ -698,48 +698,66 @@ uc_uci_reorder(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+static int
+uc_uci_pkg_command_single(struct uci_context *ctx, enum pkg_cmd cmd,
+                          struct uci_package *pkg)
+{
+	struct uci_ptr ptr = { 0 };
+
+	switch (cmd) {
+	case CMD_COMMIT:
+		return uci_commit(ctx, &pkg, false);
+
+	case CMD_SAVE:
+		return uci_save(ctx, pkg);
+
+	case CMD_REVERT:
+		ptr.p = pkg;
+
+		return uci_revert(ctx, &ptr);
+
+	default:
+		return UCI_ERR_INVAL;
+	}
+}
+
 static uc_value_t *
 uc_uci_pkg_command(uc_vm_t *vm, size_t nargs, enum pkg_cmd cmd)
 {
 	struct uci_context **c = uc_fn_this("uci.cursor");
 	uc_value_t *conf = uc_fn_arg(0);
-	struct uci_element *e, *tmp;
 	struct uci_package *p;
-	struct uci_ptr ptr = { 0 };
+	char **configs = NULL;
 	int rv, res = UCI_OK;
+	size_t i;
 
-	if (cmd != CMD_REVERT && conf)
-		err_return(UCI_ERR_INVAL);
+	if (conf) {
+		if (ucv_type(conf) != UC_STRING)
+			err_return(UCI_ERR_INVAL);
 
-	if (conf && ucv_type(conf) != UC_STRING)
-		err_return(UCI_ERR_INVAL);
+		if (!(p = uci_lookup_package(*c, ucv_string_get(conf))))
+			err_return(UCI_ERR_NOTFOUND);
 
-	uci_foreach_element_safe(&(*c)->root, tmp, e) {
-		p = uci_to_package(e);
+		res = uc_uci_pkg_command_single(*c, cmd, p);
+	}
+	else {
+		if (uci_list_configs(*c, &configs))
+			err_return((*c)->err);
 
-		if (conf && strcmp(e->name, ucv_string_get(conf)))
-			continue;
+		if (!configs || !configs[0])
+			err_return(UCI_ERR_NOTFOUND);
 
-		switch (cmd) {
-		case CMD_COMMIT:
-			rv = uci_commit(*c, &p, false);
-			break;
+		for (i = 0; configs[i]; i++) {
+			if (!(p = uci_lookup_package(*c, configs[i])))
+				continue;
 
-		case CMD_SAVE:
-			rv = uci_save(*c, p);
-			break;
+			rv = uc_uci_pkg_command_single(*c, cmd, p);
 
-		case CMD_REVERT:
-			ptr.p = p;
-			rv = uci_revert(*c, &ptr);
-			break;
-
-		default:
-			rv = UCI_ERR_INVAL;
+			if (rv != UCI_OK)
+				res = rv;
 		}
 
-		if (rv != UCI_OK)
-			res = rv;
+		free(configs);
 	}
 
 	if (res != UCI_OK)
