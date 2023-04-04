@@ -304,7 +304,7 @@ cif_call(uc_vm_t *vm, size_t nargs)
 		return NULL;
 	}
 
-	void *return_value;
+	void *return_value = 0;
 	void **argument_values = (void**) &(**cif).values[cif_argument_count + 1];
 	bool returns_void = (**cif).cif.rtype->type == FFI_TYPE_VOID;
 
