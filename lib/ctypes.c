@@ -369,6 +369,8 @@ cif_call(uc_vm_t *vm, size_t nargs)
 
 	ffi_call(&(**cif).cif, FFI_FN((**target_fn).void_ptr), widened_return_value, argument_values);
 
+	uc_vm_registry_set(vm, "ctypes.errno", ucv_int64_new(errno));
+
 	if (widened_return_value != return_value) {
 		switch ((**cif).cif.rtype->type) {
 		case FFI_TYPE_SINT8:
@@ -395,6 +397,12 @@ cif_call(uc_vm_t *vm, size_t nargs)
 	}
 
 	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+ctypes_errno(uc_vm_t *vm, size_t nargs)
+{
+	return uc_vm_registry_get(vm, "ctypes.errno");
 }
 
 static void
@@ -473,6 +481,7 @@ static const uc_function_list_t global_fns[] = {
 	{ "ptr",    ctypes_new_ptr },
 	{ "symbol", ctypes_symbol },
 	{ "prep",   ctypes_prepare_cif },
+	{ "errno",  ctypes_errno },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
@@ -481,6 +490,8 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 
 	ptr_type = uc_type_declare(vm, "ctypes.ptr", ptr_fns, ptr_gc);
 	cif_type = uc_type_declare(vm, "ctypes.cif", cif_fns, cif_gc);
+
+	uc_vm_registry_set(vm, "ctypes.errno", ucv_int64_new(0));
 
 	register_constants(vm, scope);
 }
