@@ -393,7 +393,7 @@ blob_to_ucv(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **name)
 		return ucv_double_new(v.d);
 
 	case BLOBMSG_TYPE_STRING:
-		return ucv_string_new(data);
+		return ucv_string_new_length(data, len - 1);
 
 	case BLOBMSG_TYPE_ARRAY:
 		return blob_array_to_ucv(vm, data, len, false);
@@ -444,7 +444,8 @@ ucv_to_blob(const char *name, uc_value_t *val, struct blob_buf *blob)
 		break;
 
 	case UC_STRING:
-		blobmsg_add_string(blob, name, ucv_string_get(val));
+		blobmsg_add_field(blob, BLOBMSG_TYPE_STRING, name,
+				  ucv_string_get(val), ucv_string_length(val) + 1);
 		break;
 
 	case UC_ARRAY:
