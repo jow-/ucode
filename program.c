@@ -587,8 +587,11 @@ read_sourceinfo(uc_source_t *input, uint32_t flags, char **errp, uc_program_t *p
 				return NULL;
 			}
 
-			if (!read_size_t(input->fp, &len, sizeof(uint32_t), "sourceinfo code buffer length", errp))
+			if (!read_size_t(input->fp, &len, sizeof(uint32_t), "sourceinfo code buffer length", errp)) {
+				free(path);
+
 				return NULL;
+			}
 
 			if (len > 0) {
 				code = xalloc(len);
