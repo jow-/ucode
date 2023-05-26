@@ -42,7 +42,7 @@ jobs:
       matrix:
         sdk_platform:
           - ath79-generic
-          - imx6-generic
+          - imx-cortexa9
           - malta-be
           - mvebu-cortexa53
 
