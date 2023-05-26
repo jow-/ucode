@@ -10,6 +10,10 @@ env:
   CI_ENABLE_UNIT_TESTING: 1
   CI_TARGET_BUILD_DEPENDS: libnl-tiny ubus uci
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   native_testing:
     name: Various native checks
