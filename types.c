@@ -2222,6 +2222,8 @@ ucv_gc_common(uc_vm_t *vm, bool final)
 	uc_value_t *val;
 	size_t i;
 
+	vm->alloc_refs = 0;
+
 	/* back out early if value list is uninitialized */
 	if (!vm->values.prev || !vm->values.next)
 		return;
