@@ -528,7 +528,9 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 				s = ucv_to_string(vm, arg);
 				uc_vm_raise_exception(vm, EXCEPTION_TYPE, "(%s) is not iterable", s);
 				free(s);
+				ucv_put(ctx);
 				ucv_put(fno);
+				ucv_put(ellip);
 
 				return false;
 			}
