@@ -2502,8 +2502,6 @@ uc_vm_gc_step(uc_vm_t *vm)
 		else {
 			ucv_gc(vm);
 		}
-
-		vm->alloc_refs = 0;
 	}
 }
 
