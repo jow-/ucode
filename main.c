@@ -90,7 +90,7 @@ print_usage(const char *app)
 	"  Preload the given `library`, optionally aliased to `name`.\n\n"
 
 	"-L pattern\n"
-	"  Append given `pattern` to default library search paths. If the pattern\n"
+	"  Prepend given `pattern` to default library search paths. If the pattern\n"
 	"  contains no `*`, it is added twice, once with `/*.so` and once with\n"
 	"  `/*.uc` appended to it.\n\n"
 
@@ -505,8 +505,6 @@ main(int argc, char **argv)
 		.raw_mode = true
 	};
 
-	uc_search_path_init(&config.module_search_path);
-
 	app = appname(argv[0]);
 
 	if (argc == 1) {
@@ -543,6 +541,8 @@ main(int argc, char **argv)
 			break;
 		}
 	}
+
+	uc_search_path_init(&config.module_search_path);
 
 	optind = 1;
 

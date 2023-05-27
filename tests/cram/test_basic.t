@@ -61,7 +61,7 @@ check that ucode provides exepected help:
     Preload the given `library`, optionally aliased to `name`.
   
   -L pattern
-    Append given `pattern` to default library search paths. If the pattern
+    Prepend given `pattern` to default library search paths. If the pattern
     contains no `*`, it is added twice, once with `/*.so` and once with
     `/*.uc` appended to it.
   
