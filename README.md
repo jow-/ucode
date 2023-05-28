@@ -916,16 +916,52 @@ array was empty or if a non-array argument was passed.
 
 Return the sine of x, where x is given in radians.
 
-#### 6.31. `sort(arr, fn)`
+#### 6.31. `sort(val, fn)`
 
-Sort the given array according to the given sort function. If no sort
-function is provided, a default ascending sort order is applied.
+Sort the given array or object according to the given comparison function.
+If no comparison function is provided, a default lexical sort order is
+applied.
+
+Values are sorted in-place, the given array of object value is modified
+by this function.
+
+Sorting of objects is performed by reordering the internal key sequence
+without modifying or rehashing the contained values themselves. Since
+ucode maintains insertion order of keys within object values, this is
+useful to sort object keys for output purposes.
+
+The comparison function is repeatedly invoked until the array values
+or object key sequence is fully sorted. It should return a numeric
+value less than, equal to or greater than zero when the first item
+is smaller, equal or larger than the second one respectively.
+
+When sorting array values, the comparison function is invoked with two
+array value arguments to compare against each other.
+
+When sorting object values, the comparison function is invoked with four
+arguments; two keys to compare to each other as well as their
+corresponding object values.
+
+Returns the given, ordered array or object value.
+
+Returns `null` if the given argument was neither an array nor object.
+
+Throws an exception if a non-callable custom comparison function was
+provided or if the comparison function triggered an exception.
 
 ```javascript
 sort([8, 1, 5, 9]) // [1, 5, 8, 9]
 sort(["Bean", "Orange", "Apple"], function(a, b) {
-    return length(a) < length(b);
+    return length(a) - length(b);
 }) // ["Bean", "Apple", "Orange"]
+
+sort({ qrx: 1, foo: 2, abc: 3 }) // { "abc": 3, "foo": 2, "qrx": 1 }
+sort({ a: 5, b: 3, c: 2, d: 4, e: 1 }, function(k1, k2, v1, v2) {
+	return v1 - v2;
+}) // { "e": 1, "c": 2, "b": 3, "d": 4, "a": 5 }
+sort({ "Bean": true, "Orange": true, "Apple": true }, function(k1, k2) {
+    return length(k1) - length(k2);
+}) // { "Bean": true, "Apple": true, "Orange": true }
 ```
 
 #### 6.32. `splice(arr, off, len, ...)`
