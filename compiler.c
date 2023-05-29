@@ -3602,6 +3602,7 @@ uc_compiler_compile_import(uc_compiler_t *compiler)
 		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 			"Imports may only appear at top level");
 
+		ucv_put(namelist);
 		return;
 	}
 
