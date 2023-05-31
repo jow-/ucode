@@ -1,0 +1,29 @@
+{
+	"tags": {
+		"allowUnknownTags": true,
+		"dictionaries": ["jsdoc","closure"]
+	},
+	"source": {
+		"include": ["."],
+		"exclude": ["CMakeFiles"],
+		"includePattern": ".+\\.c$"
+	},
+	"plugins": [
+		"plugins/markdown",
+		"jsdoc/c-transpiler"
+
+	],
+	"templates": {
+		"referenceTitle": "OpenWrt ucode library reference",
+		"disableSort": false,
+		"collapse": true,
+		"resources_": {
+			"OpenWrt": "https://openwrt.org/"
+		}
+	},
+	"opts": {
+		"destination": "docs",
+		"recurse": true,
+		"readme": "docs/README.md"
+	}
+}
