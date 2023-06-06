@@ -40,7 +40,16 @@ Returns `null` if the given input array value is not an array.
 				return 1;
 
 			return 0;
-		})
+		}),
+
+		// default lexical object key sort
+		sort({ qrx: 1, foo: 2, abc: 3 }),
+
+		// object sort with custom callback (by value)
+		sort({ a: 5, b: 3, c: 2, d: 4, e: 1 }, (k1, k2, v1, v2) => v1 - v2),
+
+		// object sort with custom callback (by key length)
+		sort({ "Bean": true, "Orange": true, "Apple": true }, (k1, k2) => length(k1) - length(k2))
 	]), "\n");
 %}
 -- End --
@@ -51,6 +60,9 @@ Returns `null` if the given input array value is not an array.
 [ 1, "2b", false, null, true ]
 [ "pear", "apple", "banana", "grapefruit" ]
 [ 1, 2, 4, 9, "a", "b", "q", "x" ]
+{ "abc": 3, "foo": 2, "qrx": 1 }
+{ "e": 1, "c": 2, "b": 3, "d": 4, "a": 5 }
+{ "Bean": true, "Apple": true, "Orange": true }
 -- End --
 
 
@@ -73,7 +85,7 @@ In line 2, byte 34:
 -- End --
 
 
-Supplying an invalid array will yield `null`.
+Supplying a non-array, non-object value will yield `null`.
 
 -- Testcase --
 {%

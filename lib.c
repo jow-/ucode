@@ -404,11 +404,8 @@ uc_rindex(uc_vm_t *vm, size_t nargs)
 }
 
 static bool
-assert_mutable_array(uc_vm_t *vm, uc_value_t *val)
+assert_mutable(uc_vm_t *vm, uc_value_t *val)
 {
-	if (ucv_type(val) != UC_ARRAY)
-		return false;
-
 	if (ucv_is_constant(val)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 		                      "%s value is immutable",
@@ -418,6 +415,15 @@ assert_mutable_array(uc_vm_t *vm, uc_value_t *val)
 	}
 
 	return true;
+}
+
+static bool
+assert_mutable_array(uc_vm_t *vm, uc_value_t *val)
+{
+	if (ucv_type(val) != UC_ARRAY)
+		return false;
+
+	return assert_mutable(vm, val);
 }
 
 static uc_value_t *
@@ -894,7 +900,7 @@ default_cmp(uc_value_t *v1, uc_value_t *v2)
 }
 
 static int
-sort_fn(const void *k1, const void *k2)
+array_sort_fn(const void *k1, const void *k2)
 {
 	uc_value_t *rv, *null = ucv_int64_new(0);
 	uc_value_t * const *v1 = k1;
@@ -928,21 +934,69 @@ sort_fn(const void *k1, const void *k2)
 	return res;
 }
 
+static int
+object_sort_fn(const void *k1, const void *k2)
+{
+	uc_value_t *rv, *null = ucv_int64_new(0);
+	struct lh_entry * const *e1 = k1;
+	struct lh_entry * const *e2 = k2;
+	int res;
+
+	if (!sort_ctx.fn)
+		return strcmp((char *)lh_entry_k(*e1), (char *)lh_entry_k(*e2));
+
+	if (sort_ctx.ex)
+		return 0;
+
+	uc_vm_ctx_push(sort_ctx.vm);
+	uc_vm_stack_push(sort_ctx.vm, ucv_get(sort_ctx.fn));
+	uc_vm_stack_push(sort_ctx.vm, ucv_string_new((char *)lh_entry_k(*e1)));
+	uc_vm_stack_push(sort_ctx.vm, ucv_string_new((char *)lh_entry_k(*e2)));
+	uc_vm_stack_push(sort_ctx.vm, ucv_get((uc_value_t *)lh_entry_v(*e1)));
+	uc_vm_stack_push(sort_ctx.vm, ucv_get((uc_value_t *)lh_entry_v(*e2)));
+
+	if (uc_vm_call(sort_ctx.vm, true, 4)) {
+		sort_ctx.ex = true;
+
+		return 0;
+	}
+
+	rv = uc_vm_stack_pop(sort_ctx.vm);
+
+	ucv_compare(0, rv, null, &res);
+
+	ucv_put(null);
+	ucv_put(rv);
+
+	return res;
+}
+
 static uc_value_t *
 uc_sort(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *arr = uc_fn_arg(0);
+	uc_value_t *val = uc_fn_arg(0);
 	uc_value_t *fn = uc_fn_arg(1);
 
-	if (!assert_mutable_array(vm, arr))
+	if (!assert_mutable(vm, val))
 		return NULL;
 
 	sort_ctx.vm = vm;
 	sort_ctx.fn = fn;
 
-	ucv_array_sort(arr, sort_fn);
+	switch (ucv_type(val)) {
+	case UC_ARRAY:
+		ucv_array_sort(val, array_sort_fn);
+		break;
 
-	return sort_ctx.ex ? NULL : ucv_get(arr);
+	case UC_OBJECT:
+		ucv_object_sort(val, object_sort_fn);
+		break;
+
+	default:
+		return NULL;
+	}
+
+	return sort_ctx.ex ? NULL : ucv_get(val);
 }
 
 static uc_value_t *

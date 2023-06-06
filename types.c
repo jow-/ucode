@@ -956,6 +956,48 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 	return true;
 }
 
+void
+ucv_object_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
+{
+	uc_object_t *object = (uc_object_t *)uv;
+	struct lh_table *t;
+	struct lh_entry *e;
+	size_t i;
+
+	struct {
+		struct lh_entry **entries;
+		size_t count;
+	} keys = { 0 };
+
+	if (ucv_type(uv) != UC_OBJECT || lh_table_length(object->table) <= 1)
+		return;
+
+	for (t = object->table, e = t->head; e; e = e->next)
+		uc_vector_push(&keys, e);
+
+	if (!keys.entries)
+		return;
+
+	qsort(keys.entries, keys.count, sizeof(keys.entries[0]), cmp);
+
+	for (i = 0; i < keys.count; i++) {
+		e = keys.entries[i];
+
+		if (i == 0) {
+			t->head = t->tail = e;
+			e->next = e->prev = NULL;
+		}
+		else {
+			t->tail->next = e;
+			e->prev = t->tail;
+			e->next = NULL;
+			t->tail = e;
+		}
+	}
+
+	uc_vector_clear(&keys);
+}
+
 bool
 ucv_object_delete(uc_value_t *uv, const char *key)
 {
