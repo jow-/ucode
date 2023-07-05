@@ -14,6 +14,36 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/**
+ * This module provides functions for interacting with the file system.
+ *
+ * Functions can be individually imported and directly accessed using the
+ * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+ * syntax:
+ *
+ *   ```
+ *   import { readlink, popen } from 'fs';
+ *
+ *   let dest = readlink('/sys/class/net/eth0');
+ *   let proc = popen('ps ww');
+ *   ```
+ *
+ * Alternatively, the module namespace can be imported
+ * using a wildcard import statement:
+ *
+ *   ```
+ *   import * as fs from 'fs';
+ *
+ *   let dest = fs.readlink('/sys/class/net/eth0');
+ *   let proc = fs.popen('ps ww');
+ *   ```
+ *
+ * Additionally, the filesystem module namespace may also be imported by invoking
+ * the `ucode` interpreter with the `-lfs` switch.
+ *
+ * @module fs
+ */
+
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
@@ -41,6 +71,24 @@ static uc_resource_type_t *file_type, *proc_type, *dir_type;
 
 static int last_error = 0;
 
+/**
+ * Query error information.
+ *
+ * Returns a string containing a description of the last occurred error or
+ * `null` if there is no error information.
+ *
+ * @function module:fs#error
+ *
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * // Trigger file system error
+ * unlink('/path/does/not/exist');
+ *
+ * // Print error (should yield "No such file or directory")
+ * print(error(), "\n");
+ */
 static uc_value_t *
 uc_fs_error(uc_vm_t *vm, size_t nargs)
 {
@@ -205,6 +253,46 @@ uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
 }
 
 
+/**
+ * Represents a handle for interacting with a program launched by `popen()`.
+ *
+ * @namespace module:fs.proc
+ * @example
+ *
+ * const handle = popen(…);
+ *
+ * handle.read(…);
+ * handle.write(…);
+ * handle.flush();
+ *
+ * handle.fileno();
+ *
+ * handle.close();
+ */
+
+/**
+ * Closes the program handle and awaits program termination.
+ *
+ * Upon calling `close()` on the handle, the program's input or output stream
+ * (depending on the open mode) is closed. Afterwards, the function awaits the
+ * termination of the underlying program and returns its exit code.
+ *
+ * - When the program was terminated by a signal, the return value will be the
+ *   negative signal number, e.g. `-9` for SIGKILL.
+ *
+ * - When the program terminated normally, the return value will be the positive
+ *   exit code of the program.
+ *
+ * Returns a negative signal number if the program was terminated by a signal.
+ *
+ * Returns a positive exit code if the program terminated normally.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs.proc#close
+ *
+ * @returns {number|null}
+ */
 static uc_value_t *
 uc_fs_pclose(uc_vm_t *vm, size_t nargs)
 {
@@ -229,30 +317,168 @@ uc_fs_pclose(uc_vm_t *vm, size_t nargs)
 	return ucv_int64_new(0);
 }
 
+/**
+ * Reads a chunk of data from the program handle.
+ *
+ * The length argument may be either a positive number of bytes to read, in
+ * which case the read call returns up to that many bytes, or a string to
+ * specify a dynamic read size.
+ *
+ *  - If length is a number, the method will read the specified number of bytes
+ *    from the handle. Reading stops after the given amount of bytes or after
+ *    encountering EOF, whatever comes first.
+ *
+ *  - If length is the string "line", the method will read an entire line,
+ *    terminated by "\n" (a newline), from the handle. Reading stops at the next
+ *    newline or when encountering EOF. The returned data will contain the
+ *    terminating newline character if one was read.
+ *
+ *  - If length is the string "all", the method will read from the handle until
+ *    encountering EOF and return the complete contents.
+ *
+ *  - If length is a single character string, the method will read from the
+ *    handle until encountering the specified character or upon encountering
+ *    EOF. The returned data will contain the terminating character if one was
+ *    read.
+ *
+ * Returns a string containing the read data.
+ *
+ * Returns an empty string on EOF.
+ *
+ * Returns `null` if a read error occurred.
+ *
+ * @function module:fs.proc#read
+ *
+ * @param {number|string} length
+ * The length of data to read. Can be a number, the string "line", the string
+ * "all", or a single character string.
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * const fp = popen("command", "r");
+ *
+ * // Example 1: Read 10 bytes from the handle
+ * const chunk = fp.read(10);
+ *
+ * // Example 2: Read the handle line by line
+ * for (let line = fp.read("line"); length(line); line = fp.read("line"))
+ *   print(line);
+ *
+ * // Example 3: Read the complete contents from the handle
+ * const content = fp.read("all");
+ *
+ * // Example 4: Read until encountering the character ':'
+ * const field = fp.read(":");
+ */
 static uc_value_t *
 uc_fs_pread(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_read_common(vm, nargs, "fs.proc");
 }
 
+/**
+ * Writes a chunk of data to the program handle.
+ *
+ * In case the given data is not a string, it is converted to a string before
+ * being written to the program's stdin. String values are written as-is,
+ * integer and double values are written in decimal notation, boolean values are
+ * written as `true` or `false` while arrays and objects are converted to their
+ * JSON representation before being written. The `null` value is represented by
+ * an empty string so `proc.write(null)` would be a no-op. Resource values are
+ * written in the form `<type address>`, e.g. `<fs.file 0x7f60f0981760>`.
+ *
+ * If resource, array or object values contain a `tostring()` function in their
+ * prototypes, then this function is invoked to obtain an alternative string
+ * representation of the value.
+ *
+ * Returns the number of bytes written.
+ *
+ * Returns `null` if a write error occurred.
+ *
+ * @function module:fs.proc#write
+ *
+ * @param {*} data
+ * The data to be written.
+ *
+ * @returns {number|null}
+ *
+ * @example
+ * const fp = popen("command", "w");
+ *
+ * fp.write("Hello world!\n");
+ */
 static uc_value_t *
 uc_fs_pwrite(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_write_common(vm, nargs, "fs.proc");
 }
 
+/**
+ * Forces a write of all buffered data to the underlying handle.
+ *
+ * Returns `true` if the data was successfully flushed.
+ *
+ * Returns `null` on error.
+ *
+ * @function module:fs.proc#flush
+ *
+ * @returns {boolean|null}
+ *
+ */
 static uc_value_t *
 uc_fs_pflush(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_flush_common(vm, nargs, "fs.proc");
 }
 
+/**
+ * Obtains the number of the handle's underlying file descriptor.
+ *
+ * Returns the descriptor number.
+ *
+ * Returns `null` on error.
+ *
+ * @function module:fs.proc#fileno
+ *
+ * @returns {number|null}
+ */
 static uc_value_t *
 uc_fs_pfileno(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_fileno_common(vm, nargs, "fs.proc");
 }
 
+/**
+ * Starts a process and returns a handle representing the executed process.
+ *
+ * The handle will be connected to the process stdin or stdout, depending on the
+ * value of the mode argument.
+ *
+ * The mode argument may be either "r" to open the process for reading (connect
+ * to its stdin) or "w" to open the process for writing (connect to its stdout).
+ *
+ * The mode character "r" or "w" may be optionally followed by "e" to apply the
+ * FD_CLOEXEC flag onto the open descriptor.
+ *
+ * Returns a process handle referring to the executed process.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs#popen
+ *
+ * @param {string} command
+ * The command to be executed.
+ *
+ * @param {string} [mode="r"]
+ * The open mode of the process handle.
+ *
+ * @returns {module:fs.proc|null}
+ *
+ * @example
+ * // Open a process
+ * const process = popen('command', 'r');
+ */
 static uc_value_t *
 uc_fs_popen(uc_vm_t *vm, size_t nargs)
 {
@@ -273,6 +499,41 @@ uc_fs_popen(uc_vm_t *vm, size_t nargs)
 }
 
 
+/**
+ * Represents a handle for interacting with a file opened by `open()`.
+ *
+ * @namespace module:fs.file
+ * @example
+ *
+ * const handle = open(…);
+ *
+ * handle.read(…);
+ * handle.write(…);
+ * handle.flush();
+ *
+ * handle.seek(…);
+ * handle.tell();
+ *
+ * handle.isatty();
+ * handle.fileno();
+ *
+ * handle.close();
+ */
+
+/**
+ * Closes the file handle.
+ *
+ * Upon calling `close()` on the handle, buffered data is flushed and the
+ * underlying file descriptor is closed.
+ *
+ * Returns `true` if the handle was properly closed.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs.file#close
+ *
+ * @returns {boolean|null}
+ */
 static uc_value_t *
 uc_fs_close(uc_vm_t *vm, size_t nargs)
 {
@@ -287,12 +548,97 @@ uc_fs_close(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Reads a chunk of data from the file handle.
+ *
+ * The length argument may be either a positive number of bytes to read, in
+ * which case the read call returns up to that many bytes, or a string to
+ * specify a dynamic read size.
+ *
+ *  - If length is a number, the method will read the specified number of bytes
+ *    from the handle. Reading stops after the given amount of bytes or after
+ *    encountering EOF, whatever comes first.
+ *
+ *  - If length is the string "line", the method will read an entire line,
+ *    terminated by "\n" (a newline), from the handle. Reading stops at the next
+ *    newline or when encountering EOF. The returned data will contain the
+ *    terminating newline character if one was read.
+ *
+ *  - If length is the string "all", the method will read from the handle until
+ *    encountering EOF and return the complete contents.
+ *
+ *  - If length is a single character string, the method will read from the
+ *    handle until encountering the specified character or upon encountering
+ *    EOF. The returned data will contain the terminating character if one was
+ *    read.
+ *
+ * Returns a string containing the read data.
+ *
+ * Returns an empty string on EOF.
+ *
+ * Returns `null` if a read error occurred.
+ *
+ * @function module:fs.file#read
+ *
+ * @param {number|string} length
+ * The length of data to read. Can be a number, the string "line", the string
+ * "all", or a single character string.
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * const fp = open("file.txt", "r");
+ *
+ * // Example 1: Read 10 bytes from the handle
+ * const chunk = fp.read(10);
+ *
+ * // Example 2: Read the handle line by line
+ * for (let line = fp.read("line"); length(line); line = fp.read("line"))
+ *   print(line);
+ *
+ * // Example 3: Read the complete contents from the handle
+ * const content = fp.read("all");
+ *
+ * // Example 4: Read until encountering the character ':'
+ * const field = fp.read(":");
+ */
 static uc_value_t *
 uc_fs_read(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_read_common(vm, nargs, "fs.file");
 }
 
+/**
+ * Writes a chunk of data to the file handle.
+ *
+ * In case the given data is not a string, it is converted to a string before
+ * being written into the file. String values are written as-is, integer and
+ * double values are written in decimal notation, boolean values are written as
+ * `true` or `false` while arrays and objects are converted to their JSON
+ * representation before being written. The `null` value is represented by an
+ * empty string so `file.write(null)` would be a no-op. Resource values are
+ * written in the form `<type address>`, e.g. `<fs.file 0x7f60f0981760>`.
+ *
+ * If resource, array or object values contain a `tostring()` function in their
+ * prototypes, then this function is invoked to obtain an alternative string
+ * representation of the value.
+ *
+ * Returns the number of bytes written.
+ *
+ * Returns `null` if a write error occurred.
+ *
+ * @function module:fs.file#write
+ *
+ * @param {*} data
+ * The data to be written.
+ *
+ * @returns {number|null}
+ *
+ * @example
+ * const fp = open("file.txt", "w");
+ *
+ * fp.write("Hello world!\n");
+ */
 static uc_value_t *
 uc_fs_write(uc_vm_t *vm, size_t nargs)
 {
@@ -369,18 +715,87 @@ uc_fs_isatty(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(isatty(fd));
 }
 
+/**
+ * Forces a write of all buffered data to the underlying handle.
+ *
+ * Returns `true` if the data was successfully flushed.
+ *
+ * Returns `null` on error.
+ *
+ * @function module:fs.file#flush
+ *
+ * @returns {boolean|null}
+ *
+ */
 static uc_value_t *
 uc_fs_flush(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_flush_common(vm, nargs, "fs.file");
 }
 
+/**
+ * Obtains the number of the handle's underlying file descriptor.
+ *
+ * Returns the descriptor number.
+ *
+ * Returns `null` on error.
+ *
+ * @function module:fs.file#fileno
+ *
+ * @returns {number|null}
+ */
 static uc_value_t *
 uc_fs_fileno(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_fileno_common(vm, nargs, "fs.file");
 }
 
+/**
+ * Opens a file.
+ *
+ * The mode argument specifies the way the file is opened, it may
+ * start with one of the following values:
+ *
+ * | Mode    | Description                                                                                                   |
+ * |---------|---------------------------------------------------------------------------------------------------------------|
+ * | "r"     | Opens a file for reading. The file must exist.                                                                 |
+ * | "w"     | Opens a file for writing. If the file exists, it is truncated. If the file does not exist, it is created.     |
+ * | "a"     | Opens a file for appending. Data is written at the end of the file. If the file does not exist, it is created. |
+ * | "r+"    | Opens a file for both reading and writing. The file must exist.                                              |
+ * | "w+"    | Opens a file for both reading and writing. If the file exists, it is truncated. If the file does not exist, it is created. |
+ * | "a+"    | Opens a file for both reading and appending. Data can be read and written at the end of the file. If the file does not exist, it is created. |
+ *
+ * Additionally, the following flag characters may be appended to
+ * the mode value:
+ *
+ * | Flag    | Description                                                                                                   |
+ * |---------|---------------------------------------------------------------------------------------------------------------|
+ * | "x"     | Opens a file for exclusive creation. If the file exists, the `open` call fails.                             |
+ * | "e"     | Opens a file with the `O_CLOEXEC` flag set, ensuring that the file descriptor is closed on `exec` calls.      |
+ *
+ * If the mode is one of `"w…"` or `"a…"`, the permission argument
+ * controls the filesystem permissions bits used when creating
+ * the file.
+ *
+ * Returns a file handle object associated with the opened file.
+ *
+ * @function module:fs#open
+ *
+ * @param {string} path
+ * The path to the file.
+ *
+ * @param {string} [mode="r"]
+ * The file opening mode.
+ *
+ * @param {number} [perm=0o666]
+ * The file creation permissions (for modes `w…` and `a…`)
+ *
+ * @returns {module:fs.file|null}
+ *
+ * @example
+ * // Open a file in read-only mode
+ * const fileHandle = open('file.txt', 'r');
+ */
 static uc_value_t *
 uc_fs_open(uc_vm_t *vm, size_t nargs)
 {
@@ -454,6 +869,40 @@ uc_fs_open(uc_vm_t *vm, size_t nargs)
 	return uc_resource_new(file_type, fp);
 }
 
+/**
+ * Associates a file descriptor number with a file handle object.
+ *
+ * The mode argument controls how the file handle object is opened
+ * and must match the open mode of the underlying descriptor.
+ *
+ * It may be set to one of the following values:
+ *
+ * | Mode    | Description                                                                                                  |
+ * |---------|--------------------------------------------------------------------------------------------------------------|
+ * | "r"     | Opens a file stream for reading. The file descriptor must be valid and opened in read mode.                  |
+ * | "w"     | Opens a file stream for writing. The file descriptor must be valid and opened in write mode.                 |
+ * | "a"     | Opens a file stream for appending. The file descriptor must be valid and opened in write mode.               |
+ * | "r+"    | Opens a file stream for both reading and writing. The file descriptor must be valid and opened in read/write mode. |
+ * | "w+"    | Opens a file stream for both reading and writing. The file descriptor must be valid and opened in read/write mode. |
+ * | "a+"    | Opens a file stream for both reading and appending. The file descriptor must be valid and opened in read/write mode. |
+ *
+ * Returns the file handle object associated with the file descriptor.
+ *
+ * @function module:fs#fdopen
+ *
+ * @param {number} fd
+ * The file descriptor.
+ *
+ * @param {string} [mode="r"]
+ * The open mode.
+ *
+ * @returns {Object}
+ *
+ * @example
+ * // Associate file descriptors of stdin and stdout with handles
+ * const stdinHandle = fdopen(0, 'r');
+ * const stdoutHandle = fdopen(1, 'w');
+ */
 static uc_value_t *
 uc_fs_fdopen(uc_vm_t *vm, size_t nargs)
 {
@@ -549,6 +998,25 @@ uc_fs_closedir(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Opens a directory and returns a directory handle associated with the open
+ * directory descriptor.
+ *
+ * Returns a director handle referring to the open directory.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs#opendir
+ *
+ * @param {string} path
+ * The path to the directory.
+ *
+ * @returns {Object|null}
+ *
+ * @example
+ * // Open a directory
+ * const directory = opendir('path/to/directory');
+ */
 static uc_value_t *
 uc_fs_opendir(uc_vm_t *vm, size_t nargs)
 {
@@ -566,6 +1034,24 @@ uc_fs_opendir(uc_vm_t *vm, size_t nargs)
 	return uc_resource_new(dir_type, dp);
 }
 
+/**
+ * Reads the target path of a symbolic link.
+ *
+ * Returns a string containing the target path.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs#readlink
+ *
+ * @param {string} path
+ * The path to the symbolic link.
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * // Read the value of a symbolic link
+ * const targetPath = readlink('symbolicLink');
+ */
 static uc_value_t *
 uc_fs_readlink(uc_vm_t *vm, size_t nargs)
 {
@@ -605,6 +1091,38 @@ uc_fs_readlink(uc_vm_t *vm, size_t nargs)
 
 	return res;
 }
+
+/**
+ * @typedef {Object} module:fs.FileStatResult
+ * @property {Object} dev - The device information.
+ * @property {number} dev.major - The major device number.
+ * @property {number} dev.minor - The minor device number.
+ * @property {Object} perm - The file permissions.
+ * @property {boolean} perm.setuid - Whether the setuid bit is set.
+ * @property {boolean} perm.setgid - Whether the setgid bit is set.
+ * @property {boolean} perm.sticky - Whether the sticky bit is set.
+ * @property {boolean} perm.user_read - Whether the file is readable by the owner.
+ * @property {boolean} perm.user_write - Whether the file is writable by the owner.
+ * @property {boolean} perm.user_exec - Whether the file is executable by the owner.
+ * @property {boolean} perm.group_read - Whether the file is readable by the group.
+ * @property {boolean} perm.group_write - Whether the file is writable by the group.
+ * @property {boolean} perm.group_exec - Whether the file is executable by the group.
+ * @property {boolean} perm.other_read - Whether the file is readable by others.
+ * @property {boolean} perm.other_write - Whether the file is writable by others.
+ * @property {boolean} perm.other_exec - Whether the file is executable by others.
+ * @property {number} inode - The inode number.
+ * @property {number} mode - The file mode.
+ * @property {number} nlink - The number of hard links.
+ * @property {number} uid - The user ID of the owner.
+ * @property {number} gid - The group ID of the owner.
+ * @property {number} size - The file size in bytes.
+ * @property {number} blksize - The block size for file system I/O.
+ * @property {number} blocks - The number of 512-byte blocks allocated for the file.
+ * @property {number} atime - The timestamp when the file was last accessed.
+ * @property {number} mtime - The timestamp when the file was last modified.
+ * @property {number} ctime - The timestamp when the file status was last changed.
+ * @property {string} type - The type of the file ("directory", "file", etc.).
+ */
 
 static uc_value_t *
 uc_fs_stat_common(uc_vm_t *vm, size_t nargs, bool use_lstat)
@@ -690,18 +1208,73 @@ uc_fs_stat_common(uc_vm_t *vm, size_t nargs, bool use_lstat)
 	return res;
 }
 
+/**
+ * Retrieves information about a file or directory.
+ *
+ * Returns an object containing information about the file or directory.
+ *
+ * Returns `null` if an error occurred, e.g. due to insufficient permissions.
+ *
+ * @function module:fs#stat
+ *
+ * @param {string} path
+ * The path to the file or directory.
+ *
+ * @returns {module:fs.FileStatResult|null}
+ *
+ * @example
+ * // Get information about a file
+ * const fileInfo = stat('path/to/file');
+ */
 static uc_value_t *
 uc_fs_stat(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_stat_common(vm, nargs, false);
 }
 
+/**
+ * Retrieves information about a file or directory, without following symbolic
+ * links.
+ *
+ * Returns an object containing information about the file or directory.
+ *
+ * Returns `null` if an error occurred, e.g. due to insufficient permissions.
+ *
+ * @function module:fs#lstat
+ *
+ * @param {string} path
+ * The path to the file or directory.
+ *
+ * @returns {module:fs.FileStatResult|null}
+ *
+ * @example
+ * // Get information about a directory
+ * const dirInfo = lstat('path/to/directory');
+ */
 static uc_value_t *
 uc_fs_lstat(uc_vm_t *vm, size_t nargs)
 {
 	return uc_fs_stat_common(vm, nargs, true);
 }
 
+/**
+ * Creates a new directory.
+ *
+ * Returns `true` if the directory was successfully created.
+ *
+ * Returns `null` if an error occurred, e.g. due to inexistent path.
+ *
+ * @function module:fs#mkdir
+ *
+ * @param {string} path
+ * The path to the new directory.
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ * // Create a directory
+ * mkdir('path/to/new-directory');
+ */
 static uc_value_t *
 uc_fs_mkdir(uc_vm_t *vm, size_t nargs)
 {
@@ -718,6 +1291,24 @@ uc_fs_mkdir(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Removes the specified directory.
+ *
+ * Returns `true` if the directory was successfully removed.
+ *
+ * Returns `null` if an error occurred, e.g. due to inexistent path.
+ *
+ * @function module:fs#rmdir
+ *
+ * @param {string} path
+ * The path to the directory to be removed.
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ * // Remove a directory
+ * rmdir('path/to/directory');
+ */
 static uc_value_t *
 uc_fs_rmdir(uc_vm_t *vm, size_t nargs)
 {
@@ -732,6 +1323,27 @@ uc_fs_rmdir(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Creates a new symbolic link.
+ *
+ * Returns `true` if the symlink was successfully created.
+ *
+ * Returns `null` if an error occurred, e.g. due to inexistent path.
+ *
+ * @function module:fs#symlink
+ *
+ * @param {string} target
+ * The target of the symbolic link.
+ *
+ * @param {string} path
+ * The path of the symbolic link.
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ * // Create a symbolic link
+ * symlink('target', 'path/to/symlink');
+ */
 static uc_value_t *
 uc_fs_symlink(uc_vm_t *vm, size_t nargs)
 {
@@ -748,6 +1360,24 @@ uc_fs_symlink(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Removes the specified file or symbolic link.
+ *
+ * Returns `true` if the unlink operation was successful.
+ *
+ * Returns `null` if an error occurred, e.g. due to inexistent path.
+ *
+ * @function module:fs#unlink
+ *
+ * @param {string} path
+ * The path to the file or symbolic link.
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ * // Remove a file
+ * unlink('path/to/file');
+ */
 static uc_value_t *
 uc_fs_unlink(uc_vm_t *vm, size_t nargs)
 {
@@ -762,6 +1392,21 @@ uc_fs_unlink(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Retrieves the current working directory.
+ *
+ * Returns a string containing the current working directory path.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs#getcwd
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * // Get the current working directory
+ * const cwd = getcwd();
+ */
 static uc_value_t *
 uc_fs_getcwd(uc_vm_t *vm, size_t nargs)
 {
@@ -798,6 +1443,25 @@ uc_fs_getcwd(uc_vm_t *vm, size_t nargs)
 	return res;
 }
 
+/**
+ * Changes the current working directory to the specified path.
+ *
+ * Returns `true` if the permission change was successful.
+ *
+ * Returns `null` if an error occurred, e.g. due to insufficient permissions or
+ * invalid arguments.
+ *
+ * @function module:fs#chdir
+ *
+ * @param {string} path
+ * The path to the new working directory.
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ * // Change the current working directory
+ * chdir('new-directory');
+ */
 static uc_value_t *
 uc_fs_chdir(uc_vm_t *vm, size_t nargs)
 {
@@ -812,6 +1476,28 @@ uc_fs_chdir(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Changes the permission mode bits of a file or directory.
+ *
+ * Returns `true` if the permission change was successful.
+ *
+ * Returns `null` if an error occurred, e.g. due to insufficient permissions or
+ * invalid arguments.
+ *
+ * @function module:fs#chmod
+ *
+ * @param {string} path
+ * The path to the file or directory.
+ *
+ * @param {number} mode
+ * The new mode (permissions).
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ * // Change the mode of a file
+ * chmod('path/to/file', 0o644);
+ */
 static uc_value_t *
 uc_fs_chmod(uc_vm_t *vm, size_t nargs)
 {
@@ -922,6 +1608,43 @@ uc_fs_resolve_group(uc_value_t *v, gid_t *gid)
 	}
 }
 
+/**
+ * Changes the owner and group of a file or directory.
+ *
+ * The user and group may be specified either as uid or gid number respectively,
+ * or as a string containing the user or group name, in which case it is
+ * resolved to the proper uid/gid first.
+ *
+ * If either the user or group parameter is omitted or given as `-1`,
+ * it is not changed.
+ *
+ * Returns `true` if the ownership change was successful.
+ *
+ * Returns `null` if an error occurred or if a user/group name cannot be
+ * resolved to a uid/gid value.
+ *
+ * @function module:fs#chown
+ *
+ * @param {string} path
+ * The path to the file or directory.
+ *
+ * @param {number|string} [uid=-1]
+ * The new owner's user ID. When given as number, it is used as-is, when given
+ * as string, the user name is resolved to the corresponding uid first.
+ *
+ * @param {number|string} [gid=-1]
+ * The new group's ID. When given as number, it is used as-is, when given as
+ * string, the group name is resolved to the corresponding gid first.
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ * // Change the owner of a file
+ * chown('path/to/file', 1000);
+ *
+ * // Change the group of a directory
+ * chown('/htdocs/', null, 'www-data');
+ */
 static uc_value_t *
 uc_fs_chown(uc_vm_t *vm, size_t nargs)
 {
@@ -944,6 +1667,27 @@ uc_fs_chown(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Renames or moves a file or directory.
+ *
+ * Returns `true` if the rename operation was successful.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs#rename
+ *
+ * @param {string} oldPath
+ * The current path of the file or directory.
+ *
+ * @param {string} newPath
+ * The new path of the file or directory.
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ * // Rename a file
+ * rename('old-name.txt', 'new-name.txt');
+ */
 static uc_value_t *
 uc_fs_rename(uc_vm_t *vm, size_t nargs)
 {
@@ -988,6 +1732,24 @@ uc_fs_glob(uc_vm_t *vm, size_t nargs)
 	return arr;
 }
 
+/**
+ * Retrieves the directory name of a path.
+ *
+ * Returns the directory name component of the specified path.
+ *
+ * Returns `null` if the path argument is not a string.
+ *
+ * @function module:fs#dirname
+ *
+ * @param {string} path
+ * The path to extract the directory name from.
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * // Get the directory name of a path
+ * const directoryName = dirname('/path/to/file.txt');
+ */
 static uc_value_t *
 uc_fs_dirname(uc_vm_t *vm, size_t nargs)
 {
@@ -1019,6 +1781,24 @@ uc_fs_dirname(uc_vm_t *vm, size_t nargs)
 	return ucv_string_new_length(s, i + 1);
 }
 
+/**
+ * Retrieves the base name of a path.
+ *
+ * Returns the base name component of the specified path.
+ *
+ * Returns `null` if the path argument is not a string.
+ *
+ * @function module:fs#basename
+ *
+ * @param {string} path
+ * The path to extract the base name from.
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * // Get the base name of a path
+ * const baseName = basename('/path/to/file.txt');
+ */
 static uc_value_t *
 uc_fs_basename(uc_vm_t *vm, size_t nargs)
 {
@@ -1053,6 +1833,26 @@ uc_fs_lsdir_sort_fn(const void *k1, const void *k2)
 	return strcmp(ucv_string_get(*v1), ucv_string_get(*v2));
 }
 
+/**
+ * Lists the content of a directory.
+ *
+ * Returns a sorted array of the names of files and directories in the specified
+ * directory.
+ *
+ * Returns `null` if an error occurred, e.g. if the specified directory cannot
+ * be opened.
+ *
+ * @function module:fs#lsdir
+ *
+ * @param {string} path
+ * The path to the directory.
+ *
+ * @returns {string[]|null}
+ *
+ * @example
+ * // List the content of a directory
+ * const fileList = lsdir('/path/to/directory');
+ */
 static uc_value_t *
 uc_fs_lsdir(uc_vm_t *vm, size_t nargs)
 {
@@ -1108,6 +1908,37 @@ uc_fs_lsdir(uc_vm_t *vm, size_t nargs)
 	return res;
 }
 
+/**
+ * Creates a unique, ephemeral temporary file.
+ *
+ * Creates a new temporary file, opens it in read and write mode, unlinks it and
+ * returns a file handle object referring to the yet open but deleted file.
+ *
+ * Upon closing the handle, the associated file will automatically vanish from
+ * the system.
+ *
+ * The optional path template argument may be used to override the path and name
+ * chosen for the temporary file. If the path template contains no path element,
+ * `/tmp/` is prepended, if it does not end with `XXXXXX`, then  * `.XXXXXX` is
+ * appended to it. The `XXXXXX` sequence is replaced with a random value
+ * ensuring uniqueness of the temporary file name.
+ *
+ * Returns a file handle object referring to the ephemeral file on success.
+ *
+ * Returns `null` if an error occurred, e.g. on insufficient permissions or
+ * inaccessible directory.
+ *
+ * @function module:fs#mkstemp
+ *
+ * @param {string} [template="/tmp/XXXXXX"]
+ * The path template to use when forming the temporary file name.
+ *
+ * @returns {Object|null}
+ *
+ * @example
+ * // Create a unique temporary file in the current working directory
+ * const tempFile = mkstemp('./data-XXXXXX');
+ */
 static uc_value_t *
 uc_fs_mkstemp(uc_vm_t *vm, size_t nargs)
 {
@@ -1165,6 +1996,44 @@ uc_fs_mkstemp(uc_vm_t *vm, size_t nargs)
 	return uc_resource_new(file_type, fp);
 }
 
+/**
+ * Checks the accessibility of a file or directory.
+ *
+ * The optional modes argument specifies the access modes which should be
+ * checked. A file is only considered accessible if all access modes specified
+ * in the modes argument are possible.
+ *
+ * The following modes are recognized:
+ *
+ * | Mode | Description                           |
+ * |------|---------------------------------------|
+ * | "r"  | Tests whether the file is readable.   |
+ * | "w"  | Tests whether the file is writable.   |
+ * | "x"  | Tests whether the file is executable. |
+ * | "f"  | Tests whether the file exists.        |
+ *
+ * Returns `true` if the given path is accessible or `false` when it is not.
+ *
+ * Returns `null` if an error occurred, e.g. due to inaccessible intermediate
+ * path components, invalid path arguments etc.
+ *
+ * @function module:fs#access
+ *
+ * @param {string} path
+ * The path to the file or directory.
+ *
+ * @param {number} [mode="f"]
+ * Optional access mode.
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ * // Check file read and write accessibility
+ * const isAccessible = access('path/to/file', 'rw');
+ *
+ * // Check execute permissions
+ * const mayExecute = access('/usr/bin/example', 'x');
+ */
 static uc_value_t *
 uc_fs_access(uc_vm_t *vm, size_t nargs)
 {
@@ -1208,6 +2077,31 @@ uc_fs_access(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Reads the content of a file, optionally limited to the given amount of bytes.
+ *
+ * Returns a string containing the file contents.
+ *
+ * Returns `null` if an error occurred, e.g. due to insufficient permissions.
+ *
+ * @function module:fs#readfile
+ *
+ * @param {string} path
+ * The path to the file.
+ *
+ * @param {number} [limit]
+ * Number of bytes to limit the result to. When omitted, the entire content is
+ * returned.
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * // Read first 100 bytes of content
+ * const content = readfile('path/to/file', 100);
+ *
+ * // Read entire file content
+ * const content = readfile('path/to/file');
+ */
 static uc_value_t *
 uc_fs_readfile(uc_vm_t *vm, size_t nargs)
 {
@@ -1274,6 +2168,53 @@ uc_fs_readfile(uc_vm_t *vm, size_t nargs)
 	return res;
 }
 
+/**
+ * Writes the given data to a file, optionally truncated to the given amount
+ * of bytes.
+ *
+ * In case the given data is not a string, it is converted to a string before
+ * being written into the file. String values are written as-is, integer and
+ * double values are written in decimal notation, boolean values are written as
+ * `true` or `false` while arrays and objects are converted to their JSON
+ * representation before being written into the file. The `null` value is
+ * represented by an empty string so `writefile(…, null)` would write an empty
+ * file. Resource values are written in the form `<type address>`, e.g.
+ * `<fs.file 0x7f60f0981760>`.
+ *
+ * If resource, array or object values contain a `tostring()` function in their
+ * prototypes, then this function is invoked to obtain an alternative string
+ * representation of the value.
+ *
+ * If a file already exists at the given path, it is truncated. If no file
+ * exists, it is created with default permissions 0o666 masked by the currently
+ * effective umask.
+ *
+ * Returns the number of bytes written.
+ *
+ * Returns `null` if an error occurred, e.g. due to insufficient permissions.
+ *
+ * @function module:fs#writefile
+ *
+ * @param {string} path
+ * The path to the file.
+ *
+ * @param {*} data
+ * The data to be written.
+ *
+ * @param {number} [limit]
+ * Truncates the amount of data to be written to the specified amount of bytes.
+ * When omitted, the entire content is written.
+ *
+ * @returns {number|null}
+ *
+ * @example
+ * // Write string to a file
+ * const bytesWritten = writefile('path/to/file', 'Hello, World!');
+ *
+ * // Write object as JSON to a file and limit to 1024 bytes at most
+ * const obj = { foo: "Hello world", bar: true, baz: 123 };
+ * const bytesWritten = writefile('debug.txt', obj, 1024);
+ */
 static uc_value_t *
 uc_fs_writefile(uc_vm_t *vm, size_t nargs)
 {
@@ -1333,6 +2274,24 @@ uc_fs_writefile(uc_vm_t *vm, size_t nargs)
 	return ucv_uint64_new(wlen);
 }
 
+/**
+ * Resolves the absolute path of a file or directory.
+ *
+ * Returns a string containing the resolved path.
+ *
+ * Returns `null` if an error occurred, e.g. due to insufficient permissions.
+ *
+ * @function module:fs#realpath
+ *
+ * @param {string} path
+ * The path to the file or directory.
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * // Resolve the absolute path of a file
+ * const absolutePath = realpath('path/to/file', 'utf8');
+ */
 static uc_value_t *
 uc_fs_realpath(uc_vm_t *vm, size_t nargs)
 {
@@ -1354,6 +2313,26 @@ uc_fs_realpath(uc_vm_t *vm, size_t nargs)
 	return rv;
 }
 
+/**
+ * Creates a pipe and returns file handle objects associated with the read- and
+ * write end of the pipe respectively.
+ *
+ * Returns a two element array containing both a file handle object open in read
+ * mode referring to the read end of the pipe and a file handle object open in
+ * write mode referring to the write end of the pipe.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs#pipe
+ *
+ * @returns {Object[]|null}
+ *
+ * @example
+ * // Create a pipe
+ * const pipeHandles = pipe();
+ * pipeHandles[1].write("Hello world\n");
+ * print(pipeHandles[0].read("line"));
+ */
 static uc_value_t *
 uc_fs_pipe(uc_vm_t *vm, size_t nargs)
 {
