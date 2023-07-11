@@ -68,6 +68,8 @@ jobs:
         uses: openwrt/gh-action-sdk@v5
         env:
           ARCH: ${{ matrix.arch }}
+          NO_DEFAULT_FEEDS: 1
+          EXTRA_FEEDS: "src-git|base|https://github.com/openwrt/openwrt.git"
           FEEDNAME: ucode_ci
           PACKAGES: ucode
 
