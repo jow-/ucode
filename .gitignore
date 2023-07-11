@@ -1,4 +1,5 @@
 Makefile
+!/openwrt/ucode/Makefile
 CMakeCache.txt
 CMakeFiles
 *.cmake

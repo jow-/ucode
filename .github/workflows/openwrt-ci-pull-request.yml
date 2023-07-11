@@ -5,6 +5,7 @@ on:
     branches-ignore:
       - master
   pull_request:
+    types: [opened, reopened]
 
 env:
   CI_ENABLE_UNIT_TESTING: 1
@@ -38,23 +39,54 @@ jobs:
             tests/cram/**/*.t.err
 
   sdk_build:
-    name: Build with OpenWrt ${{ matrix.sdk_platform }} SDK (out of tree)
+    name: Build with OpenWrt ${{ matrix.arch }} SDK
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-        sdk_platform:
-          - ath79-generic
-          - imx-cortexa9
-          - malta-be
-          - mediatek-mt7622
+        include:
+          - arch: mips_24kc
+            target: ath79-generic
+
+          - arch: arm_cortex-a9_neon
+            target: imx-cortexa9
+
+          - arch: mipsel_24kc
+            target: malta-le
+
+          - arch: aarch64_cortex-a53
+            target: mediatek-mt7622
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-      - name: Out of tree build with OpenWrt ${{ matrix.sdk_platform }} SDK
-        uses: ynezz/gh-actions-openwrt-ci-sdk@v0.0.2
+      - name: Determine branch name
+        run: |
+          BRANCH="${GITHUB_BASE_REF#refs/heads/}"
+          echo "Building for $BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: Build with OpenWrt ${{ matrix.arch }} SDK
+        uses: openwrt/gh-action-sdk@v5
         env:
-          CI_TARGET_SDK_RELEASE: master
-          CI_TARGET_SDK_IMAGE: ${{ matrix.sdk_platform }}
+          ARCH: ${{ matrix.arch }}
+          FEEDNAME: ucode_ci
+          PACKAGES: ucode
+
+      - name: Move created packages to project dir
+        run: cp bin/packages/${{ matrix.arch }}/ucode_ci/*.ipk . || true
+
+      - name: Store packages
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.arch }}-packages
+          path: "*.ipk"
+
+      - name: Store logs
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.arch }}-logs
+          path: logs/
