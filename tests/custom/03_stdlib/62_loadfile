@@ -134,7 +134,7 @@ Compiling a syntax error (should fail with syntax error exception)
 Runtime error: Unable to compile source file './files/test6.uc':
 
   | Syntax error: Expecting expression
-  | In line 1, byte 5:
+  | In line 2, byte 1:
   |
   |  `1 +`
   |      ^-- Near here

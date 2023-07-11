@@ -146,7 +146,7 @@ A compilation error in the file triggers an exception.
 Runtime error: Unable to compile source file './files/broken.uc':
 
   | Syntax error: Expecting label
-  | In line 3, byte 11:
+  | In line 4, byte 1:
   |
   |  `    return {`
   |   Near here --^

@@ -3,7 +3,7 @@ buffer, the source code context line was not properly printed.
 
 -- Expect stderr --
 Syntax error: Expecting expression
-In line 1, byte 7:
+In line 2, byte 1:
 
  `{% 1+`
        ^-- Near here

@@ -12,7 +12,7 @@ to be incorrectly shifted.
 
 -- Expect stderr --
 Error
-In line 3, byte 12:
+In line 3, byte 13:
 
  `    die("Error");`
   Near here -----^
