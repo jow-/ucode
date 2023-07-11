@@ -5647,6 +5647,248 @@ uc_callfunc(uc_vm_t *vm, size_t nargs)
 }
 
 
+static const char *signal_names[] = {
+#if defined(SIGINT)
+	[SIGINT] = "INT",
+#endif
+#if defined(SIGILL)
+	[SIGILL] = "ILL",
+#endif
+#if defined(SIGABRT)
+	[SIGABRT] = "ABRT",
+#endif
+#if defined(SIGFPE)
+	[SIGFPE] = "FPE",
+#endif
+#if defined(SIGSEGV)
+	[SIGSEGV] = "SEGV",
+#endif
+#if defined(SIGTERM)
+	[SIGTERM] = "TERM",
+#endif
+#if defined(SIGHUP)
+	[SIGHUP] = "HUP",
+#endif
+#if defined(SIGQUIT)
+	[SIGQUIT] = "QUIT",
+#endif
+#if defined(SIGTRAP)
+	[SIGTRAP] = "TRAP",
+#endif
+#if defined(SIGKILL)
+	[SIGKILL] = "KILL",
+#endif
+#if defined(SIGPIPE)
+	[SIGPIPE] = "PIPE",
+#endif
+#if defined(SIGALRM)
+	[SIGALRM] = "ALRM",
+#endif
+#if defined(SIGSTKFLT)
+	[SIGSTKFLT] = "STKFLT",
+#endif
+#if defined(SIGPWR)
+	[SIGPWR] = "PWR",
+#endif
+#if defined(SIGBUS)
+	[SIGBUS] = "BUS",
+#endif
+#if defined(SIGSYS)
+	[SIGSYS] = "SYS",
+#endif
+#if defined(SIGURG)
+	[SIGURG] = "URG",
+#endif
+#if defined(SIGSTOP)
+	[SIGSTOP] = "STOP",
+#endif
+#if defined(SIGTSTP)
+	[SIGTSTP] = "TSTP",
+#endif
+#if defined(SIGCONT)
+	[SIGCONT] = "CONT",
+#endif
+#if defined(SIGCHLD)
+	[SIGCHLD] = "CHLD",
+#endif
+#if defined(SIGTTIN)
+	[SIGTTIN] = "TTIN",
+#endif
+#if defined(SIGTTOU)
+	[SIGTTOU] = "TTOU",
+#endif
+#if defined(SIGPOLL)
+	[SIGPOLL] = "POLL",
+#endif
+#if defined(SIGXFSZ)
+	[SIGXFSZ] = "XFSZ",
+#endif
+#if defined(SIGXCPU)
+	[SIGXCPU] = "XCPU",
+#endif
+#if defined(SIGVTALRM)
+	[SIGVTALRM] = "VTALRM",
+#endif
+#if defined(SIGPROF)
+	[SIGPROF] = "PROF",
+#endif
+#if defined(SIGUSR1)
+	[SIGUSR1] = "USR1",
+#endif
+#if defined(SIGUSR2)
+	[SIGUSR2] = "USR2",
+#endif
+};
+
+/**
+ * Set or query process signal handler function.
+ *
+ * When invoked with two arguments, a signal specification and a signal handler
+ * value, this function configures a new process signal handler.
+ *
+ * When invoked with one argument, a signal specification, this function returns
+ * the currently configured handler for the given signal.
+ *
+ * The signal specification might either be an integer signal number or a string
+ * value containing a signal name (with or without "SIG" prefix). Signal names
+ * are treated case-insensitively.
+ *
+ * The signal handler might be either a callable function value or one of the
+ * two special string values `"ignore"` and `"default"`. Passing `"ignore"` will
+ * mask the given process signal while `"default"` will restore the operating
+ * systems default behaviour for the given signal.
+ *
+ * In case a callable handler function is provided, it is invoked at the
+ * earliest  opportunity after receiving the corresponding signal from the
+ * operating system. The invoked function will receive a single argument, the
+ * number of the signal it is invoked for.
+ *
+ * Note that within the ucode VM, process signals are not immediately delivered,
+ * instead the VM keeps track of received signals and delivers them to the ucode
+ * script environment at the next opportunity, usually before executing the next
+ * byte code instruction. This means that if a signal is received while
+ * performing a computationally expensive operation in C mode, such as a complex
+ * regexp match, the corresponding ucode signal handler will only be invoked
+ * after that operation concluded and control flow returns to the VM.
+ *
+ * Returns the signal handler function or one of the special values `"ignore"`
+ * or `"default"` corresponding to the given signal specification.
+ *
+ * Returns `null` if an invalid signal spec or signal handler was provided.
+ *
+ * Returns `null` if changing the signal action failed, e.g. due to insufficient
+ * permission, or when attempting to ignore a non-ignorable signal.
+ *
+ * @function module:core#signal
+ *
+ * @param {number|string} signal
+ * The signal to query/set handler for.
+ *
+ * @param {Function|string} [handler]
+ * The signal handler to install for the given signal.
+ *
+ * @returns {Function|string}
+ *
+ * @example
+ * // Ignore signals
+ * signal('INT', 'ignore');      // "ignore"
+ * signal('SIGINT', 'ignore');   // "ignore" (equivalent to 'INT')
+ * signal('sigterm', 'ignore');  // "ignore" (signal names are case insensitive)
+ * signal(9, 'ignore');          // null (SIGKILL cannot be ignored)
+ *
+ * // Restore signal default behavior
+ * signal('INT', 'default');     // "default"
+ * signal('foobar', 'default');  // null (unknown signal name)
+ * signal(-313, 'default');      // null (invalid signal number)
+ *
+ * // Set custom handler function
+ * function intexit(signo) {
+ *   printf("I received signal number %d\n", signo);
+ *   exit(1);
+ * }
+ *
+ * signal('SIGINT', intexit);    // returns intexit
+ * signal('SIGINT') == intexit;  // true
+ */
+static uc_value_t *
+uc_signal(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *signame = uc_fn_arg(0);
+	uc_value_t *sighandler = uc_fn_arg(1);
+	struct sigaction sa = { 0 };
+	char *sigstr;
+	int sig;
+
+	if (ucv_type(signame) == UC_INTEGER) {
+		sig = (int)ucv_int64_get(signame);
+
+		if (errno || sig >= (int)ARRAY_SIZE(signal_names) || !signal_names[sig])
+			return NULL;
+	}
+	else if (ucv_type(signame) == UC_STRING) {
+		sigstr = ucv_string_get(signame);
+
+		if (!strncasecmp(sigstr, "SIG", 3))
+			sigstr += 3;
+
+		for (sig = 0; sig < (int)ARRAY_SIZE(signal_names); sig++)
+			if (signal_names[sig] && !strcasecmp(signal_names[sig], sigstr))
+				break;
+
+		if (sig == (int)ARRAY_SIZE(signal_names))
+			return NULL;
+	}
+	else {
+		return NULL;
+	}
+
+	/* Query current signal handler state */
+	if (nargs < 2) {
+		if (sigaction(sig, NULL, &sa) != 0)
+			return NULL;
+
+		if (sa.sa_handler == SIG_IGN)
+			return ucv_string_new("ignore");
+
+		if (sa.sa_handler == SIG_DFL)
+			return ucv_string_new("default");
+
+		return ucv_get(ucv_array_get(vm->signal.handler, sig));
+	}
+
+	/* Install new signal handler */
+	if (ucv_type(sighandler) == UC_STRING) {
+		sigstr = ucv_string_get(sighandler);
+
+		sa.sa_flags = SA_ONSTACK | SA_RESTART;
+		sigemptyset(&sa.sa_mask);
+
+		if (!strcmp(sigstr, "ignore"))
+			sa.sa_handler = SIG_IGN;
+		else if (!strcmp(sigstr, "default"))
+			sa.sa_handler = SIG_DFL;
+		else
+			return NULL;
+
+		if (sigaction(sig, &sa, NULL) != 0)
+			return NULL;
+
+		ucv_array_set(vm->signal.handler, sig, NULL);
+	}
+	else if (ucv_is_callable(sighandler)) {
+		if (sigaction(sig, &vm->signal.sa, NULL) != 0)
+			return NULL;
+
+		ucv_array_set(vm->signal.handler, sig, ucv_get(sighandler));
+	}
+	else {
+		return NULL;
+	}
+
+	return ucv_get(sighandler);
+}
+
+
 const uc_function_list_t uc_stdlib_functions[] = {
 	{ "chr",		uc_chr },
 	{ "die",		uc_die },
@@ -5718,6 +5960,7 @@ const uc_function_list_t uc_stdlib_functions[] = {
 	{ "loadstring",	uc_loadstring },
 	{ "loadfile",	uc_loadfile },
 	{ "call",		uc_callfunc },
+	{ "signal",		uc_signal },
 };
 
 
