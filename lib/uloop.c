@@ -1155,8 +1155,22 @@ static void close_pipe(void *ud)
 }
 
 
+static struct {
+	struct uloop_fd ufd;
+	uc_vm_t *vm;
+} signal_handle;
+
+static void
+uc_uloop_signal_cb(struct uloop_fd *ufd, unsigned int events)
+{
+	if (uc_vm_signal_dispatch(signal_handle.vm) != EXCEPTION_NONE)
+		uloop_end();
+}
+
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
+	int signal_fd;
+
 	uc_function_list_register(scope, global_fns);
 
 #define ADD_CONST(x) ucv_object_add(scope, #x, ucv_int64_new(x))
@@ -1175,4 +1189,14 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	object_registry = ucv_array_new(vm);
 
 	uc_vm_registry_set(vm, "uloop.registry", object_registry);
+
+	signal_fd = uc_vm_signal_notifyfd(vm);
+
+	if (signal_fd != -1 && uloop_init() == 0) {
+		signal_handle.vm = vm;
+		signal_handle.ufd.cb = uc_uloop_signal_cb;
+		signal_handle.ufd.fd = signal_fd;
+
+		uloop_fd_add(&signal_handle.ufd, ULOOP_READ);
+	}
 }
