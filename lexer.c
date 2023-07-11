@@ -94,9 +94,9 @@ fill_buf(uc_lexer_t *lex) {
 
 static int
 update_line(uc_lexer_t *lex, int ch) {
-	if (ch == '\n' || ch == EOF)
+	if (ch == '\n')
 		uc_source_line_next(lex->source);
-	else
+	else if (ch != EOF)
 		uc_source_line_update(lex->source, 1);
 
 	lex->source->off++;
