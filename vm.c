@@ -21,6 +21,8 @@
 #include <math.h>
 #include <errno.h>
 #include <limits.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "ucode/vm.h"
 #include "ucode/compiler.h"
@@ -142,6 +144,69 @@ uc_vm_alloc_global_scope(uc_vm_t *vm)
 static void
 uc_vm_output_exception(uc_vm_t *vm, uc_exception_t *ex);
 
+static uc_vm_t *signal_handler_vm;
+
+static void
+uc_vm_signal_handler(int sig)
+{
+	assert(signal_handler_vm);
+
+	uc_vm_signal_raise(signal_handler_vm, sig);
+}
+
+#ifdef __APPLE__
+static int pipe2(int pipefd[2], int flags)
+{
+	if (pipe(pipefd) != 0)
+		return -1;
+
+	if (flags & O_CLOEXEC) {
+		if (fcntl(pipefd[0], F_SETFD, FD_CLOEXEC) != 0 ||
+		    fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) != 0) {
+			close(pipefd[0]);
+			close(pipefd[1]);
+
+			return -1;
+		}
+
+		flags &= ~O_CLOEXEC;
+	}
+
+	if (fcntl(pipefd[0], F_SETFL, flags) != 0 ||
+	    fcntl(pipefd[1], F_SETFL, flags) != 0) {
+		close(pipefd[0]);
+		close(pipefd[1]);
+
+		return -1;
+	}
+
+	return 0;
+}
+#endif
+
+static void
+uc_vm_signal_handlers_setup(uc_vm_t *vm)
+{
+	memset(&vm->signal, 0, sizeof(vm->signal));
+
+	vm->signal.sigpipe[0] = -1;
+	vm->signal.sigpipe[1] = -1;
+
+	if (!vm->config->setup_signal_handlers)
+		return;
+
+	if (pipe2(vm->signal.sigpipe, O_CLOEXEC | O_NONBLOCK) != 0)
+		return;
+
+	signal_handler_vm = vm;
+
+	vm->signal.handler = ucv_array_new_length(vm, NSIG - 1);
+
+	vm->signal.sa.sa_handler = uc_vm_signal_handler;
+	vm->signal.sa.sa_flags = SA_RESTART | SA_ONSTACK;
+	sigemptyset(&vm->signal.sa.sa_mask);
+}
+
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 {
 	vm->exception.type = EXCEPTION_NONE;
@@ -165,6 +230,8 @@ void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 	uc_vm_exception_handler_set(vm, uc_vm_output_exception);
 
 	uc_vm_trace_set(vm, 0);
+
+	uc_vm_signal_handlers_setup(vm);
 }
 
 void uc_vm_free(uc_vm_t *vm)
@@ -2564,6 +2631,53 @@ uc_vm_output_exception(uc_vm_t *vm, uc_exception_t *ex)
 	fprintf(stderr, "\n");
 }
 
+uc_exception_type_t
+uc_vm_signal_dispatch(uc_vm_t *vm)
+{
+	uc_exception_type_t ex;
+	uc_value_t *handler;
+	uint64_t mask;
+	size_t i, j;
+	int sig, rv;
+
+	if (!vm->config->setup_signal_handlers)
+		return EXCEPTION_NONE;
+
+	for (i = 0; i < ARRAY_SIZE(vm->signal.raised); i++) {
+		if (!vm->signal.raised[i])
+			continue;
+
+		do {
+			rv = read(vm->signal.sigpipe[0], &sig, sizeof(sig));
+		} while (rv > 0 || (rv == -1 && errno == EINTR));
+
+		for (j = 0; j < 64; j++) {
+			mask = 1ull << j;
+
+			if (vm->signal.raised[i] & mask) {
+				vm->signal.raised[i] &= ~mask;
+
+				sig = i * 64 + j;
+				handler = ucv_array_get(vm->signal.handler, sig);
+
+				if (ucv_is_callable(handler)) {
+					uc_vm_stack_push(vm, ucv_get(handler));
+					uc_vm_stack_push(vm, ucv_int64_new(sig));
+
+					ex = uc_vm_call(vm, false, 1);
+
+					if (ex != EXCEPTION_NONE)
+						return ex;
+
+					ucv_put(uc_vm_stack_pop(vm));
+				}
+			}
+		}
+	}
+
+	return EXCEPTION_NONE;
+}
+
 static uc_vm_status_t
 uc_vm_execute_chunk(uc_vm_t *vm)
 {
@@ -2812,6 +2926,7 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 			break;
 		}
 
+exception:
 		/* previous instruction raised exception */
 		if (vm->exception.type != EXCEPTION_NONE) {
 			/* VM termination was requested */
@@ -2840,6 +2955,10 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 				chunk = uc_vm_frame_chunk(frame);
 			}
 		}
+
+		/* run handler for signal(s) delivered during previous instruction */
+		if (uc_vm_signal_dispatch(vm) != EXCEPTION_NONE)
+			goto exception;
 	}
 
 	return STATUS_OK;
@@ -3056,4 +3175,23 @@ uc_vm_gc_stop(uc_vm_t *vm)
 	vm->gc_flags &= ~GC_ENABLED;
 
 	return true;
+}
+
+void
+uc_vm_signal_raise(uc_vm_t *vm, int signo)
+{
+	uint8_t signum = signo;
+
+	if (signo <= 0 || signo >= NSIG)
+		return;
+
+	vm->signal.raised[signo / 64] |= (1ull << (signo % 64));
+
+	write(vm->signal.sigpipe[1], &signum, sizeof(signum));
+}
+
+int
+uc_vm_signal_notifyfd(uc_vm_t *vm)
+{
+	return vm->signal.sigpipe[0];
 }

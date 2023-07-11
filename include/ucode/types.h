@@ -20,6 +20,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <regex.h>
+#include <signal.h>
 #include <json-c/json.h>
 
 #include "util.h"
@@ -230,6 +231,7 @@ typedef struct {
 	bool raw_mode;
 	uc_search_path_t module_search_path;
 	uc_search_path_t force_dynlink_list;
+	bool setup_signal_handlers;
 } uc_parse_config_t;
 
 extern uc_parse_config_t uc_default_parse_config;
@@ -311,6 +313,12 @@ struct uc_vm {
 	uc_stringbuf_t *strbuf;
 	uc_exception_handler_t *exhandler;
 	FILE *output;
+	struct {
+		uint64_t raised[((NSIG + 63) & ~63) / 64];
+		uc_value_t *handler;
+		struct sigaction sa;
+		int sigpipe[2];
+	} signal;
 };
 
 

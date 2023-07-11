@@ -156,4 +156,8 @@ uc_vm_raise_exception(uc_vm_t *vm, uc_exception_type_t type, const char *fmt, ..
 uc_vm_status_t uc_vm_execute(uc_vm_t *vm, uc_program_t *fn, uc_value_t **retval);
 uc_value_t *uc_vm_invoke(uc_vm_t *vm, const char *fname, size_t nargs, ...);
 
+uc_exception_type_t uc_vm_signal_dispatch(uc_vm_t *vm);
+void uc_vm_signal_raise(uc_vm_t *vm, int signo);
+int uc_vm_signal_notifyfd(uc_vm_t *vm);
+
 #endif /* UCODE_VM_H */
