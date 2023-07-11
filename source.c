@@ -74,22 +74,23 @@ size_t
 uc_source_get_line(uc_source_t *source, size_t *offset)
 {
 	uc_lineinfo_t *lines = &source->lineinfo;
-	size_t i, pos = 0, line = 0, lastoff = 0;
+	size_t i, pos = 0, line = 1, lastoff = 0;
 
-	for (i = 0; i < lines->count; i++) {
-		if (lines->entries[i] & 0x80) {
-			lastoff = pos;
-			line++;
-			pos++;
-		}
-
-		pos += (lines->entries[i] & 0x7f);
-
-		if (pos >= *offset) {
-			*offset -= lastoff - 1;
+	for (i = 0; i <= lines->count; i++) {
+		if (pos >= *offset || i == lines->count) {
+			*offset = (*offset - lastoff) + 1;
 
 			return line;
 		}
+
+		/* don't count first line jump as actual byte */
+		if (i > 0 && (lines->entries[i] & 0x80)) {
+			line++;
+			pos++;
+			lastoff = pos;
+		}
+
+		pos += (lines->entries[i] & 0x7f);
 	}
 
 	return 0;
@@ -125,10 +126,13 @@ uc_source_type_test(uc_source_t *source)
 		type = UC_SOURCE_TYPE_PRECOMPILED;
 	}
 	else {
-		uc_source_line_update(source, source->off);
-
-		if (c == '\n')
+		if (c == '\n') {
+			uc_source_line_update(source, source->off - 1);
 			uc_source_line_next(source);
+		}
+		else {
+			uc_source_line_update(source, source->off);
+		}
 	}
 
 	if (fseek(fp, -(long)rlen, SEEK_CUR) == -1)

@@ -134,7 +134,7 @@ return {
 Runtime error: Unable to compile source file './files/require/test/broken.uc':
 
   | Syntax error: Expecting label
-  | In line 2, byte 10:
+  | In line 3, byte 1:
   |
   |  `return {`
   |           ^-- Near here
