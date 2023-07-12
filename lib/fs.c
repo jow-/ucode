@@ -15,7 +15,9 @@
  */
 
 /**
- * This module provides functions for interacting with the file system.
+ * # Filesystem Access
+ *
+ * The `fs` module provides functions for interacting with the file system.
  *
  * Functions can be individually imported and directly accessed using the
  * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
@@ -256,7 +258,11 @@ uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
 /**
  * Represents a handle for interacting with a program launched by `popen()`.
  *
- * @namespace module:fs.proc
+ * @class module:fs.proc
+ * @hideconstructor
+ *
+ * @see {@link module:fs#popen|popen()}
+ *
  * @example
  *
  * const handle = popen(…);
@@ -522,9 +528,17 @@ uc_fs_popen(uc_vm_t *vm, size_t nargs)
 
 
 /**
- * Represents a handle for interacting with a file opened by `open()`.
+ * Represents a handle for interacting with a file opened by one of the file
+ * open functions.
  *
- * @namespace module:fs.file
+ * @class module:fs.file
+ * @hideconstructor
+ *
+ * @see {@link module:fs#open|open()}
+ * @see {@link module:fs#fdopen|fdopen()}
+ * @see {@link module:fs#mkstemp|mkstemp()}
+ * @see {@link module:fs#pipe|pipe()}
+ *
  * @example
  *
  * const handle = open(…);
@@ -1044,7 +1058,11 @@ uc_fs_fdopen(uc_vm_t *vm, size_t nargs)
 /**
  * Represents a handle for interacting with a directory opened by `opendir()`.
  *
- * @namespace module:fs.dir
+ * @class module:fs.dir
+ * @hideconstructor
+ *
+ * @see {@link module:fs#opendir|opendir()}
+ *
  * @example
  *
  * const handle = opendir(…);

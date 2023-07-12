@@ -15,7 +15,7 @@
  */
 
 /**
- * Builtin functions.
+ * # Builtin functions
  *
  * The core namespace is not an actual module but refers to the set of
  * builtin functions and properties available to `ucode` scripts.

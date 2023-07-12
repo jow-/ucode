@@ -14,5 +14,8 @@ contrib/lemon
 tests/cram/*.t.err
 tests/cram/.venv
 examples/
-docs/*
-!docs/*.md
+/docs/*
+!/docs/*.md
+!/docs/CNAME
+!/docs/ucode.js
+!/docs/ucode.css

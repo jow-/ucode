@@ -13,17 +13,43 @@
 		"jsdoc/c-transpiler"
 
 	],
-	"templates": {
-		"referenceTitle": "OpenWrt ucode library reference",
-		"disableSort": false,
-		"collapse": true,
-		"resources_": {
-			"OpenWrt": "https://openwrt.org/"
+	"templates2": {
+		"cleverLinks": true,
+		"monospaceLinks": true,
+		"default": {
+			"outputSourceFiles": true,
+			"useLongnameInNav": true
 		}
 	},
+	"markdown": {
+		"hardwrap": false,
+		"idInHeadings": true
+	},
 	"opts": {
+		"template": "node_modules/clean-jsdoc-theme",
 		"destination": "docs",
 		"recurse": true,
-		"readme": "docs/README.md"
+		"readme": "docs/README.md",
+		"theme_opts": {
+			"default_theme": "light",
+			"title": "ucode Documentation",
+			"homepageTitle": "ucode - Reference Documentation",
+			"displayModuleHeader": true,
+			"prefixModuleToSidebarItems_experimental": true,
+			"includeFilesListInHomepage": true,
+			"include_css": [
+				"docs/ucode.css"
+			],
+			"include_js": [
+				"docs/ucode.js"
+			],
+			"menu": [
+				{
+					"title": "GitHub Project Page",
+					"link": "https://github.com/jow-/ucode",
+					"class": "github-home"
+				}
+			]
+		}
 	}
 }

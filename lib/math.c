@@ -15,7 +15,9 @@
  */
 
 /**
- * This module bundles various mathematical functions.
+ * # Mathematical Functions
+ *
+ * The `math` module bundles various mathematical and trigonometrical functions.
  *
  * Functions can be individually imported and directly accessed using the
  * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
