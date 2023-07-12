@@ -1,0 +1,594 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>
+      lib/math.c - Documentation
+  </title>
+
+  <link href="https://www.braintreepayments.com/images/favicon-ccda0b14.png" rel="icon" type="image/png">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.7.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+
+  <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+  <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+  
+  <link type="text/css" rel="stylesheet" href="styles/collapse.css">
+  
+
+  
+
+  <!-- start Mixpanel -->
+  <script type="text/javascript">(function(e,a){if(!a.__SV){var b=window;try{var c,l,i,j=b.location,g=j.hash;c=function(a,b){return(l=a.match(RegExp(b+"=([^&]*)")))?l[1]:null};g&&c(g,"state")&&(i=JSON.parse(decodeURIComponent(c(g,"state"))),"mpeditor"===i.action&&(b.sessionStorage.setItem("_mpcehash",g),history.replaceState(i.desiredHash||"",e.title,j.pathname+j.search)))}catch(m){}var k,h;window.mixpanel=a;a._i=[];a.init=function(b,c,f){function e(b,a){var c=a.split(".");2==c.length&&(b=b[c[0]],a=c[1]);b[a]=function(){b.push([a].concat(Array.prototype.slice.call(arguments,
+  0)))}}var d=a;"undefined"!==typeof f?d=a[f]=[]:f="mixpanel";d.people=d.people||[];d.toString=function(b){var a="mixpanel";"mixpanel"!==f&&(a+="."+f);b||(a+=" (stub)");return a};d.people.toString=function(){return d.toString(1)+".people (stub)"};k="disable time_event track track_pageview track_links track_forms register register_once alias unregister identify name_tag set_config reset people.set people.set_once people.increment people.append people.union people.track_charge people.clear_charges people.delete_user".split(" ");
+  for(h=0;h<k.length;h++)e(d,k[h]);a._i.push([b,c,f])};a.__SV=1.2;b=e.createElement("script");b.type="text/javascript";b.async=!0;b.src="undefined"!==typeof MIXPANEL_CUSTOM_LIB_URL?MIXPANEL_CUSTOM_LIB_URL:"file:"===e.location.protocol&&"//cdn.mxpnl.com/libs/mixpanel-2-latest.min.js".match(/^\/\//)?"https://cdn.mxpnl.com/libs/mixpanel-2-latest.min.js":"//cdn.mxpnl.com/libs/mixpanel-2-latest.min.js";c=e.getElementsByTagName("script")[0];c.parentNode.insertBefore(b,c)}})(document,window.mixpanel||[]);
+  mixpanel.init("1919205b2da72e4da3b9b6639b444d59");</script>
+  <!-- end Mixpanel -->
+</head>
+
+<body>
+  <svg style="display: none;">
+    <defs>
+      <symbol id="linkIcon" fill="#706d77" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 0h24v24H0z" fill="none"/>
+          <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+  <label for="nav-trigger" class="navicon-button x">
+    <div class="navicon"></div>
+  </label>
+
+  <label for="nav-trigger" class="overlay"></label>
+
+  <div class="top-nav-wrapper">
+    <ul>
+      <li >
+        <a href="index.html">
+          
+            <svg fill="#6D6D6D" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+              <path d="M0 0h24v24H0z" fill="none"/>
+            </svg>
+          
+          
+        </a>
+      </li>
+
+      
+
+    </ul>
+  </div>
+
+  <nav>
+    <h3 class="reference-title">
+      OpenWrt ucode library reference
+    </h3>
+
+    
+
+    <h3>Modules</h3><ul><li id="core-nav"><a href="module-core.html">core</a><ul class='methods'><li data-type="method" id="core-arrtoip-nav"><a href="module-core.html#arrtoip">arrtoip</a></li><li data-type="method" id="core-assert-nav"><a href="module-core.html#assert">assert</a></li><li data-type="method" id="core-b64dec-nav"><a href="module-core.html#b64dec">b64dec</a></li><li data-type="method" id="core-b64enc-nav"><a href="module-core.html#b64enc">b64enc</a></li><li data-type="method" id="core-call-nav"><a href="module-core.html#call">call</a></li><li data-type="method" id="core-chr-nav"><a href="module-core.html#chr">chr</a></li><li data-type="method" id="core-clock-nav"><a href="module-core.html#clock">clock</a></li><li data-type="method" id="core-die-nav"><a href="module-core.html#die">die</a></li><li data-type="method" id="core-exists-nav"><a href="module-core.html#exists">exists</a></li><li data-type="method" id="core-exit-nav"><a href="module-core.html#exit">exit</a></li><li data-type="method" id="core-filter-nav"><a href="module-core.html#filter">filter</a></li><li data-type="method" id="core-gc-nav"><a href="module-core.html#gc">gc</a></li><li data-type="method" id="core-getenv-nav"><a href="module-core.html#getenv">getenv</a></li><li data-type="method" id="core-gmtime-nav"><a href="module-core.html#gmtime">gmtime</a></li><li data-type="method" id="core-hex-nav"><a href="module-core.html#hex">hex</a></li><li data-type="method" id="core-hexdec-nav"><a href="module-core.html#hexdec">hexdec</a></li><li data-type="method" id="core-hexenc-nav"><a href="module-core.html#hexenc">hexenc</a></li><li data-type="method" id="core-include-nav"><a href="module-core.html#include">include</a></li><li data-type="method" id="core-index-nav"><a href="module-core.html#index">index</a></li><li data-type="method" id="core-int-nav"><a href="module-core.html#int">int</a></li><li data-type="method" id="core-iptoarr-nav"><a href="module-core.html#iptoarr">iptoarr</a></li><li data-type="method" id="core-join-nav"><a href="module-core.html#join">join</a></li><li data-type="method" id="core-json-nav"><a href="module-core.html#json">json</a></li><li data-type="method" id="core-keys-nav"><a href="module-core.html#keys">keys</a></li><li data-type="method" id="core-lc-nav"><a href="module-core.html#lc">lc</a></li><li data-type="method" id="core-length-nav"><a href="module-core.html#length">length</a></li><li data-type="method" id="core-loadfile-nav"><a href="module-core.html#loadfile">loadfile</a></li><li data-type="method" id="core-loadstring-nav"><a href="module-core.html#loadstring">loadstring</a></li><li data-type="method" id="core-localtime-nav"><a href="module-core.html#localtime">localtime</a></li><li data-type="method" id="core-ltrim-nav"><a href="module-core.html#ltrim">ltrim</a></li><li data-type="method" id="core-map-nav"><a href="module-core.html#map">map</a></li><li data-type="method" id="core-match-nav"><a href="module-core.html#match">match</a></li><li data-type="method" id="core-max-nav"><a href="module-core.html#max">max</a></li><li data-type="method" id="core-min-nav"><a href="module-core.html#min">min</a></li><li data-type="method" id="core-ord-nav"><a href="module-core.html#ord">ord</a></li><li data-type="method" id="core-pop-nav"><a href="module-core.html#pop">pop</a></li><li data-type="method" id="core-print-nav"><a href="module-core.html#print">print</a></li><li data-type="method" id="core-printf-nav"><a href="module-core.html#printf">printf</a></li><li data-type="method" id="core-proto-nav"><a href="module-core.html#proto">proto</a></li><li data-type="method" id="core-push-nav"><a href="module-core.html#push">push</a></li><li data-type="method" id="core-regexp-nav"><a href="module-core.html#regexp">regexp</a></li><li data-type="method" id="core-render-nav"><a href="module-core.html#render">render</a></li><li data-type="method" id="core-replace-nav"><a href="module-core.html#replace">replace</a></li><li data-type="method" id="core-reverse-nav"><a href="module-core.html#reverse">reverse</a></li><li data-type="method" id="core-rindex-nav"><a href="module-core.html#rindex">rindex</a></li><li data-type="method" id="core-rtrim-nav"><a href="module-core.html#rtrim">rtrim</a></li><li data-type="method" id="core-shift-nav"><a href="module-core.html#shift">shift</a></li><li data-type="method" id="core-sleep-nav"><a href="module-core.html#sleep">sleep</a></li><li data-type="method" id="core-slice-nav"><a href="module-core.html#slice">slice</a></li><li data-type="method" id="core-sort-nav"><a href="module-core.html#sort">sort</a></li><li data-type="method" id="core-sourcepath-nav"><a href="module-core.html#sourcepath">sourcepath</a></li><li data-type="method" id="core-splice-nav"><a href="module-core.html#splice">splice</a></li><li data-type="method" id="core-split-nav"><a href="module-core.html#split">split</a></li><li data-type="method" id="core-sprintf-nav"><a href="module-core.html#sprintf">sprintf</a></li><li data-type="method" id="core-substr-nav"><a href="module-core.html#substr">substr</a></li><li data-type="method" id="core-system-nav"><a href="module-core.html#system">system</a></li><li data-type="method" id="core-time-nav"><a href="module-core.html#time">time</a></li><li data-type="method" id="core-timegm-nav"><a href="module-core.html#timegm">timegm</a></li><li data-type="method" id="core-timelocal-nav"><a href="module-core.html#timelocal">timelocal</a></li><li data-type="method" id="core-trace-nav"><a href="module-core.html#trace">trace</a></li><li data-type="method" id="core-trim-nav"><a href="module-core.html#trim">trim</a></li><li data-type="method" id="core-type-nav"><a href="module-core.html#type">type</a></li><li data-type="method" id="core-uc-nav"><a href="module-core.html#uc">uc</a></li><li data-type="method" id="core-uchr-nav"><a href="module-core.html#uchr">uchr</a></li><li data-type="method" id="core-uniq-nav"><a href="module-core.html#uniq">uniq</a></li><li data-type="method" id="core-unshift-nav"><a href="module-core.html#unshift">unshift</a></li><li data-type="method" id="core-values-nav"><a href="module-core.html#values">values</a></li><li data-type="method" id="core-warn-nav"><a href="module-core.html#warn">warn</a></li><li data-type="method" id="core-wildcard-nav"><a href="module-core.html#wildcard">wildcard</a></li></ul></li><li id="fs-nav"><a href="module-fs.html">fs</a><ul class='methods'><li data-type="method" id="fs-access-nav"><a href="module-fs.html#access">access</a></li><li data-type="method" id="fs-basename-nav"><a href="module-fs.html#basename">basename</a></li><li data-type="method" id="fs-chdir-nav"><a href="module-fs.html#chdir">chdir</a></li><li data-type="method" id="fs-chmod-nav"><a href="module-fs.html#chmod">chmod</a></li><li data-type="method" id="fs-chown-nav"><a href="module-fs.html#chown">chown</a></li><li data-type="method" id="fs-dirname-nav"><a href="module-fs.html#dirname">dirname</a></li><li data-type="method" id="fs-error-nav"><a href="module-fs.html#error">error</a></li><li data-type="method" id="fs-fdopen-nav"><a href="module-fs.html#fdopen">fdopen</a></li><li data-type="method" id="fs-getcwd-nav"><a href="module-fs.html#getcwd">getcwd</a></li><li data-type="method" id="fs-lsdir-nav"><a href="module-fs.html#lsdir">lsdir</a></li><li data-type="method" id="fs-lstat-nav"><a href="module-fs.html#lstat">lstat</a></li><li data-type="method" id="fs-mkdir-nav"><a href="module-fs.html#mkdir">mkdir</a></li><li data-type="method" id="fs-mkstemp-nav"><a href="module-fs.html#mkstemp">mkstemp</a></li><li data-type="method" id="fs-open-nav"><a href="module-fs.html#open">open</a></li><li data-type="method" id="fs-opendir-nav"><a href="module-fs.html#opendir">opendir</a></li><li data-type="method" id="fs-pipe-nav"><a href="module-fs.html#pipe">pipe</a></li><li data-type="method" id="fs-popen-nav"><a href="module-fs.html#popen">popen</a></li><li data-type="method" id="fs-readfile-nav"><a href="module-fs.html#readfile">readfile</a></li><li data-type="method" id="fs-readlink-nav"><a href="module-fs.html#readlink">readlink</a></li><li data-type="method" id="fs-realpath-nav"><a href="module-fs.html#realpath">realpath</a></li><li data-type="method" id="fs-rename-nav"><a href="module-fs.html#rename">rename</a></li><li data-type="method" id="fs-rmdir-nav"><a href="module-fs.html#rmdir">rmdir</a></li><li data-type="method" id="fs-stat-nav"><a href="module-fs.html#stat">stat</a></li><li data-type="method" id="fs-symlink-nav"><a href="module-fs.html#symlink">symlink</a></li><li data-type="method" id="fs-unlink-nav"><a href="module-fs.html#unlink">unlink</a></li><li data-type="method" id="fs-writefile-nav"><a href="module-fs.html#writefile">writefile</a></li></ul></li><li id="math-nav"><a href="module-math.html">math</a><ul class='methods'><li data-type="method" id="math-abs-nav"><a href="module-math.html#abs">abs</a></li><li data-type="method" id="math-atan2-nav"><a href="module-math.html#atan2">atan2</a></li><li data-type="method" id="math-cos-nav"><a href="module-math.html#cos">cos</a></li><li data-type="method" id="math-exp-nav"><a href="module-math.html#exp">exp</a></li><li data-type="method" id="math-isnan-nav"><a href="module-math.html#isnan">isnan</a></li><li data-type="method" id="math-log-nav"><a href="module-math.html#log">log</a></li><li data-type="method" id="math-pow-nav"><a href="module-math.html#pow">pow</a></li><li data-type="method" id="math-rand-nav"><a href="module-math.html#rand">rand</a></li><li data-type="method" id="math-sin-nav"><a href="module-math.html#sin">sin</a></li><li data-type="method" id="math-sqrt-nav"><a href="module-math.html#sqrt">sqrt</a></li><li data-type="method" id="math-srand-nav"><a href="module-math.html#srand">srand</a></li></ul></li></ul>
+  </nav>
+
+  <div id="main">
+    
+      <h1 class="page-title">
+        lib/math.c
+      </h1>
+    
+
+    
+      
+
+<section>
+  <article>
+    <pre class="prettyprint source linenums"><code>/*
+ * Copyright (C) 2020-2021 Jo-Philipp Wich &lt;jo@mein.io>
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+/**
+ * This module bundles various mathematical functions.
+ *
+ * Functions can be individually imported and directly accessed using the
+ * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+ * syntax:
+ *
+ *   ```
+ *   import { pow, rand } from 'math';
+ *
+ *   let x = pow(2, 5);
+ *   let y = rand();
+ *   ```
+ *
+ * Alternatively, the module namespace can be imported
+ * using a wildcard import statement:
+ *
+ *   ```
+ *   import * as math from 'math';
+ *
+ *   let x = math.pow(2, 5);
+ *   let y = math.rand();
+ *   ```
+ *
+ * Additionally, the math module namespace may also be imported by invoking the
+ * `ucode` interpreter with the `-lmath` switch.
+ *
+ * @module math
+ */
+
+#include &lt;math.h>
+#include &lt;errno.h>
+#include &lt;sys/time.h>
+
+#include "ucode/module.h"
+
+static bool srand_called = false;
+
+/**
+ * Returns the absolute value of the given numeric value.
+ *
+ * @function module:math#abs
+ *
+ * @param {*} number
+ * The number to return the absolute value for.
+ *
+ * @returns {number}
+ * Returns the absolute value or `NaN` if the given argument could
+ * not be converted to a number.
+ */
+static uc_value_t *
+uc_abs(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *v = uc_fn_arg(0), *nv, *res;
+	int64_t n;
+	double d;
+
+	nv = v ? ucv_to_number(v) : NULL;
+
+	switch (ucv_type(nv)) {
+	case UC_INTEGER:
+		n = ucv_int64_get(nv);
+
+		if (n >= 0 || errno == ERANGE)
+			res = ucv_get(nv);
+		else if (n == INT64_MIN)
+			res = ucv_uint64_new((uint64_t)INT64_MAX + 1);
+		else
+			res = ucv_uint64_new(-n);
+
+		break;
+
+	case UC_DOUBLE:
+		d = ucv_double_get(nv);
+
+		if (isnan(d) || d >= 0)
+			res = ucv_get(nv);
+		else
+			res = ucv_double_new(-d);
+
+		break;
+
+	default:
+		res = ucv_double_new(NAN);
+		break;
+	}
+
+	ucv_put(nv);
+
+	return res;
+}
+
+/**
+ * Calculates the principal value of the arc tangent of `y`/`x`,
+ * using the signs of the two arguments to determine the quadrant
+ * of the result.
+ *
+ * On success, this function returns the principal value of the arc
+ * tangent of `y`/`x` in radians; the return value is in the range [-pi, pi].
+ *
+ *  - If `y` is +0 (-0) and `x` is less than 0, +pi (-pi) is returned.
+ *  - If `y` is +0 (-0) and `x` is greater than 0, +0 (-0) is returned.
+ *  - If `y` is less than 0 and `x` is +0 or -0, -pi/2 is returned.
+ *  - If `y` is greater than 0 and `x` is +0 or -0, pi/2 is returned.
+ *  - If either `x` or `y` is NaN, a NaN is returned.
+ *  - If `y` is +0 (-0) and `x` is -0, +pi (-pi) is returned.
+ *  - If `y` is +0 (-0) and `x` is +0, +0 (-0) is returned.
+ *  - If `y` is a finite value greater (less) than 0, and `x` is negative
+ *    infinity, +pi (-pi) is returned.
+ *  - If `y` is a finite value greater (less) than 0, and `x` is positive
+ *    infinity, +0 (-0) is returned.
+ *  - If `y` is positive infinity (negative infinity), and `x` is finite,
+ *    pi/2 (-pi/2) is returned.
+ *  - If `y` is positive infinity (negative infinity) and `x` is negative
+ *    infinity, +3*pi/4 (-3*pi/4) is returned.
+ *  - If `y` is positive infinity (negative infinity) and `x` is positive
+ *    infinity, +pi/4 (-pi/4) is returned.
+ *
+ * When either `x` or `y` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#atan2
+ *
+ * @param {*} y
+ * The `y` value.
+ *
+ * @param {*} x
+ * The `x` value.
+ *
+ * @returns {number}
+ */
+static uc_value_t *
+uc_atan2(uc_vm_t *vm, size_t nargs)
+{
+	double d1 = ucv_to_double(uc_fn_arg(0));
+	double d2 = ucv_to_double(uc_fn_arg(1));
+
+	if (isnan(d1) || isnan(d2))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(atan2(d1, d2));
+}
+
+/**
+ * Calculates the cosine of `x`, where `x` is given in radians.
+ *
+ * Returns the resulting consine value.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#cos
+ *
+ * @param {number} x
+ * Radians value to calculate cosine for.
+ *
+ * @returns {number}
+ */
+static uc_value_t *
+uc_cos(uc_vm_t *vm, size_t nargs)
+{
+	double d = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(d))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(cos(d));
+}
+
+/**
+ * Calculates the value of `e` (the base of natural logarithms)
+ * raised to the power of `x`.
+ *
+ * On success, returns the exponential value of `x`.
+ *
+ *  - If `x` is positive infinity, positive infinity is returned.
+ *  - If `x` is negative infinity, `+0` is returned.
+ *  - If the result underflows, a range error occurs, and zero is returned.
+ *  - If the result overflows, a range error occurs, and `Infinity` is returned.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#exp
+ *
+ * @param {number} x
+ * Power to raise `e` to.
+ *
+ * @returns {number}
+ */
+static uc_value_t *
+uc_exp(uc_vm_t *vm, size_t nargs)
+{
+	double d = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(d))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(exp(d));
+}
+
+/**
+ * Calculates the natural logarithm of `x`.
+ *
+ * On success, returns the natural logarithm of `x`.
+ *
+ *  - If `x` is `1`, the result is `+0`.
+ *  - If `x` is positive nfinity, positive infinity is returned.
+ *  - If `x` is zero, then a pole error occurs, and the function
+ *    returns negative infinity.
+ *  - If `x` is negative (including negative infinity), then a domain
+ *    error occurs, and `NaN` is returned.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#log
+ *
+ * @param {number} x
+ * Value to calulate natural logarithm of.
+ *
+ * @returns {number}
+ */
+static uc_value_t *
+uc_log(uc_vm_t *vm, size_t nargs)
+{
+	double d = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(d))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(log(d));
+}
+
+/**
+ * Calculates the sine of `x`, where `x` is given in radians.
+ *
+ * Returns the resulting sine value.
+ *
+ *  - When `x` is positive or negative infinity, a domain error occurs
+ *    and `NaN` is returned.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#sin
+ *
+ * @param {number} x
+ * Radians value to calculate sine for.
+ *
+ * @returns {number}
+ */
+static uc_value_t *
+uc_sin(uc_vm_t *vm, size_t nargs)
+{
+	double d = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(d))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(sin(d));
+}
+
+/**
+ * Calculates the nonnegative square root of `x`.
+ *
+ * Returns the resulting square root value.
+ *
+ *  - If `x` is `+0` (`-0`) then `+0` (`-0`) is returned.
+ *  - If `x` is positive infinity, positive infinity is returned.
+ *  - If `x` is less than `-0`, a domain error occurs, and `NaN` is returned.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#sqrt
+ *
+ * @param {number} x
+ * Value to calculate square root for.
+ *
+ * @returns {number}
+ */
+static uc_value_t *
+uc_sqrt(uc_vm_t *vm, size_t nargs)
+{
+	double d = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(d))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(sqrt(d));
+}
+
+/**
+ * Calculates the value of `x` raised to the power of `y`.
+ *
+ * On success, returns the value of `x` raised to the power of `y`.
+ *
+ *  - If the result overflows, a range error occurs, and the function
+ *    returns `Infinity`.
+ *  - If result underflows, and is not representable, a range error
+ *    occurs, and `0.0` with the appropriate sign is returned.
+ *  - If `x` is `+0` or `-0`, and `y` is an odd integer less than `0`,
+ *    a pole error occurs `Infinity` is returned, with the same sign
+ *    as `x`.
+ *  - If `x` is `+0` or `-0`, and `y` is less than `0` and not an odd
+ *    integer, a pole error occurs and `Infinity` is returned.
+ *  - If `x` is `+0` (`-0`), and `y` is an odd integer greater than `0`,
+ *    the result is `+0` (`-0`).
+ *  - If `x` is `0`, and `y` greater than `0` and not an odd integer,
+ *    the result is `+0`.
+ *  - If `x` is `-1`, and `y` is positive infinity or negative infinity,
+ *    the result is `1.0`.
+ *  - If `x` is `+1`, the result is `1.0` (even if `y` is `NaN`).
+ *  - If `y` is `0`, the result is `1.0` (even if `x` is `NaN`).
+ *  - If `x` is a finite value less than `0`, and `y` is a finite
+ *    noninteger, a domain error occurs, and `NaN` is returned.
+ *  - If the absolute value of `x` is less than `1`, and `y` is negative
+ *    infinity, the result is positive infinity.
+ *  - If the absolute value of `x` is greater than `1`, and `y` is
+ *    negative infinity, the result is `+0`.
+ *  - If the absolute value of `x` is less than `1`, and `y` is positive
+ *    infinity, the result is `+0`.
+ *  - If the absolute value of `x` is greater than `1`, and `y` is positive
+ *    infinity, the result is positive infinity.
+ *  - If `x` is negative infinity, and `y` is an odd integer less than `0`,
+ *    the result is `-0`.
+ *  - If `x` is negative infinity, and `y` less than `0` and not an odd
+ *    integer, the result is `+0`.
+ *  - If `x` is negative infinity, and `y` is an odd integer greater than
+ *    `0`, the result is negative infinity.
+ *  - If `x` is negative infinity, and `y` greater than `0` and not an odd
+ *    integer, the result is positive infinity.
+ *  - If `x` is positive infinity, and `y` less than `0`, the result is `+0`.
+ *  - If `x` is positive infinity, and `y` greater than `0`, the result is
+ *    positive infinity.
+ *
+ * Returns `NaN` if either the `x` or `y` value can't be converted to a number.
+ *
+ * @function module:math#pow
+ *
+ * @param {number} x
+ * The base value.
+ *
+ * @param {number} y
+ * The power value.
+ *
+ * @returns {number}
+ */
+static uc_value_t *
+uc_pow(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double y = ucv_to_double(uc_fn_arg(1));
+
+	if (isnan(x) || isnan(y))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(pow(x, y));
+}
+
+/**
+ * Produces a pseudo-random positive integer.
+ *
+ * Returns the calculated pseuo-random value. The value is within the range
+ * `0` to `RAND_MAX` inclusive where `RAND_MAX` is a platform specific value
+ * guaranteed to be at least `32767`.
+ *
+ * The {@link module:math~srand `srand()`} function sets its argument as the
+ * seed for a new sequence of pseudo-random integers to be returned by `rand()`. These sequences are
+ * repeatable by calling {@link module:math~srand `srand()`} with the same
+ * seed value.
+ *
+ * If no seed value is explicitly set by calling
+ * {@link module:math~srand `srand()`} prior to the first call to `rand()`,
+ * the math module will automatically seed the PRNG once, using the current
+ * time of day in milliseconds as seed value.
+ *
+ * @function module:math#rand
+ *
+ * @returns {number}
+ */
+static uc_value_t *
+uc_rand(uc_vm_t *vm, size_t nargs)
+{
+	struct timeval tv;
+
+	if (!srand_called) {
+		gettimeofday(&amp;tv, NULL);
+		srand((tv.tv_sec * 1000) + (tv.tv_usec / 1000));
+
+		srand_called = true;
+	}
+
+	return ucv_int64_new(rand());
+}
+
+/**
+ * Seeds the pseudo-random number generator.
+ *
+ * This functions seeds the PRNG with the given value and thus affects the
+ * pseudo-random integer sequence produced by subsequent calls to
+ * {@link module:math~rand `rand()`}.
+ *
+ * Setting the same seed value will result in the same pseudo-random numbers
+ * produced by {@link module:math~rand `rand()`}.
+ *
+ * @function module:math#srand
+ *
+ * @param {number} seed
+ * The seed value.
+ */
+static uc_value_t *
+uc_srand(uc_vm_t *vm, size_t nargs)
+{
+	int64_t n = ucv_to_integer(uc_fn_arg(0));
+
+	srand((unsigned int)n);
+	srand_called = true;
+
+	return NULL;
+}
+
+/**
+ * Tests whether `x` is a `NaN` double.
+ *
+ * This functions checks whether the given argument is of type `double` with
+ * a `NaN` (not a number) value.
+ *
+ * Returns `true` if the value is `NaN`, otherwise false.
+ *
+ * Note that a value can also be checked for `NaN` with the expression
+ * `x !== x` which only evaluates to `true` if `x` is `NaN`.
+ *
+ * @function module:math#isnan
+ *
+ * @param {number} x
+ * The value to test.
+ *
+ * @returns {boolean}
+ */
+static uc_value_t *
+uc_isnan(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *v = uc_fn_arg(0);
+
+	return ucv_boolean_new(ucv_type(v) == UC_DOUBLE &amp;&amp; isnan(ucv_double_get(v)));
+}
+
+static const uc_function_list_t math_fns[] = {
+	{ "abs",	uc_abs },
+	{ "atan2",	uc_atan2 },
+	{ "cos",	uc_cos },
+	{ "exp",	uc_exp },
+	{ "log",	uc_log },
+	{ "sin",	uc_sin },
+	{ "sqrt",	uc_sqrt },
+	{ "pow",	uc_pow },
+	{ "rand",	uc_rand },
+	{ "srand",	uc_srand },
+	{ "isnan",	uc_isnan },
+};
+
+void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
+{
+	uc_function_list_register(scope, math_fns);
+}
+</code></pre>
+  </article>
+</section>
+
+    
+
+
+  </div>
+
+  <br class="clear">
+
+  <footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.2</a>
+  </footer>
+
+  <script src="scripts/linenumber.js"></script>
+  <script src="scripts/pagelocation.js"></script>
+
+  
+
+</body>
+</html>

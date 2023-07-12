@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>
+      math - Documentation
+  </title>
+
+  <link href="https://www.braintreepayments.com/images/favicon-ccda0b14.png" rel="icon" type="image/png">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.7.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+
+  <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+  <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+  
+  <link type="text/css" rel="stylesheet" href="styles/collapse.css">
+  
+
+  
+
+  <!-- start Mixpanel -->
+  <script type="text/javascript">(function(e,a){if(!a.__SV){var b=window;try{var c,l,i,j=b.location,g=j.hash;c=function(a,b){return(l=a.match(RegExp(b+"=([^&]*)")))?l[1]:null};g&&c(g,"state")&&(i=JSON.parse(decodeURIComponent(c(g,"state"))),"mpeditor"===i.action&&(b.sessionStorage.setItem("_mpcehash",g),history.replaceState(i.desiredHash||"",e.title,j.pathname+j.search)))}catch(m){}var k,h;window.mixpanel=a;a._i=[];a.init=function(b,c,f){function e(b,a){var c=a.split(".");2==c.length&&(b=b[c[0]],a=c[1]);b[a]=function(){b.push([a].concat(Array.prototype.slice.call(arguments,
+  0)))}}var d=a;"undefined"!==typeof f?d=a[f]=[]:f="mixpanel";d.people=d.people||[];d.toString=function(b){var a="mixpanel";"mixpanel"!==f&&(a+="."+f);b||(a+=" (stub)");return a};d.people.toString=function(){return d.toString(1)+".people (stub)"};k="disable time_event track track_pageview track_links track_forms register register_once alias unregister identify name_tag set_config reset people.set people.set_once people.increment people.append people.union people.track_charge people.clear_charges people.delete_user".split(" ");
+  for(h=0;h<k.length;h++)e(d,k[h]);a._i.push([b,c,f])};a.__SV=1.2;b=e.createElement("script");b.type="text/javascript";b.async=!0;b.src="undefined"!==typeof MIXPANEL_CUSTOM_LIB_URL?MIXPANEL_CUSTOM_LIB_URL:"file:"===e.location.protocol&&"//cdn.mxpnl.com/libs/mixpanel-2-latest.min.js".match(/^\/\//)?"https://cdn.mxpnl.com/libs/mixpanel-2-latest.min.js":"//cdn.mxpnl.com/libs/mixpanel-2-latest.min.js";c=e.getElementsByTagName("script")[0];c.parentNode.insertBefore(b,c)}})(document,window.mixpanel||[]);
+  mixpanel.init("1919205b2da72e4da3b9b6639b444d59");</script>
+  <!-- end Mixpanel -->
+</head>
+
+<body>
+  <svg style="display: none;">
+    <defs>
+      <symbol id="linkIcon" fill="#706d77" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 0h24v24H0z" fill="none"/>
+          <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+  <label for="nav-trigger" class="navicon-button x">
+    <div class="navicon"></div>
+  </label>
+
+  <label for="nav-trigger" class="overlay"></label>
+
+  <div class="top-nav-wrapper">
+    <ul>
+      <li >
+        <a href="index.html">
+          
+            <svg fill="#6D6D6D" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+              <path d="M0 0h24v24H0z" fill="none"/>
+            </svg>
+          
+          
+        </a>
+      </li>
+
+      
+
+    </ul>
+  </div>
+
+  <nav>
+    <h3 class="reference-title">
+      OpenWrt ucode library reference
+    </h3>
+
+    
+
+    <h3>Modules</h3><ul><li id="core-nav"><a href="module-core.html">core</a><ul class='methods'><li data-type="method" id="core-arrtoip-nav"><a href="module-core.html#arrtoip">arrtoip</a></li><li data-type="method" id="core-assert-nav"><a href="module-core.html#assert">assert</a></li><li data-type="method" id="core-b64dec-nav"><a href="module-core.html#b64dec">b64dec</a></li><li data-type="method" id="core-b64enc-nav"><a href="module-core.html#b64enc">b64enc</a></li><li data-type="method" id="core-call-nav"><a href="module-core.html#call">call</a></li><li data-type="method" id="core-chr-nav"><a href="module-core.html#chr">chr</a></li><li data-type="method" id="core-clock-nav"><a href="module-core.html#clock">clock</a></li><li data-type="method" id="core-die-nav"><a href="module-core.html#die">die</a></li><li data-type="method" id="core-exists-nav"><a href="module-core.html#exists">exists</a></li><li data-type="method" id="core-exit-nav"><a href="module-core.html#exit">exit</a></li><li data-type="method" id="core-filter-nav"><a href="module-core.html#filter">filter</a></li><li data-type="method" id="core-gc-nav"><a href="module-core.html#gc">gc</a></li><li data-type="method" id="core-getenv-nav"><a href="module-core.html#getenv">getenv</a></li><li data-type="method" id="core-gmtime-nav"><a href="module-core.html#gmtime">gmtime</a></li><li data-type="method" id="core-hex-nav"><a href="module-core.html#hex">hex</a></li><li data-type="method" id="core-hexdec-nav"><a href="module-core.html#hexdec">hexdec</a></li><li data-type="method" id="core-hexenc-nav"><a href="module-core.html#hexenc">hexenc</a></li><li data-type="method" id="core-include-nav"><a href="module-core.html#include">include</a></li><li data-type="method" id="core-index-nav"><a href="module-core.html#index">index</a></li><li data-type="method" id="core-int-nav"><a href="module-core.html#int">int</a></li><li data-type="method" id="core-iptoarr-nav"><a href="module-core.html#iptoarr">iptoarr</a></li><li data-type="method" id="core-join-nav"><a href="module-core.html#join">join</a></li><li data-type="method" id="core-json-nav"><a href="module-core.html#json">json</a></li><li data-type="method" id="core-keys-nav"><a href="module-core.html#keys">keys</a></li><li data-type="method" id="core-lc-nav"><a href="module-core.html#lc">lc</a></li><li data-type="method" id="core-length-nav"><a href="module-core.html#length">length</a></li><li data-type="method" id="core-loadfile-nav"><a href="module-core.html#loadfile">loadfile</a></li><li data-type="method" id="core-loadstring-nav"><a href="module-core.html#loadstring">loadstring</a></li><li data-type="method" id="core-localtime-nav"><a href="module-core.html#localtime">localtime</a></li><li data-type="method" id="core-ltrim-nav"><a href="module-core.html#ltrim">ltrim</a></li><li data-type="method" id="core-map-nav"><a href="module-core.html#map">map</a></li><li data-type="method" id="core-match-nav"><a href="module-core.html#match">match</a></li><li data-type="method" id="core-max-nav"><a href="module-core.html#max">max</a></li><li data-type="method" id="core-min-nav"><a href="module-core.html#min">min</a></li><li data-type="method" id="core-ord-nav"><a href="module-core.html#ord">ord</a></li><li data-type="method" id="core-pop-nav"><a href="module-core.html#pop">pop</a></li><li data-type="method" id="core-print-nav"><a href="module-core.html#print">print</a></li><li data-type="method" id="core-printf-nav"><a href="module-core.html#printf">printf</a></li><li data-type="method" id="core-proto-nav"><a href="module-core.html#proto">proto</a></li><li data-type="method" id="core-push-nav"><a href="module-core.html#push">push</a></li><li data-type="method" id="core-regexp-nav"><a href="module-core.html#regexp">regexp</a></li><li data-type="method" id="core-render-nav"><a href="module-core.html#render">render</a></li><li data-type="method" id="core-replace-nav"><a href="module-core.html#replace">replace</a></li><li data-type="method" id="core-reverse-nav"><a href="module-core.html#reverse">reverse</a></li><li data-type="method" id="core-rindex-nav"><a href="module-core.html#rindex">rindex</a></li><li data-type="method" id="core-rtrim-nav"><a href="module-core.html#rtrim">rtrim</a></li><li data-type="method" id="core-shift-nav"><a href="module-core.html#shift">shift</a></li><li data-type="method" id="core-sleep-nav"><a href="module-core.html#sleep">sleep</a></li><li data-type="method" id="core-slice-nav"><a href="module-core.html#slice">slice</a></li><li data-type="method" id="core-sort-nav"><a href="module-core.html#sort">sort</a></li><li data-type="method" id="core-sourcepath-nav"><a href="module-core.html#sourcepath">sourcepath</a></li><li data-type="method" id="core-splice-nav"><a href="module-core.html#splice">splice</a></li><li data-type="method" id="core-split-nav"><a href="module-core.html#split">split</a></li><li data-type="method" id="core-sprintf-nav"><a href="module-core.html#sprintf">sprintf</a></li><li data-type="method" id="core-substr-nav"><a href="module-core.html#substr">substr</a></li><li data-type="method" id="core-system-nav"><a href="module-core.html#system">system</a></li><li data-type="method" id="core-time-nav"><a href="module-core.html#time">time</a></li><li data-type="method" id="core-timegm-nav"><a href="module-core.html#timegm">timegm</a></li><li data-type="method" id="core-timelocal-nav"><a href="module-core.html#timelocal">timelocal</a></li><li data-type="method" id="core-trace-nav"><a href="module-core.html#trace">trace</a></li><li data-type="method" id="core-trim-nav"><a href="module-core.html#trim">trim</a></li><li data-type="method" id="core-type-nav"><a href="module-core.html#type">type</a></li><li data-type="method" id="core-uc-nav"><a href="module-core.html#uc">uc</a></li><li data-type="method" id="core-uchr-nav"><a href="module-core.html#uchr">uchr</a></li><li data-type="method" id="core-uniq-nav"><a href="module-core.html#uniq">uniq</a></li><li data-type="method" id="core-unshift-nav"><a href="module-core.html#unshift">unshift</a></li><li data-type="method" id="core-values-nav"><a href="module-core.html#values">values</a></li><li data-type="method" id="core-warn-nav"><a href="module-core.html#warn">warn</a></li><li data-type="method" id="core-wildcard-nav"><a href="module-core.html#wildcard">wildcard</a></li></ul></li><li id="fs-nav"><a href="module-fs.html">fs</a><ul class='methods'><li data-type="method" id="fs-access-nav"><a href="module-fs.html#access">access</a></li><li data-type="method" id="fs-basename-nav"><a href="module-fs.html#basename">basename</a></li><li data-type="method" id="fs-chdir-nav"><a href="module-fs.html#chdir">chdir</a></li><li data-type="method" id="fs-chmod-nav"><a href="module-fs.html#chmod">chmod</a></li><li data-type="method" id="fs-chown-nav"><a href="module-fs.html#chown">chown</a></li><li data-type="method" id="fs-dirname-nav"><a href="module-fs.html#dirname">dirname</a></li><li data-type="method" id="fs-error-nav"><a href="module-fs.html#error">error</a></li><li data-type="method" id="fs-fdopen-nav"><a href="module-fs.html#fdopen">fdopen</a></li><li data-type="method" id="fs-getcwd-nav"><a href="module-fs.html#getcwd">getcwd</a></li><li data-type="method" id="fs-lsdir-nav"><a href="module-fs.html#lsdir">lsdir</a></li><li data-type="method" id="fs-lstat-nav"><a href="module-fs.html#lstat">lstat</a></li><li data-type="method" id="fs-mkdir-nav"><a href="module-fs.html#mkdir">mkdir</a></li><li data-type="method" id="fs-mkstemp-nav"><a href="module-fs.html#mkstemp">mkstemp</a></li><li data-type="method" id="fs-open-nav"><a href="module-fs.html#open">open</a></li><li data-type="method" id="fs-opendir-nav"><a href="module-fs.html#opendir">opendir</a></li><li data-type="method" id="fs-pipe-nav"><a href="module-fs.html#pipe">pipe</a></li><li data-type="method" id="fs-popen-nav"><a href="module-fs.html#popen">popen</a></li><li data-type="method" id="fs-readfile-nav"><a href="module-fs.html#readfile">readfile</a></li><li data-type="method" id="fs-readlink-nav"><a href="module-fs.html#readlink">readlink</a></li><li data-type="method" id="fs-realpath-nav"><a href="module-fs.html#realpath">realpath</a></li><li data-type="method" id="fs-rename-nav"><a href="module-fs.html#rename">rename</a></li><li data-type="method" id="fs-rmdir-nav"><a href="module-fs.html#rmdir">rmdir</a></li><li data-type="method" id="fs-stat-nav"><a href="module-fs.html#stat">stat</a></li><li data-type="method" id="fs-symlink-nav"><a href="module-fs.html#symlink">symlink</a></li><li data-type="method" id="fs-unlink-nav"><a href="module-fs.html#unlink">unlink</a></li><li data-type="method" id="fs-writefile-nav"><a href="module-fs.html#writefile">writefile</a></li></ul></li><li id="math-nav"><a href="module-math.html">math</a><ul class='methods'><li data-type="method" id="math-abs-nav"><a href="module-math.html#abs">abs</a></li><li data-type="method" id="math-atan2-nav"><a href="module-math.html#atan2">atan2</a></li><li data-type="method" id="math-cos-nav"><a href="module-math.html#cos">cos</a></li><li data-type="method" id="math-exp-nav"><a href="module-math.html#exp">exp</a></li><li data-type="method" id="math-isnan-nav"><a href="module-math.html#isnan">isnan</a></li><li data-type="method" id="math-log-nav"><a href="module-math.html#log">log</a></li><li data-type="method" id="math-pow-nav"><a href="module-math.html#pow">pow</a></li><li data-type="method" id="math-rand-nav"><a href="module-math.html#rand">rand</a></li><li data-type="method" id="math-sin-nav"><a href="module-math.html#sin">sin</a></li><li data-type="method" id="math-sqrt-nav"><a href="module-math.html#sqrt">sqrt</a></li><li data-type="method" id="math-srand-nav"><a href="module-math.html#srand">srand</a></li></ul></li></ul>
+  </nav>
+
+  <div id="main">
+    
+      <h1 class="page-title">
+        math
+      </h1>
+    
+
+    
+
+<section>
+  <header>
+    
+  </header>
+
+  <article>
+    <div class="container-overview">
+      
+        
+            <div class="description">
+              <p>This module bundles various mathematical functions.</p>
+<p>Functions can be individually imported and directly accessed using the
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import">named import</a>
+syntax:</p>
+<pre class="prettyprint source"><code>import { pow, rand } from 'math';
+
+let x = pow(2, 5);
+let y = rand();
+</code></pre>
+<p>Alternatively, the module namespace can be imported
+using a wildcard import statement:</p>
+<pre class="prettyprint source"><code>import * as math from 'math';
+
+let x = math.pow(2, 5);
+let y = math.rand();
+</code></pre>
+<p>Additionally, the math module namespace may also be imported by invoking the
+<code>ucode</code> interpreter with the <code>-lmath</code> switch.</p>
+            </div>
+        
+
+        
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line17">line 17</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+        
+      
+    </div>
+
+    
+
+    
+
+    
+
+     
+
+    
+
+    
+
+    
+      <h3 class="subsection-title">Methods</h3>
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#abs">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="abs">
+      <span class="type-signature"></span>abs<span class="signature">(number)</span><span class="type-signature"> &rarr; {number}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Returns the absolute value of the given numeric value.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>number</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      *
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The number to return the absolute value for.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line55">line 55</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#atan2">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="atan2">
+      <span class="type-signature"></span>atan2<span class="signature">(y, x)</span><span class="type-signature"> &rarr; {number}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Calculates the principal value of the arc tangent of <code>y</code>/<code>x</code>,
+using the signs of the two arguments to determine the quadrant
+of the result.</p>
+<p>On success, this function returns the principal value of the arc
+tangent of <code>y</code>/<code>x</code> in radians; the return value is in the range [-pi, pi].</p>
+<ul>
+<li>If <code>y</code> is +0 (-0) and <code>x</code> is less than 0, +pi (-pi) is returned.</li>
+<li>If <code>y</code> is +0 (-0) and <code>x</code> is greater than 0, +0 (-0) is returned.</li>
+<li>If <code>y</code> is less than 0 and <code>x</code> is +0 or -0, -pi/2 is returned.</li>
+<li>If <code>y</code> is greater than 0 and <code>x</code> is +0 or -0, pi/2 is returned.</li>
+<li>If either <code>x</code> or <code>y</code> is NaN, a NaN is returned.</li>
+<li>If <code>y</code> is +0 (-0) and <code>x</code> is -0, +pi (-pi) is returned.</li>
+<li>If <code>y</code> is +0 (-0) and <code>x</code> is +0, +0 (-0) is returned.</li>
+<li>If <code>y</code> is a finite value greater (less) than 0, and <code>x</code> is negative
+infinity, +pi (-pi) is returned.</li>
+<li>If <code>y</code> is a finite value greater (less) than 0, and <code>x</code> is positive
+infinity, +0 (-0) is returned.</li>
+<li>If <code>y</code> is positive infinity (negative infinity), and <code>x</code> is finite,
+pi/2 (-pi/2) is returned.</li>
+<li>If <code>y</code> is positive infinity (negative infinity) and <code>x</code> is negative
+infinity, +3<em>pi/4 (-3</em>pi/4) is returned.</li>
+<li>If <code>y</code> is positive infinity (negative infinity) and <code>x</code> is positive
+infinity, +pi/4 (-pi/4) is returned.</li>
+</ul>
+<p>When either <code>x</code> or <code>y</code> can't be converted to a numeric value, <code>NaN</code> is
+returned.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>y</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      *
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The <code>y</code> value.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>x</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      *
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The <code>x</code> value.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line109">line 109</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#cos">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="cos">
+      <span class="type-signature"></span>cos<span class="signature">(x)</span><span class="type-signature"> &rarr; {number}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Calculates the cosine of <code>x</code>, where <code>x</code> is given in radians.</p>
+<p>Returns the resulting consine value.</p>
+<p>Returns <code>NaN</code> if the <code>x</code> value can't be converted to a number.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>x</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Radians value to calculate cosine for.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line160">line 160</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#exp">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="exp">
+      <span class="type-signature"></span>exp<span class="signature">(x)</span><span class="type-signature"> &rarr; {number}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Calculates the value of <code>e</code> (the base of natural logarithms)
+raised to the power of <code>x</code>.</p>
+<p>On success, returns the exponential value of <code>x</code>.</p>
+<ul>
+<li>If <code>x</code> is positive infinity, positive infinity is returned.</li>
+<li>If <code>x</code> is negative infinity, <code>+0</code> is returned.</li>
+<li>If the result underflows, a range error occurs, and zero is returned.</li>
+<li>If the result overflows, a range error occurs, and <code>Infinity</code> is returned.</li>
+</ul>
+<p>Returns <code>NaN</code> if the <code>x</code> value can't be converted to a number.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>x</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Power to raise <code>e</code> to.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line185">line 185</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#isnan">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="isnan">
+      <span class="type-signature"></span>isnan<span class="signature">(x)</span><span class="type-signature"> &rarr; {boolean}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Tests whether <code>x</code> is a <code>NaN</code> double.</p>
+<p>This functions checks whether the given argument is of type <code>double</code> with
+a <code>NaN</code> (not a number) value.</p>
+<p>Returns <code>true</code> if the value is <code>NaN</code>, otherwise false.</p>
+<p>Note that a value can also be checked for <code>NaN</code> with the expression
+<code>x !== x</code> which only evaluates to <code>true</code> if <code>x</code> is <code>NaN</code>.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>x</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The value to test.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line435">line 435</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#log">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="log">
+      <span class="type-signature"></span>log<span class="signature">(x)</span><span class="type-signature"> &rarr; {number}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Calculates the natural logarithm of <code>x</code>.</p>
+<p>On success, returns the natural logarithm of <code>x</code>.</p>
+<ul>
+<li>If <code>x</code> is <code>1</code>, the result is <code>+0</code>.</li>
+<li>If <code>x</code> is positive nfinity, positive infinity is returned.</li>
+<li>If <code>x</code> is zero, then a pole error occurs, and the function
+returns negative infinity.</li>
+<li>If <code>x</code> is negative (including negative infinity), then a domain
+error occurs, and <code>NaN</code> is returned.</li>
+</ul>
+<p>Returns <code>NaN</code> if the <code>x</code> value can't be converted to a number.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>x</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Value to calulate natural logarithm of.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line216">line 216</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#pow">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="pow">
+      <span class="type-signature"></span>pow<span class="signature">(x, y)</span><span class="type-signature"> &rarr; {number}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Calculates the value of <code>x</code> raised to the power of <code>y</code>.</p>
+<p>On success, returns the value of <code>x</code> raised to the power of <code>y</code>.</p>
+<ul>
+<li>If the result overflows, a range error occurs, and the function
+returns <code>Infinity</code>.</li>
+<li>If result underflows, and is not representable, a range error
+occurs, and <code>0.0</code> with the appropriate sign is returned.</li>
+<li>If <code>x</code> is <code>+0</code> or <code>-0</code>, and <code>y</code> is an odd integer less than <code>0</code>,
+a pole error occurs <code>Infinity</code> is returned, with the same sign
+as <code>x</code>.</li>
+<li>If <code>x</code> is <code>+0</code> or <code>-0</code>, and <code>y</code> is less than <code>0</code> and not an odd
+integer, a pole error occurs and <code>Infinity</code> is returned.</li>
+<li>If <code>x</code> is <code>+0</code> (<code>-0</code>), and <code>y</code> is an odd integer greater than <code>0</code>,
+the result is <code>+0</code> (<code>-0</code>).</li>
+<li>If <code>x</code> is <code>0</code>, and <code>y</code> greater than <code>0</code> and not an odd integer,
+the result is <code>+0</code>.</li>
+<li>If <code>x</code> is <code>-1</code>, and <code>y</code> is positive infinity or negative infinity,
+the result is <code>1.0</code>.</li>
+<li>If <code>x</code> is <code>+1</code>, the result is <code>1.0</code> (even if <code>y</code> is <code>NaN</code>).</li>
+<li>If <code>y</code> is <code>0</code>, the result is <code>1.0</code> (even if <code>x</code> is <code>NaN</code>).</li>
+<li>If <code>x</code> is a finite value less than <code>0</code>, and <code>y</code> is a finite
+noninteger, a domain error occurs, and <code>NaN</code> is returned.</li>
+<li>If the absolute value of <code>x</code> is less than <code>1</code>, and <code>y</code> is negative
+infinity, the result is positive infinity.</li>
+<li>If the absolute value of <code>x</code> is greater than <code>1</code>, and <code>y</code> is
+negative infinity, the result is <code>+0</code>.</li>
+<li>If the absolute value of <code>x</code> is less than <code>1</code>, and <code>y</code> is positive
+infinity, the result is <code>+0</code>.</li>
+<li>If the absolute value of <code>x</code> is greater than <code>1</code>, and <code>y</code> is positive
+infinity, the result is positive infinity.</li>
+<li>If <code>x</code> is negative infinity, and <code>y</code> is an odd integer less than <code>0</code>,
+the result is <code>-0</code>.</li>
+<li>If <code>x</code> is negative infinity, and <code>y</code> less than <code>0</code> and not an odd
+integer, the result is <code>+0</code>.</li>
+<li>If <code>x</code> is negative infinity, and <code>y</code> is an odd integer greater than
+<code>0</code>, the result is negative infinity.</li>
+<li>If <code>x</code> is negative infinity, and <code>y</code> greater than <code>0</code> and not an odd
+integer, the result is positive infinity.</li>
+<li>If <code>x</code> is positive infinity, and <code>y</code> less than <code>0</code>, the result is <code>+0</code>.</li>
+<li>If <code>x</code> is positive infinity, and <code>y</code> greater than <code>0</code>, the result is
+positive infinity.</li>
+</ul>
+<p>Returns <code>NaN</code> if either the <code>x</code> or <code>y</code> value can't be converted to a number.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>x</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The base value.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>y</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The power value.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line305">line 305</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#rand">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="rand">
+      <span class="type-signature"></span>rand<span class="signature">()</span><span class="type-signature"> &rarr; {number}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Produces a pseudo-random positive integer.</p>
+<p>Returns the calculated pseuo-random value. The value is within the range
+<code>0</code> to <code>RAND_MAX</code> inclusive where <code>RAND_MAX</code> is a platform specific value
+guaranteed to be at least <code>32767</code>.</p>
+<p>The <code>srand()</code> function sets its argument as the
+seed for a new sequence of pseudo-random integers to be returned by <code>rand()</code>. These sequences are
+repeatable by calling <code>srand()</code> with the same
+seed value.</p>
+<p>If no seed value is explicitly set by calling
+<code>srand()</code> prior to the first call to <code>rand()</code>,
+the math module will automatically seed the PRNG once, using the current
+time of day in milliseconds as seed value.</p>
+  </div>
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line373">line 373</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#sin">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="sin">
+      <span class="type-signature"></span>sin<span class="signature">(x)</span><span class="type-signature"> &rarr; {number}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Calculates the sine of <code>x</code>, where <code>x</code> is given in radians.</p>
+<p>Returns the resulting sine value.</p>
+<ul>
+<li>When <code>x</code> is positive or negative infinity, a domain error occurs
+and <code>NaN</code> is returned.</li>
+</ul>
+<p>Returns <code>NaN</code> if the <code>x</code> value can't be converted to a number.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>x</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Radians value to calculate sine for.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line248">line 248</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#sqrt">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="sqrt">
+      <span class="type-signature"></span>sqrt<span class="signature">(x)</span><span class="type-signature"> &rarr; {number}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Calculates the nonnegative square root of <code>x</code>.</p>
+<p>Returns the resulting square root value.</p>
+<ul>
+<li>If <code>x</code> is <code>+0</code> (<code>-0</code>) then <code>+0</code> (<code>-0</code>) is returned.</li>
+<li>If <code>x</code> is positive infinity, positive infinity is returned.</li>
+<li>If <code>x</code> is less than <code>-0</code>, a domain error occurs, and <code>NaN</code> is returned.</li>
+</ul>
+<p>Returns <code>NaN</code> if the <code>x</code> value can't be converted to a number.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>x</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Value to calculate square root for.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line276">line 276</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#srand">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="srand">
+      <span class="type-signature"></span>srand<span class="signature">(seed)</span><span class="type-signature"></span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Seeds the pseudo-random number generator.</p>
+<p>This functions seeds the PRNG with the given value and thus affects the
+pseudo-random integer sequence produced by subsequent calls to
+<code>rand()</code>.</p>
+<p>Setting the same seed value will result in the same pseudo-random numbers
+produced by <code>rand()</code>.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>seed</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The seed value.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_math.c.html">lib/math.c</a>, <a href="lib_math.c.html#line409">line 409</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+    
+
+    
+
+    
+  </article>
+</section>
+
+
+
+
+  </div>
+
+  <br class="clear">
+
+  <footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.2</a>
+  </footer>
+
+  <script src="scripts/linenumber.js"></script>
+  <script src="scripts/pagelocation.js"></script>
+
+  
+
+</body>
+</html>

@@ -1,0 +1,6132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>
+      fs - Documentation
+  </title>
+
+  <link href="https://www.braintreepayments.com/images/favicon-ccda0b14.png" rel="icon" type="image/png">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.7.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+
+  <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+  <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+  
+  <link type="text/css" rel="stylesheet" href="styles/collapse.css">
+  
+
+  
+
+  <!-- start Mixpanel -->
+  <script type="text/javascript">(function(e,a){if(!a.__SV){var b=window;try{var c,l,i,j=b.location,g=j.hash;c=function(a,b){return(l=a.match(RegExp(b+"=([^&]*)")))?l[1]:null};g&&c(g,"state")&&(i=JSON.parse(decodeURIComponent(c(g,"state"))),"mpeditor"===i.action&&(b.sessionStorage.setItem("_mpcehash",g),history.replaceState(i.desiredHash||"",e.title,j.pathname+j.search)))}catch(m){}var k,h;window.mixpanel=a;a._i=[];a.init=function(b,c,f){function e(b,a){var c=a.split(".");2==c.length&&(b=b[c[0]],a=c[1]);b[a]=function(){b.push([a].concat(Array.prototype.slice.call(arguments,
+  0)))}}var d=a;"undefined"!==typeof f?d=a[f]=[]:f="mixpanel";d.people=d.people||[];d.toString=function(b){var a="mixpanel";"mixpanel"!==f&&(a+="."+f);b||(a+=" (stub)");return a};d.people.toString=function(){return d.toString(1)+".people (stub)"};k="disable time_event track track_pageview track_links track_forms register register_once alias unregister identify name_tag set_config reset people.set people.set_once people.increment people.append people.union people.track_charge people.clear_charges people.delete_user".split(" ");
+  for(h=0;h<k.length;h++)e(d,k[h]);a._i.push([b,c,f])};a.__SV=1.2;b=e.createElement("script");b.type="text/javascript";b.async=!0;b.src="undefined"!==typeof MIXPANEL_CUSTOM_LIB_URL?MIXPANEL_CUSTOM_LIB_URL:"file:"===e.location.protocol&&"//cdn.mxpnl.com/libs/mixpanel-2-latest.min.js".match(/^\/\//)?"https://cdn.mxpnl.com/libs/mixpanel-2-latest.min.js":"//cdn.mxpnl.com/libs/mixpanel-2-latest.min.js";c=e.getElementsByTagName("script")[0];c.parentNode.insertBefore(b,c)}})(document,window.mixpanel||[]);
+  mixpanel.init("1919205b2da72e4da3b9b6639b444d59");</script>
+  <!-- end Mixpanel -->
+</head>
+
+<body>
+  <svg style="display: none;">
+    <defs>
+      <symbol id="linkIcon" fill="#706d77" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 0h24v24H0z" fill="none"/>
+          <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+  <label for="nav-trigger" class="navicon-button x">
+    <div class="navicon"></div>
+  </label>
+
+  <label for="nav-trigger" class="overlay"></label>
+
+  <div class="top-nav-wrapper">
+    <ul>
+      <li >
+        <a href="index.html">
+          
+            <svg fill="#6D6D6D" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+              <path d="M0 0h24v24H0z" fill="none"/>
+            </svg>
+          
+          
+        </a>
+      </li>
+
+      
+
+    </ul>
+  </div>
+
+  <nav>
+    <h3 class="reference-title">
+      OpenWrt ucode library reference
+    </h3>
+
+    
+
+    <h3>Modules</h3><ul><li id="core-nav"><a href="module-core.html">core</a><ul class='methods'><li data-type="method" id="core-arrtoip-nav"><a href="module-core.html#arrtoip">arrtoip</a></li><li data-type="method" id="core-assert-nav"><a href="module-core.html#assert">assert</a></li><li data-type="method" id="core-b64dec-nav"><a href="module-core.html#b64dec">b64dec</a></li><li data-type="method" id="core-b64enc-nav"><a href="module-core.html#b64enc">b64enc</a></li><li data-type="method" id="core-call-nav"><a href="module-core.html#call">call</a></li><li data-type="method" id="core-chr-nav"><a href="module-core.html#chr">chr</a></li><li data-type="method" id="core-clock-nav"><a href="module-core.html#clock">clock</a></li><li data-type="method" id="core-die-nav"><a href="module-core.html#die">die</a></li><li data-type="method" id="core-exists-nav"><a href="module-core.html#exists">exists</a></li><li data-type="method" id="core-exit-nav"><a href="module-core.html#exit">exit</a></li><li data-type="method" id="core-filter-nav"><a href="module-core.html#filter">filter</a></li><li data-type="method" id="core-gc-nav"><a href="module-core.html#gc">gc</a></li><li data-type="method" id="core-getenv-nav"><a href="module-core.html#getenv">getenv</a></li><li data-type="method" id="core-gmtime-nav"><a href="module-core.html#gmtime">gmtime</a></li><li data-type="method" id="core-hex-nav"><a href="module-core.html#hex">hex</a></li><li data-type="method" id="core-hexdec-nav"><a href="module-core.html#hexdec">hexdec</a></li><li data-type="method" id="core-hexenc-nav"><a href="module-core.html#hexenc">hexenc</a></li><li data-type="method" id="core-include-nav"><a href="module-core.html#include">include</a></li><li data-type="method" id="core-index-nav"><a href="module-core.html#index">index</a></li><li data-type="method" id="core-int-nav"><a href="module-core.html#int">int</a></li><li data-type="method" id="core-iptoarr-nav"><a href="module-core.html#iptoarr">iptoarr</a></li><li data-type="method" id="core-join-nav"><a href="module-core.html#join">join</a></li><li data-type="method" id="core-json-nav"><a href="module-core.html#json">json</a></li><li data-type="method" id="core-keys-nav"><a href="module-core.html#keys">keys</a></li><li data-type="method" id="core-lc-nav"><a href="module-core.html#lc">lc</a></li><li data-type="method" id="core-length-nav"><a href="module-core.html#length">length</a></li><li data-type="method" id="core-loadfile-nav"><a href="module-core.html#loadfile">loadfile</a></li><li data-type="method" id="core-loadstring-nav"><a href="module-core.html#loadstring">loadstring</a></li><li data-type="method" id="core-localtime-nav"><a href="module-core.html#localtime">localtime</a></li><li data-type="method" id="core-ltrim-nav"><a href="module-core.html#ltrim">ltrim</a></li><li data-type="method" id="core-map-nav"><a href="module-core.html#map">map</a></li><li data-type="method" id="core-match-nav"><a href="module-core.html#match">match</a></li><li data-type="method" id="core-max-nav"><a href="module-core.html#max">max</a></li><li data-type="method" id="core-min-nav"><a href="module-core.html#min">min</a></li><li data-type="method" id="core-ord-nav"><a href="module-core.html#ord">ord</a></li><li data-type="method" id="core-pop-nav"><a href="module-core.html#pop">pop</a></li><li data-type="method" id="core-print-nav"><a href="module-core.html#print">print</a></li><li data-type="method" id="core-printf-nav"><a href="module-core.html#printf">printf</a></li><li data-type="method" id="core-proto-nav"><a href="module-core.html#proto">proto</a></li><li data-type="method" id="core-push-nav"><a href="module-core.html#push">push</a></li><li data-type="method" id="core-regexp-nav"><a href="module-core.html#regexp">regexp</a></li><li data-type="method" id="core-render-nav"><a href="module-core.html#render">render</a></li><li data-type="method" id="core-replace-nav"><a href="module-core.html#replace">replace</a></li><li data-type="method" id="core-reverse-nav"><a href="module-core.html#reverse">reverse</a></li><li data-type="method" id="core-rindex-nav"><a href="module-core.html#rindex">rindex</a></li><li data-type="method" id="core-rtrim-nav"><a href="module-core.html#rtrim">rtrim</a></li><li data-type="method" id="core-shift-nav"><a href="module-core.html#shift">shift</a></li><li data-type="method" id="core-sleep-nav"><a href="module-core.html#sleep">sleep</a></li><li data-type="method" id="core-slice-nav"><a href="module-core.html#slice">slice</a></li><li data-type="method" id="core-sort-nav"><a href="module-core.html#sort">sort</a></li><li data-type="method" id="core-sourcepath-nav"><a href="module-core.html#sourcepath">sourcepath</a></li><li data-type="method" id="core-splice-nav"><a href="module-core.html#splice">splice</a></li><li data-type="method" id="core-split-nav"><a href="module-core.html#split">split</a></li><li data-type="method" id="core-sprintf-nav"><a href="module-core.html#sprintf">sprintf</a></li><li data-type="method" id="core-substr-nav"><a href="module-core.html#substr">substr</a></li><li data-type="method" id="core-system-nav"><a href="module-core.html#system">system</a></li><li data-type="method" id="core-time-nav"><a href="module-core.html#time">time</a></li><li data-type="method" id="core-timegm-nav"><a href="module-core.html#timegm">timegm</a></li><li data-type="method" id="core-timelocal-nav"><a href="module-core.html#timelocal">timelocal</a></li><li data-type="method" id="core-trace-nav"><a href="module-core.html#trace">trace</a></li><li data-type="method" id="core-trim-nav"><a href="module-core.html#trim">trim</a></li><li data-type="method" id="core-type-nav"><a href="module-core.html#type">type</a></li><li data-type="method" id="core-uc-nav"><a href="module-core.html#uc">uc</a></li><li data-type="method" id="core-uchr-nav"><a href="module-core.html#uchr">uchr</a></li><li data-type="method" id="core-uniq-nav"><a href="module-core.html#uniq">uniq</a></li><li data-type="method" id="core-unshift-nav"><a href="module-core.html#unshift">unshift</a></li><li data-type="method" id="core-values-nav"><a href="module-core.html#values">values</a></li><li data-type="method" id="core-warn-nav"><a href="module-core.html#warn">warn</a></li><li data-type="method" id="core-wildcard-nav"><a href="module-core.html#wildcard">wildcard</a></li></ul></li><li id="fs-nav"><a href="module-fs.html">fs</a><ul class='methods'><li data-type="method" id="fs-access-nav"><a href="module-fs.html#access">access</a></li><li data-type="method" id="fs-basename-nav"><a href="module-fs.html#basename">basename</a></li><li data-type="method" id="fs-chdir-nav"><a href="module-fs.html#chdir">chdir</a></li><li data-type="method" id="fs-chmod-nav"><a href="module-fs.html#chmod">chmod</a></li><li data-type="method" id="fs-chown-nav"><a href="module-fs.html#chown">chown</a></li><li data-type="method" id="fs-dirname-nav"><a href="module-fs.html#dirname">dirname</a></li><li data-type="method" id="fs-error-nav"><a href="module-fs.html#error">error</a></li><li data-type="method" id="fs-fdopen-nav"><a href="module-fs.html#fdopen">fdopen</a></li><li data-type="method" id="fs-getcwd-nav"><a href="module-fs.html#getcwd">getcwd</a></li><li data-type="method" id="fs-lsdir-nav"><a href="module-fs.html#lsdir">lsdir</a></li><li data-type="method" id="fs-lstat-nav"><a href="module-fs.html#lstat">lstat</a></li><li data-type="method" id="fs-mkdir-nav"><a href="module-fs.html#mkdir">mkdir</a></li><li data-type="method" id="fs-mkstemp-nav"><a href="module-fs.html#mkstemp">mkstemp</a></li><li data-type="method" id="fs-open-nav"><a href="module-fs.html#open">open</a></li><li data-type="method" id="fs-opendir-nav"><a href="module-fs.html#opendir">opendir</a></li><li data-type="method" id="fs-pipe-nav"><a href="module-fs.html#pipe">pipe</a></li><li data-type="method" id="fs-popen-nav"><a href="module-fs.html#popen">popen</a></li><li data-type="method" id="fs-readfile-nav"><a href="module-fs.html#readfile">readfile</a></li><li data-type="method" id="fs-readlink-nav"><a href="module-fs.html#readlink">readlink</a></li><li data-type="method" id="fs-realpath-nav"><a href="module-fs.html#realpath">realpath</a></li><li data-type="method" id="fs-rename-nav"><a href="module-fs.html#rename">rename</a></li><li data-type="method" id="fs-rmdir-nav"><a href="module-fs.html#rmdir">rmdir</a></li><li data-type="method" id="fs-stat-nav"><a href="module-fs.html#stat">stat</a></li><li data-type="method" id="fs-symlink-nav"><a href="module-fs.html#symlink">symlink</a></li><li data-type="method" id="fs-unlink-nav"><a href="module-fs.html#unlink">unlink</a></li><li data-type="method" id="fs-writefile-nav"><a href="module-fs.html#writefile">writefile</a></li></ul></li><li id="math-nav"><a href="module-math.html">math</a><ul class='methods'><li data-type="method" id="math-abs-nav"><a href="module-math.html#abs">abs</a></li><li data-type="method" id="math-atan2-nav"><a href="module-math.html#atan2">atan2</a></li><li data-type="method" id="math-cos-nav"><a href="module-math.html#cos">cos</a></li><li data-type="method" id="math-exp-nav"><a href="module-math.html#exp">exp</a></li><li data-type="method" id="math-isnan-nav"><a href="module-math.html#isnan">isnan</a></li><li data-type="method" id="math-log-nav"><a href="module-math.html#log">log</a></li><li data-type="method" id="math-pow-nav"><a href="module-math.html#pow">pow</a></li><li data-type="method" id="math-rand-nav"><a href="module-math.html#rand">rand</a></li><li data-type="method" id="math-sin-nav"><a href="module-math.html#sin">sin</a></li><li data-type="method" id="math-sqrt-nav"><a href="module-math.html#sqrt">sqrt</a></li><li data-type="method" id="math-srand-nav"><a href="module-math.html#srand">srand</a></li></ul></li></ul>
+  </nav>
+
+  <div id="main">
+    
+      <h1 class="page-title">
+        fs
+      </h1>
+    
+
+    
+
+<section>
+  <header>
+    
+  </header>
+
+  <article>
+    <div class="container-overview">
+      
+        
+            <div class="description">
+              <p>This module provides functions for interacting with the file system.</p>
+<p>Functions can be individually imported and directly accessed using the
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import">named import</a>
+syntax:</p>
+<pre class="prettyprint source"><code>import { readlink, popen } from 'fs';
+
+let dest = readlink('/sys/class/net/eth0');
+let proc = popen('ps ww');
+</code></pre>
+<p>Alternatively, the module namespace can be imported
+using a wildcard import statement:</p>
+<pre class="prettyprint source"><code>import * as fs from 'fs';
+
+let dest = fs.readlink('/sys/class/net/eth0');
+let proc = fs.popen('ps ww');
+</code></pre>
+<p>Additionally, the filesystem module namespace may also be imported by invoking
+the <code>ucode</code> interpreter with the <code>-lfs</code> switch.</p>
+            </div>
+        
+
+        
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line17">line 17</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+        
+      
+    </div>
+
+    
+
+    
+
+    
+
+     
+
+    
+      <h3 class="subsection-title">Namespaces</h3>
+
+      <dl>
+        
+          <dt>
+            <a href="module-fs.file.html">file</a>
+          </dt>
+          <dd>
+            
+          </dd>
+        
+          <dt>
+            <a href="module-fs.proc.html">proc</a>
+          </dt>
+          <dd>
+            
+          </dd>
+        
+      </dl>
+    
+
+    
+
+    
+      <h3 class="subsection-title">Methods</h3>
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#access">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="access">
+      <span class="type-signature"></span>access<span class="signature">(path, mode<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {boolean|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Checks the accessibility of a file or directory.</p>
+<p>The optional modes argument specifies the access modes which should be
+checked. A file is only considered accessible if all access modes specified
+in the modes argument are possible.</p>
+<p>The following modes are recognized:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&quot;r&quot;</td>
+<td>Tests whether the file is readable.</td>
+</tr>
+<tr>
+<td>&quot;w&quot;</td>
+<td>Tests whether the file is writable.</td>
+</tr>
+<tr>
+<td>&quot;x&quot;</td>
+<td>Tests whether the file is executable.</td>
+</tr>
+<tr>
+<td>&quot;f&quot;</td>
+<td>Tests whether the file exists.</td>
+</tr>
+</tbody>
+</table>
+<p>Returns <code>true</code> if the given path is accessible or <code>false</code> when it is not.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to inaccessible intermediate
+path components, invalid path arguments etc.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+        <th>Attributes</th>
+      
+
+      
+        <th>Default</th>
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The path to the file or directory.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>mode</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+              &lt;optional><br>
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+              "f"
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>Optional access mode.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1999">line 1999</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#access-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="access-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Check file read and write accessibility
+const isAccessible = access('path/to/file', 'rw');
+
+// Check execute permissions
+const mayExecute = access('/usr/bin/example', 'x');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#basename">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="basename">
+      <span class="type-signature"></span>basename<span class="signature">(path)</span><span class="type-signature"> &rarr; {string|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Retrieves the base name of a path.</p>
+<p>Returns the base name component of the specified path.</p>
+<p>Returns <code>null</code> if the path argument is not a string.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to extract the base name from.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1784">line 1784</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#basename-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="basename-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Get the base name of a path
+const baseName = basename('/path/to/file.txt');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#chdir">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="chdir">
+      <span class="type-signature"></span>chdir<span class="signature">(path)</span><span class="type-signature"> &rarr; {boolean|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Changes the current working directory to the specified path.</p>
+<p>Returns <code>true</code> if the permission change was successful.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to insufficient permissions or
+invalid arguments.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the new working directory.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1446">line 1446</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#chdir-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="chdir-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Change the current working directory
+chdir('new-directory');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#chmod">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="chmod">
+      <span class="type-signature"></span>chmod<span class="signature">(path, mode)</span><span class="type-signature"> &rarr; {boolean|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Changes the permission mode bits of a file or directory.</p>
+<p>Returns <code>true</code> if the permission change was successful.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to insufficient permissions or
+invalid arguments.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the file or directory.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>mode</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The new mode (permissions).</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1479">line 1479</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#chmod-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="chmod-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Change the mode of a file
+chmod('path/to/file', 0o644);</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#chown">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="chown">
+      <span class="type-signature"></span>chown<span class="signature">(path, uid<span class="signature-attributes">opt</span>, gid<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {boolean|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Changes the owner and group of a file or directory.</p>
+<p>The user and group may be specified either as uid or gid number respectively,
+or as a string containing the user or group name, in which case it is
+resolved to the proper uid/gid first.</p>
+<p>If either the user or group parameter is omitted or given as <code>-1</code>,
+it is not changed.</p>
+<p>Returns <code>true</code> if the ownership change was successful.</p>
+<p>Returns <code>null</code> if an error occurred or if a user/group name cannot be
+resolved to a uid/gid value.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+        <th>Attributes</th>
+      
+
+      
+        <th>Default</th>
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The path to the file or directory.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>uid</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    |
+
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+              &lt;optional><br>
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+              -1
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The new owner's user ID. When given as number, it is used as-is, when given
+as string, the user name is resolved to the corresponding uid first.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>gid</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    |
+
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+              &lt;optional><br>
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+              -1
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The new group's ID. When given as number, it is used as-is, when given as
+string, the group name is resolved to the corresponding gid first.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1611">line 1611</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#chown-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="chown-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Change the owner of a file
+chown('path/to/file', 1000);
+
+// Change the group of a directory
+chown('/htdocs/', null, 'www-data');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#dirname">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="dirname">
+      <span class="type-signature"></span>dirname<span class="signature">(path)</span><span class="type-signature"> &rarr; {string|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Retrieves the directory name of a path.</p>
+<p>Returns the directory name component of the specified path.</p>
+<p>Returns <code>null</code> if the path argument is not a string.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to extract the directory name from.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1735">line 1735</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#dirname-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="dirname-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Get the directory name of a path
+const directoryName = dirname('/path/to/file.txt');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#error">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="error">
+      <span class="type-signature"></span>error<span class="signature">()</span><span class="type-signature"> &rarr; {string|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Query error information.</p>
+<p>Returns a string containing a description of the last occurred error or
+<code>null</code> if there is no error information.</p>
+  </div>
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line74">line 74</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#error-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="error-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Trigger file system error
+unlink('/path/does/not/exist');
+
+// Print error (should yield "No such file or directory")
+print(error(), "\n");</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#fdopen">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="fdopen">
+      <span class="type-signature"></span>fdopen<span class="signature">(fd, mode<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Object}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Associates a file descriptor number with a file handle object.</p>
+<p>The mode argument controls how the file handle object is opened
+and must match the open mode of the underlying descriptor.</p>
+<p>It may be set to one of the following values:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&quot;r&quot;</td>
+<td>Opens a file stream for reading. The file descriptor must be valid and opened in read mode.</td>
+</tr>
+<tr>
+<td>&quot;w&quot;</td>
+<td>Opens a file stream for writing. The file descriptor must be valid and opened in write mode.</td>
+</tr>
+<tr>
+<td>&quot;a&quot;</td>
+<td>Opens a file stream for appending. The file descriptor must be valid and opened in write mode.</td>
+</tr>
+<tr>
+<td>&quot;r+&quot;</td>
+<td>Opens a file stream for both reading and writing. The file descriptor must be valid and opened in read/write mode.</td>
+</tr>
+<tr>
+<td>&quot;w+&quot;</td>
+<td>Opens a file stream for both reading and writing. The file descriptor must be valid and opened in read/write mode.</td>
+</tr>
+<tr>
+<td>&quot;a+&quot;</td>
+<td>Opens a file stream for both reading and appending. The file descriptor must be valid and opened in read/write mode.</td>
+</tr>
+</tbody>
+</table>
+<p>Returns the file handle object associated with the file descriptor.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+        <th>Attributes</th>
+      
+
+      
+        <th>Default</th>
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>fd</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The file descriptor.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>mode</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+              &lt;optional><br>
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+              "r"
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The open mode.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line872">line 872</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#fdopen-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="fdopen-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Associate file descriptors of stdin and stdout with handles
+const stdinHandle = fdopen(0, 'r');
+const stdoutHandle = fdopen(1, 'w');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#getcwd">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="getcwd">
+      <span class="type-signature"></span>getcwd<span class="signature">()</span><span class="type-signature"> &rarr; {string|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Retrieves the current working directory.</p>
+<p>Returns a string containing the current working directory path.</p>
+<p>Returns <code>null</code> if an error occurred.</p>
+  </div>
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1395">line 1395</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#getcwd-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="getcwd-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Get the current working directory
+const cwd = getcwd();</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#lsdir">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="lsdir">
+      <span class="type-signature"></span>lsdir<span class="signature">(path)</span><span class="type-signature"> &rarr; {Array.&lt;string>|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Lists the content of a directory.</p>
+<p>Returns a sorted array of the names of files and directories in the specified
+directory.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. if the specified directory cannot
+be opened.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the directory.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1836">line 1836</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#lsdir-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="lsdir-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// List the content of a directory
+const fileList = lsdir('/path/to/directory');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#lstat">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="lstat">
+      <span class="type-signature"></span>lstat<span class="signature">(path)</span><span class="type-signature"> &rarr; {<a href="module-fs.html#.FileStatResult">module:fs.FileStatResult</a>|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Retrieves information about a file or directory, without following symbolic
+links.</p>
+<p>Returns an object containing information about the file or directory.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to insufficient permissions.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the file or directory.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1235">line 1235</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#lstat-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="lstat-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Get information about a directory
+const dirInfo = lstat('path/to/directory');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#mkdir">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="mkdir">
+      <span class="type-signature"></span>mkdir<span class="signature">(path)</span><span class="type-signature"> &rarr; {boolean|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Creates a new directory.</p>
+<p>Returns <code>true</code> if the directory was successfully created.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to inexistent path.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the new directory.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1260">line 1260</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#mkdir-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="mkdir-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Create a directory
+mkdir('path/to/new-directory');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#mkstemp">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="mkstemp">
+      <span class="type-signature"></span>mkstemp<span class="signature">(template<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Object|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Creates a unique, ephemeral temporary file.</p>
+<p>Creates a new temporary file, opens it in read and write mode, unlinks it and
+returns a file handle object referring to the yet open but deleted file.</p>
+<p>Upon closing the handle, the associated file will automatically vanish from
+the system.</p>
+<p>The optional path template argument may be used to override the path and name
+chosen for the temporary file. If the path template contains no path element,
+<code>/tmp/</code> is prepended, if it does not end with <code>XXXXXX</code>, then  * <code>.XXXXXX</code> is
+appended to it. The <code>XXXXXX</code> sequence is replaced with a random value
+ensuring uniqueness of the temporary file name.</p>
+<p>Returns a file handle object referring to the ephemeral file on success.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. on insufficient permissions or
+inaccessible directory.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+        <th>Attributes</th>
+      
+
+      
+        <th>Default</th>
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>template</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+              &lt;optional><br>
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+              "/tmp/XXXXXX"
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The path template to use when forming the temporary file name.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1911">line 1911</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#mkstemp-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="mkstemp-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Create a unique temporary file in the current working directory
+const tempFile = mkstemp('./data-XXXXXX');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#open">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="open">
+      <span class="type-signature"></span>open<span class="signature">(path, mode<span class="signature-attributes">opt</span>, perm<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {<a href="module-fs.file.html">module:fs.file</a>|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Opens a file.</p>
+<p>The mode argument specifies the way the file is opened, it may
+start with one of the following values:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&quot;r&quot;</td>
+<td>Opens a file for reading. The file must exist.</td>
+</tr>
+<tr>
+<td>&quot;w&quot;</td>
+<td>Opens a file for writing. If the file exists, it is truncated. If the file does not exist, it is created.</td>
+</tr>
+<tr>
+<td>&quot;a&quot;</td>
+<td>Opens a file for appending. Data is written at the end of the file. If the file does not exist, it is created.</td>
+</tr>
+<tr>
+<td>&quot;r+&quot;</td>
+<td>Opens a file for both reading and writing. The file must exist.</td>
+</tr>
+<tr>
+<td>&quot;w+&quot;</td>
+<td>Opens a file for both reading and writing. If the file exists, it is truncated. If the file does not exist, it is created.</td>
+</tr>
+<tr>
+<td>&quot;a+&quot;</td>
+<td>Opens a file for both reading and appending. Data can be read and written at the end of the file. If the file does not exist, it is created.</td>
+</tr>
+</tbody>
+</table>
+<p>Additionally, the following flag characters may be appended to
+the mode value:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&quot;x&quot;</td>
+<td>Opens a file for exclusive creation. If the file exists, the <code>open</code> call fails.</td>
+</tr>
+<tr>
+<td>&quot;e&quot;</td>
+<td>Opens a file with the <code>O_CLOEXEC</code> flag set, ensuring that the file descriptor is closed on <code>exec</code> calls.</td>
+</tr>
+</tbody>
+</table>
+<p>If the mode is one of <code>&quot;w…&quot;</code> or <code>&quot;a…&quot;</code>, the permission argument
+controls the filesystem permissions bits used when creating
+the file.</p>
+<p>Returns a file handle object associated with the opened file.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+        <th>Attributes</th>
+      
+
+      
+        <th>Default</th>
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The path to the file.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>mode</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+              &lt;optional><br>
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+              "r"
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The file opening mode.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>perm</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+              &lt;optional><br>
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+              0o666
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The file creation permissions (for modes <code>w…</code> and <code>a…</code>)</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line753">line 753</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#open-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="open-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Open a file in read-only mode
+const fileHandle = open('file.txt', 'r');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#opendir">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="opendir">
+      <span class="type-signature"></span>opendir<span class="signature">(path)</span><span class="type-signature"> &rarr; {Object|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Opens a directory and returns a directory handle associated with the open
+directory descriptor.</p>
+<p>Returns a director handle referring to the open directory.</p>
+<p>Returns <code>null</code> if an error occurred.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the directory.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1001">line 1001</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#opendir-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="opendir-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Open a directory
+const directory = opendir('path/to/directory');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#pipe">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="pipe">
+      <span class="type-signature"></span>pipe<span class="signature">()</span><span class="type-signature"> &rarr; {Array.&lt;Object>|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Creates a pipe and returns file handle objects associated with the read- and
+write end of the pipe respectively.</p>
+<p>Returns a two element array containing both a file handle object open in read
+mode referring to the read end of the pipe and a file handle object open in
+write mode referring to the write end of the pipe.</p>
+<p>Returns <code>null</code> if an error occurred.</p>
+  </div>
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2316">line 2316</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#pipe-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="pipe-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Create a pipe
+const pipeHandles = pipe();
+pipeHandles[1].write("Hello world\n");
+print(pipeHandles[0].read("line"));</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#popen">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="popen">
+      <span class="type-signature"></span>popen<span class="signature">(command, mode<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {<a href="module-fs.proc.html">module:fs.proc</a>|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Starts a process and returns a handle representing the executed process.</p>
+<p>The handle will be connected to the process stdin or stdout, depending on the
+value of the mode argument.</p>
+<p>The mode argument may be either &quot;r&quot; to open the process for reading (connect
+to its stdin) or &quot;w&quot; to open the process for writing (connect to its stdout).</p>
+<p>The mode character &quot;r&quot; or &quot;w&quot; may be optionally followed by &quot;e&quot; to apply the
+FD_CLOEXEC flag onto the open descriptor.</p>
+<p>Returns a process handle referring to the executed process.</p>
+<p>Returns <code>null</code> if an error occurred.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+        <th>Attributes</th>
+      
+
+      
+        <th>Default</th>
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>command</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The command to be executed.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>mode</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+              &lt;optional><br>
+            
+
+            
+
+            
+          </td>
+        
+
+        
+          <td class="default">
+            
+              "r"
+            
+          </td>
+        
+
+        <td class="description last">
+          <p>The open mode of the process handle.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line452">line 452</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#popen-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="popen-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Open a process
+const process = popen('command', 'r');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#readfile">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="readfile">
+      <span class="type-signature"></span>readfile<span class="signature">(path, limit<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {string|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Reads the content of a file, optionally limited to the given amount of bytes.</p>
+<p>Returns a string containing the file contents.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to insufficient permissions.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+        <th>Attributes</th>
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+
+            
+
+            
+          </td>
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the file.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>limit</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+              &lt;optional><br>
+            
+
+            
+
+            
+          </td>
+        
+
+        
+
+        <td class="description last">
+          <p>Number of bytes to limit the result to. When omitted, the entire content is
+returned.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2080">line 2080</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#readfile-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="readfile-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Read first 100 bytes of content
+const content = readfile('path/to/file', 100);
+
+// Read entire file content
+const content = readfile('path/to/file');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#readlink">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="readlink">
+      <span class="type-signature"></span>readlink<span class="signature">(path)</span><span class="type-signature"> &rarr; {string|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Reads the target path of a symbolic link.</p>
+<p>Returns a string containing the target path.</p>
+<p>Returns <code>null</code> if an error occurred.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the symbolic link.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1037">line 1037</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#readlink-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="readlink-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Read the value of a symbolic link
+const targetPath = readlink('symbolicLink');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#realpath">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="realpath">
+      <span class="type-signature"></span>realpath<span class="signature">(path)</span><span class="type-signature"> &rarr; {string|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Resolves the absolute path of a file or directory.</p>
+<p>Returns a string containing the resolved path.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to insufficient permissions.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the file or directory.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2277">line 2277</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#realpath-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="realpath-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Resolve the absolute path of a file
+const absolutePath = realpath('path/to/file', 'utf8');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#rename">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="rename">
+      <span class="type-signature"></span>rename<span class="signature">(oldPath, newPath)</span><span class="type-signature"> &rarr; {boolean|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Renames or moves a file or directory.</p>
+<p>Returns <code>true</code> if the rename operation was successful.</p>
+<p>Returns <code>null</code> if an error occurred.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>oldPath</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The current path of the file or directory.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>newPath</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The new path of the file or directory.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1670">line 1670</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#rename-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="rename-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Rename a file
+rename('old-name.txt', 'new-name.txt');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#rmdir">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="rmdir">
+      <span class="type-signature"></span>rmdir<span class="signature">(path)</span><span class="type-signature"> &rarr; {boolean|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Removes the specified directory.</p>
+<p>Returns <code>true</code> if the directory was successfully removed.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to inexistent path.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the directory to be removed.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1294">line 1294</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#rmdir-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="rmdir-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Remove a directory
+rmdir('path/to/directory');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#stat">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="stat">
+      <span class="type-signature"></span>stat<span class="signature">(path)</span><span class="type-signature"> &rarr; {<a href="module-fs.html#.FileStatResult">module:fs.FileStatResult</a>|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Retrieves information about a file or directory.</p>
+<p>Returns an object containing information about the file or directory.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to insufficient permissions.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the file or directory.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1211">line 1211</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#stat-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="stat-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Get information about a file
+const fileInfo = stat('path/to/file');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#symlink">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="symlink">
+      <span class="type-signature"></span>symlink<span class="signature">(target, path)</span><span class="type-signature"> &rarr; {boolean|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Creates a new symbolic link.</p>
+<p>Returns <code>true</code> if the symlink was successfully created.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to inexistent path.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>target</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The target of the symbolic link.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path of the symbolic link.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1326">line 1326</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#symlink-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="symlink-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Create a symbolic link
+symlink('target', 'path/to/symlink');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#unlink">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="unlink">
+      <span class="type-signature"></span>unlink<span class="signature">(path)</span><span class="type-signature"> &rarr; {boolean|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Removes the specified file or symbolic link.</p>
+<p>Returns <code>true</code> if the unlink operation was successful.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to inexistent path.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the file or symbolic link.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1363">line 1363</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#unlink-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="unlink-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Remove a file
+unlink('path/to/file');</code></pre>
+
+
+  </div>
+
+
+      
+        
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#writefile">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id="writefile">
+      <span class="type-signature"></span>writefile<span class="signature">(path, data, limit<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {number|null}</span>
+    </h4>
+  </span>
+
+  
+
+
+
+  <div class="description">
+    <p>Writes the given data to a file, optionally truncated to the given amount
+of bytes.</p>
+<p>In case the given data is not a string, it is converted to a string before
+being written into the file. String values are written as-is, integer and
+double values are written in decimal notation, boolean values are written as
+<code>true</code> or <code>false</code> while arrays and objects are converted to their JSON
+representation before being written into the file. The <code>null</code> value is
+represented by an empty string so <code>writefile(…, null)</code> would write an empty
+file. Resource values are written in the form <code>&lt;type address&gt;</code>, e.g.
+<code>&lt;fs.file 0x7f60f0981760&gt;</code>.</p>
+<p>If resource, array or object values contain a <code>tostring()</code> function in their
+prototypes, then this function is invoked to obtain an alternative string
+representation of the value.</p>
+<p>If a file already exists at the given path, it is truncated. If no file
+exists, it is created with default permissions 0o666 masked by the currently
+effective umask.</p>
+<p>Returns the number of bytes written.</p>
+<p>Returns <code>null</code> if an error occurred, e.g. due to insufficient permissions.</p>
+  </div>
+
+
+
+
+
+
+
+  <h5>Parameters:</h5>
+  
+
+<table class="params">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+        <th>Attributes</th>
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+      <tr>
+        
+          <td class="name"><code>path</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+
+            
+
+            
+          </td>
+        
+
+        
+
+        <td class="description last">
+          <p>The path to the file.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>data</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      *
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+
+            
+
+            
+          </td>
+        
+
+        
+
+        <td class="description last">
+          <p>The data to be written.</p>
+          
+        </td>
+      </tr>
+
+    
+      <tr>
+        
+          <td class="name"><code>limit</code></td>
+        
+
+        <td class="type">
+          
+            
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+          
+        </td>
+
+        
+          <td class="attributes">
+            
+              &lt;optional><br>
+            
+
+            
+
+            
+          </td>
+        
+
+        
+
+        <td class="description last">
+          <p>Truncates the amount of data to be written to the specified amount of bytes.
+When omitted, the entire content is written.</p>
+          
+        </td>
+      </tr>
+
+    
+  </tbody>
+</table>
+
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2171">line 2171</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="example-container">
+    <a class="link-icon" href="#writefile-examples">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h5 id="writefile-examples">Example</h5>
+    
+
+  <pre class="prettyprint"><code>// Write string to a file
+const bytesWritten = writefile('path/to/file', 'Hello, World!');
+
+// Write object as JSON to a file and limit to 1024 bytes at most
+const obj = { foo: "Hello world", bar: true, baz: 123 };
+const bytesWritten = writefile('debug.txt', obj, 1024);</code></pre>
+
+
+  </div>
+
+
+      
+    
+
+    
+      <h3 class="subsection-title">Type Definitions</h3>
+
+      
+          
+
+
+  
+
+  <span class='name-container'>
+    <a class="link-icon" href="#.FileStatResult">
+      <svg height="20" width="20" style="fill: black;">
+        <use xlink:href="#linkIcon"></use>
+      </svg>
+    </a>
+    <h4 class="name" id=".FileStatResult">
+      <span class="type-signature"></span>FileStatResult<span class="type-signature"> :Object</span>
+    </h4>
+  </span>
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  <h5 class="subsection-title">Properties:</h5>
+
+  
+
+<table class="props">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+
+    <tr>
+      
+        <td class="name"><code>dev</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      Object
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The device information.</p>
+          
+            <h6>Properties</h6>
+            
+
+<table class="props">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+
+    <tr>
+      
+        <td class="name"><code>major</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The major device number.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>minor</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The minor device number.</p>
+          </td>
+    </tr>
+
+  
+  </tbody>
+</table>
+
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>perm</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      Object
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The file permissions.</p>
+          
+            <h6>Properties</h6>
+            
+
+<table class="props">
+  <thead>
+    <tr>
+      
+        <th>Name</th>
+      
+
+      <th>Type</th>
+
+      
+
+      
+
+      <th class="last">Description</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    
+
+    <tr>
+      
+        <td class="name"><code>setuid</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the setuid bit is set.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>setgid</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the setgid bit is set.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>sticky</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the sticky bit is set.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>user_read</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the file is readable by the owner.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>user_write</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the file is writable by the owner.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>user_exec</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the file is executable by the owner.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>group_read</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the file is readable by the group.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>group_write</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the file is writable by the group.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>group_exec</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the file is executable by the group.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>other_read</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the file is readable by others.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>other_write</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the file is writable by others.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>other_exec</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      boolean
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>Whether the file is executable by others.</p>
+          </td>
+    </tr>
+
+  
+  </tbody>
+</table>
+
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>inode</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The inode number.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>mode</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The file mode.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>nlink</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The number of hard links.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>uid</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The user ID of the owner.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>gid</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The group ID of the owner.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>size</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The file size in bytes.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>blksize</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The block size for file system I/O.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>blocks</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The number of 512-byte blocks allocated for the file.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>atime</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The timestamp when the file was last accessed.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>mtime</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The timestamp when the file was last modified.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>ctime</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      number
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The timestamp when the file status was last changed.</p>
+          </td>
+    </tr>
+
+  
+
+    <tr>
+      
+        <td class="name"><code>type</code></td>
+      
+
+      <td class="type">
+        
+          
+    <span class="param-type">
+      string
+    </span>
+
+    
+
+
+        
+      </td>
+
+        
+
+        
+
+        <td class="description last">
+          <p>The type of the file (&quot;directory&quot;, &quot;file&quot;, etc.).</p>
+          </td>
+    </tr>
+
+  
+  </tbody>
+</table>
+
+
+
+
+<dl class="details">
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source">
+      <ul class="dummy">
+        <li>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1095">line 1095</a>
+        </li>
+      </ul>
+    </dd>
+  
+
+  
+
+  
+
+  
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+
+    
+  </article>
+</section>
+
+
+
+
+  </div>
+
+  <br class="clear">
+
+  <footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.2</a>
+  </footer>
+
+  <script src="scripts/linenumber.js"></script>
+  <script src="scripts/pagelocation.js"></script>
+
+  
+
+</body>
+</html>
