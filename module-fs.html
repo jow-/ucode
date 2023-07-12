@@ -183,6 +183,13 @@ the <code>ucode</code> interpreter with the <code>-lfs</code> switch.</p>
       <dl>
         
           <dt>
+            <a href="module-fs.dir.html">dir</a>
+          </dt>
+          <dd>
+            
+          </dd>
+        
+          <dt>
             <a href="module-fs.file.html">file</a>
           </dt>
           <dd>
@@ -418,7 +425,7 @@ path components, invalid path arguments etc.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1999">line 1999</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2220">line 2220</a>
         </li>
       </ul>
     </dd>
@@ -584,7 +591,7 @@ const mayExecute = access('/usr/bin/example', 'x');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1784">line 1784</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2005">line 2005</a>
         </li>
       </ul>
     </dd>
@@ -748,7 +755,7 @@ invalid arguments.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1446">line 1446</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1667">line 1667</a>
         </li>
       </ul>
     </dd>
@@ -941,7 +948,7 @@ invalid arguments.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1479">line 1479</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1700">line 1700</a>
         </li>
       </ul>
     </dd>
@@ -1230,7 +1237,7 @@ string, the group name is resolved to the corresponding gid first.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1611">line 1611</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1832">line 1832</a>
         </li>
       </ul>
     </dd>
@@ -1396,7 +1403,7 @@ chown('/htdocs/', null, 'www-data');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1735">line 1735</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1956">line 1956</a>
         </li>
       </ul>
     </dd>
@@ -1767,7 +1774,7 @@ and must match the open mode of the underlying descriptor.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line872">line 872</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line984">line 984</a>
         </li>
       </ul>
     </dd>
@@ -1876,7 +1883,7 @@ const stdoutHandle = fdopen(1, 'w');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1395">line 1395</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1616">line 1616</a>
         </li>
       </ul>
     </dd>
@@ -2041,7 +2048,7 @@ be opened.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1836">line 1836</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2057">line 2057</a>
         </li>
       </ul>
     </dd>
@@ -2205,7 +2212,7 @@ links.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1235">line 1235</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1456">line 1456</a>
         </li>
       </ul>
     </dd>
@@ -2368,7 +2375,7 @@ const dirInfo = lstat('path/to/directory');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1260">line 1260</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1481">line 1481</a>
         </li>
       </ul>
     </dd>
@@ -2422,7 +2429,7 @@ mkdir('path/to/new-directory');</code></pre>
       </svg>
     </a>
     <h4 class="name" id="mkstemp">
-      <span class="type-signature"></span>mkstemp<span class="signature">(template<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Object|null}</span>
+      <span class="type-signature"></span>mkstemp<span class="signature">(template<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {<a href="module-fs.file.html">module:fs.file</a>|null}</span>
     </h4>
   </span>
 
@@ -2561,7 +2568,7 @@ inaccessible directory.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1911">line 1911</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2132">line 2132</a>
         </li>
       </ul>
     </dd>
@@ -2888,7 +2895,7 @@ the file.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line753">line 753</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line865">line 865</a>
         </li>
       </ul>
     </dd>
@@ -2942,7 +2949,7 @@ const fileHandle = open('file.txt', 'r');</code></pre>
       </svg>
     </a>
     <h4 class="name" id="opendir">
-      <span class="type-signature"></span>opendir<span class="signature">(path)</span><span class="type-signature"> &rarr; {Object|null}</span>
+      <span class="type-signature"></span>opendir<span class="signature">(path)</span><span class="type-signature"> &rarr; {<a href="module-fs.dir.html">module:fs.dir</a>|null}</span>
     </h4>
   </span>
 
@@ -3052,7 +3059,7 @@ directory descriptor.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1001">line 1001</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1222">line 1222</a>
         </li>
       </ul>
     </dd>
@@ -3106,7 +3113,7 @@ const directory = opendir('path/to/directory');</code></pre>
       </svg>
     </a>
     <h4 class="name" id="pipe">
-      <span class="type-signature"></span>pipe<span class="signature">()</span><span class="type-signature"> &rarr; {Array.&lt;Object>|null}</span>
+      <span class="type-signature"></span>pipe<span class="signature">()</span><span class="type-signature"> &rarr; {Array.&lt;<a href="module-fs.file.html">module:fs.file</a>>|null}</span>
     </h4>
   </span>
 
@@ -3163,7 +3170,7 @@ write mode referring to the write end of the pipe.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2316">line 2316</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2537">line 2537</a>
         </li>
       </ul>
     </dd>
@@ -3395,7 +3402,7 @@ FD_CLOEXEC flag onto the open descriptor.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line452">line 452</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line474">line 474</a>
         </li>
       </ul>
     </dd>
@@ -3608,7 +3615,7 @@ returned.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2080">line 2080</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2301">line 2301</a>
         </li>
       </ul>
     </dd>
@@ -3774,7 +3781,7 @@ const content = readfile('path/to/file');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1037">line 1037</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1258">line 1258</a>
         </li>
       </ul>
     </dd>
@@ -3937,7 +3944,7 @@ const targetPath = readlink('symbolicLink');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2277">line 2277</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2498">line 2498</a>
         </li>
       </ul>
     </dd>
@@ -4129,7 +4136,7 @@ const absolutePath = realpath('path/to/file', 'utf8');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1670">line 1670</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1891">line 1891</a>
         </li>
       </ul>
     </dd>
@@ -4292,7 +4299,7 @@ rename('old-name.txt', 'new-name.txt');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1294">line 1294</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1515">line 1515</a>
         </li>
       </ul>
     </dd>
@@ -4455,7 +4462,7 @@ rmdir('path/to/directory');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1211">line 1211</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1432">line 1432</a>
         </li>
       </ul>
     </dd>
@@ -4647,7 +4654,7 @@ const fileInfo = stat('path/to/file');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1326">line 1326</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1547">line 1547</a>
         </li>
       </ul>
     </dd>
@@ -4810,7 +4817,7 @@ symlink('target', 'path/to/symlink');</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1363">line 1363</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1584">line 1584</a>
         </li>
       </ul>
     </dd>
@@ -5075,7 +5082,7 @@ When omitted, the entire content is written.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2171">line 2171</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line2392">line 2392</a>
         </li>
       </ul>
     </dd>
@@ -6080,7 +6087,7 @@ const bytesWritten = writefile('debug.txt', obj, 1024);</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1095">line 1095</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1316">line 1316</a>
         </li>
       </ul>
     </dd>

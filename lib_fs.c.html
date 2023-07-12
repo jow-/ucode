@@ -362,6 +362,28 @@ uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
  * handle.fileno();
  *
  * handle.close();
+ *
+ * handle.error();
+ */
+
+/**
+ * Query error information.
+ *
+ * Returns a string containing a description of the last occurred error or
+ * `null` if there is no error information.
+ *
+ * @function module:fs.proc#error
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * // Trigger error
+ * const fp = popen("command");
+ * fp.close();
+ * fp.close(); // already closed
+ *
+ * // Print error (should yield "Bad file descriptor")
+ * print(fp.error(), "\n");
  */
 
 /**
@@ -612,6 +634,28 @@ uc_fs_popen(uc_vm_t *vm, size_t nargs)
  * handle.fileno();
  *
  * handle.close();
+ *
+ * handle.error();
+ */
+
+/**
+ * Query error information.
+ *
+ * Returns a string containing a description of the last occurred error or
+ * `null` if there is no error information.
+ *
+ * @function module:fs.file#error
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * // Trigger error
+ * const fp = open("file.txt");
+ * fp.close();
+ * fp.close(); // already closed
+ *
+ * // Print error (should yield "Bad file descriptor")
+ * print(fp.error(), "\n");
  */
 
 /**
@@ -739,6 +783,45 @@ uc_fs_write(uc_vm_t *vm, size_t nargs)
 	return uc_fs_write_common(vm, nargs, "fs.file");
 }
 
+/**
+ * Set file read position.
+ *
+ * Set the read position of the open file handle to the given offset and
+ * position.
+ *
+ * Returns `true` if the read position was set.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs.file#seek
+ *
+ * @param {number} [offset=0]
+ * The offset in bytes.
+ *
+ * @param {number} [position=0]
+ * The position of the offset.
+ *
+ * | Position | Description                                                                                  |
+ * |----------|----------------------------------------------------------------------------------------------|
+ * | `0`      | The given offset is relative to the start of the file. This is the default value if omitted. |
+ * | `1`      | The given offset is relative to the current read position.                                   |
+ * | `2`      | The given offset is relative to the end of the file.                                         |
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ * const fp = open("file.txt", "r");
+ *
+ * print(fp.read(100), "\n");  // read 100 bytes...
+ * fp.seek(0, 0);              // ... and reset position to start of file
+ * print(fp.read(100), "\n");  // ... read same 100 bytes again
+ *
+ * fp.seek(10, 1);  // skip 10 bytes forward, relative to current offset ...
+ * fp.tell();       // ... position is at 110 now
+ *
+ * fp.seek(-10, 2);            // set position to ten bytes before EOF ...
+ * print(fp.read(100), "\n");  // ... reads 10 bytes at most
+ */
 static uc_value_t *
 uc_fs_seek(uc_vm_t *vm, size_t nargs)
 {
@@ -774,6 +857,19 @@ uc_fs_seek(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Obtain current read position.
+ *
+ * Obtains the current, absolute read position of the open file.
+ *
+ * Returns an integer containing the current read offset in bytes.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs.file#tell
+ *
+ * @returns {number|null}
+ */
 static uc_value_t *
 uc_fs_tell(uc_vm_t *vm, size_t nargs)
 {
@@ -792,6 +888,22 @@ uc_fs_tell(uc_vm_t *vm, size_t nargs)
 	return ucv_int64_new(offset);
 }
 
+/**
+ * Check for TTY.
+ *
+ * Checks whether the open file handle refers to a TTY (terminal) device.
+ *
+ * Returns `true` if the handle refers to a terminal.
+ *
+ * Returns `false` if the handle refers to another kind of file.
+ *
+ * Returns `null` on error.
+ *
+ * @function module:fs.file#isatty
+ *
+ * @returns {boolean|null}
+ *
+ */
 static uc_value_t *
 uc_fs_isatty(uc_vm_t *vm, size_t nargs)
 {
@@ -1023,6 +1135,57 @@ uc_fs_fdopen(uc_vm_t *vm, size_t nargs)
 }
 
 
+/**
+ * Represents a handle for interacting with a directory opened by `opendir()`.
+ *
+ * @namespace module:fs.dir
+ * @example
+ *
+ * const handle = opendir(…);
+ *
+ * handle.read();
+ *
+ * handle.tell();
+ * handle.seek(…);
+ *
+ * handle.close();
+ *
+ * handle.error();
+ */
+
+/**
+ * Query error information.
+ *
+ * Returns a string containing a description of the last occurred error or
+ * `null` if there is no error information.
+ *
+ * @function module:fs.dir#error
+ *
+ * @returns {string|null}
+ *
+ * @example
+ * // Trigger error
+ * const fp = opendir("/tmp");
+ * fp.close();
+ * fp.close(); // already closed
+ *
+ * // Print error (should yield "Bad file descriptor")
+ * print(fp.error(), "\n");
+ */
+
+/**
+ * Read the next entry from the open directory.
+ *
+ * Returns a string containing the entry name.
+ *
+ * Returns `null` if there are no more entries to read.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs.dir#read
+ *
+ * @returns {string|null}
+ */
 static uc_value_t *
 uc_fs_readdir(uc_vm_t *vm, size_t nargs)
 {
@@ -1041,6 +1204,22 @@ uc_fs_readdir(uc_vm_t *vm, size_t nargs)
 	return ucv_string_new(e->d_name);
 }
 
+/**
+ * Obtain current read position.
+ *
+ * Returns the current read position in the open directory handle which can be
+ * passed back to the `seek()` function to return to this position. This is
+ * mainly useful to read an open directory handle (or specific items) multiple
+ * times.
+ *
+ * Returns an integer referring to the current position.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs.dir#tell
+ *
+ * @returns {number|null}
+ */
 static uc_value_t *
 uc_fs_telldir(uc_vm_t *vm, size_t nargs)
 {
@@ -1058,6 +1237,35 @@ uc_fs_telldir(uc_vm_t *vm, size_t nargs)
 	return ucv_int64_new((int64_t)position);
 }
 
+/**
+ * Set read position.
+ *
+ * Sets the read position within the open directory handle to the given offset
+ * value. The offset value should be obtained by a previous call to `tell()` as
+ * the specific integer values are implementation defined.
+ *
+ * Returns `true` if the read position was set.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs.dir#seek
+ *
+ * @param {number} offset
+ * Position value obtained by `tell()`.
+ *
+ * @returns {boolean|null}
+ *
+ * @example
+ *
+ * const handle = opendir("/tmp");
+ * const begin = handle.tell();
+ *
+ * print(handle.read(), "\n");
+ *
+ * handle.seek(begin);
+ *
+ * print(handle.read(), "\n");  // prints the first entry again
+ */
 static uc_value_t *
 uc_fs_seekdir(uc_vm_t *vm, size_t nargs)
 {
@@ -1078,6 +1286,19 @@ uc_fs_seekdir(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Closes the directory handle.
+ *
+ * Closes the underlying file descriptor referring to the opened directory.
+ *
+ * Returns `true` if the handle was properly closed.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs.dir#close
+ *
+ * @returns {boolean|null}
+ */
 static uc_value_t *
 uc_fs_closedir(uc_vm_t *vm, size_t nargs)
 {
@@ -1105,7 +1326,7 @@ uc_fs_closedir(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to the directory.
  *
- * @returns {Object|null}
+ * @returns {module:fs.dir|null}
  *
  * @example
  * // Open a directory
@@ -2027,7 +2248,7 @@ uc_fs_lsdir(uc_vm_t *vm, size_t nargs)
  * @param {string} [template="/tmp/XXXXXX"]
  * The path template to use when forming the temporary file name.
  *
- * @returns {Object|null}
+ * @returns {module:fs.file|null}
  *
  * @example
  * // Create a unique temporary file in the current working directory
@@ -2419,7 +2640,7 @@ uc_fs_realpath(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs#pipe
  *
- * @returns {Object[]|null}
+ * @returns {module:fs.file[]|null}
  *
  * @example
  * // Create a pipe

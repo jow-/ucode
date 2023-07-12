@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>
-      file - Documentation
+      dir - Documentation
   </title>
 
   <link href="https://www.braintreepayments.com/images/favicon-ccda0b14.png" rel="icon" type="image/png">
@@ -81,7 +81,7 @@
   <div id="main">
     
       <h1 class="page-title">
-        file
+        dir
       </h1>
     
 
@@ -94,7 +94,7 @@
         
           <span class="ancestors"><a href="module-fs.html">fs</a>.</span>
         
-        file
+        dir
         
       </h2>
 
@@ -107,7 +107,7 @@
       
         
             <div class="description">
-              <p>Represents a handle for interacting with a file opened by <code>open()</code>.</p>
+              <p>Represents a handle for interacting with a directory opened by <code>opendir()</code>.</p>
             </div>
         
 
@@ -144,7 +144,7 @@
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line524">line 524</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1044">line 1044</a>
         </li>
       </ul>
     </dd>
@@ -162,17 +162,12 @@
           <h3>Example</h3>
           
 
-  <pre class="prettyprint"><code>const handle = open(…);
+  <pre class="prettyprint"><code>const handle = opendir(…);
 
-handle.read(…);
-handle.write(…);
-handle.flush();
+handle.read();
 
-handle.seek(…);
 handle.tell();
-
-handle.isatty();
-handle.fileno();
+handle.seek(…);
 
 handle.close();
 
@@ -220,9 +215,8 @@ handle.error();</code></pre>
 
 
   <div class="description">
-    <p>Closes the file handle.</p>
-<p>Upon calling <code>close()</code> on the handle, buffered data is flushed and the
-underlying file descriptor is closed.</p>
+    <p>Closes the directory handle.</p>
+<p>Closes the underlying file descriptor referring to the opened directory.</p>
 <p>Returns <code>true</code> if the handle was properly closed.</p>
 <p>Returns <code>null</code> if an error occurred.</p>
   </div>
@@ -267,7 +261,7 @@ underlying file descriptor is closed.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line567">line 567</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1195">line 1195</a>
         </li>
       </ul>
     </dd>
@@ -360,7 +354,7 @@ underlying file descriptor is closed.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line547">line 547</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1062">line 1062</a>
         </li>
       </ul>
     </dd>
@@ -395,7 +389,7 @@ underlying file descriptor is closed.</p>
     
 
   <pre class="prettyprint"><code>// Trigger error
-const fp = open("file.txt");
+const fp = opendir("/tmp");
 fp.close();
 fp.close(); // already closed
 
@@ -413,294 +407,13 @@ print(fp.error(), "\n");</code></pre>
   
 
   <span class='name-container'>
-    <a class="link-icon" href="#fileno">
-      <svg height="20" width="20" style="fill: black;">
-        <use xlink:href="#linkIcon"></use>
-      </svg>
-    </a>
-    <h4 class="name" id="fileno">
-      <span class="type-signature"></span>fileno<span class="signature">()</span><span class="type-signature"> &rarr; {number|null}</span>
-    </h4>
-  </span>
-
-  
-
-
-
-  <div class="description">
-    <p>Obtains the number of the handle's underlying file descriptor.</p>
-<p>Returns the descriptor number.</p>
-<p>Returns <code>null</code> on error.</p>
-  </div>
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source">
-      <ul class="dummy">
-        <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line848">line 848</a>
-        </li>
-      </ul>
-    </dd>
-  
-
-  
-
-  
-
-  
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      
-        
-
-
-  
-
-  <span class='name-container'>
-    <a class="link-icon" href="#flush">
-      <svg height="20" width="20" style="fill: black;">
-        <use xlink:href="#linkIcon"></use>
-      </svg>
-    </a>
-    <h4 class="name" id="flush">
-      <span class="type-signature"></span>flush<span class="signature">()</span><span class="type-signature"> &rarr; {boolean|null}</span>
-    </h4>
-  </span>
-
-  
-
-
-
-  <div class="description">
-    <p>Forces a write of all buffered data to the underlying handle.</p>
-<p>Returns <code>true</code> if the data was successfully flushed.</p>
-<p>Returns <code>null</code> on error.</p>
-  </div>
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source">
-      <ul class="dummy">
-        <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line830">line 830</a>
-        </li>
-      </ul>
-    </dd>
-  
-
-  
-
-  
-
-  
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      
-        
-
-
-  
-
-  <span class='name-container'>
-    <a class="link-icon" href="#isatty">
-      <svg height="20" width="20" style="fill: black;">
-        <use xlink:href="#linkIcon"></use>
-      </svg>
-    </a>
-    <h4 class="name" id="isatty">
-      <span class="type-signature"></span>isatty<span class="signature">()</span><span class="type-signature"> &rarr; {boolean|null}</span>
-    </h4>
-  </span>
-
-  
-
-
-
-  <div class="description">
-    <p>Check for TTY.</p>
-<p>Checks whether the open file handle refers to a TTY (terminal) device.</p>
-<p>Returns <code>true</code> if the handle refers to a terminal.</p>
-<p>Returns <code>false</code> if the handle refers to another kind of file.</p>
-<p>Returns <code>null</code> on error.</p>
-  </div>
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source">
-      <ul class="dummy">
-        <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line797">line 797</a>
-        </li>
-      </ul>
-    </dd>
-  
-
-  
-
-  
-
-  
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      
-        
-
-
-  
-
-  <span class='name-container'>
     <a class="link-icon" href="#read">
       <svg height="20" width="20" style="fill: black;">
         <use xlink:href="#linkIcon"></use>
       </svg>
     </a>
     <h4 class="name" id="read">
-      <span class="type-signature"></span>read<span class="signature">(length)</span><span class="type-signature"> &rarr; {string|null}</span>
+      <span class="type-signature"></span>read<span class="signature">()</span><span class="type-signature"> &rarr; {string|null}</span>
     </h4>
   </span>
 
@@ -709,104 +422,16 @@ print(fp.error(), "\n");</code></pre>
 
 
   <div class="description">
-    <p>Reads a chunk of data from the file handle.</p>
-<p>The length argument may be either a positive number of bytes to read, in
-which case the read call returns up to that many bytes, or a string to
-specify a dynamic read size.</p>
-<ul>
-<li>
-<p>If length is a number, the method will read the specified number of bytes
-from the handle. Reading stops after the given amount of bytes or after
-encountering EOF, whatever comes first.</p>
-</li>
-<li>
-<p>If length is the string &quot;line&quot;, the method will read an entire line,
-terminated by &quot;\n&quot; (a newline), from the handle. Reading stops at the next
-newline or when encountering EOF. The returned data will contain the
-terminating newline character if one was read.</p>
-</li>
-<li>
-<p>If length is the string &quot;all&quot;, the method will read from the handle until
-encountering EOF and return the complete contents.</p>
-</li>
-<li>
-<p>If length is a single character string, the method will read from the
-handle until encountering the specified character or upon encountering
-EOF. The returned data will contain the terminating character if one was
-read.</p>
-</li>
-</ul>
-<p>Returns a string containing the read data.</p>
-<p>Returns an empty string on EOF.</p>
-<p>Returns <code>null</code> if a read error occurred.</p>
+    <p>Read the next entry from the open directory.</p>
+<p>Returns a string containing the entry name.</p>
+<p>Returns <code>null</code> if there are no more entries to read.</p>
+<p>Returns <code>null</code> if an error occurred.</p>
   </div>
 
 
 
 
 
-
-
-  <h5>Parameters:</h5>
-  
-
-<table class="params">
-  <thead>
-    <tr>
-      
-        <th>Name</th>
-      
-
-      <th>Type</th>
-
-      
-
-      
-
-      <th class="last">Description</th>
-    </tr>
-  </thead>
-
-  <tbody>
-    
-      <tr>
-        
-          <td class="name"><code>length</code></td>
-        
-
-        <td class="type">
-          
-            
-    <span class="param-type">
-      number
-    </span>
-
-    |
-
-    <span class="param-type">
-      string
-    </span>
-
-    
-
-
-          
-        </td>
-
-        
-
-        
-
-        <td class="description last">
-          <p>The length of data to read. Can be a number, the string &quot;line&quot;, the string
-&quot;all&quot;, or a single character string.</p>
-          
-        </td>
-      </tr>
-
-    
-  </tbody>
-</table>
 
 
 
@@ -843,7 +468,7 @@ read.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line595">line 595</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1082">line 1082</a>
         </li>
       </ul>
     </dd>
@@ -867,33 +492,6 @@ read.</p>
 
 
 
-
-  <div class="example-container">
-    <a class="link-icon" href="#read-examples">
-      <svg height="20" width="20" style="fill: black;">
-        <use xlink:href="#linkIcon"></use>
-      </svg>
-    </a>
-    <h5 id="read-examples">Example</h5>
-    
-
-  <pre class="prettyprint"><code>const fp = open("file.txt", "r");
-
-// Example 1: Read 10 bytes from the handle
-const chunk = fp.read(10);
-
-// Example 2: Read the handle line by line
-for (let line = fp.read("line"); length(line); line = fp.read("line"))
-  print(line);
-
-// Example 3: Read the complete contents from the handle
-const content = fp.read("all");
-
-// Example 4: Read until encountering the character ':'
-const field = fp.read(":");</code></pre>
-
-
-  </div>
 
 
       
@@ -909,7 +507,7 @@ const field = fp.read(":");</code></pre>
       </svg>
     </a>
     <h4 class="name" id="seek">
-      <span class="type-signature"></span>seek<span class="signature">(offset<span class="signature-attributes">opt</span>, position<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {boolean|null}</span>
+      <span class="type-signature"></span>seek<span class="signature">(offset)</span><span class="type-signature"> &rarr; {boolean|null}</span>
     </h4>
   </span>
 
@@ -918,9 +516,10 @@ const field = fp.read(":");</code></pre>
 
 
   <div class="description">
-    <p>Set file read position.</p>
-<p>Set the read position of the open file handle to the given offset and
-position.</p>
+    <p>Set read position.</p>
+<p>Sets the read position within the open directory handle to the given offset
+value. The offset value should be obtained by a previous call to <code>tell()</code> as
+the specific integer values are implementation defined.</p>
 <p>Returns <code>true</code> if the read position was set.</p>
 <p>Returns <code>null</code> if an error occurred.</p>
   </div>
@@ -944,11 +543,7 @@ position.</p>
       <th>Type</th>
 
       
-        <th>Attributes</th>
-      
 
-      
-        <th>Default</th>
       
 
       <th class="last">Description</th>
@@ -976,94 +571,11 @@ position.</p>
         </td>
 
         
-          <td class="attributes">
-            
-              &lt;optional><br>
-            
 
-            
-
-            
-          </td>
-        
-
-        
-          <td class="default">
-            
-              0
-            
-          </td>
         
 
         <td class="description last">
-          <p>The offset in bytes.</p>
-          
-        </td>
-      </tr>
-
-    
-      <tr>
-        
-          <td class="name"><code>position</code></td>
-        
-
-        <td class="type">
-          
-            
-    <span class="param-type">
-      number
-    </span>
-
-    
-
-
-          
-        </td>
-
-        
-          <td class="attributes">
-            
-              &lt;optional><br>
-            
-
-            
-
-            
-          </td>
-        
-
-        
-          <td class="default">
-            
-              0
-            
-          </td>
-        
-
-        <td class="description last">
-          <p>The position of the offset.</p>
-<table>
-<thead>
-<tr>
-<th>Position</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>0</code></td>
-<td>The given offset is relative to the start of the file. This is the default value if omitted.</td>
-</tr>
-<tr>
-<td><code>1</code></td>
-<td>The given offset is relative to the current read position.</td>
-</tr>
-<tr>
-<td><code>2</code></td>
-<td>The given offset is relative to the end of the file.</td>
-</tr>
-</tbody>
-</table>
+          <p>Position value obtained by <code>tell()</code>.</p>
           
         </td>
       </tr>
@@ -1107,7 +619,7 @@ position.</p>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line692">line 692</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1146">line 1146</a>
         </li>
       </ul>
     </dd>
@@ -1141,17 +653,14 @@ position.</p>
     <h5 id="seek-examples">Example</h5>
     
 
-  <pre class="prettyprint"><code>const fp = open("file.txt", "r");
+  <pre class="prettyprint"><code>const handle = opendir("/tmp");
+const begin = handle.tell();
 
-print(fp.read(100), "\n");  // read 100 bytes...
-fp.seek(0, 0);              // ... and reset position to start of file
-print(fp.read(100), "\n");  // ... read same 100 bytes again
+print(handle.read(), "\n");
 
-fp.seek(10, 1);  // skip 10 bytes forward, relative to current offset ...
-fp.tell();       // ... position is at 110 now
+handle.seek(begin);
 
-fp.seek(-10, 2);            // set position to ten bytes before EOF ...
-print(fp.read(100), "\n");  // ... reads 10 bytes at most</code></pre>
+print(handle.read(), "\n");  // prints the first entry again</code></pre>
 
 
   </div>
@@ -1180,8 +689,11 @@ print(fp.read(100), "\n");  // ... reads 10 bytes at most</code></pre>
 
   <div class="description">
     <p>Obtain current read position.</p>
-<p>Obtains the current, absolute read position of the open file.</p>
-<p>Returns an integer containing the current read offset in bytes.</p>
+<p>Returns the current read position in the open directory handle which can be
+passed back to the <code>seek()</code> function to return to this position. This is
+mainly useful to read an open directory handle (or specific items) multiple
+times.</p>
+<p>Returns an integer referring to the current position.</p>
 <p>Returns <code>null</code> if an error occurred.</p>
   </div>
 
@@ -1225,7 +737,7 @@ print(fp.read(100), "\n");  // ... reads 10 bytes at most</code></pre>
     <dd class="tag-source">
       <ul class="dummy">
         <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line766">line 766</a>
+          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line1113">line 1113</a>
         </li>
       </ul>
     </dd>
@@ -1249,180 +761,6 @@ print(fp.read(100), "\n");  // ... reads 10 bytes at most</code></pre>
 
 
 
-
-
-      
-        
-
-
-  
-
-  <span class='name-container'>
-    <a class="link-icon" href="#write">
-      <svg height="20" width="20" style="fill: black;">
-        <use xlink:href="#linkIcon"></use>
-      </svg>
-    </a>
-    <h4 class="name" id="write">
-      <span class="type-signature"></span>write<span class="signature">(data)</span><span class="type-signature"> &rarr; {number|null}</span>
-    </h4>
-  </span>
-
-  
-
-
-
-  <div class="description">
-    <p>Writes a chunk of data to the file handle.</p>
-<p>In case the given data is not a string, it is converted to a string before
-being written into the file. String values are written as-is, integer and
-double values are written in decimal notation, boolean values are written as
-<code>true</code> or <code>false</code> while arrays and objects are converted to their JSON
-representation before being written. The <code>null</code> value is represented by an
-empty string so <code>file.write(null)</code> would be a no-op. Resource values are
-written in the form <code>&lt;type address&gt;</code>, e.g. <code>&lt;fs.file 0x7f60f0981760&gt;</code>.</p>
-<p>If resource, array or object values contain a <code>tostring()</code> function in their
-prototypes, then this function is invoked to obtain an alternative string
-representation of the value.</p>
-<p>Returns the number of bytes written.</p>
-<p>Returns <code>null</code> if a write error occurred.</p>
-  </div>
-
-
-
-
-
-
-
-  <h5>Parameters:</h5>
-  
-
-<table class="params">
-  <thead>
-    <tr>
-      
-        <th>Name</th>
-      
-
-      <th>Type</th>
-
-      
-
-      
-
-      <th class="last">Description</th>
-    </tr>
-  </thead>
-
-  <tbody>
-    
-      <tr>
-        
-          <td class="name"><code>data</code></td>
-        
-
-        <td class="type">
-          
-            
-    <span class="param-type">
-      *
-    </span>
-
-    
-
-
-          
-        </td>
-
-        
-
-        
-
-        <td class="description last">
-          <p>The data to be written.</p>
-          
-        </td>
-      </tr>
-
-    
-  </tbody>
-</table>
-
-
-
-
-
-<dl class="details">
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source">
-      <ul class="dummy">
-        <li>
-          <a href="lib_fs.c.html">lib/fs.c</a>, <a href="lib_fs.c.html#line655">line 655</a>
-        </li>
-      </ul>
-    </dd>
-  
-
-  
-
-  
-
-  
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-  <div class="example-container">
-    <a class="link-icon" href="#write-examples">
-      <svg height="20" width="20" style="fill: black;">
-        <use xlink:href="#linkIcon"></use>
-      </svg>
-    </a>
-    <h5 id="write-examples">Example</h5>
-    
-
-  <pre class="prettyprint"><code>const fp = open("file.txt", "w");
-
-fp.write("Hello world!\n");</code></pre>
-
-
-  </div>
 
 
       
