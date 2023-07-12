@@ -14,6 +14,36 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/**
+ * This module bundles various mathematical functions.
+ *
+ * Functions can be individually imported and directly accessed using the
+ * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+ * syntax:
+ *
+ *   ```
+ *   import { pow, rand } from 'math';
+ *
+ *   let x = pow(2, 5);
+ *   let y = rand();
+ *   ```
+ *
+ * Alternatively, the module namespace can be imported
+ * using a wildcard import statement:
+ *
+ *   ```
+ *   import * as math from 'math';
+ *
+ *   let x = math.pow(2, 5);
+ *   let y = math.rand();
+ *   ```
+ *
+ * Additionally, the math module namespace may also be imported by invoking the
+ * `ucode` interpreter with the `-lmath` switch.
+ *
+ * @module math
+ */
+
 #include <math.h>
 #include <errno.h>
 #include <sys/time.h>
@@ -22,6 +52,18 @@
 
 static bool srand_called = false;
 
+/**
+ * Returns the absolute value of the given numeric value.
+ *
+ * @function module:math#abs
+ *
+ * @param {*} number
+ * The number to return the absolute value for.
+ *
+ * @returns {number}
+ * Returns the absolute value or `NaN` if the given argument could
+ * not be converted to a number.
+ */
 static uc_value_t *
 uc_abs(uc_vm_t *vm, size_t nargs)
 {
@@ -64,6 +106,45 @@ uc_abs(uc_vm_t *vm, size_t nargs)
 	return res;
 }
 
+/**
+ * Calculates the principal value of the arc tangent of `y`/`x`,
+ * using the signs of the two arguments to determine the quadrant
+ * of the result.
+ *
+ * On success, this function returns the principal value of the arc
+ * tangent of `y`/`x` in radians; the return value is in the range [-pi, pi].
+ *
+ *  - If `y` is +0 (-0) and `x` is less than 0, +pi (-pi) is returned.
+ *  - If `y` is +0 (-0) and `x` is greater than 0, +0 (-0) is returned.
+ *  - If `y` is less than 0 and `x` is +0 or -0, -pi/2 is returned.
+ *  - If `y` is greater than 0 and `x` is +0 or -0, pi/2 is returned.
+ *  - If either `x` or `y` is NaN, a NaN is returned.
+ *  - If `y` is +0 (-0) and `x` is -0, +pi (-pi) is returned.
+ *  - If `y` is +0 (-0) and `x` is +0, +0 (-0) is returned.
+ *  - If `y` is a finite value greater (less) than 0, and `x` is negative
+ *    infinity, +pi (-pi) is returned.
+ *  - If `y` is a finite value greater (less) than 0, and `x` is positive
+ *    infinity, +0 (-0) is returned.
+ *  - If `y` is positive infinity (negative infinity), and `x` is finite,
+ *    pi/2 (-pi/2) is returned.
+ *  - If `y` is positive infinity (negative infinity) and `x` is negative
+ *    infinity, +3*pi/4 (-3*pi/4) is returned.
+ *  - If `y` is positive infinity (negative infinity) and `x` is positive
+ *    infinity, +pi/4 (-pi/4) is returned.
+ *
+ * When either `x` or `y` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#atan2
+ *
+ * @param {*} y
+ * The `y` value.
+ *
+ * @param {*} x
+ * The `x` value.
+ *
+ * @returns {number}
+ */
 static uc_value_t *
 uc_atan2(uc_vm_t *vm, size_t nargs)
 {
@@ -76,6 +157,20 @@ uc_atan2(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(atan2(d1, d2));
 }
 
+/**
+ * Calculates the cosine of `x`, where `x` is given in radians.
+ *
+ * Returns the resulting consine value.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#cos
+ *
+ * @param {number} x
+ * Radians value to calculate cosine for.
+ *
+ * @returns {number}
+ */
 static uc_value_t *
 uc_cos(uc_vm_t *vm, size_t nargs)
 {
@@ -87,6 +182,26 @@ uc_cos(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(cos(d));
 }
 
+/**
+ * Calculates the value of `e` (the base of natural logarithms)
+ * raised to the power of `x`.
+ *
+ * On success, returns the exponential value of `x`.
+ *
+ *  - If `x` is positive infinity, positive infinity is returned.
+ *  - If `x` is negative infinity, `+0` is returned.
+ *  - If the result underflows, a range error occurs, and zero is returned.
+ *  - If the result overflows, a range error occurs, and `Infinity` is returned.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#exp
+ *
+ * @param {number} x
+ * Power to raise `e` to.
+ *
+ * @returns {number}
+ */
 static uc_value_t *
 uc_exp(uc_vm_t *vm, size_t nargs)
 {
@@ -98,6 +213,27 @@ uc_exp(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(exp(d));
 }
 
+/**
+ * Calculates the natural logarithm of `x`.
+ *
+ * On success, returns the natural logarithm of `x`.
+ *
+ *  - If `x` is `1`, the result is `+0`.
+ *  - If `x` is positive nfinity, positive infinity is returned.
+ *  - If `x` is zero, then a pole error occurs, and the function
+ *    returns negative infinity.
+ *  - If `x` is negative (including negative infinity), then a domain
+ *    error occurs, and `NaN` is returned.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#log
+ *
+ * @param {number} x
+ * Value to calulate natural logarithm of.
+ *
+ * @returns {number}
+ */
 static uc_value_t *
 uc_log(uc_vm_t *vm, size_t nargs)
 {
@@ -109,6 +245,23 @@ uc_log(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(log(d));
 }
 
+/**
+ * Calculates the sine of `x`, where `x` is given in radians.
+ *
+ * Returns the resulting sine value.
+ *
+ *  - When `x` is positive or negative infinity, a domain error occurs
+ *    and `NaN` is returned.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#sin
+ *
+ * @param {number} x
+ * Radians value to calculate sine for.
+ *
+ * @returns {number}
+ */
 static uc_value_t *
 uc_sin(uc_vm_t *vm, size_t nargs)
 {
@@ -120,6 +273,24 @@ uc_sin(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(sin(d));
 }
 
+/**
+ * Calculates the nonnegative square root of `x`.
+ *
+ * Returns the resulting square root value.
+ *
+ *  - If `x` is `+0` (`-0`) then `+0` (`-0`) is returned.
+ *  - If `x` is positive infinity, positive infinity is returned.
+ *  - If `x` is less than `-0`, a domain error occurs, and `NaN` is returned.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#sqrt
+ *
+ * @param {number} x
+ * Value to calculate square root for.
+ *
+ * @returns {number}
+ */
 static uc_value_t *
 uc_sqrt(uc_vm_t *vm, size_t nargs)
 {
@@ -131,6 +302,62 @@ uc_sqrt(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(sqrt(d));
 }
 
+/**
+ * Calculates the value of `x` raised to the power of `y`.
+ *
+ * On success, returns the value of `x` raised to the power of `y`.
+ *
+ *  - If the result overflows, a range error occurs, and the function
+ *    returns `Infinity`.
+ *  - If result underflows, and is not representable, a range error
+ *    occurs, and `0.0` with the appropriate sign is returned.
+ *  - If `x` is `+0` or `-0`, and `y` is an odd integer less than `0`,
+ *    a pole error occurs `Infinity` is returned, with the same sign
+ *    as `x`.
+ *  - If `x` is `+0` or `-0`, and `y` is less than `0` and not an odd
+ *    integer, a pole error occurs and `Infinity` is returned.
+ *  - If `x` is `+0` (`-0`), and `y` is an odd integer greater than `0`,
+ *    the result is `+0` (`-0`).
+ *  - If `x` is `0`, and `y` greater than `0` and not an odd integer,
+ *    the result is `+0`.
+ *  - If `x` is `-1`, and `y` is positive infinity or negative infinity,
+ *    the result is `1.0`.
+ *  - If `x` is `+1`, the result is `1.0` (even if `y` is `NaN`).
+ *  - If `y` is `0`, the result is `1.0` (even if `x` is `NaN`).
+ *  - If `x` is a finite value less than `0`, and `y` is a finite
+ *    noninteger, a domain error occurs, and `NaN` is returned.
+ *  - If the absolute value of `x` is less than `1`, and `y` is negative
+ *    infinity, the result is positive infinity.
+ *  - If the absolute value of `x` is greater than `1`, and `y` is
+ *    negative infinity, the result is `+0`.
+ *  - If the absolute value of `x` is less than `1`, and `y` is positive
+ *    infinity, the result is `+0`.
+ *  - If the absolute value of `x` is greater than `1`, and `y` is positive
+ *    infinity, the result is positive infinity.
+ *  - If `x` is negative infinity, and `y` is an odd integer less than `0`,
+ *    the result is `-0`.
+ *  - If `x` is negative infinity, and `y` less than `0` and not an odd
+ *    integer, the result is `+0`.
+ *  - If `x` is negative infinity, and `y` is an odd integer greater than
+ *    `0`, the result is negative infinity.
+ *  - If `x` is negative infinity, and `y` greater than `0` and not an odd
+ *    integer, the result is positive infinity.
+ *  - If `x` is positive infinity, and `y` less than `0`, the result is `+0`.
+ *  - If `x` is positive infinity, and `y` greater than `0`, the result is
+ *    positive infinity.
+ *
+ * Returns `NaN` if either the `x` or `y` value can't be converted to a number.
+ *
+ * @function module:math#pow
+ *
+ * @param {number} x
+ * The base value.
+ *
+ * @param {number} y
+ * The power value.
+ *
+ * @returns {number}
+ */
 static uc_value_t *
 uc_pow(uc_vm_t *vm, size_t nargs)
 {
@@ -143,6 +370,27 @@ uc_pow(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(pow(x, y));
 }
 
+/**
+ * Produces a pseudo-random positive integer.
+ *
+ * Returns the calculated pseuo-random value. The value is within the range
+ * `0` to `RAND_MAX` inclusive where `RAND_MAX` is a platform specific value
+ * guaranteed to be at least `32767`.
+ *
+ * The {@link module:math~srand `srand()`} function sets its argument as the
+ * seed for a new sequence of pseudo-random integers to be returned by `rand()`. These sequences are
+ * repeatable by calling {@link module:math~srand `srand()`} with the same
+ * seed value.
+ *
+ * If no seed value is explicitly set by calling
+ * {@link module:math~srand `srand()`} prior to the first call to `rand()`,
+ * the math module will automatically seed the PRNG once, using the current
+ * time of day in milliseconds as seed value.
+ *
+ * @function module:math#rand
+ *
+ * @returns {number}
+ */
 static uc_value_t *
 uc_rand(uc_vm_t *vm, size_t nargs)
 {
@@ -158,6 +406,21 @@ uc_rand(uc_vm_t *vm, size_t nargs)
 	return ucv_int64_new(rand());
 }
 
+/**
+ * Seeds the pseudo-random number generator.
+ *
+ * This functions seeds the PRNG with the given value and thus affects the
+ * pseudo-random integer sequence produced by subsequent calls to
+ * {@link module:math~rand `rand()`}.
+ *
+ * Setting the same seed value will result in the same pseudo-random numbers
+ * produced by {@link module:math~rand `rand()`}.
+ *
+ * @function module:math#srand
+ *
+ * @param {number} seed
+ * The seed value.
+ */
 static uc_value_t *
 uc_srand(uc_vm_t *vm, size_t nargs)
 {
@@ -169,6 +432,24 @@ uc_srand(uc_vm_t *vm, size_t nargs)
 	return NULL;
 }
 
+/**
+ * Tests whether `x` is a `NaN` double.
+ *
+ * This functions checks whether the given argument is of type `double` with
+ * a `NaN` (not a number) value.
+ *
+ * Returns `true` if the value is `NaN`, otherwise false.
+ *
+ * Note that a value can also be checked for `NaN` with the expression
+ * `x !== x` which only evaluates to `true` if `x` is `NaN`.
+ *
+ * @function module:math#isnan
+ *
+ * @param {number} x
+ * The value to test.
+ *
+ * @returns {boolean}
+ */
 static uc_value_t *
 uc_isnan(uc_vm_t *vm, size_t nargs)
 {

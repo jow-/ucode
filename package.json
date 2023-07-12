@@ -1,0 +1,10 @@
+{
+	"scripts": {
+		"doc": "LC_ALL=C jsdoc -c jsdoc/conf.json -t node_modules/braintree-jsdoc-template"
+	},
+	"devDependencies": {
+		"braintree-jsdoc-template": "^3.3.0",
+		"jsdoc": "^4.0.2",
+		"taffydb": "^2.7.2"
+	}
+}
