@@ -745,7 +745,7 @@ uc_fs_seek(uc_vm_t *vm, size_t nargs)
 	uc_value_t *ofs = uc_fn_arg(0);
 	uc_value_t *how = uc_fn_arg(1);
 	int whence, res;
-	long offset;
+	off_t offset;
 
 	FILE **fp = uc_fn_this("fs.file");
 
@@ -757,7 +757,7 @@ uc_fs_seek(uc_vm_t *vm, size_t nargs)
 	else if (ucv_type(ofs) != UC_INTEGER)
 		err_return(EINVAL);
 	else
-		offset = (long)ucv_int64_get(ofs);
+		offset = (off_t)ucv_int64_get(ofs);
 
 	if (!how)
 		whence = 0;
@@ -766,7 +766,7 @@ uc_fs_seek(uc_vm_t *vm, size_t nargs)
 	else
 		whence = (int)ucv_int64_get(how);
 
-	res = fseek(*fp, offset, whence);
+	res = fseeko(*fp, offset, whence);
 
 	if (res &lt; 0)
 		err_return(errno);
@@ -777,14 +777,14 @@ uc_fs_seek(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_tell(uc_vm_t *vm, size_t nargs)
 {
-	long offset;
+	off_t offset;
 
 	FILE **fp = uc_fn_this("fs.file");
 
 	if (!fp || !*fp)
 		err_return(EBADF);
 
-	offset = ftell(*fp);
+	offset = ftello(*fp);
 
 	if (offset &lt; 0)
 		err_return(errno);
