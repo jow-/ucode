@@ -699,9 +699,9 @@ in the table below.
 | 10         | Strict inequality `… !== …`       | left-to-right  |
 | 9          | Bitwise AND `… & …`               | left-to-right  |
 | 8          | Bitwise XOR `… ^ …`               | left-to-right  |
-| 7          | Bitwise OR `… | …`                | left-to-right  |
+| 7          | Bitwise OR `… \| …`               | left-to-right  |
 | 6          | Logical AND `… && …`              | left-to-right  |
-| 5          | Logical OR `… || …`               | left-to-right  |
+| 5          | Logical OR `… \|\| …`             | left-to-right  |
 | 5          | Nullish coalescing `… ?? …`       | left-to-right  |
 | 4          | Assignment `… = …`                | right-to-left  |
 | 4          | Assignment `… += …`               | right-to-left  |
@@ -714,9 +714,9 @@ in the table below.
 | 4          | Assignment `… >>= …`              | right-to-left  |
 | 4          | Assignment `… &= …`               | right-to-left  |
 | 4          | Assignment `… ^= …`               | right-to-left  |
-| 4          | Assignment `… |= …`               | right-to-left  |
+| 4          | Assignment `… \|= …`              | right-to-left  |
 | 4          | Assignment `… &&= …`              | right-to-left  |
-| 4          | Assignment `… ||= …`              | right-to-left  |
+| 4          | Assignment `… \|\|= …`            | right-to-left  |
 | 4          | Assignment `… ??= …`              | right-to-left  |
 | 3          | Ternary `… ? … : …`               | right-to-left  |
 | 2          | Arrow `… => …`                    | right-to-left  |
