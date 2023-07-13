@@ -30,6 +30,7 @@
 		"destination": "docs",
 		"recurse": true,
 		"readme": "docs/README.md",
+		"tutorials": "docs/tutorials",
 		"theme_opts": {
 			"default_theme": "light",
 			"title": "ucode Documentation",
@@ -49,6 +50,10 @@
 					"link": "https://github.com/jow-/ucode",
 					"class": "github-home"
 				}
+			],
+			"sections": [
+				"Tutorials",
+				"Modules"
 			]
 		}
 	}
