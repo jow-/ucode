@@ -23,6 +23,7 @@
 #include <libubox/uloop.h>
 
 #include "ucode/module.h"
+#include "ucode/platform.h"
 
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
@@ -535,13 +536,8 @@ uc_uloop_process(uc_vm_t *vm, size_t nargs)
 			free(buf);
 		}
 
-#ifdef __APPLE__
-		execve((const char *)ucv_string_get(executable),
-		       (char * const *)argp, (char * const *)envp);
-#else
 		execvpe((const char *)ucv_string_get(executable),
 		        (char * const *)argp, (char * const *)envp);
-#endif
 
 		_exit(-1);
 	}

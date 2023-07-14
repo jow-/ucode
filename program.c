@@ -16,12 +16,12 @@
 
 #include <assert.h>
 #include <errno.h>
-#include <endian.h>
 
 #include "ucode/program.h"
 #include "ucode/source.h"
 #include "ucode/vallist.h"
 #include "ucode/chunk.h"
+#include "ucode/platform.h"
 
 
 uc_program_t *

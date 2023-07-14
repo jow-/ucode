@@ -24,6 +24,7 @@
 #include <json-c/json.h>
 
 #include "util.h"
+#include "platform.h"
 
 
 /* Value types and generic value header */
@@ -314,7 +315,7 @@ struct uc_vm {
 	uc_exception_handler_t *exhandler;
 	FILE *output;
 	struct {
-		uint64_t raised[((NSIG + 63) & ~63) / 64];
+		uint64_t raised[((UC_SYSTEM_SIGNAL_COUNT + 63) & ~63) / 64];
 		uc_value_t *handler;
 		struct sigaction sa;
 		int sigpipe[2];

@@ -28,6 +28,7 @@
 #include "ucode/compiler.h"
 #include "ucode/program.h"
 #include "ucode/lib.h" /* uc_error_context_format() */
+#include "ucode/platform.h"
 
 #undef __insn
 #define __insn(_name) #_name,
@@ -154,36 +155,6 @@ uc_vm_signal_handler(int sig)
 	uc_vm_signal_raise(signal_handler_vm, sig);
 }
 
-#ifdef __APPLE__
-static int pipe2(int pipefd[2], int flags)
-{
-	if (pipe(pipefd) != 0)
-		return -1;
-
-	if (flags & O_CLOEXEC) {
-		if (fcntl(pipefd[0], F_SETFD, FD_CLOEXEC) != 0 ||
-		    fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) != 0) {
-			close(pipefd[0]);
-			close(pipefd[1]);
-
-			return -1;
-		}
-
-		flags &= ~O_CLOEXEC;
-	}
-
-	if (fcntl(pipefd[0], F_SETFL, flags) != 0 ||
-	    fcntl(pipefd[1], F_SETFL, flags) != 0) {
-		close(pipefd[0]);
-		close(pipefd[1]);
-
-		return -1;
-	}
-
-	return 0;
-}
-#endif
-
 static void
 uc_vm_signal_handlers_setup(uc_vm_t *vm)
 {
@@ -200,7 +171,7 @@ uc_vm_signal_handlers_setup(uc_vm_t *vm)
 
 	signal_handler_vm = vm;
 
-	vm->signal.handler = ucv_array_new_length(vm, NSIG - 1);
+	vm->signal.handler = ucv_array_new_length(vm, UC_SYSTEM_SIGNAL_COUNT);
 
 	vm->signal.sa.sa_handler = uc_vm_signal_handler;
 	vm->signal.sa.sa_flags = SA_RESTART | SA_ONSTACK;
@@ -3182,7 +3153,7 @@ uc_vm_signal_raise(uc_vm_t *vm, int signo)
 {
 	uint8_t signum = signo;
 
-	if (signo <= 0 || signo >= NSIG)
+	if (signo <= 0 || signo >= UC_SYSTEM_SIGNAL_COUNT)
 		return;
 
 	vm->signal.raised[signo / 64] |= (1ull << (signo % 64));
