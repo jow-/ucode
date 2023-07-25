@@ -838,7 +838,7 @@ uc_fs_isatty(uc_vm_t *vm, size_t nargs)
 	if (fd == -1)
 		err_return(errno);
 
-	return ucv_boolean_new(isatty(fd));
+	return ucv_boolean_new(isatty(fd) == 1);
 }
 
 /**
