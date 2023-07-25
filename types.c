@@ -1998,7 +1998,7 @@ ucv_compare(int how, uc_value_t *v1, uc_value_t *v2, int *deltap)
 	uint64_t u1, u2;
 	int64_t n1, n2;
 	double d1, d2;
-	int8_t delta;
+	int delta;
 
 	/* at least one operand is null and we compare for equality or inequality ... */
 	if ((!v1 || !v2) && (how == I_EQ || how == I_NE)) {
@@ -2015,7 +2015,12 @@ ucv_compare(int how, uc_value_t *v1, uc_value_t *v2, int *deltap)
 		/* ... both operands are of the same, non-scalar type... */
 		if (t1 == t2 && !ucv_is_scalar(v1)) {
 			/* ... compare memory addrs */
-			delta = (intptr_t)v1 - (intptr_t)v2;
+			if ((uintptr_t)v1 == (uintptr_t)v2)
+				delta = 0;
+			else if ((uintptr_t)v1 < (uintptr_t)v2)
+				delta = -1;
+			else
+				delta = 1;
 		}
 
 		/* ... operands are of different type or at least one is scalar... */
