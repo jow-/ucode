@@ -35,7 +35,7 @@ typedef enum {
 uc_source_t *uc_source_new_file(const char *path);
 uc_source_t *uc_source_new_buffer(const char *name, char *buf, size_t len);
 
-__hidden size_t uc_source_get_line(uc_source_t *source, size_t *offset);
+size_t uc_source_get_line(uc_source_t *source, size_t *offset);
 
 static inline uc_source_t *
 uc_source_get(uc_source_t *source) {
