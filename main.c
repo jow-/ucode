@@ -502,7 +502,8 @@ main(int argc, char **argv)
 		.strict_declarations = false,
 		.lstrip_blocks = true,
 		.trim_blocks = true,
-		.raw_mode = true
+		.raw_mode = true,
+		.setup_signal_handlers = true
 	};
 
 	app = appname(argv[0]);
