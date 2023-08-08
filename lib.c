@@ -50,6 +50,7 @@
 #include "ucode/lib.h"
 #include "ucode/source.h"
 #include "ucode/program.h"
+#include "ucode/platform.h"
 
 static void
 format_context_line(uc_stringbuf_t *buf, const char *line, size_t off, bool compact)
@@ -3734,107 +3735,6 @@ uc_warn(uc_vm_t *vm, size_t nargs)
 	return uc_print_common(vm, nargs, stderr);
 }
 
-#ifdef __APPLE__
-/*
- * sigtimedwait() implementation based on
- * https://comp.unix.programmer.narkive.com/rEDH0sPT/sigtimedwait-implementation
- * and
- * https://github.com/wahern/lunix/blob/master/src/unix.c
- */
-static void
-sigtimedwait_consume_signal(int signo)
-{
-}
-
-static int
-sigtimedwait(const sigset_t *set, siginfo_t *info, const struct timespec *timeout)
-{
-	struct timespec elapsed = { 0, 0 }, sleep, rem;
-	sigset_t pending, unblock, omask;
-	struct sigaction sa, osa;
-	int signo;
-	bool lt;
-
-	while (true) {
-		sigemptyset(&pending);
-		sigpending(&pending);
-
-		for (signo = 1; signo < NSIG; signo++) {
-			if (!sigismember(set, signo) || !sigismember(&pending, signo))
-				continue;
-
-			sa.sa_handler = sigtimedwait_consume_signal;
-			sa.sa_flags = 0;
-			sigfillset(&sa.sa_mask);
-
-			sigaction(signo, &sa, &osa);
-
-			sigemptyset(&unblock);
-			sigaddset(&unblock, signo);
-			sigprocmask(SIG_UNBLOCK, &unblock, &omask);
-			sigprocmask(SIG_SETMASK, &omask, NULL);
-
-			sigaction(signo, &osa, NULL);
-
-			if (info) {
-				memset(info, 0, sizeof(*info));
-				info->si_signo = signo;
-			}
-
-			return signo;
-		}
-
-		sleep.tv_sec = 0;
-		sleep.tv_nsec = 200000000L; /* 2/10th second */
-		rem = sleep;
-
-		if (nanosleep(&sleep, &rem) == 0) {
-			elapsed.tv_sec += sleep.tv_sec;
-			elapsed.tv_nsec += sleep.tv_nsec;
-
-			if (elapsed.tv_nsec > 1000000000) {
-				elapsed.tv_sec++;
-				elapsed.tv_nsec -= 1000000000;
-			}
-		}
-		else if (errno == EINTR) {
-			sleep.tv_sec -= rem.tv_sec;
-			sleep.tv_nsec -= rem.tv_nsec;
-
-			if (sleep.tv_nsec < 0) {
-				sleep.tv_sec--;
-				sleep.tv_nsec += 1000000000;
-			}
-
-			elapsed.tv_sec += sleep.tv_sec;
-			elapsed.tv_nsec += sleep.tv_nsec;
-
-			if (elapsed.tv_nsec > 1000000000) {
-				elapsed.tv_sec++;
-				elapsed.tv_nsec -= 1000000000;
-			}
-		}
-		else {
-			return errno;
-		}
-
-		lt = timeout
-			? ((elapsed.tv_sec == timeout->tv_sec)
-				? (elapsed.tv_nsec < timeout->tv_nsec)
-				: (elapsed.tv_sec < timeout->tv_sec))
-			: true;
-
-		if (!lt)
-			break;
-	}
-
-	errno = EAGAIN;
-
-	return -1;
-}
-
-#endif
-
 /**
  * Executes the given command, waits for completion, and returns the resulting
  * exit code.
@@ -5501,7 +5401,6 @@ uc_loadstring(uc_vm_t *vm, size_t nargs)
  * @example
  * loadfile("./templates/example.uc");  // function main() { ... }
  */
-
 static uc_value_t *
 uc_loadfile(uc_vm_t *vm, size_t nargs)
 {
@@ -5646,100 +5545,6 @@ uc_callfunc(uc_vm_t *vm, size_t nargs)
 	return res;
 }
 
-
-static const char *signal_names[] = {
-#if defined(SIGINT)
-	[SIGINT] = "INT",
-#endif
-#if defined(SIGILL)
-	[SIGILL] = "ILL",
-#endif
-#if defined(SIGABRT)
-	[SIGABRT] = "ABRT",
-#endif
-#if defined(SIGFPE)
-	[SIGFPE] = "FPE",
-#endif
-#if defined(SIGSEGV)
-	[SIGSEGV] = "SEGV",
-#endif
-#if defined(SIGTERM)
-	[SIGTERM] = "TERM",
-#endif
-#if defined(SIGHUP)
-	[SIGHUP] = "HUP",
-#endif
-#if defined(SIGQUIT)
-	[SIGQUIT] = "QUIT",
-#endif
-#if defined(SIGTRAP)
-	[SIGTRAP] = "TRAP",
-#endif
-#if defined(SIGKILL)
-	[SIGKILL] = "KILL",
-#endif
-#if defined(SIGPIPE)
-	[SIGPIPE] = "PIPE",
-#endif
-#if defined(SIGALRM)
-	[SIGALRM] = "ALRM",
-#endif
-#if defined(SIGSTKFLT)
-	[SIGSTKFLT] = "STKFLT",
-#endif
-#if defined(SIGPWR)
-	[SIGPWR] = "PWR",
-#endif
-#if defined(SIGBUS)
-	[SIGBUS] = "BUS",
-#endif
-#if defined(SIGSYS)
-	[SIGSYS] = "SYS",
-#endif
-#if defined(SIGURG)
-	[SIGURG] = "URG",
-#endif
-#if defined(SIGSTOP)
-	[SIGSTOP] = "STOP",
-#endif
-#if defined(SIGTSTP)
-	[SIGTSTP] = "TSTP",
-#endif
-#if defined(SIGCONT)
-	[SIGCONT] = "CONT",
-#endif
-#if defined(SIGCHLD)
-	[SIGCHLD] = "CHLD",
-#endif
-#if defined(SIGTTIN)
-	[SIGTTIN] = "TTIN",
-#endif
-#if defined(SIGTTOU)
-	[SIGTTOU] = "TTOU",
-#endif
-#if defined(SIGPOLL)
-	[SIGPOLL] = "POLL",
-#endif
-#if defined(SIGXFSZ)
-	[SIGXFSZ] = "XFSZ",
-#endif
-#if defined(SIGXCPU)
-	[SIGXCPU] = "XCPU",
-#endif
-#if defined(SIGVTALRM)
-	[SIGVTALRM] = "VTALRM",
-#endif
-#if defined(SIGPROF)
-	[SIGPROF] = "PROF",
-#endif
-#if defined(SIGUSR1)
-	[SIGUSR1] = "USR1",
-#endif
-#if defined(SIGUSR2)
-	[SIGUSR2] = "USR2",
-#endif
-};
-
 /**
  * Set or query process signal handler function.
  *
@@ -5822,7 +5627,10 @@ uc_signal(uc_vm_t *vm, size_t nargs)
 	if (ucv_type(signame) == UC_INTEGER) {
 		sig = (int)ucv_int64_get(signame);
 
-		if (errno || sig >= (int)ARRAY_SIZE(signal_names) || !signal_names[sig])
+		if (errno || sig < 0 || sig >= UC_SYSTEM_SIGNAL_COUNT)
+			return NULL;
+
+		if (!uc_system_signal_names[sig])
 			return NULL;
 	}
 	else if (ucv_type(signame) == UC_STRING) {
@@ -5831,11 +5639,12 @@ uc_signal(uc_vm_t *vm, size_t nargs)
 		if (!strncasecmp(sigstr, "SIG", 3))
 			sigstr += 3;
 
-		for (sig = 0; sig < (int)ARRAY_SIZE(signal_names); sig++)
-			if (signal_names[sig] && !strcasecmp(signal_names[sig], sigstr))
+		for (sig = 0; sig < UC_SYSTEM_SIGNAL_COUNT; sig++)
+			if (uc_system_signal_names[sig] &&
+			    !strcasecmp(uc_system_signal_names[sig], sigstr))
 				break;
 
-		if (sig == (int)ARRAY_SIZE(signal_names))
+		if (sig == UC_SYSTEM_SIGNAL_COUNT)
 			return NULL;
 	}
 	else {

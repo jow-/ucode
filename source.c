@@ -16,9 +16,9 @@
 
 #include <string.h>
 #include <errno.h>
-#include <endian.h>
 
 #include "ucode/source.h"
+#include "ucode/platform.h"
 
 
 uc_source_t *

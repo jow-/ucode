@@ -24,7 +24,6 @@ limitations under the License.
 #include <limits.h>
 #include <math.h>
 #include <assert.h>
-#include <endian.h>
 #include <fcntl.h>
 #include <poll.h>
 
@@ -43,6 +42,7 @@ limitations under the License.
 #include <libubox/uloop.h>
 
 #include "ucode/module.h"
+#include "ucode/platform.h"
 
 #define DIV_ROUND_UP(n, d)      (((n) + (d) - 1) / (d))
 

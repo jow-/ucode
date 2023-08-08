@@ -15,7 +15,6 @@
  */
 
 #include <string.h> /* memcpy(), memset() */
-#include <endian.h> /* htobe64(), be64toh() */
 #include <math.h> /* isnan(), INFINITY */
 #include <ctype.h> /* isspace(), isdigit(), isxdigit() */
 #include <assert.h>
@@ -27,6 +26,7 @@
 #include "ucode/program.h"
 #include "ucode/vallist.h"
 #include "ucode/vm.h"
+#include "ucode/platform.h"
 
 #define TAG_TYPE			uint64_t
 #define TAG_BITS			3

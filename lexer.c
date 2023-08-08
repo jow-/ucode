@@ -23,11 +23,11 @@
 #include <regex.h>
 #include <math.h>
 #include <errno.h>
-#include <endian.h>
 
 #include "ucode/vm.h"
 #include "ucode/lib.h"
 #include "ucode/lexer.h"
+#include "ucode/platform.h"
 
 struct keyword {
 	unsigned type;

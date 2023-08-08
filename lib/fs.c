@@ -60,11 +60,8 @@
 #include <limits.h>
 #include <fcntl.h>
 
-#ifndef __APPLE__
-#include <sys/sysmacros.h> /* major(), minor() */
-#endif
-
 #include "ucode/module.h"
+#include "ucode/platform.h"
 
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
