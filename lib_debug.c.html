@@ -1,0 +1,1634 @@
+<!DOCTYPE html><html lang="en" style="font-size:16px"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script src="ucode.js"></script><link type="text/css" rel="stylesheet" href="ucode.css"><title>Source: lib/debug.c</title><!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]--><script src="scripts/third-party/hljs.js" defer="defer"></script><script src="scripts/third-party/hljs-line-num.js" defer="defer"></script><script src="scripts/third-party/popper.js" defer="defer"></script><script src="scripts/third-party/tippy.js" defer="defer"></script><script src="scripts/third-party/tocbot.min.js"></script><script>var baseURL="/",locationPathname="";baseURL=(locationPathname=document.location.pathname).substr(0,locationPathname.lastIndexOf("/")+1)</script><link rel="stylesheet" href="styles/clean-jsdoc-theme.min.css"><svg aria-hidden="true" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:none"><defs><symbol id="copy-icon" viewbox="0 0 488.3 488.3"><g><path d="M314.25,85.4h-227c-21.3,0-38.6,17.3-38.6,38.6v325.7c0,21.3,17.3,38.6,38.6,38.6h227c21.3,0,38.6-17.3,38.6-38.6V124    C352.75,102.7,335.45,85.4,314.25,85.4z M325.75,449.6c0,6.4-5.2,11.6-11.6,11.6h-227c-6.4,0-11.6-5.2-11.6-11.6V124    c0-6.4,5.2-11.6,11.6-11.6h227c6.4,0,11.6,5.2,11.6,11.6V449.6z"/><path d="M401.05,0h-227c-21.3,0-38.6,17.3-38.6,38.6c0,7.5,6,13.5,13.5,13.5s13.5-6,13.5-13.5c0-6.4,5.2-11.6,11.6-11.6h227    c6.4,0,11.6,5.2,11.6,11.6v325.7c0,6.4-5.2,11.6-11.6,11.6c-7.5,0-13.5,6-13.5,13.5s6,13.5,13.5,13.5c21.3,0,38.6-17.3,38.6-38.6    V38.6C439.65,17.3,422.35,0,401.05,0z"/></g></symbol><symbol id="search-icon" viewBox="0 0 512 512"><g><g><path d="M225.474,0C101.151,0,0,101.151,0,225.474c0,124.33,101.151,225.474,225.474,225.474    c124.33,0,225.474-101.144,225.474-225.474C450.948,101.151,349.804,0,225.474,0z M225.474,409.323    c-101.373,0-183.848-82.475-183.848-183.848S124.101,41.626,225.474,41.626s183.848,82.475,183.848,183.848    S326.847,409.323,225.474,409.323z"/></g></g><g><g><path d="M505.902,476.472L386.574,357.144c-8.131-8.131-21.299-8.131-29.43,0c-8.131,8.124-8.131,21.306,0,29.43l119.328,119.328    c4.065,4.065,9.387,6.098,14.715,6.098c5.321,0,10.649-2.033,14.715-6.098C514.033,497.778,514.033,484.596,505.902,476.472z"/></g></g></symbol><symbol id="font-size-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11.246 15H4.754l-2 5H.6L7 4h2l6.4 16h-2.154l-2-5zm-.8-2L8 6.885 5.554 13h4.892zM21 12.535V12h2v8h-2v-.535a4 4 0 1 1 0-6.93zM19 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></symbol><symbol id="add-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></symbol><symbol id="minus-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M5 11h14v2H5z"/></symbol><symbol id="dark-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol><symbol id="light-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol><symbol id="reset-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M18.537 19.567A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10c0 2.136-.67 4.116-1.81 5.74L17 12h3a8 8 0 1 0-2.46 5.772l.997 1.795z"/></symbol><symbol id="down-icon" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7803 6.21967C13.0732 6.51256 13.0732 6.98744 12.7803 7.28033L8.53033 11.5303C8.23744 11.8232 7.76256 11.8232 7.46967 11.5303L3.21967 7.28033C2.92678 6.98744 2.92678 6.51256 3.21967 6.21967C3.51256 5.92678 3.98744 5.92678 4.28033 6.21967L8 9.93934L11.7197 6.21967C12.0126 5.92678 12.4874 5.92678 12.7803 6.21967Z"></path></symbol><symbol id="codepen-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M16.5 13.202L13 15.535v3.596L19.197 15 16.5 13.202zM14.697 12L12 10.202 9.303 12 12 13.798 14.697 12zM20 10.869L18.303 12 20 13.131V10.87zM19.197 9L13 4.869v3.596l3.5 2.333L19.197 9zM7.5 10.798L11 8.465V4.869L4.803 9 7.5 10.798zM4.803 15L11 19.131v-3.596l-3.5-2.333L4.803 15zM4 13.131L5.697 12 4 10.869v2.262zM2 9a1 1 0 0 1 .445-.832l9-6a1 1 0 0 1 1.11 0l9 6A1 1 0 0 1 22 9v6a1 1 0 0 1-.445.832l-9 6a1 1 0 0 1-1.11 0l-9-6A1 1 0 0 1 2 15V9z"/></symbol><symbol id="close-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></symbol><symbol id="menu-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/></symbol></defs></svg></head><body class="light" data-theme="light"><div class="sidebar-container"><div class="sidebar" id="sidebar"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="sidebar-items-container"><div class="sidebar-section-title with-arrow" data-isopen="false" id="r8C_6dRjFCA3iGZU-_T7V"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="fZfjCuj4GyRcJEpBvaVFH"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div></div></div></div></div><div class="navbar-container" id="VuAckcnZhf"><nav class="navbar"><div class="navbar-left-items"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="navbar-right-items"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div></div><nav></nav></nav></div><div class="toc-container"><div class="toc-content"><span class="bold">On this page</span><div id="eed4d2a0bfd64539bb9df78095dec881"></div></div></div><div class="body-wrapper"><div class="main-content"><div class="main-wrapper"><section id="source-page" class="source-page"><header><h1 id="title" class="has-anchor">lib_debug.c</h1></header><article><pre class="prettyprint source lang-js"><code>/*
+ * Copyright (C) 2023 Jo-Philipp Wich &lt;jo@mein.io>
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+/**
+ * This module provides runtime debug functionality for ucode scripts.
+ *
+ * Functions can be individually imported and directly accessed using the
+ * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+ * syntax:
+ *
+ *   ```
+ *   import { memdump, traceback } from 'debug';
+ *
+ *   let stacktrace = traceback(1);
+ *
+ *   memdump("/tmp/dump.txt");
+ *   ```
+ *
+ * Alternatively, the module namespace can be imported
+ * using a wildcard import statement:
+ *
+ *   ```
+ *   import * as debug from 'debug';
+ *
+ *   let stacktrace = debug.traceback(1);
+ *
+ *   debug.memdump("/tmp/dump.txt");
+ *   ```
+ *
+ * Additionally, the debug module namespace may also be imported by invoking the
+ * `ucode` interpreter with the `-ldebug` switch.
+ *
+ * Upon loading, the `debug` module will register a `SIGUSR2` signal handler
+ * which, upon receipt of the signal, will write a memory dump of the currently
+ * running program to `/tmp/ucode.$timestamp.$pid.memdump`. This default
+ * behavior can be inhibited by setting the `UCODE_DEBUG_MEMDUMP_ENABLED`
+ * environment variable to `0` when starting the process. The memory dump signal
+ * and output directory can be overridden with the `UCODE_DEBUG_MEMDUMP_SIGNAL`
+ * and `UCODE_DEBUG_MEMDUMP_PATH` environment variables respectively.
+ *
+ * @module debug
+ */
+
+#include &lt;stdio.h>
+#include &lt;stdlib.h>
+#include &lt;assert.h>
+#include &lt;unistd.h>
+#include &lt;errno.h>
+
+#ifdef HAVE_ULOOP
+#include &lt;libubox/uloop.h>
+#endif
+
+#include &lt;json-c/printbuf.h>
+#include &lt;json-c/linkhash.h>
+
+#include "ucode/module.h"
+#include "ucode/platform.h"
+
+
+static char *memdump_signal = "USR2";
+static char *memdump_directory = "/tmp";
+
+struct memdump_walk_ctx {
+	FILE *out;
+	uc_closure_t *current_closure;
+	struct lh_table *seen;
+};
+
+static uc_callframe_t *
+debuginfo_stackslot_to_callframe(uc_vm_t *vm, size_t slot)
+{
+	size_t stackframe, i;
+
+	for (i = vm->callframes.count; i > 0; i--) {
+		stackframe = vm->callframes.entries[i - 1].stackframe;
+
+		if (vm->callframes.entries[i - 1].mcall)
+			stackframe--;
+
+		if (stackframe &lt;= slot)
+			return &amp;vm->callframes.entries[i - 1];
+	}
+
+	return NULL;
+}
+
+static void
+uc_debug_discover_ucv(uc_value_t *uv, struct lh_table *seen);
+
+static void
+uc_debug_discover_ucv(uc_value_t *uv, struct lh_table *seen)
+{
+	uc_function_t *function;
+	uc_closure_t *closure;
+	uc_upvalref_t *upval;
+	uc_object_t *object;
+	uc_array_t *array;
+	uc_resource_t *resource;
+	uc_program_t *program;
+	struct lh_entry *entry;
+	unsigned long hash;
+	size_t i;
+
+	hash = lh_get_hash(seen, uv);
+
+	if (ucv_is_scalar(uv))
+		return;
+
+	if (lh_table_lookup_entry_w_hash(seen, uv, hash))
+		return;
+
+	lh_table_insert_w_hash(seen, uv, NULL, hash, 0);
+
+	switch (ucv_type(uv)) {
+	case UC_ARRAY:
+		array = (uc_array_t *)uv;
+
+		uc_debug_discover_ucv(array->proto, seen);
+
+		for (i = 0; i &lt; array->count; i++)
+			uc_debug_discover_ucv(array->entries[i], seen);
+
+		break;
+
+	case UC_OBJECT:
+		object = (uc_object_t *)uv;
+
+		uc_debug_discover_ucv(object->proto, seen);
+
+		lh_foreach(object->table, entry)
+			uc_debug_discover_ucv((uc_value_t *)lh_entry_v(entry), seen);
+
+		break;
+
+	case UC_CLOSURE:
+		closure = (uc_closure_t *)uv;
+		function = closure->function;
+
+		for (i = 0; i &lt; function->nupvals; i++)
+			uc_debug_discover_ucv(&amp;closure->upvals[i]->header, seen);
+
+		uc_debug_discover_ucv(&amp;function->program->header, seen);
+
+		break;
+
+	case UC_UPVALUE:
+		upval = (uc_upvalref_t *)uv;
+		uc_debug_discover_ucv(upval->value, seen);
+		break;
+
+	case UC_RESOURCE:
+		resource = (uc_resource_t *)uv;
+
+		if (resource->type)
+			uc_debug_discover_ucv(resource->type->proto, seen);
+
+		break;
+
+	case UC_PROGRAM:
+		program = (uc_program_t *)uv;
+
+		for (i = 0; i &lt; program->sources.count; i++)
+			uc_debug_discover_ucv(&amp;program->sources.entries[i]->header, seen);
+
+		for (i = 0; i &lt; program->exports.count; i++)
+			uc_debug_discover_ucv(&amp;program->exports.entries[i]->header, seen);
+
+		break;
+
+	default:
+		break;
+	}
+}
+
+static void
+print_value(FILE *out, size_t pad, struct lh_table *seen,
+            uc_vm_t *vm, uc_value_t *uv);
+
+static void
+print_value(FILE *out, size_t pad, struct lh_table *seen,
+            uc_vm_t *vm, uc_value_t *uv)
+{
+	uc_resource_t *resource;
+	uc_closure_t *closure;
+	uc_object_t *object;
+	uc_array_t *array;
+	size_t i, j;
+	char *s;
+
+	fprintf(out, "%s", ucv_typename(uv));
+
+	if (!uv) {
+		fprintf(out, "\n");
+
+		return;
+	}
+
+	if (!ucv_is_scalar(uv))
+		fprintf(out, "; %" PRIu32 " refs", uv->refcount);
+
+	if (!lh_table_lookup_entry(seen, uv))
+		fprintf(out, "; unreachable");
+
+	if (ucv_is_constant(uv))
+		fprintf(out, "; constant");
+
+	fprintf(out, "\n");
+
+	for (j = 0; j &lt; pad + 1; j++)
+		fprintf(out, "  ");
+
+	s = ucv_to_string(NULL, uv);
+	fprintf(out, "#value = %s\n", s);
+	free(s);
+
+	if (ucv_type(uv) == UC_CLOSURE) {
+		closure = (uc_closure_t *)uv;
+
+		for (i = 0; i &lt; closure->function->nupvals; i++) {
+			for (j = 0; j &lt; pad + 1; j++)
+				fprintf(out, "  ");
+
+			fprintf(out, "#upvalue[%zu] ", i);
+
+			if (closure->upvals[i]->closed) {
+				fprintf(out, "closed; ");
+				print_value(out, pad + 1, seen, vm, closure->upvals[i]->value);
+			}
+			else {
+				fprintf(out, "open; stack slot %zu\n",
+					closure->upvals[i]->slot);
+			}
+		}
+	}
+	else if (ucv_type(uv) == UC_OBJECT) {
+		object = (uc_object_t *)uv;
+
+		if (object->proto) {
+			for (j = 0; j &lt; pad + 1; j++)
+				fprintf(out, "  ");
+
+			fprintf(out, "#prototype = ");
+			print_value(out, pad + 1, seen, vm, object->proto);
+		}
+	}
+	else if (ucv_type(uv) == UC_ARRAY) {
+		array = (uc_array_t *)uv;
+
+		if (array->proto) {
+			for (j = 0; j &lt; pad + 1; j++)
+				fprintf(out, "  ");
+
+			fprintf(out, "#prototype = ");
+			print_value(out, pad + 1, seen, vm, array->proto);
+		}
+	}
+	else if (ucv_type(uv) == UC_RESOURCE) {
+		resource = (uc_resource_t *)uv;
+
+		if (resource->type) {
+			for (j = 0; j &lt; pad + 1; j++)
+				fprintf(out, "  ");
+
+			fprintf(out, "#type %s\n", resource->type->name);
+
+			if (resource->type->proto) {
+				for (j = 0; j &lt; pad + 2; j++)
+					fprintf(out, "  ");
+
+				fprintf(out, "#prototype = ");
+				print_value(out, pad + 2, seen, vm, resource->type->proto);
+			}
+		}
+	}
+}
+
+static size_t
+insnoff_to_srcpos(uc_function_t *function, size_t *insnoff)
+{
+	size_t byteoff, lineno;
+	uc_source_t *source;
+
+	source = uc_program_function_source(function);
+	byteoff = uc_program_function_srcpos(function, *insnoff);
+	lineno = uc_source_get_line(source, &amp;byteoff);
+
+	*insnoff = byteoff;
+
+	return lineno;
+}
+
+static void
+print_declaration_srcpos(FILE *out, uc_callframe_t *frame, size_t off, size_t slot, bool upval)
+{
+	uc_function_t *function = frame->closure->function;
+	uc_variables_t *variables = &amp;function->chunk.debuginfo.variables;
+	size_t i, line;
+
+	assert(slot &lt;= ((size_t)-1 / 2));
+
+	if (upval)
+		slot += (size_t)-1 / 2;
+
+	for (i = 0; i &lt; variables->count; i++) {
+		if (variables->entries[i].slot != slot ||
+		    variables->entries[i].from > off ||
+		    variables->entries[i].to &lt; off)
+			continue;
+
+		off = variables->entries[i].from;
+		line = insnoff_to_srcpos(function, &amp;off);
+
+		fprintf(out, "%s:%zu:%zu",
+			uc_program_function_source(function)->filename, line, off);
+
+		return;
+	}
+
+	fprintf(out, "[unknown source position]");
+}
+
+static void
+print_function_srcpos(FILE *out, uc_closure_t *closure)
+{
+	size_t line, off;
+
+	if (!closure)
+		return;
+
+	off = 0;
+	line = insnoff_to_srcpos(closure->function, &amp;off);
+
+	fprintf(out, " @ %s:%zu:%zu",
+		uc_program_function_source(closure->function)->filename, line, off);
+}
+
+static void
+print_ip_srcpos(FILE *out, uc_callframe_t *frame)
+{
+	uc_function_t *function;
+	size_t line, off;
+
+	if (!frame->closure)
+		return;
+
+	function = frame->closure->function;
+	off = frame->ip - function->chunk.entries;
+	line = insnoff_to_srcpos(function, &amp;off);
+
+	fprintf(out, " @ %s:%zu:%zu",
+		uc_program_function_source(function)->filename, line, off);
+}
+
+static void
+print_memdump(uc_vm_t *vm, FILE *out)
+{
+	struct memdump_walk_ctx ctx = { 0 };
+	uc_callframe_t *frame;
+	uc_chunk_t *chunk;
+	uc_weakref_t *ref;
+	uc_value_t *uv;
+	size_t i;
+	char *s;
+
+	ctx.out = out;
+	ctx.seen = lh_kptr_table_new(16, NULL);
+
+	if (!ctx.seen) {
+		fprintf(stderr, "Unable to allocate lookup table: %m\n");
+
+		return;
+	}
+
+	fprintf(ctx.out, "STACK\n");
+
+	for (i = 0; i &lt; vm->stack.count; i++) {
+		fprintf(ctx.out, "[%zu]", i);
+
+		frame = debuginfo_stackslot_to_callframe(vm, i);
+
+		if (frame) {
+			chunk = frame->closure ? &amp;frame->closure->function->chunk : NULL;
+			uv = chunk ? uc_chunk_debug_get_variable(
+				chunk,
+				frame->ip - chunk->entries + 1,
+				i - frame->stackframe,
+				false) : NULL;
+
+			if (uv) {
+				fprintf(ctx.out, " %s @ ",
+					ucv_string_get(uv));
+
+				print_declaration_srcpos(ctx.out, frame,
+					frame->ip - chunk->entries + 1,
+					i - frame->stackframe, false);
+
+				ucv_put(uv);
+			}
+			else if (frame->mcall &amp;&amp; i == frame->stackframe - 1) {
+				fprintf(ctx.out, " (this)");
+
+				if (frame->closure)
+					print_function_srcpos(ctx.out, frame->closure);
+				else
+					fprintf(ctx.out, " @ [C function \"%s\"]",
+						frame->cfunction->name);
+			}
+			else if (i == frame->stackframe) {
+				fprintf(ctx.out, " (callee)");
+
+				if (frame->closure)
+					print_function_srcpos(ctx.out, frame->closure);
+				else
+					fprintf(ctx.out, " @ [C function \"%s\"]",
+						frame->cfunction->name);
+			}
+			else if (i > frame->stackframe) {
+				fprintf(ctx.out, " (argument #%zu)",
+					i - frame->stackframe);
+
+				if (frame->closure)
+					print_function_srcpos(ctx.out, frame->closure);
+				else
+					fprintf(ctx.out, " @ [C function \"%s\"]",
+						frame->cfunction->name);
+			}
+		}
+
+		fprintf(ctx.out, "\n");
+
+		uc_debug_discover_ucv(vm->stack.entries[i], ctx.seen);
+
+		s = ucv_to_string(NULL, vm->stack.entries[i]);
+		fprintf(ctx.out, "  #value = %s\n", s);
+		free(s);
+	}
+
+	fprintf(ctx.out, "---\n\n");
+
+	fprintf(ctx.out, "CALLFRAMES\n");
+
+	for (i = 0; i &lt; vm->callframes.count; i++) {
+		fprintf(ctx.out, "[%zu]", i);
+		print_ip_srcpos(ctx.out, &amp;vm->callframes.entries[i]);
+		fprintf(ctx.out, "\n");
+
+		uc_debug_discover_ucv(vm->callframes.entries[i].ctx,
+			ctx.seen);
+
+		uc_debug_discover_ucv(&amp;vm->callframes.entries[i].closure->header,
+			ctx.seen);
+
+		uc_debug_discover_ucv(&amp;vm->callframes.entries[i].cfunction->header,
+			ctx.seen);
+
+		s = ucv_to_string(NULL, vm->callframes.entries[i].ctx);
+		fprintf(ctx.out, "  #context = %s\n", s);
+		free(s);
+
+		if (vm->callframes.entries[i].closure) {
+			s = ucv_to_string(NULL,
+				&amp;vm->callframes.entries[i].closure->header);
+			fprintf(ctx.out, "  #closure = %s\n", s);
+			free(s);
+		}
+
+		if (vm->callframes.entries[i].cfunction) {
+			s = ucv_to_string(NULL,
+				&amp;vm->callframes.entries[i].cfunction->header);
+
+			fprintf(ctx.out, "  #cfunction = %s\n", s);
+			free(s);
+		}
+	}
+
+	fprintf(ctx.out, "---\n\n");
+
+	fprintf(ctx.out, "GLOBALS\n");
+	uc_debug_discover_ucv(vm->globals, ctx.seen);
+	i = 0;
+	ucv_object_foreach(vm->globals, gk, gv) {
+		s = ucv_to_string(NULL, gv);
+		fprintf(ctx.out, "[%zu] %s\n", i++, gk);
+		fprintf(ctx.out, "  #value = %s\n", s);
+		free(s);
+	}
+	fprintf(ctx.out, "---\n\n");
+
+	fprintf(ctx.out, "REGISTRY\n");
+	uc_debug_discover_ucv(vm->registry, ctx.seen);
+	i = 0;
+	ucv_object_foreach(vm->registry, rk, rv) {
+		s = ucv_to_string(NULL, rv);
+		fprintf(ctx.out, "[%zu] %s\n", i++, rk);
+		fprintf(ctx.out, "  #value = %s\n", s);
+		free(s);
+	}
+	fprintf(ctx.out, "---\n\n");
+
+	fprintf(ctx.out, "EXCEPTION\n");
+	uc_debug_discover_ucv(vm->exception.stacktrace, ctx.seen);
+	s = ucv_to_string(NULL, vm->exception.stacktrace);
+	fprintf(ctx.out, "%s\n", s);
+	free(s);
+	fprintf(ctx.out, "---\n\n");
+
+	fprintf(ctx.out, "RESOURCE TYPES\n");
+
+	for (i = 0; i &lt; vm->restypes.count; i++) {
+		fprintf(ctx.out, "[%zu] %s\n", i,
+			vm->restypes.entries[i]->name);
+
+		uc_debug_discover_ucv(vm->restypes.entries[i]->proto, ctx.seen);
+
+		s = ucv_to_string(NULL, vm->restypes.entries[i]->proto);
+		fprintf(ctx.out, "  #prototype = %s\n", s);
+		free(s);
+	}
+
+	fprintf(ctx.out, "---\n\n");
+
+	fprintf(ctx.out, "OBJECT POOL\n");
+
+	for (ref = vm->values.next, i = 0;
+	     ref != &amp;vm->values;
+	     ref = ref->next, i++) {
+
+		uv = (uc_value_t *)((uintptr_t)ref - offsetof(uc_array_t, ref));
+
+		fprintf(ctx.out, "[%zu] ", i);
+		print_value(ctx.out, 0, ctx.seen, vm, uv);
+	}
+
+	lh_table_free(ctx.seen);
+}
+
+static uc_value_t *
+debug_handle_memdump(uc_vm_t *vm, size_t nargs)
+{
+	char *path;
+	FILE *out;
+
+	xasprintf(&amp;path, "%s/ucode.%llu.%llu.memdump",
+		memdump_directory,
+		(long long unsigned int)time(NULL),
+		(long long unsigned int)getpid());
+
+	out = fopen(path, "w");
+
+	if (!out) {
+		fprintf(stderr, "Unable to open memdump file '%s': %m\n", path);
+
+		return NULL;
+	}
+
+	print_memdump(vm, out);
+
+	fclose(out);
+	free(path);
+
+	return NULL;
+}
+
+#ifdef HAVE_ULOOP
+/* The uloop signal handling activation has been intentionally copied from
+   the uloop module here to ensure that uloop signal dispatching also works
+   when just loading the debug module without the uloop one. */
+static struct {
+	struct uloop_fd ufd;
+	uc_vm_t *vm;
+} signal_handle;
+
+static void
+uc_uloop_signal_cb(struct uloop_fd *ufd, unsigned int events)
+{
+	if (uc_vm_signal_dispatch(signal_handle.vm) != EXCEPTION_NONE)
+		uloop_end();
+}
+
+static void
+debug_setup_uloop(uc_vm_t *vm)
+{
+	int signal_fd = uc_vm_signal_notifyfd(vm);
+
+	if (signal_fd != -1 &amp;&amp; uloop_init() == 0) {
+		signal_handle.vm = vm;
+		signal_handle.ufd.cb = uc_uloop_signal_cb;
+		signal_handle.ufd.fd = signal_fd;
+
+		uloop_fd_add(&amp;signal_handle.ufd, ULOOP_READ);
+	}
+}
+#else
+static void debug_setup_uloop(uc_vm_t *vm) {}
+#endif
+
+static void
+debug_setup_memdump(uc_vm_t *vm)
+{
+	uc_cfn_ptr_t ucsignal = uc_stdlib_function("signal");
+	uc_value_t *memdump = ucv_cfunction_new("memdump", debug_handle_memdump);
+	char *ev;
+
+	ev = getenv("UCODE_DEBUG_MEMDUMP_PATH");
+	memdump_directory = ev ? ev : memdump_directory;
+
+	ev = getenv("UCODE_DEBUG_MEMDUMP_SIGNAL");
+	memdump_signal = ev ? ev : memdump_signal;
+
+	debug_setup_uloop(vm);
+
+	uc_vm_stack_push(vm, ucv_string_new(memdump_signal));
+	uc_vm_stack_push(vm, memdump);
+
+	if (ucsignal(vm, 2) != memdump)
+		fprintf(stderr, "Unable to install debug signal handler\n");
+
+	ucv_put(uc_vm_stack_pop(vm));
+	ucv_put(uc_vm_stack_pop(vm));
+}
+
+static void
+debug_setup(uc_vm_t *vm)
+{
+	char *ev;
+
+	ev = getenv("UCODE_DEBUG_MEMDUMP_ENABLED");
+
+	if (!ev || !strcmp(ev, "1") || !strcmp(ev, "yes") || !strcmp(ev, "true"))
+		debug_setup_memdump(vm);
+}
+
+
+/**
+ * Write a memory dump report to the given file.
+ *
+ * This function generates a human readable memory dump of ucode values
+ * currently managed by the running VM which is useful to track down logical
+ * memory leaks in scripts.
+ *
+ * The file parameter can be either a string value containing a file path, in
+ * which case this function tries to create and write the report file at the
+ * given location, or an already open file handle this function should write to.
+ *
+ * Returns `true` if the report has been written.
+ *
+ * Returns `null` if the file could not be opened or if the handle was invalid.
+ *
+ * @function module:debug#memdump
+ *
+ * @param {string|module:fs.file|module:fs.proc} file
+ * The file path or open file handle to write report to.
+ *
+ * @return {boolean|null}
+ */
+static uc_value_t *
+uc_memdump(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *file = uc_fn_arg(0);
+	FILE *fp = NULL;
+
+	if (ucv_type(file) == UC_RESOURCE) {
+		fp = ucv_resource_data(file, "fs.file");
+
+		if (!fp)
+			fp = ucv_resource_data(file, "fs.proc");
+	}
+	else if (ucv_type(file) == UC_STRING) {
+		fp = fopen(ucv_string_get(file), "w");
+	}
+
+	if (!fp)
+		return NULL;
+
+	print_memdump(vm, fp);
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Capture call stack trace.
+ *
+ * This function captures the current call stack and returns it. The optional
+ * level parameter controls how many calls up the trace should start. It
+ * defaults to `1`, that is the function calling this `traceback()` function.
+ *
+ * Returns an array of stack trace entries describing the function invocations
+ * up to the point where `traceback()` is called.
+ *
+ * @function module:debug#traceback
+ *
+ * @param {number} [level=1]
+ * The number of callframes up the call trace should start, `0` is this function
+ * itself, `1` the function calling it and so on.
+ *
+ * @return {module:debug.StackTraceEntry[]}
+ */
+
+/**
+ * @typedef {Object} module:debug.StackTraceEntry
+ *
+ * @property {function} callee
+ * The function that was called.
+ *
+ * @property {*} this
+ * The `this` context the function was called with.
+ *
+ * @property {boolean} mcall
+ * Indicates whether the function was invoked as a method.
+ *
+ * @property {boolean} [strict]
+ * Indicates whether the VM was running in strict mode when the function was
+ * called (only applicable to non-C, pure ucode calls).
+ *
+ * @property {string} [filename]
+ * The name of the source file that called the function (only applicable to
+ * non-C, pure ucode calls).
+ *
+ * @property {number} [line]
+ * The source line of the function call (only applicable to non-C, pure ucode
+ * calls).
+ *
+ * @property {number} [byte]
+ * The source line offset of the function call (only applicable to non-C, pure
+ * ucode calls).
+ *
+ * @property {string} [context]
+ * The surrounding source code context formatted as human-readable string,
+ * useful for generating debug messages (only applicable to non-C, pure ucode
+ * calls).
+ */
+
+static uc_value_t *
+uc_traceback(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *stacktrace, *entry, *level = uc_fn_arg(0);
+	uc_function_t *function;
+	uc_stringbuf_t *context;
+	uc_callframe_t *frame;
+	uc_source_t *source;
+	size_t off, srcpos;
+	size_t i, lv;
+
+	lv = level ? ucv_uint64_get(level) : 1;
+
+	if (level &amp;&amp; errno)
+		return NULL;
+
+	stacktrace = ucv_array_new(vm);
+
+	for (i = (lv &lt; vm->callframes.count) ? vm->callframes.count - lv : 0;
+	     i > 0;
+	     i--) {
+
+		frame = &amp;vm->callframes.entries[i - 1];
+		entry = ucv_object_new(vm);
+
+		if (frame->closure) {
+			function = frame->closure->function;
+			source = uc_program_function_source(function);
+
+			off = (frame->ip - function->chunk.entries) - 1;
+			srcpos = uc_program_function_srcpos(function, off);
+
+			context = ucv_stringbuf_new();
+
+			uc_source_context_format(context,
+				uc_program_function_source(function),
+				srcpos, false);
+
+			ucv_object_add(entry, "callee", ucv_get(&amp;frame->closure->header));
+			ucv_object_add(entry, "this", ucv_get(frame->ctx));
+			ucv_object_add(entry, "mcall", ucv_boolean_new(frame->mcall));
+			ucv_object_add(entry, "strict", ucv_boolean_new(frame->strict));
+			ucv_object_add(entry, "filename", ucv_string_new(source->filename));
+			ucv_object_add(entry, "line", ucv_int64_new(uc_source_get_line(source, &amp;srcpos)));
+			ucv_object_add(entry, "byte", ucv_int64_new(srcpos));
+			ucv_object_add(entry, "context", ucv_stringbuf_finish(context));
+		}
+		else if (frame->cfunction) {
+			ucv_object_add(entry, "callee", ucv_get(&amp;frame->cfunction->header));
+			ucv_object_add(entry, "this", ucv_get(frame->ctx));
+			ucv_object_add(entry, "mcall", ucv_boolean_new(frame->mcall));
+		}
+
+		ucv_array_push(stacktrace, entry);
+	}
+
+	return stacktrace;
+}
+
+/**
+ * Obtain information about the current source position.
+ *
+ * The `sourcepos()` function determines the source code position of the
+ * current instruction invoking this function.
+ *
+ * Returns a dictionary containing the filename, line number and line byte
+ * offset of the call site.
+ *
+ * Returns `null` if this function was invoked from C code.
+ *
+ * @function module:debug#sourcepos
+ *
+ * @return {module:debug.SourcePosition|null}
+ */
+
+/**
+ * @typedef {Object} module:debug.SourcePosition
+ *
+ * @property {string} filename
+ * The name of the source file that called this function.
+ *
+ * @property {number} line
+ * The source line of the function call.
+ *
+ * @property {number} byte
+ * The source line offset of the function call.
+ */
+
+static uc_value_t *
+uc_sourcepos(uc_vm_t *vm, size_t nargs)
+{
+	uc_function_t *function;
+	uc_callframe_t *frame;
+	uc_source_t *source;
+	uc_value_t *rv;
+	size_t byte;
+
+	if (vm->callframes.count &lt; 2)
+		return NULL;
+
+	frame = &amp;vm->callframes.entries[vm->callframes.count - 2];
+
+	if (!frame->closure)
+		return NULL;
+
+	function = frame->closure->function;
+	source = uc_program_function_source(function);
+	byte = uc_program_function_srcpos(function,
+		(frame->ip - function->chunk.entries) - 1);
+
+	rv = ucv_object_new(vm);
+
+	ucv_object_add(rv, "filename", ucv_string_new(source->filename));
+	ucv_object_add(rv, "line", ucv_int64_new(uc_source_get_line(source, &amp;byte)));
+	ucv_object_add(rv, "byte", ucv_int64_new(byte));
+
+	return rv;
+}
+
+static uc_value_t *
+uc_getinfo_fnargs(uc_vm_t *vm, uc_function_t *function)
+{
+	uc_value_t *rv = NULL, *name;
+	size_t i;
+
+	for (i = 0; i &lt; function->nargs; i++) {
+		name = uc_chunk_debug_get_variable(&amp;function->chunk, i, i + 1, false);
+
+		if (!name)
+			continue;
+
+		if (!rv)
+			rv = ucv_array_new_length(vm, function->nargs);
+
+		ucv_array_push(rv, name);
+	}
+
+	return rv;
+}
+
+/**
+ * @typedef {Object} module:debug.UpvalRef
+ *
+ * @property {string} name
+ * The name of the captured variable.
+ *
+ * @property {boolean} closed
+ * Indicates whether the captured variable (upvalue) is closed or not. A closed
+ * upvalue means that the function value outlived the declaration scope of the
+ * captured variable.
+ *
+ * @property {*} value
+ * The current value of the captured variable.
+ *
+ * @property {number} [slot]
+ * The stack slot of the captured variable. Only applicable to open (non-closed)
+ * captured variables.
+ */
+static uc_value_t *
+uc_getinfo_upvals(uc_vm_t *vm, uc_closure_t *closure)
+{
+	uc_function_t *function = closure->function;
+	uc_upvalref_t **upvals = closure->upvals;
+	uc_value_t *rv = NULL, *up, *name;
+	size_t i;
+
+	for (i = 0; i &lt; function->nupvals; i++) {
+		up = ucv_object_new(vm);
+		name = uc_chunk_debug_get_variable(&amp;function->chunk, 0, i, true);
+
+		if (name)
+			ucv_object_add(up, "name", name);
+
+		if (upvals[i]->closed) {
+			ucv_object_add(up, "closed", ucv_boolean_new(true));
+			ucv_object_add(up, "value", ucv_get(upvals[i]->value));
+		}
+		else {
+			ucv_object_add(up, "closed", ucv_boolean_new(false));
+			ucv_object_add(up, "slot", ucv_uint64_new(upvals[i]->slot));
+			ucv_object_add(up, "value",
+				ucv_get(vm->stack.entries[upvals[i]->slot]));
+		}
+
+		if (!rv)
+			rv = ucv_array_new_length(vm, function->nupvals);
+
+		ucv_array_push(rv, up);
+	}
+
+	return rv;
+}
+
+/**
+ * Obtain information about the given value.
+ *
+ * The `getinfo()` function allows querying internal information about the
+ * given ucode value, such as the current reference count, the mark bit state
+ * etc.
+ *
+ * Returns a dictionary with value type specific details.
+ *
+ * Returns `null` if a `null` value was provided.
+ *
+ * @function module:debug#getinfo
+ *
+ * @param {*} value
+ * The value to query information for.
+ *
+ * @return {module:debug.ValueInformation|null}
+ */
+
+/**
+ * @typedef {Object} module:debug.ValueInformation
+ *
+ * @property {string} type
+ * The name of the value type, one of `integer`, `boolean`, `string`, `double`,
+ * `array`, `object`, `regexp`, `cfunction`, `closure`, `upvalue` or `resource`.
+ *
+ * @property {*} value
+ * The value itself.
+ *
+ * @property {boolean} tagged
+ * Indicates whether the given value is internally stored as tagged pointer
+ * without an additional heap allocation.
+ *
+ * @property {boolean} [mark]
+ * Indicates whether the value has it's mark bit set, which is used for loop
+ * detection during recursive object traversal on garbage collection cycles or
+ * complex value stringification. Only applicable to non-tagged values.
+ *
+ * @property {number} [refcount]
+ * The current reference count of the value. Note that the `getinfo()` function
+ * places a reference to the value into the `value` field of the resulting
+ * information dictionary, so the ref count will always be at least 2 - one
+ * reference for the function call argument and one for the value property in
+ * the result dictionary. Only applicable to non-tagged values.
+ *
+ * @property {boolean} [unsigned]
+ * Whether the number value is internally stored as unsigned integer. Only
+ * applicable to non-tagged integer values.
+ *
+ * @property {number} [address]
+ * The address of the underlying C heap memory. Only applicable to non-tagged
+ * `string`, `array`, `object`, `cfunction` or `resource` values.
+ *
+ * @property {number} [length]
+ * The length of the underlying string memory. Only applicable to non-tagged
+ * `string` values.
+ *
+ * @property {number} [count]
+ * The amount of elements in the underlying memory structure. Only applicable to
+ * `array` and `object` values.
+ *
+ * @property {boolean} [constant]
+ * Indicates whether the value is constant (immutable). Only applicable to
+ * `array` and `object` values.
+ *
+ * @property {*} [prototype]
+ * The associated prototype value, if any. Only applicable to `array`, `object`
+ * and `prototype` values.
+ *
+ * @property {string} [source]
+ * The original regex source pattern. Only applicable to `regexp` values.
+ *
+ * @property {boolean} [icase]
+ * Whether the compiled regex has the `i` (ignore case) flag set. Only
+ * applicable to `regexp` values.
+ *
+ * @property {boolean} [global]
+ * Whether the compiled regex has the `g` (global) flag set. Only applicable to
+ * `regexp` values.
+ *
+ * @property {boolean} [newline]
+ * Whether the compiled regex has the `s` (single line) flag set. Only
+ * applicable to `regexp` values.
+ *
+ * @property {number} [nsub]
+ * The amount of capture groups within the regular expression. Only applicable
+ * to `regexp` values.
+ *
+ * @property {string} [name]
+ * The name of the non-anonymous function. Only applicable to `cfunction` and
+ * `closure` values. Set to `null` for anonymous function values.
+ *
+ * @property {boolean} [arrow]
+ * Indicates whether the ucode function value is an arrow function. Only
+ * applicable to `closure` values.
+ *
+ * @property {boolean} [module]
+ * Indicates whether the ucode function value is a module entry point. Only
+ * applicable to `closure` values.
+ *
+ * @property {boolean} [strict]
+ * Indicates whether the function body will be executed in strict mode. Only
+ * applicable to `closure` values.
+ *
+ * @property {boolean} [vararg]
+ * Indicates whether the ucode function takes a variable number of arguments.
+ * Only applicable to `closure` values.
+ *
+ * @property {number} [nargs]
+ * The number of arguments expected by the ucode function, excluding a potential
+ * final variable argument ellipsis. Only applicable to `closure` values.
+ *
+ * @property {string[]} [argnames]
+ * The names of the function arguments in their declaration order. Only
+ * applicable to `closure` values.
+ *
+ * @property {number} [nupvals]
+ * The number of upvalues associated with the ucode function. Only applicable to
+ * `closure` values.
+ *
+ * @property {module:debug.UpvalRef[]} [upvals]
+ * An array of upvalue information objects. Only applicable to `closure` values.
+ *
+ * @property {string} [filename]
+ * The path of the source file the function was declared in. Only applicable to
+ * `closure` values.
+ *
+ * @property {number} [line]
+ * The source line number the function was declared at. Only applicable to
+ * `closure` values.
+ *
+ * @property {number} [byte]
+ * The source line offset the function was declared at. Only applicable to
+ * `closure` values.
+ *
+ * @property {string} [type]
+ * The resource type name. Only applicable to `resource` values.
+ */
+
+static uc_value_t *
+uc_getinfo(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *uv = uc_fn_arg(0), *rv;
+	uintptr_t pv = (uintptr_t)uv;
+	uc_cfunction_t *uvcfn;
+	uc_resource_t *uvres;
+	uc_closure_t *uvfun;
+	uc_source_t *source;
+	uc_regexp_t *uvreg;
+	uc_string_t *uvstr;
+	uc_object_t *uvobj;
+	uc_array_t *uvarr;
+	size_t byte;
+
+	if (!uv)
+		return NULL;
+
+	rv = ucv_object_new(vm);
+
+	ucv_object_add(rv, "type", ucv_string_new(ucv_typename(uv)));
+	ucv_object_add(rv, "value", ucv_get(uv));
+
+	if (pv &amp; 3) {
+		ucv_object_add(rv, "tagged", ucv_boolean_new(true));
+	}
+	else {
+		ucv_object_add(rv, "tagged", ucv_boolean_new(false));
+		ucv_object_add(rv, "mark", ucv_boolean_new(uv->mark));
+		ucv_object_add(rv, "refcount", ucv_uint64_new(uv->refcount));
+	}
+
+	switch (ucv_type(uv)) {
+	case UC_INTEGER:
+		ucv_object_add(rv, "unsigned",
+			ucv_boolean_new(!(pv &amp; 3) &amp;&amp; uv->u64_or_constant));
+
+		break;
+
+	case UC_STRING:
+		if (pv &amp; 3) {
+			uvstr = (uc_string_t *)uv;
+
+			ucv_object_add(rv, "address",
+				ucv_uint64_new((uintptr_t)uvstr->str));
+
+			ucv_object_add(rv, "length", ucv_uint64_new(uvstr->length));
+		}
+
+		break;
+
+	case UC_ARRAY:
+		uvarr = (uc_array_t *)uv;
+
+		ucv_object_add(rv, "address",
+			ucv_uint64_new((uintptr_t)uvarr->entries));
+
+		ucv_object_add(rv, "count", ucv_uint64_new(uvarr->count));
+		ucv_object_add(rv, "constant", ucv_boolean_new(uv->u64_or_constant));
+		ucv_object_add(rv, "prototype", ucv_get(uvarr->proto));
+
+		break;
+
+	case UC_OBJECT:
+		uvobj = (uc_object_t *)uv;
+
+		ucv_object_add(rv, "address",
+			ucv_uint64_new((uintptr_t)uvobj->table));
+
+		ucv_object_add(rv, "count",
+			ucv_uint64_new(lh_table_length(uvobj->table)));
+
+		ucv_object_add(rv, "constant", ucv_boolean_new(uv->u64_or_constant));
+		ucv_object_add(rv, "prototype", ucv_get(uvobj->proto));
+
+		break;
+
+	case UC_REGEXP:
+		uvreg = (uc_regexp_t *)uv;
+
+		ucv_object_add(rv, "source", ucv_string_new(uvreg->source));
+		ucv_object_add(rv, "icase", ucv_boolean_new(uvreg->icase));
+		ucv_object_add(rv, "global", ucv_boolean_new(uvreg->global));
+		ucv_object_add(rv, "newline", ucv_boolean_new(uvreg->newline));
+		ucv_object_add(rv, "nsub", ucv_uint64_new(uvreg->regexp.re_nsub));
+
+		break;
+
+	case UC_CFUNCTION:
+		uvcfn = (uc_cfunction_t *)uv;
+
+		ucv_object_add(rv, "name", ucv_string_new(uvcfn->name));
+		ucv_object_add(rv, "address", ucv_uint64_new((uintptr_t)uvcfn->cfn));
+
+		break;
+
+	case UC_CLOSURE:
+		uvfun = (uc_closure_t *)uv;
+		byte = uvfun->function->srcpos;
+		source = uc_program_function_source(uvfun->function);
+
+		ucv_object_add(rv, "name", ucv_string_new(uvfun->function->name));
+		ucv_object_add(rv, "arrow", ucv_boolean_new(uvfun->function->arrow));
+		ucv_object_add(rv, "module", ucv_boolean_new(uvfun->function->module));
+		ucv_object_add(rv, "strict", ucv_boolean_new(uvfun->function->strict));
+		ucv_object_add(rv, "vararg", ucv_boolean_new(uvfun->function->vararg));
+		ucv_object_add(rv, "nargs", ucv_uint64_new(uvfun->function->nargs));
+		ucv_object_add(rv, "argnames", uc_getinfo_fnargs(vm, uvfun->function));
+		ucv_object_add(rv, "nupvals", ucv_uint64_new(uvfun->function->nupvals));
+		ucv_object_add(rv, "upvals", uc_getinfo_upvals(vm, uvfun));
+		ucv_object_add(rv, "filename", ucv_string_new(source->filename));
+		ucv_object_add(rv, "line", ucv_int64_new(uc_source_get_line(source, &amp;byte)));
+		ucv_object_add(rv, "byte", ucv_int64_new(byte));
+
+		break;
+
+	case UC_RESOURCE:
+		uvres = (uc_resource_t *)uv;
+
+		ucv_object_add(rv, "address", ucv_uint64_new((uintptr_t)uvres->data));
+
+		if (uvres->type) {
+			ucv_object_add(rv, "type", ucv_string_new(uvres->type->name));
+			ucv_object_add(rv, "prototype", ucv_get(uvres->type->proto));
+		}
+
+		break;
+
+	default:
+		break;
+	}
+
+	return rv;
+}
+
+/**
+ * @typedef {Object} module:debug.LocalInfo
+ *
+ * @property {number} index
+ * The index of the local variable.
+ *
+ * @property {string} name
+ * The name of the local variable.
+ *
+ * @property {*} value
+ * The current value of the local variable.
+ *
+ * @property {number} linefrom
+ * The source line number of the local variable declaration.
+ *
+ * @property {number} bytefrom
+ * The source line offset of the local variable declaration.
+ *
+ * @property {number} lineto
+ * The source line number where the local variable goes out of scope.
+ *
+ * @property {number} byteto
+ * The source line offset where the local vatiable goes out of scope.
+ */
+static uc_value_t *
+uc_xlocal(uc_vm_t *vm, uc_value_t *level, uc_value_t *var, uc_value_t **set)
+{
+	size_t lv, vn, vi, i, pos, slot = 0;
+	uc_value_t *vname = NULL, *rv;
+	uc_variables_t *variables;
+	uc_callframe_t *frame;
+	uc_source_t *source;
+	uc_chunk_t *chunk;
+
+	lv = level ? ucv_uint64_get(level) : 1;
+
+	if ((level &amp;&amp; errno) || lv >= vm->callframes.count)
+		return NULL;
+
+	frame = &amp;vm->callframes.entries[vm->callframes.count - lv - 1];
+
+	if (!frame->closure)
+		return NULL;
+
+	source = uc_program_function_source(frame->closure->function);
+	chunk = &amp;frame->closure->function->chunk;
+	variables = &amp;chunk->debuginfo.variables;
+
+	if (ucv_type(var) == UC_INTEGER) {
+		vn = ucv_uint64_get(var);
+		var = NULL;
+
+		if (errno || vn >= variables->count)
+			return NULL;
+	}
+	else if (ucv_type(var) == UC_STRING) {
+		vn = 0;
+	}
+	else {
+		return NULL;
+	}
+
+	pos = frame->ip - chunk->entries;
+
+	for (i = 0, vi = 0; i &lt; variables->count; i++) {
+		slot = variables->entries[i].slot;
+
+		if (slot >= (size_t)-1 / 2)
+			continue;
+
+		if (variables->entries[i].from > pos || variables->entries[i].to &lt; pos)
+			continue;
+
+		vname = uc_chunk_debug_get_variable(chunk, pos, slot, false);
+
+		if (var ? ucv_is_equal(var, vname) : (vi == vn))
+			break;
+
+		ucv_put(vname);
+		vname = NULL;
+		vi++;
+	}
+
+	if (i == variables->count)
+		return NULL;
+
+	if (set) {
+		ucv_put(vm->stack.entries[frame->stackframe + slot]);
+		vm->stack.entries[frame->stackframe + slot] = ucv_get(*set);
+	}
+
+	rv = ucv_object_new(vm);
+
+	ucv_object_add(rv, "index", ucv_uint64_new(vi));
+	ucv_object_add(rv, "name", vname);
+	ucv_object_add(rv, "value",
+		ucv_get(vm->stack.entries[frame->stackframe + slot]));
+
+	pos = uc_program_function_srcpos(frame->closure->function,
+		variables->entries[i].from);
+
+	ucv_object_add(rv, "linefrom",
+		ucv_uint64_new(uc_source_get_line(source, &amp;pos)));
+
+	ucv_object_add(rv, "bytefrom",
+		ucv_uint64_new(pos));
+
+	pos = uc_program_function_srcpos(frame->closure->function,
+		variables->entries[i].to);
+
+	ucv_object_add(rv, "lineto",
+		ucv_uint64_new(uc_source_get_line(source, &amp;pos)));
+
+	ucv_object_add(rv, "byteto",
+		ucv_uint64_new(pos));
+
+	return rv;
+}
+
+/**
+ * Obtain local variable.
+ *
+ * The `getlocal()` function retrieves information about the specified local
+ * variable at the given call stack depth.
+ *
+ * The call stack depth specifies the amount of levels up local variables should
+ * be queried. A value of `0` refers to this `getlocal()` function call itself,
+ * `1` to the function calling `getlocal()` and so on.
+ *
+ * The variable to query might be either specified by name or by its index with
+ * index numbers following the source code declaration order.
+ *
+ * Returns a dictionary holding information about the given variable.
+ *
+ * Returns `null` if the stack depth exceeds the size of the current call stack.
+ *
+ * Returns `null` if the invocation at the given stack depth is a C call.
+ *
+ * Returns `null` if the given variable name is not found or the given variable
+ * index is invalid.
+ *
+ * @function module:debug#getlocal
+ *
+ * @param {number} [level=1]
+ * The amount of call stack levels up local variables should be queried.
+ *
+ * @param {string|number} variable
+ * The variable index or variable name to obtain information for.
+ *
+ * @returns {module:debug.LocalInfo|null}
+ */
+static uc_value_t *
+uc_getlocal(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *level = uc_fn_arg(0);
+	uc_value_t *var = uc_fn_arg(1);
+
+	return uc_xlocal(vm, level, var, NULL);
+}
+
+/**
+ * Set local variable.
+ *
+ * The `setlocal()` function manipulates the value of the specified local
+ * variable at the given call stack depth.
+ *
+ * The call stack depth specifies the amount of levels up local variables should
+ * be updated. A value of `0` refers to this `setlocal()` function call itself,
+ * `1` to the function calling `setlocal()` and so on.
+ *
+ * The variable to update might be either specified by name or by its index with
+ * index numbers following the source code declaration order.
+ *
+ * Returns a dictionary holding information about the updated variable.
+ *
+ * Returns `null` if the stack depth exceeds the size of the current call stack.
+ *
+ * Returns `null` if the invocation at the given stack depth is a C call.
+ *
+ * Returns `null` if the given variable name is not found or the given variable
+ * index is invalid.
+ *
+ * @function module:debug#setlocal
+ *
+ * @param {number} [level=1]
+ * The amount of call stack levels up local variables should be updated.
+ *
+ * @param {string|number} variable
+ * The variable index or variable name to update.
+ *
+ * @param {*} [value=null]
+ * The value to set the local variable to.
+ *
+ * @returns {module:debug.LocalInfo|null}
+ */
+static uc_value_t *
+uc_setlocal(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *level = uc_fn_arg(0);
+	uc_value_t *var = uc_fn_arg(1);
+	uc_value_t *val = uc_fn_arg(2);
+
+	return uc_xlocal(vm, level, var, &amp;val);
+}
+
+
+/**
+ * @typedef {Object} module:debug.UpvalInfo
+ *
+ * @property {number} index
+ * The index of the captured variable (upvalue).
+ *
+ * @property {string} name
+ * The name of the captured variable.
+ *
+ * @property {boolean} closed
+ * Indicates whether the captured variable is closed or not. A closed upvalue
+ * means that the function outlived the declaration scope of the captured
+ * variable.
+ *
+ * @property {*} value
+ * The current value of the captured variable.
+ */
+static uc_value_t *
+uc_xupval(uc_vm_t *vm, uc_value_t *target, uc_value_t *var, uc_value_t **set)
+{
+	uc_value_t *vname = NULL, *rv;
+	uc_closure_t *closure = NULL;
+	uc_upvalref_t *uref = NULL;
+	uc_chunk_t *chunk;
+	size_t vn, depth;
+
+	if (ucv_type(target) == UC_INTEGER) {
+		depth = ucv_uint64_get(target);
+
+		if (errno || depth >= vm->callframes.count)
+			return NULL;
+
+		depth = vm->callframes.count - depth - 1;
+		closure = vm->callframes.entries[depth].closure;
+	}
+	else if (ucv_type(target) == UC_CLOSURE) {
+		closure = (uc_closure_t *)target;
+	}
+
+	if (!closure)
+		return NULL;
+
+	chunk = &amp;closure->function->chunk;
+
+	if (ucv_type(var) == UC_INTEGER) {
+		vn = ucv_uint64_get(var);
+		var = NULL;
+
+		if (errno || vn >= closure->function->nupvals)
+			return NULL;
+
+		uref = closure->upvals[vn];
+		vname = uc_chunk_debug_get_variable(chunk, 0, vn, true);
+	}
+	else if (ucv_type(var) == UC_STRING) {
+		for (vn = 0; vn &lt; closure->function->nupvals; vn++) {
+			vname = uc_chunk_debug_get_variable(chunk, 0, vn, true);
+
+			if (ucv_is_equal(vname, var)) {
+				uref = closure->upvals[vn];
+				break;
+			}
+
+			ucv_put(vname);
+			vname = NULL;
+		}
+	}
+
+	if (!uref)
+		return NULL;
+
+	rv = ucv_object_new(vm);
+
+	ucv_object_add(rv, "index", ucv_uint64_new(vn));
+	ucv_object_add(rv, "name", vname);
+
+	if (uref->closed) {
+		if (set) {
+			ucv_put(uref->value);
+			uref->value = ucv_get(*set);
+		}
+
+		ucv_object_add(rv, "closed", ucv_boolean_new(true));
+		ucv_object_add(rv, "value", ucv_get(uref->value));
+	}
+	else {
+		if (set) {
+			ucv_put(vm->stack.entries[uref->slot]);
+			vm->stack.entries[uref->slot] = ucv_get(*set);
+		}
+
+		ucv_object_add(rv, "closed", ucv_boolean_new(false));
+		ucv_object_add(rv, "value", ucv_get(vm->stack.entries[uref->slot]));
+	}
+
+	return rv;
+}
+
+/**
+ * Obtain captured variable (upvalue).
+ *
+ * The `getupval()` function retrieves information about the specified captured
+ * variable associated with the given function value or the invoked function at
+ * the given call stack depth.
+ *
+ * The call stack depth specifies the amount of levels up the function should be
+ * selected to query associated captured variables for. A value of `0` refers to
+ * this `getupval()` function call itself, `1` to the function calling
+ * `getupval()` and so on.
+ *
+ * The variable to query might be either specified by name or by its index with
+ * index numbers following the source code declaration order.
+ *
+ * Returns a dictionary holding information about the given variable.
+ *
+ * Returns `null` if the given function value is not a closure.
+ *
+ * Returns `null` if the stack depth exceeds the size of the current call stack.
+ *
+ * Returns `null` if the invocation at the given stack depth is not a closure.
+ *
+ * Returns `null` if the given variable name is not found or the given variable
+ * index is invalid.
+ *
+ * @function module:debug#getupval
+ *
+ * @param {function|number} target
+ * Either a function value referring to a closure to query upvalues for or a
+ * stack depth number selecting a closure that many levels up.
+ *
+ * @param {string|number} variable
+ * The variable index or variable name to obtain information for.
+ *
+ * @returns {module:debug.UpvalInfo|null}
+ */
+static uc_value_t *
+uc_getupval(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *target = uc_fn_arg(0);
+	uc_value_t *var = uc_fn_arg(1);
+
+	return uc_xupval(vm, target, var, NULL);
+}
+
+/**
+ * Set upvalue.
+ *
+ * The `setupval()` function manipulates the value of the specified captured
+ * variable associated with the given function value or the invoked function at
+ * the given call stack depth.
+ *
+ * The call stack depth specifies the amount of levels up the function should be
+ * selected to update associated captured variables for. A value of `0` refers
+ * to this `setupval()` function call itself, `1` to the function calling
+ * `setupval()` and so on.
+ *
+ * The variable to update might be either specified by name or by its index with
+ * index numbers following the source code declaration order.
+ *
+ * Returns a dictionary holding information about the updated variable.
+ *
+ * Returns `null` if the given function value is not a closure.
+ *
+ * Returns `null` if the stack depth exceeds the size of the current call stack.
+ *
+ * Returns `null` if the invocation at the given stack depth is not a closure.
+ *
+ * Returns `null` if the given variable name is not found or the given variable
+ * index is invalid.
+ *
+ * @function module:debug#setupval
+ *
+ * @param {function|number} target
+ * Either a function value referring to a closure to update upvalues for or a
+ * stack depth number selecting a closure that many levels up.
+ *
+ * @param {string|number} variable
+ * The variable index or variable name to update.
+ *
+ * @param {*} value
+ * The value to set the variable to.
+ *
+ * @returns {module:debug.UpvalInfo|null}
+ */
+static uc_value_t *
+uc_setupval(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *target = uc_fn_arg(0);
+	uc_value_t *var = uc_fn_arg(1);
+	uc_value_t *val = uc_fn_arg(2);
+
+	return uc_xupval(vm, target, var, &amp;val);
+}
+
+
+static const uc_function_list_t debug_fns[] = {
+	{ "memdump",	uc_memdump },
+	{ "traceback",	uc_traceback },
+	{ "sourcepos",	uc_sourcepos },
+	{ "getinfo",	uc_getinfo },
+	{ "getlocal",	uc_getlocal },
+	{ "setlocal",	uc_setlocal },
+	{ "getupval",	uc_getupval },
+	{ "setupval",	uc_setupval },
+};
+
+void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
+{
+	uc_function_list_register(scope, debug_fns);
+
+	debug_setup(vm);
+}
+</code></pre></article></section></div></div></div><div class="search-container" id="PkfLWpAbet" style="display:none"><div class="wrapper" id="iCxFxjkHbP"><button class="icon-button search-close-button" id="VjLlGakifb" aria-label="close search"><svg><use xlink:href="#close-icon"></use></svg></button><div class="search-box-c"><svg><use xlink:href="#search-icon"></use></svg> <input type="text" id="vpcKVYIppa" class="search-input" placeholder="Search..." autofocus></div><div class="search-result-c" id="fWwVHRuDuN"><span class="search-result-c-text">Type anything to view search result</span></div></div></div><div class="mobile-menu-icon-container"><button class="icon-button" id="mobile-menu" data-isopen="false" aria-label="menu"><svg><use xlink:href="#menu-icon"></use></svg></button></div><div id="mobile-sidebar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="mobile-nav-links"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="mobile-sidebar-items-c"><div class="sidebar-section-title with-arrow" data-isopen="false" id="r8C_6dRjFCA3iGZU-_T7V"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="fZfjCuj4GyRcJEpBvaVFH"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div></div></div><div class="mobile-navbar-actions"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div></div></div></div><script type="text/javascript" src="scripts/core.min.js"></script><script src="scripts/search.min.js" defer="defer"></script><script src="scripts/third-party/fuse.js" defer="defer"></script><script type="text/javascript">var tocbotInstance=tocbot.init({tocSelector:"#eed4d2a0bfd64539bb9df78095dec881",contentSelector:".main-content",headingSelector:"h1, h2, h3",hasInnerContainers:!0,scrollContainer:".main-content",headingsOffset:130,onClick:bringLinkToView})</script></body></html>
