@@ -2006,7 +2006,16 @@ ucv_compare(int how, uc_value_t *v1, uc_value_t *v2, int *deltap)
 
 	/* ... otherwise if both operands are strings, compare bytewise ... */
 	else if (t1 == UC_STRING && t2 == UC_STRING) {
-		delta = strcmp(ucv_string_get(v1), ucv_string_get(v2));
+		u1 = ucv_string_length(v1);
+		u2 = ucv_string_length(v2);
+
+		delta = memcmp(ucv_string_get(v1), ucv_string_get(v2),
+			(u1 < u2) ? u1 : u2);
+
+		if (delta == 0 && u1 < u2)
+			delta = -1;
+		else if (delta == 0 && u1 > u2)
+			delta = 1;
 	}
 
 	/* handle non-string cases... */
