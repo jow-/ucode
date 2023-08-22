@@ -1,0 +1,28 @@
+When comparing strings with embedded null bytes, ensure that the comparison
+takes the entire string length into account.
+
+-- Testcase --
+printf("%.J\n", [
+	"" == "\u0000",
+	"" < "\u0000",
+	"" > "\u0000",
+	"foo\u0000bar" == "foo\u0000baz",
+	"foo\u0000bar" < "foo\u0000baz",
+	"foo\u0000bar" > "foo\u0000baz",
+]);
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+[
+	false,
+	true,
+	false,
+	false,
+	true,
+	false
+]
+-- End --
