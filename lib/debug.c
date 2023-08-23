@@ -15,6 +15,8 @@
  */
 
 /**
+ * # Debugger Module
+ *
  * This module provides runtime debug functionality for ucode scripts.
  *
  * Functions can be individually imported and directly accessed using the
