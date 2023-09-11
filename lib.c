@@ -1516,7 +1516,7 @@ uc_sort(uc_vm_t *vm, size_t nargs)
  *
  * The array grows or shrinks as necessary.
  *
- * Returns the last element removed, or `null` if no elements are removed.
+ * Returns the modified input array.
  *
  * @function module:core#splice
  *
@@ -1536,7 +1536,7 @@ uc_sort(uc_vm_t *vm, size_t nargs)
  *
  * @example
  * let x = [ 1, 2, 3, 4 ];
- * splice(x, 1, 2, "a", "b", "c");  // 3
+ * splice(x, 1, 2, "a", "b", "c");  // [ 1, "a", "b", "c", 4 ]
  * print(x, "\n");                  // [ 1, "a", "b", "c", 4 ]
  */
 static uc_value_t *
