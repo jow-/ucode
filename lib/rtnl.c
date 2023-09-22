@@ -713,7 +713,7 @@ static const uc_nl_nested_spec_t link_attrs_stats64_rta = {
 
 static const uc_nl_nested_spec_t link_msg = {
 	.headsize = NLA_ALIGN(sizeof(struct ifinfomsg)),
-	.nattrs = 25,
+	.nattrs = 26,
 	.attrs = {
 		{ IFLA_UNSPEC, "family", DT_U8, 0, MEMBER(ifinfomsg, ifi_family) },
 		{ IFLA_UNSPEC, "type", DT_U16, 0, MEMBER(ifinfomsg, ifi_type) },
@@ -735,6 +735,7 @@ static const uc_nl_nested_spec_t link_msg = {
 		{ IFLA_NUM_RX_QUEUES, "num_rx_queues", DT_U32, 0, NULL },
 		{ IFLA_AF_SPEC, "af_spec", DT_AFSPEC, 0, NULL },
 		{ IFLA_LINK_NETNSID, "link_netnsid", DT_U32, 0, NULL },
+		{ IFLA_TARGET_NETNSID, "target_netnsid", DT_S32, 0, NULL },
 		{ IFLA_PROTO_DOWN, "proto_down", DT_BOOL, 0, NULL },
 		{ IFLA_GROUP, "group", DT_U32, 0, NULL },
 		{ IFLA_LINK, "link", DT_NETDEV, 0, NULL },
