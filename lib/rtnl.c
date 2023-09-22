@@ -724,9 +724,7 @@ static const uc_nl_nested_spec_t link_msg = {
 		{ IFLA_BROADCAST, "broadcast", DT_LLADDR, 0, NULL },
 		{ IFLA_TXQLEN, "txqlen", DT_U32, 0, NULL },
 		{ IFLA_MTU, "mtu", DT_U32, 0, NULL },
-		/* { IFLA_NETNS_PID, "netns", DT_U32, 0, NULL }, */
 		{ IFLA_CARRIER, "carrier", DT_BOOL, 0, NULL },
-		/* IFLA_VFINFO_LIST */
 		{ IFLA_MASTER, "master", DT_NETDEV, DF_ALLOW_NONE, NULL },
 		{ IFLA_IFALIAS, "ifalias", DT_STRING, 0, NULL },
 		{ IFLA_LINKMODE, "linkmode", DT_U8, 0, NULL },
@@ -743,6 +741,10 @@ static const uc_nl_nested_spec_t link_msg = {
 		{ IFLA_LINKINFO, "linkinfo", DT_LINKINFO, 0, NULL }, /* XXX: DF_NO_GET ? */
 		{ IFLA_EXT_MASK, "ext_mask", DT_U32, 0, NULL },
 		{ IFLA_STATS64, "stats64", DT_NESTED, DF_NO_SET, &link_attrs_stats64_rta },
+		/* TODO: IFLA_VFINFO_LIST */
+		/* TODO: the following two should be straightforward, just uncomment and test */
+		/* { IFLA_NET_NS_PID, "net_ns_pid", DT_S32, 0, NULL }, */
+		/* { IFLA_NET_NS_FD, "net_ns_fd", DT_S32, 0, NULL }, */
 	}
 };
 
