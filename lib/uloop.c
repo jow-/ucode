@@ -490,7 +490,7 @@ uc_uloop_process(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *executable = uc_fn_arg(0);
 	uc_value_t *arguments = uc_fn_arg(1);
-	uc_value_t *environ = uc_fn_arg(2);
+	uc_value_t *env_arg = uc_fn_arg(2);
 	uc_value_t *callback = uc_fn_arg(3);
 	uc_uloop_process_t *process;
 	uc_stringbuf_t *buf;
@@ -501,7 +501,7 @@ uc_uloop_process(uc_vm_t *vm, size_t nargs)
 
 	if (ucv_type(executable) != UC_STRING ||
 	    (arguments && ucv_type(arguments) != UC_ARRAY) ||
-	    (environ && ucv_type(environ) != UC_OBJECT) ||
+	    (env_arg && ucv_type(env_arg) != UC_OBJECT) ||
 	    !ucv_is_callable(callback)) {
 		err_return(EINVAL);
 	}
@@ -513,7 +513,7 @@ uc_uloop_process(uc_vm_t *vm, size_t nargs)
 
 	if (pid == 0) {
 		argp = calloc(ucv_array_length(arguments) + 2, sizeof(char *));
-		envp = calloc(ucv_object_length(environ) + 1, sizeof(char *));
+		envp = calloc(ucv_object_length(env_arg) + 1, sizeof(char *));
 
 		if (!argp || !envp)
 			_exit(-1);
@@ -525,7 +525,7 @@ uc_uloop_process(uc_vm_t *vm, size_t nargs)
 
 		i = 0;
 
-		ucv_object_foreach(environ, envk, envv) {
+		ucv_object_foreach(env_arg, envk, envv) {
 			buf = xprintbuf_new();
 
 			ucv_stringbuf_printf(buf, "%s=", envk);
