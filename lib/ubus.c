@@ -119,9 +119,9 @@ static bool have_own_uloop;
 static struct blob_buf buf;
 
 typedef struct {
-	int timeout;
+	struct ubus_context ctx;
 	struct blob_buf buf;
-	struct ubus_context *ctx;
+	int timeout;
 } uc_ubus_connection_t;
 
 typedef struct {
@@ -493,10 +493,9 @@ uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 	         "timeout", UC_INTEGER, true, &timeout);
 
 	c = xalloc(sizeof(*c));
-	c->ctx = ubus_connect(socket ? ucv_string_get(socket) : NULL);
 	c->timeout = timeout ? ucv_int64_get(timeout) : 30;
 
-	if (!c->ctx) {
+	if (ubus_connect_ctx(&c->ctx, socket ? ucv_string_get(socket) : NULL)) {
 		free(c);
 		err_return(UBUS_STATUS_UNKNOWN_ERROR, "Unable to connect to ubus socket");
 	}
@@ -504,7 +503,7 @@ uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 	if (c->timeout < 0)
 		c->timeout = 30;
 
-	ubus_add_uloop(c->ctx);
+	ubus_add_uloop(&c->ctx);
 
 	return uc_resource_new(conn_type, c);
 }
@@ -532,22 +531,39 @@ uc_ubus_objects_cb(struct ubus_context *c, struct ubus_object_data *o, void *p)
 	ucv_array_push(arr, ucv_string_new(o->path));
 }
 
+static bool
+_conn_get(uc_vm_t *vm, uc_ubus_connection_t **conn)
+{
+	uc_ubus_connection_t *c = uc_fn_thisval("ubus.connection");
+
+	if (!c)
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid connection context");
+
+	if (c->ctx.sock.fd < 0)
+		err_return(UBUS_STATUS_CONNECTION_FAILED, "Connection is closed");
+
+	*conn = c;
+
+	return true;
+}
+
+#define conn_get(vm, ptr) do { if (!_conn_get(vm, ptr)) return NULL; } while(0)
+
 static uc_value_t *
 uc_ubus_list(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_connection_t **c = uc_fn_this("ubus.connection");
+	uc_ubus_connection_t *c;
 	uc_value_t *objname, *res = NULL;
 	enum ubus_msg_status rv;
 
-	if (!c || !*c || !(*c)->ctx)
-		err_return(UBUS_STATUS_CONNECTION_FAILED, NULL);
+	conn_get(vm, &c);
 
 	args_get(vm, nargs,
 	         "object name", UC_STRING, true, &objname);
 
 	res = ucv_array_new(vm);
 
-	rv = ubus_lookup((*c)->ctx,
+	rv = ubus_lookup(&c->ctx,
 	                 objname ? ucv_string_get(objname) : NULL,
 	                 objname ? uc_ubus_signatures_cb : uc_ubus_objects_cb,
 	                 res);
@@ -654,28 +670,12 @@ uc_ubus_have_uloop(void)
 	return active;
 }
 
-static bool
-_conn_get(uc_vm_t *vm, uc_ubus_connection_t ***conn)
-{
-	*conn = uc_fn_this("ubus.connection");
-
-	if (!*conn || !**conn)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid connection context");
-
-	if (!(**conn)->ctx)
-		err_return(UBUS_STATUS_CONNECTION_FAILED, "Connection is closed");
-
-	return true;
-}
-
-#define conn_get(vm, ptr) do { if (!_conn_get(vm, ptr)) return NULL; } while(0)
-
 static uc_value_t *
 uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *objname, *funname, *funargs, *mret = NULL;
 	uc_ubus_call_res_t res = { 0 };
-	uc_ubus_connection_t **c;
+	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
 	uint32_t id;
 
@@ -687,12 +687,12 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 	         "function arguments", UC_OBJECT, true, &funargs,
 	         "multiple return", UC_BOOLEAN, true, &mret);
 
-	blob_buf_init(&(*c)->buf, 0);
+	blob_buf_init(&c->buf, 0);
 
 	if (funargs)
-		ucv_object_to_blob(funargs, &(*c)->buf);
+		ucv_object_to_blob(funargs, &c->buf);
 
-	rv = ubus_lookup_id((*c)->ctx, ucv_string_get(objname), &id);
+	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to resolve object name '%s'",
@@ -700,8 +700,8 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 
 	res.mret = ucv_is_truish(mret);
 
-	rv = ubus_invoke((*c)->ctx, id, ucv_string_get(funname), (*c)->buf.head,
-	                 uc_ubus_call_cb, &res, (*c)->timeout * 1000);
+	rv = ubus_invoke(&c->ctx, id, ucv_string_get(funname), c->buf.head,
+	                 uc_ubus_call_cb, &res, c->timeout * 1000);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to invoke function '%s' on object '%s'",
@@ -715,7 +715,7 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *objname, *funname, *funargs, *replycb, *conn, *res = NULL;
 	uc_ubus_deferred_t *defer;
-	uc_ubus_connection_t **c;
+	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
 	uint32_t id;
 
@@ -727,12 +727,12 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 	         "function arguments", UC_OBJECT, true, &funargs,
 	         "reply callback", UC_CLOSURE, true, &replycb);
 
-	blob_buf_init(&(*c)->buf, 0);
+	blob_buf_init(&c->buf, 0);
 
 	if (funargs)
-		ucv_object_to_blob(funargs, &(*c)->buf);
+		ucv_object_to_blob(funargs, &c->buf);
 
-	rv = ubus_lookup_id((*c)->ctx, ucv_string_get(objname), &id);
+	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to resolve object name '%s'",
@@ -740,19 +740,19 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 
 	defer = xalloc(sizeof(*defer));
 
-	rv = ubus_invoke_async((*c)->ctx, id, ucv_string_get(funname),
-	                       (*c)->buf.head, &defer->request);
+	rv = ubus_invoke_async(&c->ctx, id, ucv_string_get(funname),
+	                       c->buf.head, &defer->request);
 
 	if (rv == UBUS_STATUS_OK) {
 		defer->vm = vm;
-		defer->ctx = (*c)->ctx;
+		defer->ctx = &c->ctx;
 
 		defer->request.data_cb = uc_ubus_call_data_cb;
 		defer->request.complete_cb = uc_ubus_call_done_cb;
-		ubus_complete_request_async((*c)->ctx, &defer->request);
+		ubus_complete_request_async(&c->ctx, &defer->request);
 
 		defer->timeout.cb = uc_ubus_call_timeout_cb;
-		uloop_timeout_set(&defer->timeout, (*c)->timeout * 1000);
+		uloop_timeout_set(&defer->timeout, c->timeout * 1000);
 
 		res = uc_resource_new(defer_type, defer);
 		conn = uc_vector_last(&vm->callframes)->ctx;
@@ -1540,7 +1540,7 @@ static uc_value_t *
 uc_ubus_publish(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *objname, *methods, *subscribecb;
-	uc_ubus_connection_t **c;
+	uc_ubus_connection_t *c;
 	uc_ubus_object_t *uuobj;
 	uc_value_t *res;
 
@@ -1557,7 +1557,7 @@ uc_ubus_publish(uc_vm_t *vm, size_t nargs)
 	if (methods && !uc_ubus_object_methods_validate(methods))
 		return NULL;
 
-	uuobj = uc_ubus_object_register((*c)->ctx, ucv_string_get(objname), methods);
+	uuobj = uc_ubus_object_register(&c->ctx, ucv_string_get(objname), methods);
 
 	if (!uuobj)
 		return NULL;
@@ -1568,7 +1568,7 @@ uc_ubus_publish(uc_vm_t *vm, size_t nargs)
 	res = uc_resource_new(object_type, uuobj);
 
 	uuobj->vm = vm;
-	uuobj->ctx = (*c)->ctx;
+	uuobj->ctx = &c->ctx;
 	uuobj->registry_index = object_reg_add(vm, ucv_get(res), ucv_get(methods), ucv_get(subscribecb));
 
 	return res;
@@ -1632,7 +1632,7 @@ static uc_value_t *
 uc_ubus_listener(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *cb, *pattern;
-	uc_ubus_connection_t **c;
+	uc_ubus_connection_t *c;
 	uc_ubus_listener_t *uul;
 	uc_value_t *res;
 	int rv;
@@ -1645,10 +1645,10 @@ uc_ubus_listener(uc_vm_t *vm, size_t nargs)
 
 	uul = xalloc(sizeof(*uul));
 	uul->vm = vm;
-	uul->ctx = (*c)->ctx;
+	uul->ctx = &c->ctx;
 	uul->ev.cb = uc_ubus_listener_cb;
 
-	rv = ubus_register_event_handler((*c)->ctx, &uul->ev,
+	rv = ubus_register_event_handler(&c->ctx, &uul->ev,
 	                                 ucv_string_get(pattern));
 
 	if (rv != UBUS_STATUS_OK) {
@@ -1667,7 +1667,7 @@ static uc_value_t *
 uc_ubus_event(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *eventtype, *eventdata;
-	uc_ubus_connection_t **c;
+	uc_ubus_connection_t *c;
 	int rv;
 
 	conn_get(vm, &c);
@@ -1681,7 +1681,7 @@ uc_ubus_event(uc_vm_t *vm, size_t nargs)
 	if (eventdata)
 		ucv_object_to_blob(eventdata, &buf);
 
-	rv = ubus_send_event((*c)->ctx, ucv_string_get(eventtype), buf.head);
+	rv = ubus_send_event(&c->ctx, ucv_string_get(eventtype), buf.head);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Unable to send event");
@@ -1822,7 +1822,7 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *notify_cb, *remove_cb;
 	uc_ubus_subscriber_t *uusub;
-	uc_ubus_connection_t **c;
+	uc_ubus_connection_t *c;
 	uc_value_t *res;
 	int rv;
 
@@ -1837,9 +1837,9 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 
 	uusub = xalloc(sizeof(*uusub));
 	uusub->vm = vm;
-	uusub->ctx = (*c)->ctx;
+	uusub->ctx = &c->ctx;
 
-	rv = ubus_register_subscriber((*c)->ctx, &uusub->sub);
+	rv = ubus_register_subscriber(&c->ctx, &uusub->sub);
 
 	if (rv != UBUS_STATUS_OK) {
 		free(uusub);
@@ -1870,7 +1870,7 @@ static uc_value_t *
 uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 {
 	uc_ubus_subscriber_t **uusub;
-	uc_ubus_connection_t **c;
+	uc_ubus_connection_t *c;
 	uc_ubus_object_t **uuobj;
 	uc_ubus_listener_t **uul;
 	int rv;
@@ -1882,7 +1882,7 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 	uul = (uc_ubus_listener_t **)ucv_resource_dataptr(uc_fn_arg(0), "ubus.listener");
 
 	if (uusub && *uusub) {
-		if ((*uusub)->ctx != (*c)->ctx)
+		if ((*uusub)->ctx != &c->ctx)
 			err_return(UBUS_STATUS_INVALID_ARGUMENT,
 			           "Subscriber belongs to different connection");
 
@@ -1892,7 +1892,7 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 			err_return(rv, "Unable to remove subscriber");
 	}
 	else if (uuobj && *uuobj) {
-		if ((*uuobj)->ctx != (*c)->ctx)
+		if ((*uuobj)->ctx != &c->ctx)
 			err_return(UBUS_STATUS_INVALID_ARGUMENT,
 			           "Object belongs to different connection");
 
@@ -1902,7 +1902,7 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 			err_return(rv, "Unable to remove object");
 	}
 	else if (uul && *uul) {
-		if ((*uul)->ctx != (*c)->ctx)
+		if ((*uul)->ctx != &c->ctx)
 			err_return(UBUS_STATUS_INVALID_ARGUMENT,
 			           "Listener belongs to different connection");
 
@@ -1922,12 +1922,12 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_connection_t **c;
+	uc_ubus_connection_t *c;
 
 	conn_get(vm, &c);
 
-	ubus_free((*c)->ctx);
-	(*c)->ctx = NULL;
+	ubus_shutdown(&c->ctx);
+	c->ctx.sock.fd = -1;
 
 	return ucv_boolean_new(true);
 }
@@ -2024,8 +2024,8 @@ static void free_connection(void *ud) {
 
 	blob_buf_free(&conn->buf);
 
-	if (conn->ctx)
-		ubus_free(conn->ctx);
+	if (conn->ctx.sock.fd >= 0)
+		ubus_shutdown(&conn->ctx);
 
 	free(conn);
 }
