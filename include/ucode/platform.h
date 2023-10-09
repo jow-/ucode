@@ -61,12 +61,12 @@ __hidden int pipe2(int[2], int);
 __hidden int sigtimedwait(const sigset_t *, siginfo_t *, const struct timespec *);
 
 static inline int
-execvpe(const char *program, char **argv, char **envp)
+execvpe(const char *program, char * const *argv, char * const *envp)
 {
 	char **saved = environ;
 	int rc;
 
-	environ = envp;
+	environ = (char **)envp;
 	rc = execvp(program, argv);
 	environ = saved;
 
