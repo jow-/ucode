@@ -1561,6 +1561,21 @@ ucv_to_stringbuf_add_padding(uc_stringbuf_t *pb, char pad_char, size_t pad_size)
 	}
 }
 
+static void
+ucv_to_stringbuf_add_double(uc_stringbuf_t *pb, double val, bool json)
+{
+	int len = ucv_stringbuf_printf(pb, "%.14g", val);
+
+	if (!json)
+		return;
+
+	for (char *p = pb->buf + pb->bpos - len; len > 0; len--, p++)
+		if (*p == '.' || *p == 'e')
+			return;
+
+	ucv_stringbuf_append(pb, ".0");
+}
+
 void
 ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size_t depth, char pad_char, size_t pad_size)
 {
@@ -1624,7 +1639,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		else if (d == -INFINITY)
 			ucv_stringbuf_append(pb, "-Infinity");
 		else
-			ucv_stringbuf_printf(pb, "%.14g", d);
+			ucv_to_stringbuf_add_double(pb, d, json);
 
 		break;
 
