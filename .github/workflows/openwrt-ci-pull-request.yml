@@ -1,11 +1,8 @@
 name: OpenWrt CI pull request testing
 
 on:
-  push:
-    branches-ignore:
-      - master
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, edited]
 
 env:
   CI_ENABLE_UNIT_TESTING: 1
