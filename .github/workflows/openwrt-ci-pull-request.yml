@@ -2,7 +2,7 @@ name: OpenWrt CI pull request testing
 
 on:
   pull_request:
-    types: [opened, reopened, edited]
+    types: [opened, reopened, synchronize]
 
 env:
   CI_ENABLE_UNIT_TESTING: 1
