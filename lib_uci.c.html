@@ -1,0 +1,1874 @@
+<!DOCTYPE html><html lang="en" style="font-size:16px"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script src="ucode.js"></script><link type="text/css" rel="stylesheet" href="ucode.css"><title>Source: lib/uci.c</title><!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]--><script src="scripts/third-party/hljs.js" defer="defer"></script><script src="scripts/third-party/hljs-line-num.js" defer="defer"></script><script src="scripts/third-party/popper.js" defer="defer"></script><script src="scripts/third-party/tippy.js" defer="defer"></script><script src="scripts/third-party/tocbot.min.js"></script><script>var baseURL="/",locationPathname="";baseURL=(locationPathname=document.location.pathname).substr(0,locationPathname.lastIndexOf("/")+1)</script><link rel="stylesheet" href="styles/clean-jsdoc-theme.min.css"><svg aria-hidden="true" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:none"><defs><symbol id="copy-icon" viewbox="0 0 488.3 488.3"><g><path d="M314.25,85.4h-227c-21.3,0-38.6,17.3-38.6,38.6v325.7c0,21.3,17.3,38.6,38.6,38.6h227c21.3,0,38.6-17.3,38.6-38.6V124    C352.75,102.7,335.45,85.4,314.25,85.4z M325.75,449.6c0,6.4-5.2,11.6-11.6,11.6h-227c-6.4,0-11.6-5.2-11.6-11.6V124    c0-6.4,5.2-11.6,11.6-11.6h227c6.4,0,11.6,5.2,11.6,11.6V449.6z"/><path d="M401.05,0h-227c-21.3,0-38.6,17.3-38.6,38.6c0,7.5,6,13.5,13.5,13.5s13.5-6,13.5-13.5c0-6.4,5.2-11.6,11.6-11.6h227    c6.4,0,11.6,5.2,11.6,11.6v325.7c0,6.4-5.2,11.6-11.6,11.6c-7.5,0-13.5,6-13.5,13.5s6,13.5,13.5,13.5c21.3,0,38.6-17.3,38.6-38.6    V38.6C439.65,17.3,422.35,0,401.05,0z"/></g></symbol><symbol id="search-icon" viewBox="0 0 512 512"><g><g><path d="M225.474,0C101.151,0,0,101.151,0,225.474c0,124.33,101.151,225.474,225.474,225.474    c124.33,0,225.474-101.144,225.474-225.474C450.948,101.151,349.804,0,225.474,0z M225.474,409.323    c-101.373,0-183.848-82.475-183.848-183.848S124.101,41.626,225.474,41.626s183.848,82.475,183.848,183.848    S326.847,409.323,225.474,409.323z"/></g></g><g><g><path d="M505.902,476.472L386.574,357.144c-8.131-8.131-21.299-8.131-29.43,0c-8.131,8.124-8.131,21.306,0,29.43l119.328,119.328    c4.065,4.065,9.387,6.098,14.715,6.098c5.321,0,10.649-2.033,14.715-6.098C514.033,497.778,514.033,484.596,505.902,476.472z"/></g></g></symbol><symbol id="font-size-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11.246 15H4.754l-2 5H.6L7 4h2l6.4 16h-2.154l-2-5zm-.8-2L8 6.885 5.554 13h4.892zM21 12.535V12h2v8h-2v-.535a4 4 0 1 1 0-6.93zM19 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></symbol><symbol id="add-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></symbol><symbol id="minus-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M5 11h14v2H5z"/></symbol><symbol id="dark-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol><symbol id="light-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol><symbol id="reset-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M18.537 19.567A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10c0 2.136-.67 4.116-1.81 5.74L17 12h3a8 8 0 1 0-2.46 5.772l.997 1.795z"/></symbol><symbol id="down-icon" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7803 6.21967C13.0732 6.51256 13.0732 6.98744 12.7803 7.28033L8.53033 11.5303C8.23744 11.8232 7.76256 11.8232 7.46967 11.5303L3.21967 7.28033C2.92678 6.98744 2.92678 6.51256 3.21967 6.21967C3.51256 5.92678 3.98744 5.92678 4.28033 6.21967L8 9.93934L11.7197 6.21967C12.0126 5.92678 12.4874 5.92678 12.7803 6.21967Z"></path></symbol><symbol id="codepen-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M16.5 13.202L13 15.535v3.596L19.197 15 16.5 13.202zM14.697 12L12 10.202 9.303 12 12 13.798 14.697 12zM20 10.869L18.303 12 20 13.131V10.87zM19.197 9L13 4.869v3.596l3.5 2.333L19.197 9zM7.5 10.798L11 8.465V4.869L4.803 9 7.5 10.798zM4.803 15L11 19.131v-3.596l-3.5-2.333L4.803 15zM4 13.131L5.697 12 4 10.869v2.262zM2 9a1 1 0 0 1 .445-.832l9-6a1 1 0 0 1 1.11 0l9 6A1 1 0 0 1 22 9v6a1 1 0 0 1-.445.832l-9 6a1 1 0 0 1-1.11 0l-9-6A1 1 0 0 1 2 15V9z"/></symbol><symbol id="close-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></symbol><symbol id="menu-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/></symbol></defs></svg></head><body data-theme="light"><div class="sidebar-container"><div class="sidebar" id="sidebar"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="sidebar-items-container"><div class="sidebar-section-title with-arrow" data-isopen="false" id="Td7R0MPJOEbl2KF6Jy78S"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="CYvpWPVMTykRkTBMIzVNd"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div></div></div></div></div><div class="navbar-container" id="VuAckcnZhf"><nav class="navbar"><div class="navbar-left-items"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="navbar-right-items"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div></div><nav></nav></nav></div><div class="toc-container"><div class="toc-content"><span class="bold">On this page</span><div id="eed4d2a0bfd64539bb9df78095dec881"></div></div></div><div class="body-wrapper"><div class="main-content"><div class="main-wrapper"><section id="source-page" class="source-page"><header><h1 id="title" class="has-anchor">lib_uci.c</h1></header><article><pre class="prettyprint source lang-js"><code>/*
+ * Copyright (C) 2020-2021 Jo-Philipp Wich &lt;jo@mein.io>
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+/**
+ * # OpenWrt UCI configuration
+ *
+ * The `uci` module provides access to the native OpenWrt
+ * {@link https://github.com/openwrt/uci libuci} API for reading and
+ * manipulating UCI configuration files.
+ *
+ * Functions can be individually imported and directly accessed using the
+ * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+ * syntax:
+ *
+ *   ```
+ *   import { cursor } from 'uci';
+ *
+ *   let ctx = cursor();
+ *   let hostname = ctx.get_first('system', 'system', 'hostname');
+ *   ```
+ *
+ * Alternatively, the module namespace can be imported
+ * using a wildcard import statement:
+ *
+ *   ```
+ *   import * as uci from 'uci';
+ *
+ *   let ctx = uci.cursor();
+ *   let hostname = ctx.get_first('system', 'system', 'hostname');
+ *   ```
+ *
+ * Additionally, the uci module namespace may also be imported by invoking
+ * the `ucode` interpreter with the `-luci` switch.
+ *
+ * @module uci
+ */
+
+#include &lt;string.h>
+#include &lt;uci.h>
+
+#include "ucode/module.h"
+
+#define err_return(err) do { last_error = err; return NULL; } while(0)
+
+static int last_error = 0;
+static uc_resource_type_t *cursor_type;
+
+enum pkg_cmd {
+	CMD_SAVE,
+	CMD_COMMIT,
+	CMD_REVERT
+};
+
+/**
+ * Query error information.
+ *
+ * Returns a string containing a description of the last occurred error or
+ * `null` if there is no error information.
+ *
+ * @function module:uci#error
+ *
+ * @returns {?string}
+ *
+ * @example
+ * // Trigger error
+ * const ctx = cursor();
+ * ctx.set("not_existing_config", "test", "1");
+ *
+ * // Print error (should yield "Entry not found")
+ * print(ctx.error(), "\n");
+ */
+static uc_value_t *
+uc_uci_error(uc_vm_t *vm, size_t nargs)
+{
+	char buf[sizeof("Unknown error: -9223372036854775808")];
+	uc_value_t *errmsg;
+
+	const char *errstr[] = {
+		[UCI_ERR_MEM] =       "Out of memory",
+		[UCI_ERR_INVAL] =     "Invalid argument",
+		[UCI_ERR_NOTFOUND] =  "Entry not found",
+		[UCI_ERR_IO] =        "I/O error",
+		[UCI_ERR_PARSE] =     "Parse error",
+		[UCI_ERR_DUPLICATE] = "Duplicate entry",
+		[UCI_ERR_UNKNOWN] =   "Unknown error",
+	};
+
+	if (last_error == 0)
+		return NULL;
+
+	if (last_error >= 0 &amp;&amp; (unsigned)last_error &lt; ARRAY_SIZE(errstr)) {
+		errmsg = ucv_string_new(errstr[last_error]);
+	}
+	else {
+		snprintf(buf, sizeof(buf), "Unknown error: %d", last_error);
+		errmsg = ucv_string_new(buf);
+	}
+
+	last_error = 0;
+
+	return errmsg;
+}
+
+
+/**
+ * Instantiate uci cursor.
+ *
+ * A uci cursor is a context for interacting with uci configuration files. It's
+ * purpose is to cache and hold changes made to loaded configuration states
+ * until those changes are written out to disk or discared.
+ *
+ * Unsaved and uncommitted changes in a cursor instance are private and not
+ * visible to other cursor instances instantiated by the same program or other
+ * processes on the system.
+ *
+ * Returns the instantiated cursor on success.
+ *
+ * Returns `null` on error, e.g. if an invalid path argument was provided.
+ *
+ * @function module:uci#cursor
+ *
+ * @param {string} [config_dir=/etc/config]
+ * The directory to search for configuration files. It defaults to the well
+ * known uci configuration directory `/etc/config` but may be set to a different
+ * path for special purpose applications.
+ *
+ * @param {string} [delta_dir=/tmp/.uci]
+ * The directory to save delta records in. It defaults to the well known
+ * `/tmp/.uci` path which is used as default by the uci command line tool.
+ *
+ * By changing this path to a different location, it is possible to isolate
+ * uncommitted application changes from the uci cli or other processes on the
+ * system.
+ *
+ * @returns {?module:uci.cursor}
+ */
+static uc_value_t *
+uc_uci_cursor(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *cdir = uc_fn_arg(0);
+	uc_value_t *sdir = uc_fn_arg(1);
+	struct uci_context *c;
+	int rv;
+
+	if ((cdir &amp;&amp; ucv_type(cdir) != UC_STRING) ||
+	    (sdir &amp;&amp; ucv_type(sdir) != UC_STRING))
+		err_return(UCI_ERR_INVAL);
+
+	c = uci_alloc_context();
+
+	if (!c)
+		err_return(UCI_ERR_MEM);
+
+	if (cdir) {
+		rv = uci_set_confdir(c, ucv_string_get(cdir));
+
+		if (rv)
+			err_return(rv);
+	}
+
+	if (sdir) {
+		rv = uci_set_savedir(c, ucv_string_get(sdir));
+
+		if (rv)
+			err_return(rv);
+	}
+
+	return uc_resource_new(cursor_type, c);
+}
+
+
+/**
+ * Represents a context for interacting with uci configuration files.
+ *
+ * Operations on uci configurations are performed through a uci cursor object
+ * which operates on in-memory representations of loaded configuration files.
+ *
+ * Any changes made to configuration values are local to the cursor object and
+ * held in memory only until they're written out to the filesystem using the
+ * `save()` and `commit()` methods.
+ *
+ * Changes performed in one cursor instance are not reflected in another, unless
+ * the first instance writes those changes to the filesystem and the other
+ * instance explicitly (re)loads the affected configuration files.
+ *
+ * @class module:uci.cursor
+ * @hideconstructor
+ *
+ * @borrows module:uci#error as module.uci.cursor#error
+ *
+ * @see {@link module:uci#cursor|cursor()}
+ *
+ * @example
+ *
+ * const ctx = cursor(…);
+ *
+ * // Enumerate configuration files
+ * ctx.configs();
+ *
+ * // Load configuration files
+ * ctx.load(…);
+ * ctx.unload(…);
+ *
+ * // Query values
+ * ctx.get(…);
+ * ctx.get_all(…);
+ * ctx.get_first(…);
+ * ctx.foreach(…);
+ *
+ * // Modify values
+ * ctx.add(…);
+ * ctx.set(…);
+ * ctx.rename(…);
+ * ctx.reorder(…);
+ * ctx.delete(…);
+ *
+ * // Stage, revert, save changes
+ * ctx.changes(…);
+ * ctx.save(…);
+ * ctx.revert(…);
+ * ctx.commit(…);
+ */
+
+/**
+ * A uci change record is a plain array containing the change operation name as
+ * first element, the affected section ID as second argument and an optional
+ * third and fourth argument whose meanings depend on the operation.
+ *
+ * @typedef {string[]} ChangeRecord
+ * @memberof module:uci.cursor
+ *
+ * @property {string} 0
+ * The operation name - may be one of `add`, `set`, `remove`, `order`,
+ * `list-add`, `list-del` or `rename`.
+ *
+ * @property {string} 1
+ * The section ID targeted by the operation.
+ *
+ * @property {string} 2
+ * The meaning of the third element depends on the operation.
+ * - For `add` it is type of the section that has been added
+ * - For `set` it either is the option name if a fourth element exists, or the
+ *   type of a named section which has been added when the change entry only
+ *   contains three elements.
+ * - For `remove` it contains the name of the option that has been removed.
+ * - For `order` it specifies the new sort index of the section.
+ * - For `list-add` it contains the name of the list option a new value has been
+ *   added to.
+ * - For `list-del` it contains the name of the list option a value has been
+ *   removed from.
+ * - For `rename` it contains the name of the option that has been renamed if a
+ *   fourth element exists, else it contains the new name a section has been
+ *   renamed to if the change entry only contains three elements.
+ *
+ * @property {string} 4
+ * The meaning of the fourth element depends on the operation.
+ * - For `set` it is the value an option has been set to.
+ * - For `list-add` it is the new value that has been added to a list option.
+ * - For `rename` it is the new name of an option that has been renamed.
+ */
+
+/**
+ * A section object represents the options and their corresponding values
+ * enclosed within a configuration section, as well as some additional meta data
+ * such as sort indexes and internal ID.
+ *
+ * Any internal metadata fields are prefixed with a dot which isn't an allowed
+ * character for normal option names.
+ *
+ * @typedef {Object&lt;string, boolean|number|string|string[]>} SectionObject
+ * @memberof module:uci.cursor
+ *
+ * @property {boolean} .anonymous
+ * The `.anonymous` property specifies whether the configuration is
+ * anonymous (`true`) or named (`false`).
+ *
+ * @property {number} .index
+ * The `.index` property specifies the sort order of the section.
+ *
+ * @property {string} .name
+ * The `.name` property holds the name of the section object. It may be either
+ * an anonymous ID in the form `cfgXXXXXX` with `X` being a hexadecimal digit or
+ * a string holding the name of the section.
+ *
+ * @property {string} .type
+ * The `.type` property contains the type of the corresponding uci
+ * section.
+ *
+ * @property {string|string[]} *
+ * A section object may contain an arbitrary number of further properties
+ * representing the uci option enclosed in the section.
+ *
+ * All option property names will be in the form `[A-Za-z0-9_]+` and either
+ * contain a string value or an array of strings, in case the underlying option
+ * is an UCI list.
+ */
+
+/**
+ * The sections callback is invoked for each section found within the given
+ * configuration and receives the section object and its associated name as
+ * arguments.
+ *
+ * @callback module:uci.cursor.SectionCallback
+ *
+ * @param {module:uci.cursor.SectionObject} section
+ * The section object.
+ */
+
+/**
+ * Explicitly reload configuration file.
+ *
+ * Usually, any attempt to query or modify a value within a given configuration
+ * will implicitly load the underlying file into memory. By invoking `load()`
+ * explicitly, a potentially loaded stale configuration is discarded and
+ * reloaded from the file system, ensuring that the latest state is reflected in
+ * the cursor.
+ *
+ * Returns `true` if the configuration was successfully loaded.
+ *
+ * Returns `null` on error, e.g. if the requested configuration does not exist.
+ *
+ * @function module:uci.cursor#load
+ *
+ * @param {string} config
+ * The name of the configuration file to load, e.g. `"system"` to load
+ * `/etc/config/system` into the cursor.
+ *
+ * @returns {?boolean}
+ */
+static uc_value_t *
+uc_uci_load(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	struct uci_element *e;
+	char *s;
+
+	if (!c || !*c)
+		err_return(UCI_ERR_INVAL);
+
+	if (ucv_type(conf) != UC_STRING)
+		err_return(UCI_ERR_INVAL);
+
+	s = ucv_string_get(conf);
+
+	uci_foreach_element(&amp;(*c)->root, e) {
+		if (!strcmp(e->name, s)) {
+			uci_unload(*c, uci_to_package(e));
+			break;
+		}
+	}
+
+	if (uci_load(*c, s, NULL))
+		err_return((*c)->err);
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Explicitly unload configuration file.
+ *
+ * The `unload()` function forcibly discards a loaded configuration state from
+ * the cursor so that the next attempt to read or modify that configuration
+ * will load it anew from the file system.
+ *
+ * Returns `true` if the configuration was successfully unloaded.
+ *
+ * Returns `false` if the configuration was not loaded to begin with.
+ *
+ * Returns `null` on error, e.g. if the requested configuration does not exist.
+ *
+ * @function module:uci.cursor#unload
+ *
+ * @param {string} config
+ * The name of the configuration file to unload.
+ *
+ * @returns {?boolean}
+ */
+static uc_value_t *
+uc_uci_unload(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	struct uci_element *e;
+
+	if (!c || !*c)
+		err_return(UCI_ERR_INVAL);
+
+	if (ucv_type(conf) != UC_STRING)
+		err_return(UCI_ERR_INVAL);
+
+	uci_foreach_element(&amp;(*c)->root, e) {
+		if (!strcmp(e->name, ucv_string_get(conf))) {
+			uci_unload(*c, uci_to_package(e));
+
+			return ucv_boolean_new(true);
+		}
+	}
+
+	return ucv_boolean_new(false);
+}
+
+static int
+lookup_extended(struct uci_context *ctx, struct uci_ptr *ptr, bool extended)
+{
+	int rv;
+	struct uci_ptr lookup;
+
+	/* use a copy of the passed ptr since failing lookups will
+	 * clobber the state */
+	lookup = *ptr;
+	lookup.flags |= UCI_LOOKUP_EXTENDED;
+
+	rv = uci_lookup_ptr(ctx, &amp;lookup, NULL, extended);
+
+	/* copy to passed ptr on success */
+	if (!rv)
+		*ptr = lookup;
+
+	return rv;
+}
+
+static int
+lookup_ptr(struct uci_context *ctx, struct uci_ptr *ptr, bool extended)
+{
+	if (ptr &amp;&amp; !ptr->s &amp;&amp; ptr->section &amp;&amp; *ptr->section == '@')
+		return lookup_extended(ctx, ptr, extended);
+
+	return uci_lookup_ptr(ctx, ptr, NULL, extended);
+}
+
+static uc_value_t *
+option_to_uval(uc_vm_t *vm, struct uci_option *o)
+{
+	struct uci_element *e;
+	uc_value_t *arr;
+
+	switch (o->type) {
+	case UCI_TYPE_STRING:
+		return ucv_string_new(o->v.string);
+
+	case UCI_TYPE_LIST:
+		arr = ucv_array_new(vm);
+
+		if (arr)
+			uci_foreach_element(&amp;o->v.list, e)
+				ucv_array_push(arr, ucv_string_new(e->name));
+
+		return arr;
+
+	default:
+		return NULL;
+	}
+}
+
+static uc_value_t *
+section_to_uval(uc_vm_t *vm, struct uci_section *s, int index)
+{
+	uc_value_t *so = ucv_object_new(vm);
+	struct uci_element *e;
+	struct uci_option *o;
+
+	if (!so)
+		return NULL;
+
+	ucv_object_add(so, ".anonymous", ucv_boolean_new(s->anonymous));
+	ucv_object_add(so, ".type", ucv_string_new(s->type));
+	ucv_object_add(so, ".name", ucv_string_new(s->e.name));
+
+	if (index >= 0)
+		ucv_object_add(so, ".index", ucv_int64_new(index));
+
+	uci_foreach_element(&amp;s->options, e) {
+		o = uci_to_option(e);
+		ucv_object_add(so, o->e.name, option_to_uval(vm, o));
+	}
+
+	return so;
+}
+
+static uc_value_t *
+package_to_uval(uc_vm_t *vm, struct uci_package *p)
+{
+	uc_value_t *po = ucv_object_new(vm);
+	uc_value_t *so;
+	struct uci_element *e;
+	int i = 0;
+
+	if (!po)
+		return NULL;
+
+	uci_foreach_element(&amp;p->sections, e) {
+		so = section_to_uval(vm, uci_to_section(e), i++);
+		ucv_object_add(po, e->name, so);
+	}
+
+	return po;
+}
+
+static uc_value_t *
+uc_uci_get_any(uc_vm_t *vm, size_t nargs, bool all)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
+	uc_value_t *opt = uc_fn_arg(2);
+	struct uci_ptr ptr = { 0 };
+	int rv;
+
+	if (!c || !*c)
+		err_return(UCI_ERR_INVAL);
+
+	if ((ucv_type(conf) != UC_STRING) ||
+	    (sect &amp;&amp; ucv_type(sect) != UC_STRING) ||
+	    (opt &amp;&amp; ucv_type(opt) != UC_STRING))
+		err_return(UCI_ERR_INVAL);
+
+	if ((!sect &amp;&amp; !all) || (opt &amp;&amp; all))
+		err_return(UCI_ERR_INVAL);
+
+	ptr.package = ucv_string_get(conf);
+	ptr.section = sect ? ucv_string_get(sect) : NULL;
+	ptr.option = opt ? ucv_string_get(opt) : NULL;
+
+	rv = lookup_ptr(*c, &amp;ptr, true);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	if (!(ptr.flags &amp; UCI_LOOKUP_COMPLETE))
+		err_return(UCI_ERR_NOTFOUND);
+
+	if (all) {
+		if (ptr.section) {
+			if (!ptr.s)
+				err_return(UCI_ERR_NOTFOUND);
+
+			return section_to_uval(vm, ptr.s, -1);
+		}
+
+		if (!ptr.p)
+			err_return(UCI_ERR_NOTFOUND);
+
+		return package_to_uval(vm, ptr.p);
+	}
+
+	if (ptr.option) {
+		if (!ptr.o)
+			err_return(UCI_ERR_NOTFOUND);
+
+		return option_to_uval(vm, ptr.o);
+	}
+
+	if (!ptr.s)
+		err_return(UCI_ERR_NOTFOUND);
+
+	return ucv_string_new(ptr.s->type);
+}
+
+/**
+ * Query a single option value or section type.
+ *
+ * When invoked with three arguments, the function returns the value of the
+ * given option, within the specified section of the given configuration.
+ *
+ * When invoked with just a config and section argument, the function returns
+ * the type of the specified section.
+ *
+ * In either case, the given configuration is implicitly loaded into the cursor
+ * if not already present.
+ *
+ * Returns the configuration value or section type on success.
+ *
+ * Returns `null` on error, e.g. if the requested configuration does not exist
+ * or if an invalid argument was passed.
+ *
+ * @function module:uci.cursor#get
+ *
+ * @param {string} config
+ * The name of the configuration file to query, e.g. `"system"` to query values
+ * in `/etc/config/system`.
+ *
+ * @param {string} section
+ * The name of the section to query within the configuration.
+ *
+ * @param {string} [option]
+ * The name of the option to query within the section. If omitted, the type of
+ * the section is returned instead.
+ *
+ * @returns {?(string|string[])}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Query an option, extended section notation is supported
+ * ctx.get('system', '@system[0]', 'hostname');
+ *
+ * // Query a section type (should yield 'interface')
+ * ctx.get('network', 'lan');
+ */
+static uc_value_t *
+uc_uci_get(uc_vm_t *vm, size_t nargs)
+{
+	return uc_uci_get_any(vm, nargs, false);
+}
+
+/**
+ * Query a complete section or configuration.
+ *
+ * When invoked with two arguments, the function returns all values of the
+ * specified section within the given configuration as dictionary.
+ *
+ * When invoked with just a config argument, the function returns a nested
+ * dictionary of all sections present within the given configuration.
+ *
+ * In either case, the given configuration is implicitly loaded into the cursor
+ * if not already present.
+ *
+ * Returns the section or configuration dictionary on success.
+ *
+ * Returns `null` on error, e.g. if the requested configuration does not exist
+ * or if an invalid argument was passed.
+ *
+ * @function module:uci.cursor#get_all
+ *
+ * @param {string} config
+ * The name of the configuration file to query, e.g. `"system"` to query values
+ * in `/etc/config/system`.
+ *
+ * @param {string} [section]
+ * The name of the section to query within the configuration. If omitted a
+ * nested dictionary containing all section values is returned.
+ *
+ * @returns {?(Object&lt;string, module:uci.cursor.SectionObject>|module:uci.cursor.SectionObject)}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Query all lan interface details
+ * ctx.get_all('network', 'lan');
+ *
+ * // Dump the entire dhcp configuration
+ * ctx.get_all('dhcp');
+ */
+static uc_value_t *
+uc_uci_get_all(uc_vm_t *vm, size_t nargs)
+{
+	return uc_uci_get_any(vm, nargs, true);
+}
+
+/**
+ * Query option value or name of first section of given type.
+ *
+ * When invoked with three arguments, the function returns the value of the
+ * given option within the first found section of the specified type in the
+ * given configuration.
+ *
+ * When invoked with just a config and section type argument, the function
+ * returns the name of the first found section of the given type.
+ *
+ * In either case, the given configuration is implicitly loaded into the cursor
+ * if not already present.
+ *
+ * Returns the configuration value or section name on success.
+ *
+ * Returns `null` on error, e.g. if the requested configuration does not exist
+ * or if an invalid argument was passed.
+ *
+ * @function module:uci.cursor#get_first
+ *
+ * @param {string} config
+ * The name of the configuration file to query, e.g. `"system"` to query values
+ * in `/etc/config/system`.
+ *
+ * @param {string} type
+ * The section type to find the first section for within the configuration.
+ *
+ * @param {string} [option]
+ * The name of the option to query within the section. If omitted, the name of
+ * the section is returned instead.
+ *
+ * @returns {?(string|string[])}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Query hostname in first anonymous "system" section of /etc/config/system
+ * ctx.get_first('system', 'system', 'hostname');
+ *
+ * // Figure out name of first network interface section (usually "loopback")
+ * ctx.get_first('network', 'interface');
+ */
+static uc_value_t *
+uc_uci_get_first(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *type = uc_fn_arg(1);
+	uc_value_t *opt = uc_fn_arg(2);
+	struct uci_package *p = NULL;
+	struct uci_section *sc;
+	struct uci_element *e;
+	struct uci_ptr ptr = { 0 };
+	int rv;
+
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(type) != UC_STRING ||
+	    (opt &amp;&amp; ucv_type(opt) != UC_STRING))
+		err_return(UCI_ERR_INVAL);
+
+	uci_foreach_element(&amp;(*c)->root, e) {
+		if (strcmp(e->name, ucv_string_get(conf)))
+			continue;
+
+		p = uci_to_package(e);
+		break;
+	}
+
+	if (!p &amp;&amp; uci_load(*c, ucv_string_get(conf), &amp;p))
+		err_return((*c)->err);
+
+	uci_foreach_element(&amp;p->sections, e) {
+		sc = uci_to_section(e);
+
+		if (strcmp(sc->type, ucv_string_get(type)))
+			continue;
+
+		if (!opt)
+			return ucv_string_new(sc->e.name);
+
+		ptr.package = ucv_string_get(conf);
+		ptr.section = sc->e.name;
+		ptr.option = ucv_string_get(opt);
+		ptr.p = p;
+		ptr.s = sc;
+
+		rv = lookup_ptr(*c, &amp;ptr, false);
+
+		if (rv != UCI_OK)
+			err_return(rv);
+
+		if (!(ptr.flags &amp; UCI_LOOKUP_COMPLETE))
+			err_return(UCI_ERR_NOTFOUND);
+
+		return option_to_uval(vm, ptr.o);
+	}
+
+	err_return(UCI_ERR_NOTFOUND);
+}
+
+/**
+ * Add anonymous section to given configuration.
+ *
+ * Adds a new anonymous (unnamed) section of the specified type to the given
+ * configuration. In order to add a named section, the three argument form of
+ * `set()` should be used instead.
+ *
+ * In contrast to other query functions, `add()` will not implicitly load the
+ * configuration into the cursor. The configuration either needs to be loaded
+ * explicitly through `load()` beforehand, or implicitly by querying it through
+ * one of the `get()`, `get_all()`, `get_first()` or `foreach()` functions.
+ *
+ * Returns the autogenerated, ephemeral name of the added unnamed section
+ * on success.
+ *
+ * Returns `null` on error, e.g. if the targeted configuration was not loaded or
+ * if an invalid section type value was passed.
+ *
+ * @function module:uci.cursor#add
+ *
+ * @param {string} config
+ * The name of the configuration file to add the section to, e.g. `"system"` to
+ * modify `/etc/config/system`.
+ *
+ * @param {string} type
+ * The type value to use for the added section.
+ *
+ * @returns {?string}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Load firewall configuration
+ * ctx.load('firewall');
+ *
+ * // Add unnamed `config rule` section
+ * const sid = ctx.add('firewall', 'rule');
+ *
+ * // Set values on the newly added section
+ * ctx.set('firewall', sid, 'name', 'A test');
+ * ctx.set('firewall', sid, 'target', 'ACCEPT');
+ * …
+ */
+static uc_value_t *
+uc_uci_add(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *type = uc_fn_arg(1);
+	struct uci_element *e = NULL;
+	struct uci_package *p = NULL;
+	struct uci_section *sc = NULL;
+	int rv;
+
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(type) != UC_STRING)
+	    err_return(UCI_ERR_INVAL);
+
+	uci_foreach_element(&amp;(*c)->root, e) {
+		if (!strcmp(e->name, ucv_string_get(conf))) {
+			p = uci_to_package(e);
+			break;
+		}
+	}
+
+	if (!p)
+		err_return(UCI_ERR_NOTFOUND);
+
+	rv = uci_add_section(*c, p, ucv_string_get(type), &amp;sc);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+	else if (!sc)
+		err_return(UCI_ERR_NOTFOUND);
+
+	return ucv_string_new(sc->e.name);
+}
+
+static bool
+uval_to_uci(uc_vm_t *vm, uc_value_t *val, const char **p, bool *is_list)
+{
+	uc_value_t *item;
+
+	*p = NULL;
+
+	if (is_list)
+		*is_list = false;
+
+	switch (ucv_type(val)) {
+	case UC_ARRAY:
+		if (ucv_array_length(val) == 0)
+			return false;
+
+		item = ucv_array_get(val, 0);
+
+		/* don't recurse */
+		if (ucv_type(item) == UC_ARRAY)
+			return false;
+
+		if (is_list)
+			*is_list = true;
+
+		return uval_to_uci(vm, item, p, NULL);
+
+	case UC_BOOLEAN:
+		*p = xstrdup(ucv_boolean_get(val) ? "1" : "0");
+
+		return true;
+
+	case UC_DOUBLE:
+	case UC_INTEGER:
+	case UC_STRING:
+		*p = ucv_to_string(vm, val);
+		/* fall through */
+
+	case UC_NULL:
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+/**
+ * Set option value or add named section in given configuration.
+ *
+ * When invoked with four arguments, the function sets the value of the given
+ * option within the specified section of the given configuration to the
+ * provided value. A value of `""` (empty string) can be used to delete an
+ * existing option.
+ *
+ * When invoked with three arguments, the function adds a new named section to
+ * the given configuration, using the specified type.
+ *
+ * In either case, the given configuration is implicitly loaded into the cursor
+ * if not already present.
+ *
+ * Returns the `true` if the named section was added or the specified option was
+ * set.
+ *
+ * Returns `null` on error, e.g. if the targeted configuration was not found or
+ * if an invalid value was passed.
+ *
+ * @function module:uci.cursor#set
+ *
+ * @param {string} config
+ * The name of the configuration file to set values in, e.g. `"system"` to
+ * modify `/etc/config/system`.
+ *
+ * @param {string} section
+ * The section name to create or set a value in.
+ *
+ * @param {string} option_or_type
+ * The option name to set within the section or, when the subsequent value
+ * argument is omitted, the type of the section to create within the
+ * configuration.
+ *
+ * @param {(Array&lt;string|boolean|number>|string|boolean|number)} [value]
+ * The option value to set.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Add named `config interface guest` section
+ * ctx.set('network', 'guest', 'interface');
+ *
+ * // Set values on the newly added section
+ * ctx.set('network', 'guest', 'proto', 'static');
+ * ctx.set('network', 'guest', 'ipaddr', '10.0.0.1/24');
+ * ctx.set('network', 'guest', 'dns', ['8.8.4.4', '8.8.8.8']);
+ * …
+ *
+ * // Delete 'disabled' option in first wifi-iface section
+ * ctx.set('wireless', '@wifi-iface[0]', 'disabled', '');
+ */
+static uc_value_t *
+uc_uci_set(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
+	uc_value_t *opt = NULL, *val = NULL;
+	struct uci_ptr ptr = { 0 };
+	bool is_list = false;
+	size_t i;
+	int rv;
+
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(sect) != UC_STRING)
+	    err_return(UCI_ERR_INVAL);
+
+	switch (nargs) {
+	/* conf, sect, opt, val */
+	case 4:
+		opt = uc_fn_arg(2);
+		val = uc_fn_arg(3);
+
+		if (ucv_type(opt) != UC_STRING)
+			err_return(UCI_ERR_INVAL);
+
+		break;
+
+	/* conf, sect, type */
+	case 3:
+		val = uc_fn_arg(2);
+
+		if (ucv_type(val) != UC_STRING)
+			err_return(UCI_ERR_INVAL);
+
+		break;
+
+	default:
+		err_return(UCI_ERR_INVAL);
+	}
+
+	ptr.package = ucv_string_get(conf);
+	ptr.section = ucv_string_get(sect);
+	ptr.option = opt ? ucv_string_get(opt) : NULL;
+
+	rv = lookup_ptr(*c, &amp;ptr, true);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	if (!ptr.s &amp;&amp; ptr.option)
+		err_return(UCI_ERR_NOTFOUND);
+
+	if (!uval_to_uci(vm, val, &amp;ptr.value, &amp;is_list))
+		err_return(UCI_ERR_INVAL);
+
+	if (is_list) {
+		/* if we got a one-element array, delete existing option (if any)
+		 * and iterate array at offset 0 */
+		if (ucv_array_length(val) == 1) {
+			i = 0;
+
+			free((char *)ptr.value);
+			ptr.value = NULL;
+
+			if (ptr.o) {
+				rv = uci_delete(*c, &amp;ptr);
+
+				if (rv != UCI_OK)
+					err_return(rv);
+			}
+		}
+		/* if we get a multi element array, overwrite existing option (if any)
+		 * with first value and iterate remaining array at offset 1 */
+		else {
+			i = 1;
+
+			rv = uci_set(*c, &amp;ptr);
+			free((char *)ptr.value);
+
+			if (rv != UCI_OK)
+				err_return(rv);
+		}
+
+		for (; i &lt; ucv_array_length(val); i++) {
+			if (!uval_to_uci(vm, ucv_array_get(val, i), &amp;ptr.value, NULL))
+				continue;
+
+			rv = uci_add_list(*c, &amp;ptr);
+			free((char *)ptr.value);
+
+			if (rv != UCI_OK)
+				err_return(rv);
+		}
+	}
+	else {
+		rv = uci_set(*c, &amp;ptr);
+		free((char *)ptr.value);
+
+		if (rv != UCI_OK)
+			err_return(rv);
+	}
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Delete an option or section from given configuration.
+ *
+ * When invoked with three arguments, the function deletes the given option
+ * within the specified section of the given configuration.
+ *
+ * When invoked with two arguments, the function deletes the entire specified
+ * section within the given configuration.
+ *
+ * In either case, the given configuration is implicitly loaded into the cursor
+ * if not already present.
+ *
+ * Returns the `true` if specified option or section has been deleted.
+ *
+ * Returns `null` on error, e.g. if the targeted configuration was not found or
+ * if an invalid value was passed.
+ *
+ * @function module:uci.cursor#delete
+ *
+ * @param {string} config
+ * The name of the configuration file to delete values in, e.g. `"system"` to
+ * modify `/etc/config/system`.
+ *
+ * @param {string} section
+ * The section name to remove the specified option in or, when the subsequent
+ * argument is omitted, the section to remove entirely.
+ *
+ * @param {string} [option]
+ * The option name to remove within the section.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Delete 'disabled' option in first wifi-iface section
+ * ctx.delete('wireless', '@wifi-iface[0]', 'disabled');
+ *
+ * // Delete 'wan' interface
+ * ctx.delete('network', 'lan');
+ *
+ * // Delete last firewall rule
+ * ctx.delete('firewall', '@rule[-1]');
+ */
+static uc_value_t *
+uc_uci_delete(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
+	uc_value_t *opt = uc_fn_arg(2);
+	struct uci_ptr ptr = { 0 };
+	int rv;
+
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(sect) != UC_STRING ||
+	    (opt &amp;&amp; ucv_type(opt) != UC_STRING))
+	    err_return(UCI_ERR_INVAL);
+
+	ptr.package = ucv_string_get(conf);
+	ptr.section = ucv_string_get(sect);
+	ptr.option = opt ? ucv_string_get(opt) : NULL;
+
+	rv = lookup_ptr(*c, &amp;ptr, true);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	if (opt ? !ptr.o : !ptr.s)
+		err_return(UCI_ERR_NOTFOUND);
+
+	rv = uci_delete(*c, &amp;ptr);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Rename an option or section in given configuration.
+ *
+ * When invoked with four arguments, the function renames the given option
+ * within the specified section of the given configuration to the provided
+ * value.
+ *
+ * When invoked with three arguments, the function renames the entire specified
+ * section to the provided value.
+ *
+ * In either case, the given configuration is implicitly loaded into the cursor
+ * if not already present.
+ *
+ * Returns the `true` if specified option or section has been renamed.
+ *
+ * Returns `null` on error, e.g. if the targeted configuration was not found or
+ * if an invalid value was passed.
+ *
+ * @function module:uci.cursor#rename
+ *
+ * @param {string} config
+ * The name of the configuration file to rename values in, e.g. `"system"` to
+ * modify `/etc/config/system`.
+ *
+ * @param {string} section
+ * The section name to rename or to rename an option in.
+ *
+ * @param {string} option_or_name
+ * The option name to rename within the section or, when the subsequent name
+ * argument is omitted, the new name of the renamed section within the
+ * configuration.
+ *
+ * @param {string} [name]
+ * The new name of the option to rename.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Assign explicit name to last anonymous firewall rule section
+ * ctx.rename('firewall', '@rule[-1]', 'my_block_rule');
+ *
+ * // Rename 'server' to 'orig_server_list' in ntp section of system config
+ * ctx.rename('system', 'ntp', 'server', 'orig_server_list');
+ *
+ * // Rename 'wan' interface to 'external'
+ * ctx.rename('network', 'wan', 'external');
+ */
+static uc_value_t *
+uc_uci_rename(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
+	uc_value_t *opt = NULL, *val = NULL;
+	struct uci_ptr ptr = { 0 };
+	int rv;
+
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(sect) != UC_STRING)
+	    err_return(UCI_ERR_INVAL);
+
+	switch (nargs) {
+	/* conf, sect, opt, val */
+	case 4:
+		opt = uc_fn_arg(2);
+		val = uc_fn_arg(3);
+
+		if (ucv_type(opt) != UC_STRING ||
+		    ucv_type(val) != UC_STRING)
+			err_return(UCI_ERR_INVAL);
+
+		break;
+
+	/* conf, sect, type */
+	case 3:
+		val = uc_fn_arg(2);
+
+		if (ucv_type(val) != UC_STRING)
+			err_return(UCI_ERR_INVAL);
+
+		break;
+
+	default:
+		err_return(UCI_ERR_INVAL);
+	}
+
+	ptr.package = ucv_string_get(conf);
+	ptr.section = ucv_string_get(sect);
+	ptr.option = opt ? ucv_string_get(opt) : NULL;
+	ptr.value = ucv_string_get(val);
+
+	rv = lookup_ptr(*c, &amp;ptr, true);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	if (!ptr.s &amp;&amp; ptr.option)
+		err_return(UCI_ERR_NOTFOUND);
+
+	rv = uci_rename(*c, &amp;ptr);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Reorder sections in given configuration.
+ *
+ * The `reorder()` function moves a single section by repositioning it to the
+ * given index within the configurations section list.
+ *
+ * The given configuration is implicitly loaded into the cursor if not already
+ * present.
+ *
+ * Returns the `true` if specified section has been moved.
+ *
+ * Returns `null` on error, e.g. if the targeted configuration was not found or
+ * if an invalid value was passed.
+ *
+ * @function module:uci.cursor#reorder
+ *
+ * @param {string} config
+ * The name of the configuration file to move the section in, e.g. `"system"` to
+ * modify `/etc/config/system`.
+ *
+ * @param {string} section
+ * The section name to move.
+ *
+ * @param {number} index
+ * The target index to move the section to, starting from `0`.
+ *
+ * @param {string} [name]
+ * The new name of the option to rename.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Query whole firewall config and reorder resulting dict by type and name
+ * const type_order = ['defaults', 'zone', 'forwarding', 'redirect', 'rule'];
+ * const values = ctx.get_all('firewall');
+ *
+ * sort(values, (k1, k2, s1, s2) => {
+ *     // Get weight from type_order array
+ *     let w1 = index(type_order, s1['.type']);
+ *     let w2 = index(type_order, s2['.type']);
+ *
+ *     // For unknown type orders, use type value itself as weight
+ *     if (w1 == -1) w1 = s1['.type'];
+ *     if (w2 == -1) w2 = s2['.type'];
+ *
+ *     // Get name from name option, fallback to section name
+ *     let n1 = s1.name ?? k1;
+ *     let n2 = s2.name ?? k2;
+ *
+ *     // Order by weight
+ *     if (w1 &lt; w2) return -1;
+ *     if (w1 > w2) return 1;
+ *
+ *     // For same weight order by name
+ *     if (n1 &lt; n2) return -1;
+ *     if (n1 > n2) return 1;
+ *
+ *     return 0;
+ * });
+ *
+ * // Sequentially reorder sorted sections in firewall configuration
+ * let position = 0;
+ *
+ * for (let sid in values)
+ *   ctx.reorder('firewall', sid, position++);
+ */
+static uc_value_t *
+uc_uci_reorder(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
+	uc_value_t *val = uc_fn_arg(2);
+	struct uci_ptr ptr = { 0 };
+	int64_t n;
+	int rv;
+
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(sect) != UC_STRING ||
+	    ucv_type(val) != UC_INTEGER)
+	    err_return(UCI_ERR_INVAL);
+
+	n = ucv_int64_get(val);
+
+	if (n &lt; 0)
+		err_return(UCI_ERR_INVAL);
+
+	ptr.package = ucv_string_get(conf);
+	ptr.section = ucv_string_get(sect);
+
+	rv = lookup_ptr(*c, &amp;ptr, true);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	if (!ptr.s)
+		err_return(UCI_ERR_NOTFOUND);
+
+	rv = uci_reorder_section(*c, ptr.s, n);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	return ucv_boolean_new(true);
+}
+
+static int
+uc_uci_pkg_command_single(struct uci_context *ctx, enum pkg_cmd cmd,
+                          struct uci_package *pkg)
+{
+	struct uci_ptr ptr = { 0 };
+
+	switch (cmd) {
+	case CMD_COMMIT:
+		return uci_commit(ctx, &amp;pkg, false);
+
+	case CMD_SAVE:
+		return uci_save(ctx, pkg);
+
+	case CMD_REVERT:
+		ptr.p = pkg;
+
+		return uci_revert(ctx, &amp;ptr);
+
+	default:
+		return UCI_ERR_INVAL;
+	}
+}
+
+static uc_value_t *
+uc_uci_pkg_command(uc_vm_t *vm, size_t nargs, enum pkg_cmd cmd)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	struct uci_package *p;
+	char **configs = NULL;
+	int rv, res = UCI_OK;
+	size_t i;
+
+	if (conf) {
+		if (ucv_type(conf) != UC_STRING)
+			err_return(UCI_ERR_INVAL);
+
+		if (!(p = uci_lookup_package(*c, ucv_string_get(conf))))
+			err_return(UCI_ERR_NOTFOUND);
+
+		res = uc_uci_pkg_command_single(*c, cmd, p);
+	}
+	else {
+		if (uci_list_configs(*c, &amp;configs))
+			err_return((*c)->err);
+
+		if (!configs || !configs[0])
+			err_return(UCI_ERR_NOTFOUND);
+
+		for (i = 0; configs[i]; i++) {
+			if (!(p = uci_lookup_package(*c, configs[i])))
+				continue;
+
+			rv = uc_uci_pkg_command_single(*c, cmd, p);
+
+			if (rv != UCI_OK)
+				res = rv;
+		}
+
+		free(configs);
+	}
+
+	if (res != UCI_OK)
+		err_return(res);
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Save accumulated cursor changes to delta directory.
+ *
+ * The `save()` function writes consolidated changes made to in-memory copies of
+ * loaded configuration files to the uci delta directory which effectively makes
+ * them available to other processes using the same delta directory path as well
+ * as the `uci changes` cli command when using the default delta directory.
+ *
+ * Note that uci deltas are overlayed over the actual configuration file values
+ * so they're reflected by `get()`, `foreach()` etc. even if the underlying
+ * configuration files are not actually changed (yet). The delta records may be
+ * either permanently merged into the configuration by invoking `commit()` or
+ * reverted through `revert()` in order to restore the current state of the
+ * underlying configuration file.
+ *
+ * When the optional "config" parameter is omitted, delta records for all
+ * currently loaded configuration files are written.
+ *
+ * In case that neither sharing changes with other processes nor any revert
+ * functionality is required, changes may be committed directly using `commit()`
+ * instead, bypassing any delta record creation.
+ *
+ * Returns the `true` if operation completed successfully.
+ *
+ * Returns `null` on error, e.g. if the requested configuration was not loaded
+ * or when a file system error occurred.
+ *
+ * @function module:uci.cursor#save
+ *
+ * @param {string} [config]
+ * The name of the configuration file to save delta records for, e.g. `"system"`
+ * to store changes for `/etc/config/system`.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * ctx.set('wireless', '@wifi-iface[0]', 'disabled', '1');
+ * ctx.save('wireless');
+ *
+ * @see {@link module:uci.cursor#commit|commit()}
+ * @see {@link module:uci.cursor#revert|revert()}
+ */
+static uc_value_t *
+uc_uci_save(uc_vm_t *vm, size_t nargs)
+{
+	return uc_uci_pkg_command(vm, nargs, CMD_SAVE);
+}
+
+/**
+ * Update configuration files with accumulated cursor changes.
+ *
+ * The `commit()` function merges changes made to in-memory copies of loaded
+ * configuration files as well as existing delta records in the cursors
+ * configured delta directory and writes them back into the underlying
+ * configuration files, persistently committing changes to the file system.
+ *
+ * When the optional "config" parameter is omitted, all currently loaded
+ * configuration files with either present delta records or yet unsaved
+ * cursor changes are updated.
+ *
+ * Returns the `true` if operation completed successfully.
+ *
+ * Returns `null` on error, e.g. if the requested configuration was not loaded
+ * or when a file system error occurred.
+ *
+ * @function module:uci.cursor#commit
+ *
+ * @param {string} [config]
+ * The name of the configuration file to commit, e.g. `"system"` to update the
+ * `/etc/config/system` file.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * ctx.set('system', '@system[0]', 'hostname', 'example.org');
+ * ctx.commit('system');
+ */
+static uc_value_t *
+uc_uci_commit(uc_vm_t *vm, size_t nargs)
+{
+	return uc_uci_pkg_command(vm, nargs, CMD_COMMIT);
+}
+
+/**
+ * Revert accumulated cursor changes and associated delta records.
+ *
+ * The `revert()` function discards any changes made to in-memory copies of
+ * loaded configuration files and discards any related existing delta records in
+ * the  cursors configured delta directory.
+ *
+ * When the optional "config" parameter is omitted, all currently loaded
+ * configuration files with either present delta records or yet unsaved
+ * cursor changes are reverted.
+ *
+ * Returns the `true` if operation completed successfully.
+ *
+ * Returns `null` on error, e.g. if the requested configuration was not loaded
+ * or when a file system error occurred.
+ *
+ * @function module:uci.cursor#revert
+ *
+ * @param {string} [config]
+ * The name of the configuration file to revert, e.g. `"system"` to discard any
+ * changes for the `/etc/config/system` file.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * ctx.set('system', '@system[0]', 'hostname', 'example.org');
+ * ctx.revert('system');
+ *
+ * @see {@link module:uci.cursor#save|save()}
+ */
+static uc_value_t *
+uc_uci_revert(uc_vm_t *vm, size_t nargs)
+{
+	return uc_uci_pkg_command(vm, nargs, CMD_REVERT);
+}
+
+static uc_value_t *
+change_to_uval(uc_vm_t *vm, struct uci_delta *d)
+{
+	const char *types[] = {
+		[UCI_CMD_REORDER]  = "order",
+		[UCI_CMD_REMOVE]   = "remove",
+		[UCI_CMD_RENAME]   = "rename",
+		[UCI_CMD_ADD]      = "add",
+		[UCI_CMD_LIST_ADD] = "list-add",
+		[UCI_CMD_LIST_DEL] = "list-del",
+		[UCI_CMD_CHANGE]   = "set",
+	};
+
+	uc_value_t *a;
+
+	if (!d->section)
+		return NULL;
+
+	a = ucv_array_new(vm);
+
+	if (!a)
+		return NULL;
+
+	ucv_array_push(a, ucv_string_new(types[d->cmd]));
+	ucv_array_push(a, ucv_string_new(d->section));
+
+	if (d->e.name)
+		ucv_array_push(a, ucv_string_new(d->e.name));
+
+	if (d->value) {
+		if (d->cmd == UCI_CMD_REORDER)
+			ucv_array_push(a, ucv_int64_new(strtoul(d->value, NULL, 10)));
+		else
+			ucv_array_push(a, ucv_string_new(d->value));
+	}
+
+	return a;
+}
+
+static uc_value_t *
+changes_to_uval(uc_vm_t *vm, struct uci_context *ctx, const char *package)
+{
+	uc_value_t *a = NULL, *c;
+	struct uci_package *p = NULL;
+	struct uci_element *e;
+	bool unload = false;
+
+	uci_foreach_element(&amp;ctx->root, e) {
+		if (strcmp(e->name, package))
+			continue;
+
+		p = uci_to_package(e);
+	}
+
+	if (!p) {
+		unload = true;
+		uci_load(ctx, package, &amp;p);
+	}
+
+	if (!p)
+		return NULL;
+
+	if (!uci_list_empty(&amp;p->delta) || !uci_list_empty(&amp;p->saved_delta)) {
+		a = ucv_array_new(vm);
+
+		if (!a)
+			err_return(UCI_ERR_MEM);
+
+		uci_foreach_element(&amp;p->saved_delta, e) {
+			c = change_to_uval(vm, uci_to_delta(e));
+
+			if (c)
+				ucv_array_push(a, c);
+		}
+
+		uci_foreach_element(&amp;p->delta, e) {
+			c = change_to_uval(vm, uci_to_delta(e));
+
+			if (c)
+				ucv_array_push(a, c);
+		}
+	}
+
+	if (unload)
+		uci_unload(ctx, p);
+
+	return a;
+}
+
+/**
+ * Enumerate pending changes.
+ *
+ * The `changes()` function returns a list of change records for currently
+ * loaded configuration files, originating both from the cursors associated
+ * delta directory and yet unsaved cursor changes.
+ *
+ * When the optional "config" parameter is specified, the requested
+ * configuration is implicitly loaded if it not already loaded into the cursor.
+ *
+ * Returns a dictionary of change record arrays, keyed by configuration name.
+ *
+ * Returns `null` on error, e.g. if the requested configuration could not be
+ * loaded.
+ *
+ * @function module:uci.cursor#changes
+ *
+ * @param {string} [config]
+ * The name of the configuration file to enumerate changes for, e.g. `"system"`
+ * to query pending changes for the `/etc/config/system` file.
+ *
+ * @returns {?Object&lt;string, module:uci.cursor.ChangeRecord[]>}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Enumerate changes for all currently loaded configurations
+ * const deltas = ctx.changes();
+ *
+ * // Explicitly load and enumerate changes for the "system" configuration
+ * const deltas = ctx.changes('system');
+ */
+static uc_value_t *
+uc_uci_changes(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *res, *chg;
+	char **configs;
+	int rv, i;
+
+	if (conf &amp;&amp; ucv_type(conf) != UC_STRING)
+		err_return(UCI_ERR_INVAL);
+
+	rv = uci_list_configs(*c, &amp;configs);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	res = ucv_object_new(vm);
+
+	for (i = 0; configs[i]; i++) {
+		if (conf &amp;&amp; strcmp(configs[i], ucv_string_get(conf)))
+			continue;
+
+		chg = changes_to_uval(vm, *c, configs[i]);
+
+		if (chg)
+			ucv_object_add(res, configs[i], chg);
+	}
+
+	free(configs);
+
+	return res;
+}
+
+/**
+ * Iterate configuration sections.
+ *
+ * The `foreach()` function iterates all sections of the given configuration,
+ * optionally filtered by type, and invokes the given callback function for
+ * each encountered section.
+ *
+ * When the optional "type" parameter is specified, the callback is only invoked
+ * for sections of the given type, otherwise it is invoked for all sections.
+ *
+ * The requested configuration is implicitly loaded into the cursor.
+ *
+ * Returns `true` if the callback was executed successfully at least once.
+ *
+ * Returns `false` if the callback was never invoked, e.g. when the
+ * configuration is empty or contains no sections of the given type.
+ *
+ * Returns `null` on error, e.g. when an invalid callback was passed or the
+ * requested configuration not found.
+ *
+ * @function module:uci.cursor#foreach
+ *
+ * @param {string} config
+ * The configuration to iterate sections for, e.g. `"system"` to read the
+ * `/etc/config/system` file.
+ *
+ * @param {?string} type
+ * Invoke the callback only for sections of the specified type.
+ *
+ * @param {module:uci.cursor.SectionCallback} callback
+ * The callback to invoke for each section, will receive a section dictionary
+ * as sole argument.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Iterate all network interfaces
+ * ctx.foreach('network', 'interface',
+ * 	   section => print(`Have interface ${section[".name"]}\n`));
+ */
+static uc_value_t *
+uc_uci_foreach(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *type = uc_fn_arg(1);
+	uc_value_t *func = uc_fn_arg(2);
+	uc_value_t *rv = NULL;
+	struct uci_package *p = NULL;
+	struct uci_element *e, *tmp;
+	struct uci_section *sc;
+	uc_exception_type_t ex;
+	bool stop = false;
+	bool ret = false;
+	int i = 0;
+
+	if (ucv_type(conf) != UC_STRING ||
+	    (type &amp;&amp; ucv_type(type) != UC_STRING))
+	    err_return(UCI_ERR_INVAL);
+
+	uci_foreach_element(&amp;(*c)->root, e) {
+		if (strcmp(e->name, ucv_string_get(conf)))
+			continue;
+
+		p = uci_to_package(e);
+		break;
+	}
+
+	if (!p &amp;&amp; uci_load(*c, ucv_string_get(conf), &amp;p))
+		err_return((*c)->err);
+
+	uci_foreach_element_safe(&amp;p->sections, tmp, e) {
+		sc = uci_to_section(e);
+		i++;
+
+		if (type &amp;&amp; strcmp(sc->type, ucv_string_get(type)))
+			continue;
+
+		uc_value_push(ucv_get(func));
+		uc_value_push(section_to_uval(vm, sc, i - 1));
+
+		ex = uc_call(1);
+
+		/* stop on exception in callback */
+		if (ex)
+			break;
+
+		ret = true;
+		rv = uc_value_pop();
+		stop = (ucv_type(rv) == UC_BOOLEAN &amp;&amp; !ucv_boolean_get(rv));
+
+		ucv_put(rv);
+
+		if (stop)
+			break;
+	}
+
+	return ucv_boolean_new(ret);
+}
+
+/**
+ * Enumerate existing configurations.
+ *
+ * The `configs()` function yields an array of configuration files present in
+ * the cursors associated configuration directory, `/etc/config/` by default.
+ *
+ * Returns an array of configuration names on success.
+ *
+ * Returns `null` on error, e.g. due to filesystem errors.
+ *
+ * @function module:uci.cursor#configs
+ *
+ * @returns {?string[]}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Enumerate all present configuration file names
+ * const configurations = ctx.configs();
+ */
+static uc_value_t *
+uc_uci_configs(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *a;
+	char **configs;
+	int i, rv;
+
+	rv = uci_list_configs(*c, &amp;configs);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	a = ucv_array_new(vm);
+
+	for (i = 0; configs[i]; i++)
+		ucv_array_push(a, ucv_string_new(configs[i]));
+
+	free(configs);
+
+	return a;
+}
+
+
+static const uc_function_list_t cursor_fns[] = {
+	{ "load",		uc_uci_load },
+	{ "unload",		uc_uci_unload },
+	{ "get",		uc_uci_get },
+	{ "get_all",	uc_uci_get_all },
+	{ "get_first",	uc_uci_get_first },
+	{ "add",		uc_uci_add },
+	{ "set",		uc_uci_set },
+	{ "rename",		uc_uci_rename },
+	{ "save",		uc_uci_save },
+	{ "delete",		uc_uci_delete },
+	{ "commit",		uc_uci_commit },
+	{ "revert",		uc_uci_revert },
+	{ "reorder",	uc_uci_reorder },
+	{ "changes",	uc_uci_changes },
+	{ "foreach",	uc_uci_foreach },
+	{ "configs",	uc_uci_configs },
+	{ "error",		uc_uci_error },
+};
+
+static const uc_function_list_t global_fns[] = {
+	{ "error",		uc_uci_error },
+	{ "cursor",		uc_uci_cursor },
+};
+
+
+static void close_uci(void *ud) {
+	uci_free_context((struct uci_context *)ud);
+}
+
+void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
+{
+	uc_function_list_register(scope, global_fns);
+
+	cursor_type = uc_type_declare(vm, "uci.cursor", cursor_fns, close_uci);
+}
+</code></pre></article></section></div></div></div><div class="search-container" id="PkfLWpAbet" style="display:none"><div class="wrapper" id="iCxFxjkHbP"><button class="icon-button search-close-button" id="VjLlGakifb" aria-label="close search"><svg><use xlink:href="#close-icon"></use></svg></button><div class="search-box-c"><svg><use xlink:href="#search-icon"></use></svg> <input type="text" id="vpcKVYIppa" class="search-input" placeholder="Search..." autofocus></div><div class="search-result-c" id="fWwVHRuDuN"><span class="search-result-c-text">Type anything to view search result</span></div></div></div><div class="mobile-menu-icon-container"><button class="icon-button" id="mobile-menu" data-isopen="false" aria-label="menu"><svg><use xlink:href="#menu-icon"></use></svg></button></div><div id="mobile-sidebar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="mobile-nav-links"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="mobile-sidebar-items-c"><div class="sidebar-section-title with-arrow" data-isopen="false" id="Td7R0MPJOEbl2KF6Jy78S"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="CYvpWPVMTykRkTBMIzVNd"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div></div></div><div class="mobile-navbar-actions"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div></div></div></div><script type="text/javascript" src="scripts/core.min.js"></script><script src="scripts/search.min.js" defer="defer"></script><script src="scripts/third-party/fuse.js" defer="defer"></script><script type="text/javascript">var tocbotInstance=tocbot.init({tocSelector:"#eed4d2a0bfd64539bb9df78095dec881",contentSelector:".main-content",headingSelector:"h1, h2, h3",hasInnerContainers:!0,scrollContainer:".main-content",headingsOffset:130,onClick:bringLinkToView})</script></body></html>

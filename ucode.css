@@ -6,6 +6,24 @@ h1 {
 	display: flex;
 }
 
+h3[id].name:not(h2 + h3) {
+	margin-top: 2.5rem;
+	border-top: 1px solid #292929;
+	padding-top: 1.5rem;
+}
+
+h3[id].name:not(h2 + h3) .link-anchor {
+	top: 1.5rem;
+}
+
+.light h3[id].name {
+	border-color: #ccc;
+}
+
+html body {
+	line-height: 1.5;
+}
+
 article .description > ul,
 article .description > ol {
 	list-style: initial;
@@ -17,4 +35,67 @@ article .description > ol {
 	background-size: 1.5em;
 	background-position: 1rem center;
 	padding-left: 3rem;
+}
+
+section table td:first-child,
+section .params td:first-child,
+section table thead th:first-child,
+section .params thead th:first-child,
+section .props thead th:first-child {
+	border-top-left-radius: .5rem;
+	border-bottom-left-radius: .5rem;
+}
+
+section table td:last-child,
+section .params td:last-child,
+section table thead th:last-child,
+section .params thead th:last-child,
+section .props thead th:last-child {
+	border-top-right-radius: .5rem;
+	border-bottom-right-radius: .5rem;
+}
+
+section .params td,
+section .params th,
+section .props td,
+section .props th,
+section th,
+section td,
+section .details .details-item-container {
+	padding: .5rem 1rem;
+}
+
+section ul,
+section ol {
+	padding-left: 1.5rem;
+}
+
+section ul li,
+section ol li {
+	padding: .25rem 0;
+}
+
+section p {
+	margin: .75rem 0;
+}
+
+section .details {
+	border-radius: .5rem;
+}
+
+section .pre-div {
+	margin: 1rem 0;
+	border-radius: .5rem;
+}
+
+.param-type {
+	font-family: "code";
+}
+
+.signature-attributes {
+	font-variant: sub;
+}
+
+.method-member-container > strong + dl.param-type > dt {
+	display: none;
 }
