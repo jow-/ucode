@@ -79,7 +79,7 @@ static int last_error = 0;
  * @function module:fs#error
  *
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * // Trigger file system error
@@ -258,6 +258,8 @@ uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
  * @class module:fs.proc
  * @hideconstructor
  *
+ * @borrows module:fs#error as module:fs.proc#error
+ *
  * @see {@link module:fs#popen|popen()}
  *
  * @example
@@ -273,26 +275,6 @@ uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
  * handle.close();
  *
  * handle.error();
- */
-
-/**
- * Query error information.
- *
- * Returns a string containing a description of the last occurred error or
- * `null` if there is no error information.
- *
- * @function module:fs.proc#error
- *
- * @returns {string|null}
- *
- * @example
- * // Trigger error
- * const fp = popen("command");
- * fp.close();
- * fp.close(); // already closed
- *
- * // Print error (should yield "Bad file descriptor")
- * print(fp.error(), "\n");
  */
 
 /**
@@ -316,7 +298,7 @@ uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
  *
  * @function module:fs.proc#close
  *
- * @returns {number|null}
+ * @returns {?number}
  */
 static uc_value_t *
 uc_fs_pclose(uc_vm_t *vm, size_t nargs)
@@ -378,7 +360,7 @@ uc_fs_pclose(uc_vm_t *vm, size_t nargs)
  * The length of data to read. Can be a number, the string "line", the string
  * "all", or a single character string.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * const fp = popen("command", "r");
@@ -426,7 +408,7 @@ uc_fs_pread(uc_vm_t *vm, size_t nargs)
  * @param {*} data
  * The data to be written.
  *
- * @returns {number|null}
+ * @returns {?number}
  *
  * @example
  * const fp = popen("command", "w");
@@ -448,7 +430,7 @@ uc_fs_pwrite(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs.proc#flush
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  */
 static uc_value_t *
@@ -466,7 +448,7 @@ uc_fs_pflush(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs.proc#fileno
  *
- * @returns {number|null}
+ * @returns {?number}
  */
 static uc_value_t *
 uc_fs_pfileno(uc_vm_t *vm, size_t nargs)
@@ -498,7 +480,7 @@ uc_fs_pfileno(uc_vm_t *vm, size_t nargs)
  * @param {string} [mode="r"]
  * The open mode of the process handle.
  *
- * @returns {module:fs.proc|null}
+ * @returns {?module:fs.proc}
  *
  * @example
  * // Open a process
@@ -531,6 +513,8 @@ uc_fs_popen(uc_vm_t *vm, size_t nargs)
  * @class module:fs.file
  * @hideconstructor
  *
+ * @borrows module:fs#error as module:fs.file#error
+ *
  * @see {@link module:fs#open|open()}
  * @see {@link module:fs#fdopen|fdopen()}
  * @see {@link module:fs#mkstemp|mkstemp()}
@@ -556,26 +540,6 @@ uc_fs_popen(uc_vm_t *vm, size_t nargs)
  */
 
 /**
- * Query error information.
- *
- * Returns a string containing a description of the last occurred error or
- * `null` if there is no error information.
- *
- * @function module:fs.file#error
- *
- * @returns {string|null}
- *
- * @example
- * // Trigger error
- * const fp = open("file.txt");
- * fp.close();
- * fp.close(); // already closed
- *
- * // Print error (should yield "Bad file descriptor")
- * print(fp.error(), "\n");
- */
-
-/**
  * Closes the file handle.
  *
  * Upon calling `close()` on the handle, buffered data is flushed and the
@@ -587,7 +551,7 @@ uc_fs_popen(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs.file#close
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  */
 static uc_value_t *
 uc_fs_close(uc_vm_t *vm, size_t nargs)
@@ -639,7 +603,7 @@ uc_fs_close(uc_vm_t *vm, size_t nargs)
  * The length of data to read. Can be a number, the string "line", the string
  * "all", or a single character string.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * const fp = open("file.txt", "r");
@@ -687,7 +651,7 @@ uc_fs_read(uc_vm_t *vm, size_t nargs)
  * @param {*} data
  * The data to be written.
  *
- * @returns {number|null}
+ * @returns {?number}
  *
  * @example
  * const fp = open("file.txt", "w");
@@ -724,7 +688,7 @@ uc_fs_write(uc_vm_t *vm, size_t nargs)
  * | `1`      | The given offset is relative to the current read position.                                   |
  * | `2`      | The given offset is relative to the end of the file.                                         |
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  * const fp = open("file.txt", "r");
@@ -785,7 +749,7 @@ uc_fs_seek(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs.file#tell
  *
- * @returns {number|null}
+ * @returns {?number}
  */
 static uc_value_t *
 uc_fs_tell(uc_vm_t *vm, size_t nargs)
@@ -818,7 +782,7 @@ uc_fs_tell(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs.file#isatty
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  */
 static uc_value_t *
@@ -847,7 +811,7 @@ uc_fs_isatty(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs.file#flush
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  */
 static uc_value_t *
@@ -865,7 +829,7 @@ uc_fs_flush(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs.file#fileno
  *
- * @returns {number|null}
+ * @returns {?number}
  */
 static uc_value_t *
 uc_fs_fileno(uc_vm_t *vm, size_t nargs)
@@ -913,7 +877,7 @@ uc_fs_fileno(uc_vm_t *vm, size_t nargs)
  * @param {number} [perm=0o666]
  * The file creation permissions (for modes `w…` and `a…`)
  *
- * @returns {module:fs.file|null}
+ * @returns {?module:fs.file}
  *
  * @example
  * // Open a file in read-only mode
@@ -1058,6 +1022,8 @@ uc_fs_fdopen(uc_vm_t *vm, size_t nargs)
  * @class module:fs.dir
  * @hideconstructor
  *
+ * @borrows module:fs#error as module:fs.dir#error
+ *
  * @see {@link module:fs#opendir|opendir()}
  *
  * @example
@@ -1075,26 +1041,6 @@ uc_fs_fdopen(uc_vm_t *vm, size_t nargs)
  */
 
 /**
- * Query error information.
- *
- * Returns a string containing a description of the last occurred error or
- * `null` if there is no error information.
- *
- * @function module:fs.dir#error
- *
- * @returns {string|null}
- *
- * @example
- * // Trigger error
- * const fp = opendir("/tmp");
- * fp.close();
- * fp.close(); // already closed
- *
- * // Print error (should yield "Bad file descriptor")
- * print(fp.error(), "\n");
- */
-
-/**
  * Read the next entry from the open directory.
  *
  * Returns a string containing the entry name.
@@ -1105,7 +1051,7 @@ uc_fs_fdopen(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs.dir#read
  *
- * @returns {string|null}
+ * @returns {?string}
  */
 static uc_value_t *
 uc_fs_readdir(uc_vm_t *vm, size_t nargs)
@@ -1139,7 +1085,7 @@ uc_fs_readdir(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs.dir#tell
  *
- * @returns {number|null}
+ * @returns {?number}
  */
 static uc_value_t *
 uc_fs_telldir(uc_vm_t *vm, size_t nargs)
@@ -1174,7 +1120,7 @@ uc_fs_telldir(uc_vm_t *vm, size_t nargs)
  * @param {number} offset
  * Position value obtained by `tell()`.
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  *
@@ -1218,7 +1164,7 @@ uc_fs_seekdir(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs.dir#close
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  */
 static uc_value_t *
 uc_fs_closedir(uc_vm_t *vm, size_t nargs)
@@ -1247,7 +1193,7 @@ uc_fs_closedir(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to the directory.
  *
- * @returns {module:fs.dir|null}
+ * @returns {?module:fs.dir}
  *
  * @example
  * // Open a directory
@@ -1282,7 +1228,7 @@ uc_fs_opendir(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to the symbolic link.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * // Read the value of a symbolic link
@@ -1456,7 +1402,7 @@ uc_fs_stat_common(uc_vm_t *vm, size_t nargs, bool use_lstat)
  * @param {string} path
  * The path to the file or directory.
  *
- * @returns {module:fs.FileStatResult|null}
+ * @returns {?module:fs.FileStatResult}
  *
  * @example
  * // Get information about a file
@@ -1481,7 +1427,7 @@ uc_fs_stat(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to the file or directory.
  *
- * @returns {module:fs.FileStatResult|null}
+ * @returns {?module:fs.FileStatResult}
  *
  * @example
  * // Get information about a directory
@@ -1505,7 +1451,7 @@ uc_fs_lstat(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to the new directory.
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  * // Create a directory
@@ -1539,7 +1485,7 @@ uc_fs_mkdir(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to the directory to be removed.
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  * // Remove a directory
@@ -1574,7 +1520,7 @@ uc_fs_rmdir(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path of the symbolic link.
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  * // Create a symbolic link
@@ -1608,7 +1554,7 @@ uc_fs_symlink(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to the file or symbolic link.
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  * // Remove a file
@@ -1637,7 +1583,7 @@ uc_fs_unlink(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs#getcwd
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * // Get the current working directory
@@ -1692,7 +1638,7 @@ uc_fs_getcwd(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to the new working directory.
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  * // Change the current working directory
@@ -1728,7 +1674,7 @@ uc_fs_chdir(uc_vm_t *vm, size_t nargs)
  * @param {number} mode
  * The new mode (permissions).
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  * // Change the mode of a file
@@ -1872,7 +1818,7 @@ uc_fs_resolve_group(uc_value_t *v, gid_t *gid)
  * The new group's ID. When given as number, it is used as-is, when given as
  * string, the group name is resolved to the corresponding gid first.
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  * // Change the owner of a file
@@ -1918,7 +1864,7 @@ uc_fs_chown(uc_vm_t *vm, size_t nargs)
  * @param {string} newPath
  * The new path of the file or directory.
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  * // Rename a file
@@ -1980,7 +1926,7 @@ uc_fs_glob(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to extract the directory name from.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * // Get the directory name of a path
@@ -2029,7 +1975,7 @@ uc_fs_dirname(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to extract the base name from.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * // Get the base name of a path
@@ -2083,7 +2029,7 @@ uc_fs_lsdir_sort_fn(const void *k1, const void *k2)
  * @param {string} path
  * The path to the directory.
  *
- * @returns {string[]|null}
+ * @returns {?string[]}
  *
  * @example
  * // List the content of a directory
@@ -2169,7 +2115,7 @@ uc_fs_lsdir(uc_vm_t *vm, size_t nargs)
  * @param {string} [template="/tmp/XXXXXX"]
  * The path template to use when forming the temporary file name.
  *
- * @returns {module:fs.file|null}
+ * @returns {?module:fs.file}
  *
  * @example
  * // Create a unique temporary file in the current working directory
@@ -2261,7 +2207,7 @@ uc_fs_mkstemp(uc_vm_t *vm, size_t nargs)
  * @param {number} [mode="f"]
  * Optional access mode.
  *
- * @returns {boolean|null}
+ * @returns {?boolean}
  *
  * @example
  * // Check file read and write accessibility
@@ -2329,7 +2275,7 @@ uc_fs_access(uc_vm_t *vm, size_t nargs)
  * Number of bytes to limit the result to. When omitted, the entire content is
  * returned.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * // Read first 100 bytes of content
@@ -2441,7 +2387,7 @@ uc_fs_readfile(uc_vm_t *vm, size_t nargs)
  * Truncates the amount of data to be written to the specified amount of bytes.
  * When omitted, the entire content is written.
  *
- * @returns {number|null}
+ * @returns {?number}
  *
  * @example
  * // Write string to a file
@@ -2522,7 +2468,7 @@ uc_fs_writefile(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path to the file or directory.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * // Resolve the absolute path of a file
@@ -2561,7 +2507,7 @@ uc_fs_realpath(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs#pipe
  *
- * @returns {module:fs.file[]|null}
+ * @returns {?module:fs.file[]}
  *
  * @example
  * // Create a pipe

@@ -365,7 +365,7 @@ uc_print(uc_vm_t *vm, size_t nargs)
  *
  * @param {Object|Array|string} x - The input object, array, or string.
  *
- * @returns {number|null} - The length of the input.
+ * @returns {?number} - The length of the input.
  *
  * @example
  * length("test")                             // 4
@@ -484,7 +484,7 @@ uc_index(uc_vm_t *vm, size_t nargs, bool right)
  * @param {*} needle
  * The value to find within the array or string.
  *
- * @returns {number|null}
+ * @returns {?number}
  *
  * @example
  * index("Hello hello hello", "ll")          // 2
@@ -516,7 +516,7 @@ uc_lindex(uc_vm_t *vm, size_t nargs)
  * @param {*} needle
  * The value to find within the array or string.
  *
- * @returns {number|null}
+ * @returns {?number}
  *
  * @example
  * rindex("Hello hello hello", "ll")          // 14
@@ -844,7 +844,7 @@ uc_exit(uc_vm_t *vm, size_t nargs)
  * @param {string} [name]
  * The name of the environment variable.
  *
- * @returns {string|object}
+ * @returns {string|Object<string, string>}
  */
 static uc_value_t *
 uc_getenv(uc_vm_t *vm, size_t nargs)
@@ -1037,7 +1037,7 @@ uc_int(uc_vm_t *vm, size_t nargs)
  * @param {Array} arr
  * The array to be joined into a string.
  *
- * @returns {string|null}
+ * @returns {?string}
  */
 static uc_value_t *
 uc_join(uc_vm_t *vm, size_t nargs)
@@ -1073,7 +1073,7 @@ uc_join(uc_vm_t *vm, size_t nargs)
  * @param {object} obj
  * The object from which to retrieve the key names.
  *
- * @returns {Array|null}
+ * @returns {?Array}
  */
 static uc_value_t *
 uc_keys(uc_vm_t *vm, size_t nargs)
@@ -1104,7 +1104,7 @@ uc_keys(uc_vm_t *vm, size_t nargs)
  * @param {string} s
  * The input string.
  *
- * @returns {string|null}
+ * @returns {?string}
  * The lowercase string.
  *
  * @example
@@ -1211,7 +1211,7 @@ uc_map(uc_vm_t *vm, size_t nargs)
  * @param {number} [offset]
  * The offset of the character.
  *
- * @returns {number|null}
+ * @returns {?number}
  *
  * @example
  * ord("Abc");         // 65
@@ -1265,7 +1265,7 @@ uc_ord(uc_vm_t *vm, size_t nargs)
  * @param {*} x
  * The value to determine the type of.
  *
- * @returns {string|null}
+ * @returns {?string}
  */
 static uc_value_t *
 uc_type(uc_vm_t *vm, size_t nargs)
@@ -1307,7 +1307,7 @@ uc_type(uc_vm_t *vm, size_t nargs)
  * @param {Array|string} arr_or_str
  * The input array or string.
  *
- * @returns {Array|string|null}
+ * @returns {?(Array|string)}
  *
  * @example
  * reverse([1, 2, 3]);   // [ 3, 2, 1 ]
@@ -1938,7 +1938,7 @@ uc_time(uc_vm_t *vm, size_t nargs)
  * @param {*} str
  * The string to be converted to uppercase.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * uc("hello");   // "HELLO"
@@ -2040,7 +2040,7 @@ uc_uchr(uc_vm_t *vm, size_t nargs)
  * @param {*} obj
  * The object from which to extract values.
  *
- * @returns {Array|null}
+ * @returns {?Array}
  *
  * @example
  * values({ foo: true, bar: false });   // [true, false]
@@ -2774,7 +2774,7 @@ uc_require(uc_vm_t *vm, size_t nargs)
  * @param {string} address
  * The IP address string to convert.
  *
- * @returns {number[]|null}
+ * @returns {?number[]}
  *
  * @example
  * iptoarr("192.168.1.1")              // [ 192, 168, 1, 1 ]
@@ -2851,7 +2851,7 @@ check_byte(uc_value_t *v)
  * @param {number[]} arr
  * The byte array to convert into an IP address string.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * arrtoip([ 192, 168, 1, 1 ])   // "192.168.1.1"
@@ -2928,7 +2928,7 @@ uc_arrtoip(uc_vm_t *vm, size_t nargs)
  * @param {RegExp} pattern
  * The regular expression pattern.
  *
- * @returns {Array|null}
+ * @returns {?Array}
  *
  * @example
  * match("foobarbaz", /b.(.)/)   // ["bar", "r"]
@@ -3976,7 +3976,7 @@ uc_trace(uc_vm_t *vm, size_t nargs)
  * @param {Object} [proto]
  * The optional prototype object.
  *
- * @returns {Object|null}
+ * @returns {?Object}
  *
  * @example
  * const arr = [1, 2, 3];
@@ -4222,7 +4222,7 @@ uc_wildcard(uc_vm_t *vm, size_t nargs)
  * @param {boolean} [dironly]
  * Whether to return only the directory portion of the source file path.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * sourcepath();         // Returns the path of the currently executed file
@@ -4426,7 +4426,7 @@ uc_max(uc_vm_t *vm, size_t nargs)
  * @param {string} str
  * The base64 encoded string to decode.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * b64dec("VGhpcyBpcyBhIHRlc3Q=");         // Returns "This is a test"
@@ -4576,7 +4576,7 @@ static const char Base64[] =
  * @param {string} str
  * The string to encode.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * b64enc("This is a test");  // Returns "VGhpcyBpcyBhIHRlc3Q="
@@ -4713,7 +4713,7 @@ uc_uniq_ucv_equal(const void *k1, const void *k2)
  * @param {Array} array
  * The input array.
  *
- * @returns {Array|null}
+ * @returns {?Array}
  *
  * @example
  * uniq([1, true, "foo", 2, true, "bar", "foo"]);       // Returns [1, true, "foo", 2, "bar"]
@@ -4752,6 +4752,28 @@ uc_uniq(uc_vm_t *vm, size_t nargs)
 	return uniq;
 }
 
+/**
+ * A time spec is a plain object describing a point in time, it is returned by
+ * the {@link module:core#gmtime|gmtime()} and
+ * {@link module:core#localtime|localtime()} functions and expected as parameter
+ * by the complementary {@link module:core#timegm|timegm()} and
+ * {@link module:core#timelocal|timelocal()} functions.
+ *
+ * When returned by `gmtime()` or `localtime()`, all members of the object will
+ * be initialized, when passed as argument to `timegm()` or `timelocal()`, most
+ * member values are optional.
+ *
+ * @typedef {Object} module:core.TimeSpec
+ * @property {number} sec - Seconds (0..60)
+ * @property {number} min - Minutes (0..59)
+ * @property {number} hour - Hours (0..23)
+ * @property {number} mday - Day of month (1..31)
+ * @property {number} mon - Month (1..12)
+ * @property {number} year - Year (>= 1900)
+ * @property {number} wday - Day of week (1..7, Sunday = 7)
+ * @property {number} yday - Day of year (1-366, Jan 1st = 1)
+ * @property {number} isdst - Daylight saving time in effect (yes = 1)
+ */
 static uc_value_t *
 uc_gettime_common(uc_vm_t *vm, size_t nargs, bool local)
 {
@@ -4782,16 +4804,7 @@ uc_gettime_common(uc_vm_t *vm, size_t nargs, bool local)
  * containing broken-down date and time information according to the local
  * system timezone.
  *
- * The resulting dictionary contains the following fields:
- * - `sec`    Seconds (0-60)
- * - `min`    Minutes (0-59)
- * - `hour`   Hours (0-23)
- * - `mday`   Day of month (1-31)
- * - `mon`    Month (1-12)
- * - `year`   Year (>= 1900)
- * - `wday`   Day of the week (1-7, Sunday = 7)
- * - `yday`   Day of the year (1-366, Jan 1st = 1)
- * - `isdst`  Daylight saving time in effect (yes = 1)
+ * See {@link module:core.TimeSpec|TimeSpec} for a description of the fields.
  *
  * Note that in contrast to the underlying `localtime(3)` C library function,
  * the values for `mon`, `wday`, and `yday` are 1-based, and the `year` is
@@ -4802,7 +4815,7 @@ uc_gettime_common(uc_vm_t *vm, size_t nargs, bool local)
  * @param {number} [epoch]
  * The epoch timestamp.
  *
- * @returns {Object}
+ * @returns {module:core.TimeSpec}
  *
  * @example
  * localtime(1647953502);
@@ -4828,14 +4841,14 @@ uc_localtime(uc_vm_t *vm, size_t nargs)
 /**
  * Like `localtime()` but interpreting the given epoch value as UTC time.
  *
- * See `localtime()` for details on the return value.
+ * See {@link module:core#localtime|localtime()} for details on the return value.
  *
  * @function module:core#gmtime
  *
  * @param {number} [epoch]
  * The epoch timestamp.
  *
- * @returns {Object}
+ * @returns {module:core.TimeSpec}
  *
  * @example
  * gmtime(1647953502);
@@ -4908,9 +4921,9 @@ uc_mktime_common(uc_vm_t *vm, size_t nargs, bool local)
 }
 
 /**
- * Performs the inverse operation of `localtime()` by taking a broken-down date
- * and time dictionary and transforming it into an epoch value according to the
- * local system timezone.
+ * Performs the inverse operation of {@link module:core#localtime|localtime()}
+ * by taking a broken-down date and time dictionary and transforming it into an
+ * epoch value according to the local system timezone.
  *
  * The `wday` and `yday` fields of the given date time specification are
  * ignored. Field values outside of their valid range are internally normalized,
@@ -4922,10 +4935,10 @@ uc_mktime_common(uc_vm_t *vm, size_t nargs, bool local)
  *
  * @function module:core#timelocal
  *
- * @param {Object} datetimespec
+ * @param {module:core.TimeSpec} datetimespec
  * The broken-down date and time dictionary.
  *
- * @returns {number|null}
+ * @returns {?number}
  *
  * @example
  * timelocal({ "sec": 42, "min": 51, "hour": 13, "mday": 22, "mon": 3, "year": 2022, "isdst": 0 });
@@ -4941,14 +4954,14 @@ uc_timelocal(uc_vm_t *vm, size_t nargs)
  * Like `timelocal()` but interpreting the given date time specification as UTC
  * time.
  *
- * See `timelocal()` for details.
+ * See {@link module:core#timelocal|timelocal()} for details.
  *
  * @function module:core#timegm
  *
- * @param {Object} datetimespec
+ * @param {module:core.TimeSpec} datetimespec
  * The broken-down date and time dictionary.
  *
- * @returns {number|null}
+ * @returns {?number}
  *
  * @example
  * timegm({ "sec": 42, "min": 51, "hour": 13, "mday": 22, "mon": 3, "year": 2022, "isdst": 0 });
@@ -4980,7 +4993,7 @@ uc_timegm(uc_vm_t *vm, size_t nargs)
  * @param {boolean} [monotonic]
  * Whether to query the monotonic system clock.
  *
- * @returns {Array<number>|null}
+ * @returns {?number[]}
  *
  * @example
  * clock();        // [ 1647954926, 798269464 ]
@@ -5078,7 +5091,7 @@ hexval(unsigned char c, bool lo)
  * @param {string} [skipchars]
  * The characters to skip during decoding.
  *
- * @returns {string|null}
+ * @returns {?string}
  *
  * @example
  * hexdec("48656c6c6f20776f726c64210a");  // "Hello world!\n"
@@ -5165,7 +5178,7 @@ uc_hexdec(uc_vm_t *vm, size_t nargs)
  * @param {*} [argument]
  * The argument for the operation.
  *
- * @returns {boolean|number|null}
+ * @returns {?(boolean|number)}
  *
  * @example
  * gc();         // true
