@@ -1385,8 +1385,10 @@ uc_uci_pkg_command(uc_vm_t *vm, size_t nargs, enum pkg_cmd cmd)
 		if (uci_list_configs(*c, &configs))
 			err_return((*c)->err);
 
-		if (!configs || !configs[0])
+		if (!configs || !configs[0]) {
+			free(configs);
 			err_return(UCI_ERR_NOTFOUND);
+		}
 
 		for (i = 0; configs[i]; i++) {
 			if (!(p = uci_lookup_package(*c, configs[i])))
