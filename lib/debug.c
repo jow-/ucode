@@ -667,7 +667,7 @@ debug_setup(uc_vm_t *vm)
  * @param {string|module:fs.file|module:fs.proc} file
  * The file path or open file handle to write report to.
  *
- * @return {boolean|null}
+ * @return {?boolean}
  */
 static uc_value_t *
 uc_memdump(uc_vm_t *vm, size_t nargs)
@@ -818,7 +818,7 @@ uc_traceback(uc_vm_t *vm, size_t nargs)
  *
  * @function module:debug#sourcepos
  *
- * @return {module:debug.SourcePosition|null}
+ * @return {?module:debug.SourcePosition}
  */
 
 /**
@@ -955,7 +955,7 @@ uc_getinfo_upvals(uc_vm_t *vm, uc_closure_t *closure)
  * @param {*} value
  * The value to query information for.
  *
- * @return {module:debug.ValueInformation|null}
+ * @return {?module:debug.ValueInformation}
  */
 
 /**
@@ -1362,7 +1362,7 @@ uc_xlocal(uc_vm_t *vm, uc_value_t *level, uc_value_t *var, uc_value_t **set)
  * @param {string|number} variable
  * The variable index or variable name to obtain information for.
  *
- * @returns {module:debug.LocalInfo|null}
+ * @returns {?module:debug.LocalInfo}
  */
 static uc_value_t *
 uc_getlocal(uc_vm_t *vm, size_t nargs)
@@ -1406,7 +1406,7 @@ uc_getlocal(uc_vm_t *vm, size_t nargs)
  * @param {*} [value=null]
  * The value to set the local variable to.
  *
- * @returns {module:debug.LocalInfo|null}
+ * @returns {?module:debug.LocalInfo}
  */
 static uc_value_t *
 uc_setlocal(uc_vm_t *vm, size_t nargs)
@@ -1552,7 +1552,7 @@ uc_xupval(uc_vm_t *vm, uc_value_t *target, uc_value_t *var, uc_value_t **set)
  * @param {string|number} variable
  * The variable index or variable name to obtain information for.
  *
- * @returns {module:debug.UpvalInfo|null}
+ * @returns {?module:debug.UpvalInfo}
  */
 static uc_value_t *
 uc_getupval(uc_vm_t *vm, size_t nargs)
@@ -1601,7 +1601,7 @@ uc_getupval(uc_vm_t *vm, size_t nargs)
  * @param {*} value
  * The value to set the variable to.
  *
- * @returns {module:debug.UpvalInfo|null}
+ * @returns {?module:debug.UpvalInfo}
  */
 static uc_value_t *
 uc_setupval(uc_vm_t *vm, size_t nargs)
