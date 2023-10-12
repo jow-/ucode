@@ -2753,6 +2753,104 @@ uc_require_library(uc_vm_t *vm, uc_value_t *nameval, bool so_only)
 	return NULL;
 }
 
+/**
+ * Load and evaluate ucode scripts or shared library extensions.
+ *
+ * The `require()` function expands each member of the global
+ * `REQUIRE_SEARCH_PATH` array to a filesystem path by replacing the `*`
+ * placeholder with a slash-separated version of the given dotted module name
+ * and subsequently tries to load a file at the resulting location.
+ *
+ * If a file is found at one of the search path locations, it is compiled and
+ * evaluated or loaded via the C runtime's `dlopen()` function, depending on
+ * whether the found file is a ucode script or a compiled dynamic library.
+ *
+ * The resulting program function of the compiled/loaded module is then
+ * subsequently executed with the current global environment, without a `this`
+ * context and without arguments.
+ *
+ * Finally, the return value of the invoked program function is returned back
+ * by `require()` to the caller.
+ *
+ * By default, modules are cached in the global `modules` dictionary and
+ * subsequent attempts to require the same module will return the cached module
+ * dictionary entry without re-evaluating the module.
+ *
+ * To force reloading a module, the corresponding entry from the global
+ * `modules` dictionary can be deleted.
+ *
+ * To preload a module or to provide a "virtual" module without a corresponding
+ * filesystem resource, an entry can be manually added to the global `modules`
+ * dictionary.
+ *
+ * Summarized, the `require()` function can be roughly described by the
+ * following code:
+ *
+ * ```
+ * function require(name) {
+ *     if (exists(modules, name))
+ *         return modules[name];
+ *
+ *     for (const item in REQUIRE_SEARCH_PATH) {
+ *         const modpath = replace(item, '*', replace(name, '.', '/'));
+ *         const entryfunc = loadfile(modpath, { raw_mode: true });
+ *
+ *         if (entryfunc) {
+ *             const modval = entryfunc();
+ *             modules[name] = modval;
+ *
+ *             return modval;
+ *         }
+ *     }
+ *
+ *     die(`Module ${name} not found`);
+ * }
+ * ```
+ *
+ * Due to the fact that `require()` is a runtime operation, module source code
+ * is only lazily evaluated/loaded upon invoking the first require invocation,
+ * which might lead to situations where errors in module sources are only
+ * reported much later throughout the program execution. Unless runtime loading
+ * of modules is absolutely required, e.g. to conditionally load extensions, the
+ * compile time
+ * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import|`import` syntax}
+ * should be preferred.
+ *
+ * Returns the module value (typically an object) on success.
+ *
+ * Throws an exception if the module function threw an exception.
+ *
+ * Throws an exception if no matching module could be found, if the module
+ * contains syntax errors or upon other I/O related problems.
+ *
+ * @function module:core#require
+ *
+ * @param {string} name
+ * The name of the module to require in dotted notation.
+ *
+ * @returns {*}
+ *
+ * @example
+ * // Require the `example/acme.uc` or `example/acme.so` module
+ * const acme = require('example.acme');
+ *
+ * // Requiring the same name again will yield the cached instance
+ * const acme2 = require('example.acme');
+ * assert(acme === acme2);
+ *
+ * // Deleting the module dictionary entry will force a reload
+ * delete modules['example.acme'];
+ * const acme3 = require('example.acme');
+ * assert(acme !== acme3);
+ *
+ * // Preloading a "virtual" module
+ * modules['example.test'] = {
+ *   hello: function() { print("This is the example module\n"); }
+ * };
+ *
+ * const test = require('example.test');
+ * test.hello();  // will print "This is the example module"
+ */
 static uc_value_t *
 uc_require(uc_vm_t *vm, size_t nargs)
 {
@@ -5228,6 +5326,40 @@ uc_gc(uc_vm_t *vm, size_t nargs)
 	return NULL;
 }
 
+/**
+ * A parse configuration is a plain object describing options to use when
+ * compiling ucode at runtime. It is expected as parameter by the
+ * {@link module:core#loadfile|loadfile()} and
+ * {@link module:core#loadstring|loadstring()} functions.
+ *
+ * All members of the parse configuration object are optional and will default
+ * to the state of the running ucode file if omitted.
+ *
+ * @typedef {Object} module:core.ParseConfig
+ *
+ * @property {boolean} lstrip_blocks
+ * Whether to strip whitespace preceeding template directives.
+ * See {@link tutorial-02-syntax.html#whitespace-handling|Whitespace handling}.
+ *
+ * @property {boolean} trim_blocks
+ * Whether to trim trailing newlines following template directives.
+ * See {@link tutorial-02-syntax.html#whitespace-handling|Whitespace handling}.
+ *
+ * @property {boolean} strict_declarations
+ * Whether to compile the code in strict mode (`true`) or not (`false`).
+ *
+ * @property {boolean} raw_mode
+ * Whether to compile the code in plain script mode (`true`) or not (`false`).
+ *
+ * @property {string[]} module_search_path
+ * Override the module search path for compile time imports while compiling the
+ * ucode source.
+ *
+ * @property {string[]} force_dynlink_list
+ * List of module names assumed to be dynamic library extensions, allows
+ * compiling ucode source with import statements referring to `*.so` extensions
+ * not present at compile time.
+ */
 static void
 uc_compile_parse_config(uc_parse_config_t *config, uc_value_t *spec)
 {
@@ -5322,19 +5454,9 @@ uc_load_common(uc_vm_t *vm, size_t nargs, uc_source_t *source)
  *  - If `options` is omitted or a non-object value, the compile options of the
  *    running ucode program are reused.
  *
- * The following keys in the `options` dictionary are recognized:
- *
- * | Key                   | Type  | Description                                              |
- * |-----------------------|-------|----------------------------------------------------------|
- * | `lstrip_blocks`       | bool  | Strip leading whitespace before statement template blocks|
- * | `trim_blocks`         | bool  | Strip newline after statement template blocks            |
- * | `strict_declarations` | bool  | Treat access to undefined variables as fatal error       |
- * | `raw_mode`            | bool  | Compile source in script mode, don't treat it as template|
- * | `module_search_path`  | array | Override compile time module search path                 |
- * | `force_dynlink_list`  | array | List of module names to treat as dynamic extensions      |
- *
- * Unrecognized keys are ignored, unspecified options default to those of the
- * running program.
+ * See {@link module:core.ParseConfig|ParseConfig} for known keys within the
+ * `options` object. Unrecognized keys are ignored, unspecified options default
+ * to those of the running program.
  *
  * Returns the compiled program entry function.
  *
@@ -5345,7 +5467,7 @@ uc_load_common(uc_vm_t *vm, size_t nargs, uc_source_t *source)
  * @param {string} code
  * The code string to compile.
  *
- * @param {Object} [options]
+ * @param {module:core.ParseConfig} [options]
  * The options for compilation.
  *
  * @returns {Function}
@@ -5395,7 +5517,7 @@ uc_loadstring(uc_vm_t *vm, size_t nargs)
  * Compiles the given file into a ucode program and returns the resulting
  * program entry function.
  *
- * See `loadstring()` for details.
+ * See {@link module:core#loadstring|`loadstring()`} for details.
  *
  * Returns the compiled program entry function.
  *
@@ -5406,7 +5528,7 @@ uc_loadstring(uc_vm_t *vm, size_t nargs)
  * @param {string} path
  * The path of the file to compile.
  *
- * @param {Object} [options]
+ * @param {module:core.ParseConfig} [options]
  * The options for compilation.
  *
  * @returns {Function}
