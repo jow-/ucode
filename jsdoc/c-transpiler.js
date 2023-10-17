@@ -18,6 +18,20 @@
 
 'use strict';
 
+function isCommentStart(source, offset) {
+	if (source[offset++] != '\n')
+		return false;
+
+	while (source[offset] == ' ' || source[offset] == '\t')
+		offset++;
+
+	return (
+		source[offset++] == '/' &&
+		source[offset++] == '*' &&
+		source[offset++] == '*'
+	);
+}
+
 exports.handlers = {
   beforeParse: function(e) {
 	if (!e.filename.match(/\.(c|h)$/))
@@ -28,7 +42,7 @@ exports.handlers = {
 	let i = 0;
 
 	for (i = 0; i < e.source.length; i++) {
-		if (!chunk.comment && e.source[i] == '\n' && e.source[i+1] == '/' && e.source[i+2] == '*' && e.source[i+3] == '*') {
+		if (!chunk.comment && isCommentStart(e.source, i)) {
 			chunk.end = i;
 			chunk = { start: i, end: -1, comment: true };
 			chunks.push(chunk);
