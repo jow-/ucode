@@ -3,7 +3,7 @@
 		"doc": "LC_ALL=C jsdoc -c jsdoc/conf.json"
 	},
 	"devDependencies": {
-		"clean-jsdoc-theme": "^4.2.9",
+		"ucode-jsdoc-theme": "https://github.com/jow-/ucode-jsdoc-theme.git",
 		"jsdoc": "^4.0.2"
 	}
 }

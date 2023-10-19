@@ -26,7 +26,7 @@
 		"idInHeadings": true
 	},
 	"opts": {
-		"template": "node_modules/clean-jsdoc-theme",
+		"template": "node_modules/ucode-jsdoc-theme",
 		"destination": "docs",
 		"recurse": true,
 		"readme": "docs/README.md",
@@ -40,9 +40,6 @@
 			"includeFilesListInHomepage": true,
 			"include_css": [
 				"docs/ucode.css"
-			],
-			"include_js": [
-				"docs/ucode.js"
 			],
 			"menu": [
 				{
