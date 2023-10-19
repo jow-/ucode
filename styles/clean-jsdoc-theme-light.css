@@ -386,3 +386,10 @@ body.light {
     background: #aaa;
     outline: 0.06125rem solid #aaa;
 }
+
+@media screen and (max-width: 65em) {
+    .light .props tbody > tr,
+    .light .params tbody > tr {
+        background-color: #f7f7f7;
+    }
+}

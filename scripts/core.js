@@ -88,27 +88,13 @@ function toggleTheme() {
  * Function to set accordion id to localStorage.
  * @param {string} id Accordion id
  */
-function setAccordionIdToLocalStorage(id) {
+function setAccordionIdToLocalStorage(id, isOpen) {
     /**
      * @type {object}
      */
-    var ids = JSON.parse(localStorage.getItem(accordionLocalStorageKey));
+    var ids = JSON.parse(localStorage.getItem(accordionLocalStorageKey) ?? '{}');
 
-    ids[id] = id;
-    localStorage.setItem(accordionLocalStorageKey, JSON.stringify(ids));
-}
-
-/**
- * Function to remove accordion id from localStorage.
- * @param {string} id Accordion id
- */
-function removeAccordionIdFromLocalStorage(id) {
-    /**
-     * @type {object}
-     */
-    var ids = JSON.parse(localStorage.getItem(accordionLocalStorageKey));
-
-    delete ids[id];
+    ids[id] = isOpen;
     localStorage.setItem(accordionLocalStorageKey, JSON.stringify(ids));
 }
 
@@ -121,41 +107,22 @@ function getAccordionIdsFromLocalStorage() {
     /**
      * @type {object}
      */
-    var ids = JSON.parse(localStorage.getItem(accordionLocalStorageKey));
-
-    return ids || {};
+    return JSON.parse(localStorage.getItem(accordionLocalStorageKey));
 }
 
-function toggleAccordion(element) {
-    var currentNode = element;
-    var isCollapsed = currentNode.getAttribute('data-isopen') === 'false';
+function toggleAccordion(element, expand) {
+    const isCollapsed = expand ?? element.getAttribute('data-isopen') === 'false';
 
-    if (isCollapsed) {
-        currentNode.setAttribute('data-isopen', 'true');
-        setAccordionIdToLocalStorage(currentNode.id);
-    } else {
-        currentNode.setAttribute('data-isopen', 'false');
-        removeAccordionIdFromLocalStorage(currentNode.id);
-    }
+    element.setAttribute('data-isopen', isCollapsed);
+    setAccordionIdToLocalStorage(element.id, isCollapsed);
 }
 
 function initAccordion() {
-    if (
-        localStorage.getItem(accordionLocalStorageKey) === undefined ||
-        localStorage.getItem(accordionLocalStorageKey) === null
-    ) {
-        localStorage.setItem(accordionLocalStorageKey, '{}');
-    }
-    var allAccordion = document.querySelectorAll('.sidebar-section-title');
-    var ids = getAccordionIdsFromLocalStorage();
+    const openPanes = getAccordionIdsFromLocalStorage();
 
-    allAccordion.forEach(function (item) {
-        item.addEventListener('click', function () {
-            toggleAccordion(item);
-        });
-        if (item.id in ids) {
-            toggleAccordion(item);
-        }
+    document.querySelectorAll('.sidebar-section-title').forEach(item => {
+        item.addEventListener('click', (ev) => toggleAccordion(ev.currentTarget));
+        toggleAccordion(item, !openPanes || openPanes[item.id]);
     });
 }
 
@@ -534,6 +501,12 @@ function initTooltip() {
     });
 
     // eslint-disable-next-line no-undef
+    tippy('.toc', {
+        content: 'Table of Contents',
+        delay: 500,
+    });
+
+    // eslint-disable-next-line no-undef
     tippy('.codepen-button', {
         content: 'Open code in CodePen',
         placement: 'left',
@@ -573,54 +546,45 @@ function fixTable() {
 }
 
 function hideMobileMenu() {
-    var mobileMenuContainer = document.querySelector('#mobile-sidebar');
-    var target = document.querySelector('#mobile-menu');
-    var svgUse = target.querySelector('use');
+    document.querySelectorAll('#mobile-sidebar, #mobile-tocbar').forEach((panel) => {
+        panel.classList.remove('show');
+    });
 
-    if (mobileMenuContainer) {
-        mobileMenuContainer.classList.remove('show');
-    }
-    if (target) {
-        target.setAttribute('data-isopen', 'false');
-    }
-    if (svgUse) {
-        svgUse.setAttribute('xlink:href', '#menu-icon');
-    }
+    document.querySelectorAll('#mobile-menu, #mobile-toc').forEach((btn, i) => {
+        btn.setAttribute('data-isopen', 'false');
+        btn.querySelector('use').setAttribute('xlink:href', i ? '#toc-icon' : '#menu-icon');
+    });
 }
 
-function showMobileMenu() {
-    var mobileMenuContainer = document.querySelector('#mobile-sidebar');
-    var target = document.querySelector('#mobile-menu');
-    var svgUse = target.querySelector('use');
+function showMobileMenu(target) {
+    var buttons = document.querySelectorAll('#mobile-menu, #mobile-toc');
+    var panels = document.querySelectorAll('#mobile-sidebar, #mobile-tocbar');
 
-    if (mobileMenuContainer) {
-        mobileMenuContainer.classList.add('show');
-    }
-    if (target) {
-        target.setAttribute('data-isopen', 'true');
-    }
-    if (svgUse) {
-        svgUse.setAttribute('xlink:href', '#close-icon');
-    }
+    buttons.forEach((btn, i) => {
+        if (btn === target) {
+            btn.setAttribute('data-isopen', 'true');
+            btn.querySelector('use').setAttribute('xlink:href', '#close-icon');
+            panels[i].classList.add('show');
+        }
+        else {
+            btn.setAttribute('data-isopen', 'false');
+            btn.querySelector('use').setAttribute('xlink:href', i ? '#toc-icon' : '#menu-icon');
+            panels[i].classList.remove('show');
+        }
+    });
 }
 
-function onMobileMenuClick() {
-    var target = document.querySelector('#mobile-menu');
-    var isOpen = target.getAttribute('data-isopen') === 'true';
-
-    if (isOpen) {
+function onMobileMenuClick(ev) {
+    if (ev.currentTarget.getAttribute('data-isopen') === 'true')
         hideMobileMenu();
-    } else {
-        showMobileMenu();
-    }
+    else
+        showMobileMenu(ev.currentTarget);
 }
 
 function initMobileMenu() {
-    var menu = document.querySelector('#mobile-menu');
-
-    if (menu) {
-        menu.addEventListener('click', onMobileMenuClick);
-    }
+    document.querySelectorAll('#mobile-menu, #mobile-toc').forEach(btn => {
+        btn.addEventListener('click', onMobileMenuClick);
+    });
 }
 
 function addHrefToSidebarTitle() {
@@ -634,12 +598,39 @@ function addHrefToSidebarTitle() {
 
 function onDomContentLoaded() {
     var themeButton = document.querySelectorAll('.theme-toggle');
+    var tocButton = document.querySelector('.toc');
 
     initMobileMenu();
 
     if (themeButton) {
         themeButton.forEach(function (button) {
             button.addEventListener('click', toggleTheme);
+        });
+    }
+
+    if (tocButton) {
+        tocButton.addEventListener('click', (ev) => {
+            const closeOnEsc = (ev) => {
+                if (ev.key == 'Escape')
+                    closeToc();
+            };
+
+            const closeOnClick = (ev) => {
+                if (!ev.target.closest('#mobile-tocbar') && ev.currentTarget !== tocButton)
+                    closeToc();
+            };
+
+            const closeToc = () => {
+                document.querySelector('#mobile-tocbar').classList.remove('show');
+                document.removeEventListener('click', closeOnClick);
+                document.removeEventListener('keydown', closeOnEsc);
+            };
+
+            document.querySelector('#mobile-tocbar').classList.add('show');
+            document.addEventListener('keydown', closeOnEsc);
+            document.addEventListener('click', closeOnClick);
+
+            ev.stopPropagation();
         });
     }
 

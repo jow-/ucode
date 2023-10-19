@@ -405,3 +405,10 @@ blockquote {
     background: #555;
     outline: 0.06125rem solid #555;
 }
+
+@media screen and (max-width: 65em) {
+    .props tbody > tr,
+    .params tbody > tr {
+        background-color: #292929;
+    }
+}
