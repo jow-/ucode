@@ -3152,13 +3152,16 @@ void
 uc_vm_signal_raise(uc_vm_t *vm, int signo)
 {
 	uint8_t signum = signo;
+	ssize_t size;
 
 	if (signo <= 0 || signo >= UC_SYSTEM_SIGNAL_COUNT)
 		return;
 
 	vm->signal.raised[signo / 64] |= (1ull << (signo % 64));
 
-	write(vm->signal.sigpipe[1], &signum, sizeof(signum));
+	size = write(vm->signal.sigpipe[1], &signum, sizeof(signum));
+	if (size != sizeof(signum))
+		fprintf(stderr, "writing to signal pipe failed\n");
 }
 
 int
