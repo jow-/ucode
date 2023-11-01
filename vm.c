@@ -3158,7 +3158,7 @@ uc_vm_signal_raise(uc_vm_t *vm, int signo)
 
 	vm->signal.raised[signo / 64] |= (1ull << (signo % 64));
 
-	write(vm->signal.sigpipe[1], &signum, sizeof(signum));
+	if (write(vm->signal.sigpipe[1], &signum, sizeof(signum)) == -1) {}
 }
 
 int
