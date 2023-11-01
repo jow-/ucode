@@ -3,12 +3,17 @@ include(CheckFunctionExists)
 include(CheckSymbolExists)
 
 project(ucode C)
-add_definitions(-Os -Wall -Werror --std=gnu99 -ffunction-sections -fwrapv -D_GNU_SOURCE -D_FORTIFY_SOURCE=2)
+add_definitions(-Os -Wall -Werror --std=gnu99 -ffunction-sections -fwrapv -D_GNU_SOURCE)
 
 if(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
 	add_definitions(-Wextra -Werror=implicit-function-declaration)
 	add_definitions(-Wformat -Werror=format-security -Werror=format-nonliteral)
 endif()
+
+if(NOT CMAKE_C_FLAGS MATCHES -D_FORTIFY_SOURCE=)
+	add_definitions(-D_FORTIFY_SOURCE=2)
+endif()
+
 add_definitions(-Wmissing-declarations -Wno-error=unused-variable -Wno-unused-parameter)
 
 include_directories(include)
