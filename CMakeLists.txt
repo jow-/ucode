@@ -3,7 +3,7 @@ include(CheckFunctionExists)
 include(CheckSymbolExists)
 
 project(ucode C)
-add_definitions(-Os -Wall -Werror --std=gnu99 -ffunction-sections -fwrapv -D_GNU_SOURCE)
+add_definitions(-Os -Wall -Werror --std=gnu99 -ffunction-sections -fwrapv -D_GNU_SOURCE -D_FORTIFY_SOURCE=2)
 
 if(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
 	add_definitions(-Wextra -Werror=implicit-function-declaration)
@@ -68,7 +68,7 @@ else()
 endif()
 
 if(DEBUG)
-  add_definitions(-DDEBUG -g3 -O0)
+  add_definitions(-DDEBUG -g3 -Og)
 else()
   add_definitions(-DNDEBUG)
 endif()
