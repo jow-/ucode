@@ -451,11 +451,14 @@ uc_index(uc_vm_t *vm, size_t nargs, bool right)
 					}
 					while (--p != sstr);
 				}
-				else {
+				else if (nlen > 0) {
 					p = (const char *)memmem(sstr, slen, nstr, nlen);
 
 					if (p)
 						ret = (ssize_t)(p - sstr);
+				}
+				else {
+					ret = 0;
 				}
 			}
 		}
