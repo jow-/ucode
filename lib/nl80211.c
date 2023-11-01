@@ -1285,7 +1285,7 @@ uc_nl_convert_rta_vht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, str
 {
 	uc_value_t *mcs_obj, *mcs_set, *mcs_entry, *mcs_idx;
 	size_t i, j, max_idx;
-	uint16_t  u16;
+	uint16_t u16;
 	uint8_t *mcs;
 
 	if (!nla_check_len(tb[spec->attr], 16))
@@ -1302,7 +1302,7 @@ uc_nl_convert_rta_vht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, str
 		case 0: max_idx = 7; break;
 		case 1: max_idx = 8; break;
 		case 2: max_idx = 9; break;
-		case 3: continue;
+		default: continue;
 		}
 
 		mcs_idx = ucv_array_new_length(vm, max_idx + 1);
@@ -1329,7 +1329,7 @@ uc_nl_convert_rta_vht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, str
 		case 0: max_idx = 7; break;
 		case 1: max_idx = 8; break;
 		case 2: max_idx = 9; break;
-		case 3: continue;
+		default: continue;
 		}
 
 		mcs_idx = ucv_array_new_length(vm, max_idx + 1);
