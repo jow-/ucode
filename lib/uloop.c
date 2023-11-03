@@ -28,6 +28,15 @@
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
 static uc_resource_type_t *timer_type, *handle_type, *process_type, *task_type, *pipe_type;
+
+#ifdef HAVE_ULOOP_INTERVAL
+static uc_resource_type_t *interval_type;
+#endif
+
+#ifdef HAVE_ULOOP_SIGNAL
+static uc_resource_type_t *signal_type;
+#endif
+
 static uc_value_t *object_registry;
 
 static int last_error = 0;
@@ -1042,6 +1051,233 @@ uc_uloop_task(uc_vm_t *vm, size_t nargs)
 }
 
 
+#ifdef HAVE_ULOOP_INTERVAL
+typedef struct {
+	struct uloop_interval interval;
+	size_t registry_index;
+	uc_vm_t *vm;
+} uc_uloop_interval_t;
+
+static void
+uc_uloop_interval_clear(uc_uloop_interval_t **interval)
+{
+	/* drop registry entries and clear data to prevent reuse */
+	uc_uloop_reg_remove((*interval)->registry_index);
+	free(*interval);
+	*interval = NULL;
+}
+
+static uc_value_t *
+uc_uloop_interval_set(uc_vm_t *vm, size_t nargs)
+{
+	uc_uloop_interval_t **interval = uc_fn_this("uloop.interval");
+	uc_value_t *timeout = uc_fn_arg(0);
+	int t, rv;
+
+	if (!interval || !*interval)
+		err_return(EINVAL);
+
+	errno = 0;
+	t = timeout ? (int)ucv_int64_get(timeout) : -1;
+
+	if (errno)
+		err_return(errno);
+
+	rv = uloop_interval_set(&(*interval)->interval, t);
+
+	return ucv_boolean_new(rv == 0);
+}
+
+static uc_value_t *
+uc_uloop_interval_remaining(uc_vm_t *vm, size_t nargs)
+{
+	uc_uloop_interval_t **interval = uc_fn_this("uloop.interval");
+
+	if (!interval || !*interval)
+		err_return(EINVAL);
+
+	return ucv_int64_new(uloop_interval_remaining(&(*interval)->interval));
+}
+
+static uc_value_t *
+uc_uloop_interval_expirations(uc_vm_t *vm, size_t nargs)
+{
+	uc_uloop_interval_t **interval = uc_fn_this("uloop.interval");
+
+	if (!interval || !*interval)
+		err_return(EINVAL);
+
+	return ucv_int64_new((*interval)->interval.expirations);
+}
+
+static uc_value_t *
+uc_uloop_interval_cancel(uc_vm_t *vm, size_t nargs)
+{
+	uc_uloop_interval_t **interval = uc_fn_this("uloop.interval");
+	int rv;
+
+	if (!interval || !*interval)
+		err_return(EINVAL);
+
+	rv = uloop_interval_cancel(&(*interval)->interval);
+
+	uc_uloop_interval_clear(interval);
+
+	return ucv_boolean_new(rv == 0);
+}
+
+static void
+uc_uloop_interval_cb(struct uloop_interval *uintv)
+{
+	uc_uloop_interval_t *interval = (uc_uloop_interval_t *)uintv;
+
+	uc_uloop_reg_invoke(interval->vm, interval->registry_index, NULL);
+}
+
+static uc_value_t *
+uc_uloop_interval(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *timeout = uc_fn_arg(0);
+	uc_value_t *callback = uc_fn_arg(1);
+	uc_uloop_interval_t *interval;
+	uc_value_t *res;
+	int t;
+
+	errno = 0;
+	t = timeout ? ucv_int64_get(timeout) : -1;
+
+	if (errno)
+		err_return(errno);
+
+	if (!ucv_is_callable(callback))
+		err_return(EINVAL);
+
+	interval = xalloc(sizeof(*interval));
+	interval->interval.cb = uc_uloop_interval_cb;
+	interval->vm = vm;
+
+	if (t >= 0)
+		uloop_interval_set(&interval->interval, t);
+
+	res = uc_resource_new(interval_type, interval);
+
+	interval->registry_index = uc_uloop_reg_add(res, callback);
+
+	return res;
+}
+#endif
+
+#ifdef HAVE_ULOOP_SIGNAL
+typedef struct {
+	struct uloop_signal signal;
+	size_t registry_index;
+	uc_vm_t *vm;
+} uc_uloop_signal_t;
+
+static void
+uc_uloop_signal_clear(uc_uloop_signal_t **signal)
+{
+	/* drop registry entries and clear data to prevent reuse */
+	uc_uloop_reg_remove((*signal)->registry_index);
+	free(*signal);
+	*signal = NULL;
+}
+
+static uc_value_t *
+uc_uloop_signal_signo(uc_vm_t *vm, size_t nargs)
+{
+	uc_uloop_signal_t **signal = uc_fn_this("uloop.signal");
+
+	if (!signal || !*signal)
+		err_return(EINVAL);
+
+	return ucv_int64_new((*signal)->signal.signo);
+}
+
+static uc_value_t *
+uc_uloop_signal_delete(uc_vm_t *vm, size_t nargs)
+{
+	uc_uloop_signal_t **signal = uc_fn_this("uloop.signal");
+	int rv;
+
+	if (!signal || !*signal)
+		err_return(EINVAL);
+
+	rv = uloop_signal_delete(&(*signal)->signal);
+
+	uc_uloop_signal_clear(signal);
+
+	if (rv != 0)
+		err_return(EINVAL);
+
+	return ucv_boolean_new(true);
+}
+
+static void
+uc_uloop_signal_cb(struct uloop_signal *usig)
+{
+	uc_uloop_signal_t *signal = (uc_uloop_signal_t *)usig;
+
+	uc_uloop_reg_invoke(signal->vm, signal->registry_index, NULL);
+}
+
+static int
+parse_signo(uc_value_t *sigspec)
+{
+	if (ucv_type(sigspec) == UC_STRING) {
+		const char *signame = ucv_string_get(sigspec);
+
+		if (!strncasecmp(signame, "SIG", 3))
+			signame += 3;
+
+		for (size_t i = 0; i < UC_SYSTEM_SIGNAL_COUNT; i++) {
+			if (!uc_system_signal_names[i])
+				continue;
+
+			if (strcasecmp(uc_system_signal_names[i], signame))
+				continue;
+
+			return i;
+		}
+	}
+
+	uc_value_t *signum = ucv_to_number(sigspec);
+	int64_t signo = ucv_int64_get(signum);
+	ucv_put(signum);
+
+	if (signo < 1 || signo >= UC_SYSTEM_SIGNAL_COUNT)
+		return -1;
+
+	return signo;
+}
+
+static uc_value_t *
+uc_uloop_signal(uc_vm_t *vm, size_t nargs)
+{
+	int signo = parse_signo(uc_fn_arg(0));
+	uc_value_t *callback = uc_fn_arg(1);
+	uc_uloop_signal_t *signal;
+	uc_value_t *res;
+
+	if (signo == -1 || !ucv_is_callable(callback))
+		err_return(EINVAL);
+
+	signal = xalloc(sizeof(*signal));
+	signal->signal.signo = signo;
+	signal->signal.cb = uc_uloop_signal_cb;
+	signal->vm = vm;
+
+	uloop_signal_add(&signal->signal);
+
+	res = uc_resource_new(signal_type, signal);
+
+	signal->registry_index = uc_uloop_reg_add(res, callback);
+
+	return res;
+}
+#endif
+
+
 static const uc_function_list_t timer_fns[] = {
 	{ "set",		uc_uloop_timer_set },
 	{ "remaining",	uc_uloop_timer_remaining },
@@ -1072,6 +1308,23 @@ static const uc_function_list_t pipe_fns[] = {
 	{ "receiving",	uc_uloop_pipe_receiving },
 };
 
+#ifdef HAVE_ULOOP_INTERVAL
+static const uc_function_list_t interval_fns[] = {
+	{ "set",		uc_uloop_interval_set },
+	{ "remaining",	uc_uloop_interval_remaining },
+	{ "expirations",
+					uc_uloop_interval_expirations },
+	{ "cancel",		uc_uloop_interval_cancel },
+};
+#endif
+
+#ifdef HAVE_ULOOP_SIGNAL
+static const uc_function_list_t signal_fns[] = {
+	{ "signo",		uc_uloop_signal_signo },
+	{ "delete",		uc_uloop_signal_delete },
+};
+#endif
+
 static const uc_function_list_t global_fns[] = {
 	{ "error",		uc_uloop_error },
 	{ "init",		uc_uloop_init },
@@ -1084,6 +1337,12 @@ static const uc_function_list_t global_fns[] = {
 	{ "running",	uc_uloop_running },
 	{ "done",		uc_uloop_done },
 	{ "end",		uc_uloop_end },
+#ifdef HAVE_ULOOP_INTERVAL
+	{ "interval",	uc_uloop_interval },
+#endif
+#ifdef HAVE_ULOOP_SIGNAL
+	{ "signal",		uc_uloop_signal },
+#endif
 };
 
 
@@ -1150,6 +1409,32 @@ static void close_pipe(void *ud)
 	free(pipe);
 }
 
+#ifdef HAVE_ULOOP_INTERVAL
+static void close_interval(void *ud)
+{
+	uc_uloop_interval_t *interval = ud;
+
+	if (!interval)
+		return;
+
+	uloop_interval_cancel(&interval->interval);
+	free(interval);
+}
+#endif
+
+#ifdef HAVE_ULOOP_SIGNAL
+static void close_signal(void *ud)
+{
+	uc_uloop_signal_t *signal = ud;
+
+	if (!signal)
+		return;
+
+	uloop_signal_delete(&signal->signal);
+	free(signal);
+}
+#endif
+
 
 static struct {
 	struct uloop_fd ufd;
@@ -1157,7 +1442,7 @@ static struct {
 } signal_handle;
 
 static void
-uc_uloop_signal_cb(struct uloop_fd *ufd, unsigned int events)
+uc_uloop_vm_signal_cb(struct uloop_fd *ufd, unsigned int events)
 {
 	if (uc_vm_signal_dispatch(signal_handle.vm) != EXCEPTION_NONE)
 		uloop_end();
@@ -1182,6 +1467,14 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	task_type = uc_type_declare(vm, "uloop.task", task_fns, close_task);
 	pipe_type = uc_type_declare(vm, "uloop.pipe", pipe_fns, close_pipe);
 
+#ifdef HAVE_ULOOP_INTERVAL
+	interval_type = uc_type_declare(vm, "uloop.interval", interval_fns, close_interval);
+#endif
+
+#ifdef HAVE_ULOOP_SIGNAL
+	signal_type = uc_type_declare(vm, "uloop.signal", signal_fns, close_signal);
+#endif
+
 	object_registry = ucv_array_new(vm);
 
 	uc_vm_registry_set(vm, "uloop.registry", object_registry);
@@ -1190,7 +1483,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 
 	if (signal_fd != -1 && uloop_init() == 0) {
 		signal_handle.vm = vm;
-		signal_handle.ufd.cb = uc_uloop_signal_cb;
+		signal_handle.ufd.cb = uc_uloop_vm_signal_cb;
 		signal_handle.ufd.fd = signal_fd;
 
 		uloop_fd_add(&signal_handle.ufd, ULOOP_READ);
