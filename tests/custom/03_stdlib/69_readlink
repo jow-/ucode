@@ -1,0 +1,25 @@
+The `readlink()` function will follow symbolink link to find the real name of the file 
+input to compile from the specified file path instead.
+
+-- Testcase --
+{%
+	import { readlink } from 'fs';
+	system('touch ./files/test_69.txt');
+	system('ls -1 ./files/test_69.txt');
+	system('ln -s ./files/test_69.txt ./files/test_symlink.txt');
+	system('ls -1 ./files/test_symlink.txt');
+	
+	final_name=readlink('./files/test_symlink.txt');
+	print(final_name,"\n");
+%}
+-- End --
+
+-- File test_69.txt --
+test 69 in test_69.txt
+-- End --
+
+-- Expect stdout --
+./files/test_69.txt
+./files/test_symlink.txt
+./files/test_69.txt
+-- End --
