@@ -4,7 +4,6 @@ input to compile from the specified file path instead.
 -- Testcase --
 {%
 	import { readlink } from 'fs';
-	system('touch ./files/test_69.txt');
 	system('ls -1 ./files/test_69.txt');
 	system('ln -s ./files/test_69.txt ./files/test_symlink.txt');
 	system('ls -1 ./files/test_symlink.txt');
