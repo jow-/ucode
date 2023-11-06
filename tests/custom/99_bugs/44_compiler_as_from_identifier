@@ -1,0 +1,44 @@
+Ensure that `as` and `from` are valid identifiers while their special
+meaning in import statements is retained.
+
+-- Testcase --
+import { foo as bar } from 'mod';
+import * as mod from 'mod';
+
+function fn(as, from) {
+	return as + from;
+}
+
+as = 1;
+from = true;
+
+printf("%.J\n", [
+	bar,
+	mod,
+	fn(1, 2),
+	as,
+	from
+]);
+-- End --
+
+-- File mod.uc --
+export let foo = false;
+export default 'test';
+-- End --
+
+-- Args --
+-R -L files/
+-- End --
+
+-- Expect stdout --
+[
+	false,
+	{
+		"foo": false,
+		"default": "test"
+	},
+	3,
+	1,
+	true
+]
+-- End --

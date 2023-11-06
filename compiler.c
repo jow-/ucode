@@ -285,6 +285,40 @@ uc_compiler_parse_match(uc_compiler_t *compiler, uc_tokentype_t type)
 	return true;
 }
 
+static bool
+uc_compiler_keyword_check(uc_compiler_t *compiler, const char *keyword)
+{
+	size_t keywordlen = strlen(keyword);
+
+	return (compiler->parser->curr.type == TK_LABEL &&
+	        ucv_string_length(compiler->parser->curr.uv) == keywordlen &&
+	        strcmp(ucv_string_get(compiler->parser->curr.uv), keyword) == 0);
+}
+
+static bool
+uc_compiler_keyword_match(uc_compiler_t *compiler, const char *keyword)
+{
+	if (!uc_compiler_keyword_check(compiler, keyword))
+		return false;
+
+	uc_compiler_parse_advance(compiler);
+
+	return true;
+}
+
+static void
+uc_compiler_keyword_consume(uc_compiler_t *compiler, const char *keyword)
+{
+	if (uc_compiler_keyword_check(compiler, keyword)) {
+		uc_compiler_parse_advance(compiler);
+
+		return;
+	}
+
+	uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+		"Unexpected token\nExpecting '%s'", keyword);
+}
+
 static void
 uc_compiler_parse_synchronize(uc_compiler_t *compiler)
 {
@@ -3130,7 +3164,7 @@ uc_compiler_compile_exportlist(uc_compiler_t *compiler)
 				ucv_string_get(label));
 		}
 
-		if (uc_compiler_parse_match(compiler, TK_AS)) {
+		if (uc_compiler_keyword_match(compiler, "as")) {
 			if (uc_compiler_parse_match(compiler, TK_LABEL) || uc_compiler_parse_match(compiler, TK_STRING)) {
 				name = ucv_get(compiler->parser->prev.uv);
 			}
@@ -3553,7 +3587,7 @@ uc_compiler_compile_importlist(uc_compiler_t *compiler, uc_value_t *namelist)
 		label = NULL;
 
 		if (uc_compiler_parse_match(compiler, TK_DEFAULT)) {
-			uc_compiler_parse_consume(compiler, TK_AS);
+			uc_compiler_keyword_consume(compiler, "as");
 			uc_compiler_parse_consume(compiler, TK_LABEL);
 
 			label = ucv_get(compiler->parser->prev.uv);
@@ -3561,7 +3595,7 @@ uc_compiler_compile_importlist(uc_compiler_t *compiler, uc_value_t *namelist)
 		else if (uc_compiler_parse_match(compiler, TK_STRING)) {
 			name = ucv_get(compiler->parser->prev.uv);
 
-			uc_compiler_parse_consume(compiler, TK_AS);
+			uc_compiler_keyword_consume(compiler, "as");
 			uc_compiler_parse_consume(compiler, TK_LABEL);
 
 			label = ucv_get(compiler->parser->prev.uv);
@@ -3569,7 +3603,7 @@ uc_compiler_compile_importlist(uc_compiler_t *compiler, uc_value_t *namelist)
 		else if (uc_compiler_parse_match(compiler, TK_LABEL)) {
 			name = ucv_get(compiler->parser->prev.uv);
 
-			if (uc_compiler_parse_match(compiler, TK_AS)) {
+			if (uc_compiler_keyword_match(compiler, "as")) {
 				uc_compiler_parse_consume(compiler, TK_LABEL);
 
 				label = ucv_get(compiler->parser->prev.uv);
@@ -3588,9 +3622,12 @@ uc_compiler_compile_importlist(uc_compiler_t *compiler, uc_value_t *namelist)
 		ucv_put(label);
 
 		if (uc_compiler_parse_match(compiler, TK_RBRACE))
-			break;
+			return;
 	}
 	while (uc_compiler_parse_match(compiler, TK_COMMA));
+
+	uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+		"Unexpected token\nExpecting 'as', ',' or '}'");
 }
 
 static void
@@ -3610,19 +3647,19 @@ uc_compiler_compile_import(uc_compiler_t *compiler)
 	/* import { ... } from */
 	if (uc_compiler_parse_match(compiler, TK_LBRACE)) {
 		uc_compiler_compile_importlist(compiler, namelist);
-		uc_compiler_parse_consume(compiler, TK_FROM);
+		uc_compiler_keyword_consume(compiler, "from");
 	}
 
 	/* import * as name from */
 	else if (uc_compiler_parse_match(compiler, TK_MUL)) {
-		uc_compiler_parse_consume(compiler, TK_AS);
+		uc_compiler_keyword_consume(compiler, "as");
 		uc_compiler_parse_consume(compiler, TK_LABEL);
 
 		uc_compiler_declare_local(compiler, compiler->parser->prev.uv, true);
 		uc_compiler_initialize_local(compiler);
 		ucv_array_push(namelist, ucv_boolean_new(true));
 
-		uc_compiler_parse_consume(compiler, TK_FROM);
+		uc_compiler_keyword_consume(compiler, "from");
 	}
 
 	/* import defaultExport [, ... ] from */
@@ -3639,7 +3676,7 @@ uc_compiler_compile_import(uc_compiler_t *compiler)
 
 			/* import defaultExport, * as name from */
 			else if (uc_compiler_parse_match(compiler, TK_MUL)) {
-				uc_compiler_parse_consume(compiler, TK_AS);
+				uc_compiler_keyword_consume(compiler, "as");
 				uc_compiler_parse_consume(compiler, TK_LABEL);
 
 				uc_compiler_declare_local(compiler, compiler->parser->prev.uv, true);
@@ -3654,7 +3691,7 @@ uc_compiler_compile_import(uc_compiler_t *compiler)
 			}
 		}
 
-		uc_compiler_parse_consume(compiler, TK_FROM);
+		uc_compiler_keyword_consume(compiler, "from");
 	}
 
 	uc_compiler_parse_consume(compiler, TK_STRING);
