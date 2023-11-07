@@ -68,13 +68,11 @@ static const struct keyword reserved_words[] = {
 	{ TK_THIS,		"this",  4 },
 	{ TK_NULL,		"null",  4 },
 	{ TK_CASE,		"case",  4 },
-	{ TK_FROM,		"from",  4 },
 	{ TK_TRY,		"try",   3 },
 	{ TK_FOR,		"for",   3 },
 	{ TK_LOCAL,		"let",   3 },
 	{ TK_IF,		"if",    2 },
 	{ TK_IN,		"in",    2 },
-	{ TK_AS,		"as",    2 },
 };
 
 

@@ -119,8 +119,6 @@ typedef enum {
 	TK_TEMPLATE,
 	TK_IMPORT,
 	TK_EXPORT,
-	TK_FROM,
-	TK_AS,
 
 	TK_EOF,
 	TK_ERROR
