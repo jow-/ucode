@@ -1288,7 +1288,7 @@ uc_nl_convert_rta_vht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, str
 	uint16_t u16;
 	uint8_t *mcs;
 
-	if (!nla_check_len(tb[spec->attr], 16))
+	if (!nla_check_len(tb[spec->attr], 8))
 		return NULL;
 
 	mcs = nla_data(tb[spec->attr]);
