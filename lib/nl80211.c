@@ -1356,7 +1356,7 @@ uc_nl_convert_rta_he_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 {
 	uint8_t bw_support_mask[] = { (1 << 1) | (1 << 2), (1 << 3), (1 << 4) };
 	uc_value_t *mcs_set, *mcs_bw, *mcs_dir, *mcs_entry, *mcs_idx;
-	uint16_t bw[] = { 80, 160, 8080 }, mcs[16];
+	uint16_t bw[] = { 80, 160, 8080 }, mcs[6];
 	uint16_t u16, phy_cap_0 = 0;
 	size_t i, j, k, l, max_idx;
 
@@ -1380,14 +1380,14 @@ uc_nl_convert_rta_he_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 			mcs_dir = ucv_array_new_length(vm, 8);
 
 			for (k = 0; k < 8; k++) {
-				u16 = mcs[(i * 2) + k];
+				u16 = mcs[(i * 2) + j];
 				u16 >>= k * 2;
 				u16 &= 0x3;
 
 				switch (u16) {
 				case 0: max_idx = 7; break;
-				case 1: max_idx = 8; break;
-				case 2: max_idx = 9; break;
+				case 1: max_idx = 9; break;
+				case 2: max_idx = 11; break;
 				case 3: continue;
 				}
 
