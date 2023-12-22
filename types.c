@@ -2538,14 +2538,44 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 	if (!found) {
 		k = ucv_key_to_string(vm, key);
 
-		for (o = scope; o; o = ucv_prototype_get(o)) {
-			if (ucv_type(o) != UC_OBJECT)
-				continue;
+		/* Check resource type prototype first */
+		if (ucv_type(scope) == UC_RESOURCE) {
+			uc_value_t *uv = scope;
 
-			v = ucv_object_get(o, k ? k : ucv_string_get(key), &found);
+			if (uv->ext_flag) {
+				uc_resource_ext_t *ext = (uc_resource_ext_t *)scope;
 
-			if (found)
-				break;
+				/* Check instance-specific proto first (set via ucv_resource_new_prototyped) */
+				if (ext->hasproto) {
+					uc_value_t *inst_proto = *(uc_value_t **)(ext + 1);
+					if (inst_proto) {
+						v = ucv_object_get(inst_proto, k ? k : ucv_string_get(key), &found);
+					}
+				}
+
+				/* Then fall back to type prototype */
+				if (!found && ext->type && ext->type->proto) {
+					v = ucv_object_get(ext->type->proto, k ? k : ucv_string_get(key), &found);
+				}
+			} else {
+				uc_resource_t *res = (uc_resource_t *)scope;
+				if (res->type && res->type->proto) {
+					v = ucv_object_get(res->type->proto, k ? k : ucv_string_get(key), &found);
+				}
+			}
+		}
+
+		/* Then check object prototype chain */
+		if (!found) {
+			for (o = scope; o; o = ucv_prototype_get(o)) {
+				if (ucv_type(o) != UC_OBJECT)
+					continue;
+
+				v = ucv_object_get(o, k ? k : ucv_string_get(key), &found);
+
+				if (found)
+					break;
+			}
 		}
 
 		free(k);

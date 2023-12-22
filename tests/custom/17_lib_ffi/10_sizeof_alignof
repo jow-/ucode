@@ -1,0 +1,47 @@
+The `ffi.sizeof()` and `ffi.alignof()` functions query type sizes and alignments.
+
+Size of basic types and structs.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef(`
+    typedef char c;
+    typedef short s;
+    typedef int i;
+    typedef struct { int x; } st;
+`);
+
+print("sizeof(char): ", ffi.sizeof('c'), "\n");
+print("sizeof(int): ", ffi.sizeof('i'), "\n");
+print("sizeof(struct): ", ffi.sizeof('st'), "\n");
+-- End --
+
+-- Expect stdout --
+sizeof(char): 1
+sizeof(int): 4
+sizeof(struct): 4
+-- End --
+
+
+Size from expression and alignment query.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef(`typedef char c; typedef int i;`);
+
+let arr = ffi.ctype('int[10]');
+print("sizeof(array): ", ffi.sizeof(arr), "\n");
+print("alignof(int): ", ffi.alignof('i'), "\n");
+print("alignof(struct with char+int): ", ffi.alignof('struct { char c; int i; }'), "\n");
+-- End --
+
+-- Expect stdout --
+sizeof(array): 40
+alignof(int): 4
+alignof(struct with char+int): 4
+-- End --
+

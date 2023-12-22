@@ -4,6 +4,8 @@ project(ucode C)
 
 add_library(uc_defines INTERFACE)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 include(CheckFunctionExists)
 include(CheckSymbolExists)
 include(CheckCSourceCompiles)
@@ -76,6 +78,7 @@ find_library(libubus NAMES ubus)
 find_library(libblobmsg_json NAMES blobmsg_json)
 find_package(ZLIB)
 find_library(libmd NAMES libmd.a md)
+find_library(libffi NAMES ffi)
 
 if(LINUX)
   find_library(libnl_tiny NAMES nl-tiny)
@@ -105,10 +108,15 @@ if(libmd)
   set(DEFAULT_DIGEST_SUPPORT ON)
 endif()
 
+if(libffi)
+  set(DEFAULT_FFI_SUPPORT ON)
+endif()
+
 option(DEBUG_SUPPORT "Debug plugin support" ON)
 option(FS_SUPPORT "Filesystem plugin support" ON)
 option(IO_SUPPORT "IO plugin support" ON)
 option(MATH_SUPPORT "Math plugin support" ON)
+option(FFI_SUPPORT "FFI module support" ${DEFAULT_FFI_SUPPORT})
 option(UBUS_SUPPORT "Ubus plugin support" ${DEFAULT_UBUS_SUPPORT})
 option(UCI_SUPPORT "UCI plugin support" ${DEFAULT_UCI_SUPPORT})
 option(RTNL_SUPPORT "Route Netlink plugin support" ${DEFAULT_NL_SUPPORT})
@@ -405,6 +413,29 @@ if(DIGEST_SUPPORT)
   endif()
   target_link_options(digest_lib PRIVATE ${UCODE_MODULE_LINK_OPTIONS})
   target_link_libraries(digest_lib ${libmd})
+endif()
+
+if(FFI_SUPPORT)
+  pkg_check_modules(LIBFFI REQUIRED libffi)
+  include_directories(${LIBFFI_INCLUDE_DIRS})
+  set(LIBRARIES ${LIBRARIES} ffi_lib)
+  add_library(ffi_lib MODULE lib/ffi/uc_cparse.c lib/ffi/uc_ctype.c lib/ffi/uc_cconv.c lib/ffi/uc_cdata.c lib/ffi/ffi.c)
+  set_target_properties(ffi_lib PROPERTIES OUTPUT_NAME ffi PREFIX "")
+
+  set(CMAKE_REQUIRED_INCLUDES ${LIBFFI_INCLUDE_DIRS})
+  set(CMAKE_REQUIRED_LIBRARIES ${LIBFFI_LIBRARIES})
+
+  check_c_source_compiles("
+    #include <ffi.h>
+    int main() { return FFI_BAD_ARGTYPE; }
+  " HAVE_FFI_BAD_ARGTYPE)
+
+  if(HAVE_FFI_BAD_ARGTYPE)
+    target_compile_definitions(ffi_lib PRIVATE HAVE_FFI_BAD_ARGTYPE)
+  endif()
+
+  target_link_options(ffi_lib PRIVATE ${UCODE_MODULE_LINK_OPTIONS})
+  target_link_libraries(ffi_lib ${LIBFFI_LINK_LIBRARIES})
 endif()
 
 if(UNIT_TESTING)

@@ -1,0 +1,25 @@
+The `ffi.ctype()` function creates typed C data instances. When initializing
+with a numeric value, implicit type conversion occurs (e.g., float to int).
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int myint;');
+
+let a = ffi.ctype('myint', 42);
+print(a.get(), "\n");
+
+let b = ffi.ctype('myint', 20.5);
+print(b.get(), "\n");
+
+let c = ffi.ctype('myint', 0);
+print(c.get(), "\n");
+-- End --
+
+-- Expect stdout --
+42
+20
+0
+-- End --
+
