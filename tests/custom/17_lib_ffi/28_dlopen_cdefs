@@ -1,0 +1,232 @@
+The `ffi.dlopen()` function now accepts an optional third argument containing C definitions that are automatically parsed and wrapped.
+
+Basic function wrapping with zlib.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libz = ffi.dlopen('z', false, 'const char *zlibVersion(void);');
+print('zlibVersion = ', replace(ffi.string(libz.zlibVersion()), /^([0-9]+)\..+$/, '$1.*'), '\n');
+-- End --
+
+-- Expect stdout --
+zlibVersion = 1.*
+-- End --
+
+
+Global C library with single function.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null, false, 'int getpid(void);');
+let pid = libc.getpid();
+print('getpid works\n');
+-- End --
+
+-- Expect stdout --
+getpid works
+-- End --
+
+
+Multiple functions in single cdef.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null, false, 'int getpid(void);\nint getppid(void);');
+let pid = libc.getpid();
+let ppid = libc.getppid();
+print('getpid and getppid work\n');
+-- End --
+
+-- Expect stdout --
+getpid and getppid work
+-- End --
+
+
+Backward compatibility - dlopen without cdefs.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libz = ffi.dlopen('z');
+print('dlopen without cdefs works\n');
+-- End --
+
+-- Expect stdout --
+dlopen without cdefs works
+-- End --
+
+
+Error handling - invalid cdefs syntax.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+try {
+    ffi.dlopen(null, false, 'invalid syntax here');
+    print('ERROR - should have thrown\n');
+} catch (e) {
+    print('Correctly caught error\n');
+}
+-- End --
+
+-- Expect stdout --
+Correctly caught error
+-- End --
+
+
+Functions with integer parameters.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libz = ffi.dlopen('z', false, 'int compressBound(long srcLen);');
+let result = libz.compressBound(1024);
+print('compressBound(1024) =', result, '\n');
+-- End --
+
+-- Expect stdout --
+compressBound(1024) =1037
+-- End --
+
+
+Functions with pointer parameters (using ffi.string).
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null, false, 'char *strerror(int errnum);');
+let msg = libc.strerror(0);
+print('strerror(0) works\n');
+-- End --
+
+-- Expect stdout --
+strerror(0) works
+-- End --
+
+
+Empty cdefs string (should work, no functions added).
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libz = ffi.dlopen('z', false, '');
+print('empty cdefs works\n');
+-- End --
+
+-- Expect stdout --
+empty cdefs works
+-- End --
+
+
+Null library name with cdefs (global library).
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null, false, 'int abs(int);');
+let result = libc.abs(-42);
+print('abs(-42) =', result, '\n');
+-- End --
+
+-- Expect stdout --
+abs(-42) =42
+-- End --
+
+
+Mix of type definitions and function wrapping.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef long mylong;');
+let libz = ffi.dlopen('z', false, 'const char *zlibVersion(void);');
+let ver = ffi.string(libz.zlibVersion());
+print('zlibVersion with prior cdef = ', replace(ver, /^([0-9]+)\..+$/, '$1.*'), '\n');
+-- End --
+
+-- Expect stdout --
+zlibVersion with prior cdef = 1.*
+-- End --
+
+
+Cdefs with struct (types registered).
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// Structs are registered as types
+let libc = ffi.dlopen(null, false, 'typedef struct { int x; int y; } point_t;');
+let Point = ffi.ctype('point_t');
+let p = ffi.cast('point_t*', ffi.cast('void*', 0));
+print('struct type registered\n');
+-- End --
+
+-- Expect stdout --
+struct type registered
+-- End --
+
+
+Direct property access returns callable function.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libz = ffi.dlopen('z', false, 'const char *zlibVersion(void);');
+let fn = libz.zlibVersion;
+let ver = ffi.string(fn());
+print('Direct property access returns callable function\n');
+-- End --
+
+-- Expect stdout --
+Direct property access returns callable function
+-- End --
+
+
+Repeated dlopen with cdefs adds to same global library.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc1 = ffi.dlopen(null, false, 'int getpid(void);');
+let libc2 = ffi.dlopen(null, false, 'int getppid(void);');
+let pid = libc1.getpid();
+let ppid = libc2.getppid();
+print('global lib cdefs accumulate\n');
+-- End --
+
+-- Expect stdout --
+global lib cdefs accumulate
+-- End --
+
+
+Function with const char* return and void parameter.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libz = ffi.dlopen('z', false, 'const char *zlibVersion(void);');
+let ver_ptr = libz.zlibVersion();
+let ver_str = ffi.string(ver_ptr);
+print('ver = ', replace(ver_str, /^([0-9]+)\..+$/, '$1.*'), '\n');
+-- End --
+
+-- Expect stdout --
+ver = 1.*
+-- End --

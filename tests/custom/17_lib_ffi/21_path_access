@@ -1,0 +1,90 @@
+Path-based access allows dot notation and array indexing in get/set calls.
+
+Nested struct field access with paths.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('struct point { int x; int y; }; struct rect { struct point min; struct point max; };');
+let r = ffi.ctype('struct rect', {
+    min: {x: 1, y: 2},
+    max: {x: 3, y: 4}
+});
+
+print("min.x: ", r.get('min.x'), "\n");
+print("max.y: ", r.get('max.y'), "\n");
+-- End --
+
+-- Expect stdout --
+min.x: 1
+max.y: 4
+-- End --
+
+
+Array element access with paths.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('struct arr { int data[5]; };');
+let a = ffi.ctype('struct arr', {data: [1, 2, 3, 4, 5]});
+
+print("data[0]: ", a.get('data[0]'), "\n");
+print("data[2]: ", a.get('data[2]'), "\n");
+-- End --
+
+-- Expect stdout --
+data[0]: 1
+data[2]: 3
+-- End --
+
+
+Set with path syntax.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('struct arr { int data[5]; };');
+let a = ffi.ctype('struct arr', {data: [1, 2, 3, 4, 5]});
+
+a.set('data[1]', 99);
+print("data[1] after set: ", a.get('data[1]'), "\n");
+-- End --
+
+-- Expect stdout --
+data[1] after set: 99
+-- End --
+
+
+index() with path notation returns cdata reference.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('struct point { int x; int y; }; struct rect { struct point min; struct point max; };');
+let r = ffi.ctype('struct rect', {
+    min: {x: 1, y: 2},
+    max: {x: 3, y: 4}
+});
+
+// index() with path returns cdata reference
+let ref = r.index('min.x');
+print("type: ", type(ref), "\n");
+print("value: ", ref.get(), "\n");
+
+// Modify through path reference
+r.index('max.y').set(999);
+print("max.y after set: ", r.get('max.y'), "\n");
+-- End --
+
+-- Expect stdout --
+type: resource
+value: 1
+max.y after set: 999
+-- End --
+
+

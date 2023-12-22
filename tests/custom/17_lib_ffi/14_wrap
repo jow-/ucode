@@ -1,0 +1,35 @@
+The `ffi.C.wrap()` function creates callable wrappers around C function pointers.
+
+Wrap a C function and call it.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let strcmp = ffi.C.wrap('int strcmp(const char *, const char *)');
+let result = strcmp("hello", "hello");
+
+print("strcmp result: ", result, "\n");
+-- End --
+
+-- Expect stdout --
+strcmp result: 0
+-- End --
+
+
+Wrap getpid function.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let getpid = ffi.C.wrap('int getpid(void)');
+let pid = getpid();
+
+print("pid type: ", type(pid), "\n");
+-- End --
+
+-- Expect stdout --
+pid type: int
+-- End --
+

@@ -1,0 +1,42 @@
+The `cdata.ptr()` method returns a pointer to the cdata. The `cdata.deref()` method
+dereferences a pointer to read the value.
+
+Pointer and dereference basic usage.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let i = ffi.ctype('int', 42);
+let p = i.ptr();
+
+let addr = p.get();
+print("address is valid: ", addr != null && addr > 0, "\n");
+print("value: ", p.deref('int'), "\n");
+-- End --
+
+-- Expect stdout --
+address is valid: true
+value: 42
+-- End --
+
+
+Dereference returns primitive value directly.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let i = ffi.ctype('int', 123);
+let p = i.ptr();
+let v = p.deref('int');
+
+print("type of deref: ", type(v), "\n");
+print("value: ", v, "\n");
+-- End --
+
+-- Expect stdout --
+type of deref: int
+value: 123
+-- End --
+

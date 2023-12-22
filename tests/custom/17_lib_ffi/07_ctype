@@ -1,0 +1,35 @@
+The `ffi.ctype()` function creates C data instances with various initializers.
+
+Struct initialization with named fields.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef struct { int x; float y; } point;');
+
+let p = ffi.ctype('point', {x: 10, y: 3.14});
+print("x: ", p.get('x'), " y: ", p.get('y'), "\n");
+-- End --
+
+-- Expect stdout --
+x: 10 y: 3.1400001049042
+-- End --
+
+
+Array initialization with values.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[5];');
+
+let a = ffi.ctype('intarr', 1, 2, 3, 4, 5);
+print("len: ", a.length(), "\n");
+-- End --
+
+-- Expect stdout --
+len: 5
+-- End --
+
