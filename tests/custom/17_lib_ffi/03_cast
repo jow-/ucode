@@ -1,0 +1,26 @@
+The `ffi.cast()` function converts values between types. Numeric casts
+truncate floating point values to integers.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int myint; typedef void *ptr;');
+
+let n = ffi.cast('myint', 3.14);
+print("cast int: ", n.get(), "\n");
+
+let p = ffi.cast('ptr', ffi.ctype('int', 42));
+print("cast pointer: OK\n");
+
+let i = ffi.ctype('myint', 100);
+let c = ffi.cast('myint', i);
+print("cast same: ", c.get(), "\n");
+-- End --
+
+-- Expect stdout --
+cast int: 3
+cast pointer: OK
+cast same: 100
+-- End --
+

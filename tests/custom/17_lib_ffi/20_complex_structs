@@ -1,0 +1,46 @@
+Complex nested structs with path-based access.
+
+Nested struct initialization.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('struct point { int x; int y; }; struct rect { struct point min; struct point max; };');
+let r = ffi.ctype('struct rect', {
+    min: {x: 1, y: 2},
+    max: {x: 3, y: 4}
+});
+
+print("min.x: ", r.get('min.x'), " max.y: ", r.get('max.y'), "\n");
+-- End --
+
+-- Expect stdout --
+min.x: 1 max.y: 4
+-- End --
+
+
+Struct with array of structs.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('struct point { int x; int y; }; struct polyline { struct point pts[3]; int count; };');
+let poly = ffi.ctype('struct polyline', {
+    pts: [
+        {x: 1, y: 2},
+        {x: 3, y: 4},
+        {x: 5, y: 6}
+    ],
+    count: 3
+});
+
+let pts = poly.get('pts');
+print("pts[0]: ", pts[0].x, " ", pts[0].y, " count: ", poly.get('count'), "\n");
+-- End --
+
+-- Expect stdout --
+pts[0]: 1 2 count: 3
+-- End --
+

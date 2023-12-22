@@ -1,0 +1,121 @@
+The `ffi.string()` function correctly handles array cdata objects returned from C library functions like `strcpy()` and `memcpy()`.
+
+strcpy() with char[] buffer argument.
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null);
+let strcpy = libc.wrap('char *strcpy(char *, const char *)');
+
+let buf = ffi.ctype('char[256]');
+let result = strcpy(buf, "hello world");
+
+print("result: ", ffi.string(result), "\n");
+-- End --
+
+-- Expect stdout --
+result: hello world
+-- End --
+
+
+memcpy() with char[] buffer arguments.
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null);
+let memcpy = libc.wrap('void *memcpy(void *, const void *, size_t)');
+
+let src = ffi.ctype('char[256]', "test data");
+let dst = ffi.ctype('char[256]');
+
+memcpy(dst, src, 9);
+print("copied: ", ffi.string(dst), "\n");
+-- End --
+
+-- Expect stdout --
+copied: test data
+-- End --
+
+
+strcmp() with multiple char[] buffers.
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null);
+let strcmp = libc.wrap('int strcmp(const char *, const char *)');
+
+let s1 = ffi.ctype('char[256]', "hello");
+let s2 = ffi.ctype('char[256]', "hello");
+let s3 = ffi.ctype('char[256]', "world");
+
+let r1 = strcmp(s1, s2);
+let r2 = strcmp(s1, s3);
+print("strcmp(s1, s2): ", r1 == 0 ? "equal" : "not equal", "\n");
+print("strcmp(s1, s3): ", r2 < 0 ? "less" : "greater", "\n");
+-- End --
+
+-- Expect stdout --
+strcmp(s1, s2): equal
+strcmp(s1, s3): less
+-- End --
+
+
+strncpy() with length parameter.
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null);
+let strncpy = libc.wrap('char *strncpy(char *, const char *, size_t)');
+
+let buf = ffi.ctype('char[256]');
+strncpy(buf, "short", 5);
+
+print("strncpy result: ", ffi.string(buf), "\n");
+-- End --
+
+-- Expect stdout --
+strncpy result: short
+-- End --
+
+
+strcpy() with empty string.
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null);
+let strcpy = libc.wrap('char *strcpy(char *, const char *)');
+
+let buf = ffi.ctype('char[256]');
+strcpy(buf, "");
+
+print("empty string: ", ffi.string(buf), "\n");
+-- End --
+
+-- Expect stdout --
+empty string: 
+-- End --
+
+
+sprintf() with array buffer.
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null);
+let sprintf = libc.wrap('int sprintf(char *, const char *, ...)');
+
+let buf = ffi.ctype('char[256]');
+sprintf(buf, "value=%d", 42);
+
+print("sprintf result: ", ffi.string(buf), "\n");
+-- End --
+
+-- Expect stdout --
+sprintf result: value=42
+-- End --
+

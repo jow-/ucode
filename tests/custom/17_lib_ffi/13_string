@@ -1,0 +1,37 @@
+The `ffi.string()` function converts between C strings and ucode strings. It's bidirectional:
+- `ffi.string(char_ptr)` - converts C char* to ucode string
+- `ffi.string(ucode_string)` - creates char[] buffer from ucode string
+
+Char* to ucode string conversion.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let ptr = ffi.ctype('const char *', "hello");
+let s = ffi.string(ptr);
+
+print("type: ", type(s), " value: ", s, "\n");
+-- End --
+
+-- Expect stdout --
+type: string value: hello
+-- End --
+
+
+Creating char[] buffer from ucode string.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let buf = ffi.string("world");
+print("type: ", type(buf), "\n");
+print("deref: ", buf.deref('char'), "\n");
+-- End --
+
+-- Expect stdout --
+type: resource
+deref: 119
+-- End --
+

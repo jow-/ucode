@@ -1,0 +1,59 @@
+The `ffi.ctype` cdata objects provide a `tostring()` method that serializes
+the C type along with its value for debugging purposes.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// Scalar types
+let i = ffi.ctype('int', 42);
+print(i.tostring(), "\n");
+
+let f = ffi.ctype('float', 3.14);
+print(f.tostring(), "\n");
+
+let d = ffi.ctype('double', 2.71828);
+print(d.tostring(), "\n");
+
+// Character arrays with string content
+let buf = ffi.ctype('char[6]', "hello");
+print(buf.tostring(), "\n");
+
+// Pointer types
+let pn = ffi.ctype('void *');
+print(pn.tostring(), "\n");
+
+// Struct types
+ffi.cdef('struct point { int x; int y; };');
+let p = ffi.ctype('struct point', 10, 20);
+print(p.tostring(), "\n");
+
+// Array types
+let arr = ffi.ctype('int[5]', [1, 2, 3, 4, 5]);
+print(arr.tostring(), "\n");
+
+// Complex numbers
+let c = ffi.ctype('float complex', 1.0, 2.0);
+print(c.tostring(), "\n");
+
+// Unsigned types
+let u = ffi.ctype('uint32_t', 4294967295);
+print(u.tostring(), "\n");
+
+// Signed types
+let s = ffi.ctype('int8_t', -128);
+print(s.tostring(), "\n");
+-- End --
+
+-- Expect stdout --
+int: 42
+float: 3.1400001049042
+double: 2.71828
+char [6]: "hello"
+void *: NULL
+struct point: { "x": 10, "y": 20 }
+int [5] (len=5)
+complex float: 1+2i
+unsigned int: 4294967295
+char: -128
+-- End --
