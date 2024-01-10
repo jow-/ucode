@@ -3618,13 +3618,26 @@ cb_listener_event(struct nl_msg *msg, void *arg)
 		ucv_put(uc_vm_stack_pop(vm));
 	}
 
+	errno = 0;
+
 	return NL_SKIP;
 }
 
 static void
 uc_nl_listener_cb(struct uloop_fd *fd, unsigned int events)
 {
-	nl_recvmsgs_default(nl_conn.evsock);
+	while (true) {
+		errno = 0;
+
+		nl_recvmsgs_default(nl_conn.evsock);
+
+		if (errno != 0) {
+			if (errno != EAGAIN && errno != EWOULDBLOCK)
+				set_error(errno, NULL);
+
+			break;
+		}
+	}
 }
 
 static void
