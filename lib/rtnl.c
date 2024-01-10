@@ -3671,7 +3671,7 @@ uc_nl_evsock_init(void)
 	fd->cb = uc_nl_listener_cb;
 	uloop_fd_add(fd, ULOOP_READ);
 
-	nl_socket_set_buffer_size(sock, 65535, 0);
+	nl_socket_set_buffer_size(sock, 1024 * 1024, 0);
 	nl_socket_disable_seq_check(sock);
 	nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, cb_listener_event, NULL);
 
