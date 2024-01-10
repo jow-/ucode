@@ -3707,9 +3707,9 @@ uc_nl_listener(uc_vm_t *vm, size_t nargs)
 			break;
 	}
 
-	ucv_array_set(listener_registry, i + 1, ucv_get(cb_func));
 	l = xalloc(sizeof(*l));
 	l->index = i;
+
 	if (!uc_nl_fill_cmds(l->cmds, cmds)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid command ID");
 		free(l);
@@ -3717,7 +3717,10 @@ uc_nl_listener(uc_vm_t *vm, size_t nargs)
 	}
 
 	rv = uc_resource_new(listener_type, l);
+
 	ucv_array_set(listener_registry, i, ucv_get(rv));
+	ucv_array_set(listener_registry, i + 1, ucv_get(cb_func));
+
 	listener_vm = vm;
 
 	return rv;
