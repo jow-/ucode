@@ -3618,13 +3618,26 @@ cb_listener_event(struct nl_msg *msg, void *arg)
 		ucv_put(uc_vm_stack_pop(vm));
 	}
 
+	errno = 0;
+
 	return NL_SKIP;
 }
 
 static void
 uc_nl_listener_cb(struct uloop_fd *fd, unsigned int events)
 {
-	nl_recvmsgs_default(nl_conn.evsock);
+	while (true) {
+		errno = 0;
+
+		nl_recvmsgs_default(nl_conn.evsock);
+
+		if (errno != 0) {
+			if (errno != EAGAIN && errno != EWOULDBLOCK)
+				set_error(errno, NULL);
+
+			break;
+		}
+	}
 }
 
 static void
@@ -3658,7 +3671,7 @@ uc_nl_evsock_init(void)
 	fd->cb = uc_nl_listener_cb;
 	uloop_fd_add(fd, ULOOP_READ);
 
-	nl_socket_set_buffer_size(sock, 65535, 0);
+	nl_socket_set_buffer_size(sock, 1024 * 1024, 0);
 	nl_socket_disable_seq_check(sock);
 	nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, cb_listener_event, NULL);
 
@@ -3707,9 +3720,9 @@ uc_nl_listener(uc_vm_t *vm, size_t nargs)
 			break;
 	}
 
-	ucv_array_set(listener_registry, i + 1, ucv_get(cb_func));
 	l = xalloc(sizeof(*l));
 	l->index = i;
+
 	if (!uc_nl_fill_cmds(l->cmds, cmds)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid command ID");
 		free(l);
@@ -3717,7 +3730,10 @@ uc_nl_listener(uc_vm_t *vm, size_t nargs)
 	}
 
 	rv = uc_resource_new(listener_type, l);
+
 	ucv_array_set(listener_registry, i, ucv_get(rv));
+	ucv_array_set(listener_registry, i + 1, ucv_get(cb_func));
+
 	listener_vm = vm;
 
 	return rv;
