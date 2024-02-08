@@ -2969,7 +2969,8 @@ uc_compiler_compile_control(uc_compiler_t *compiler)
 
 	/* pop locals in all scopes covered by the target patchlist */
 	for (i = locals->count; i > 0 && (size_t)locals->entries[i - 1].depth > p->depth; i--)
-		uc_compiler_emit_insn(compiler, 0, I_POP);
+		uc_compiler_emit_insn(compiler, 0,
+			locals->entries[i - 1].captured ? I_CUPV : I_POP);
 
 	uc_vector_grow(p);
 

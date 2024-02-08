@@ -1,0 +1,22 @@
+When compiling loop control statements, the compiler incorrectly emitted an
+I_POP instead of an I_CUPV instruction for open upvalues, causing closures to
+reference unclosed upvalues that went out of scope, potentially leading to
+invalid stack accesses in subsequent code.
+
+-- Testcase --
+{%
+	let dest;
+
+	for (let i in [ 1 ]) {
+		let foo = i;
+		dest = () => print(foo, '\n');
+		continue;
+	}
+
+	dest();
+%}
+-- End --
+
+-- Expect stdout --
+1
+-- End --
