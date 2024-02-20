@@ -79,6 +79,32 @@
 } while(0)
 
 
+/* linked lists */
+
+typedef struct uc_list {
+	struct uc_list *prev;
+	struct uc_list *next;
+} uc_list_t;
+
+static inline void uc_list_insert(uc_list_t *list, uc_list_t *item)
+{
+	list->next->prev = item;
+	item->next = list->next;
+	item->prev = list;
+	list->next = item;
+}
+
+static inline void uc_list_remove(uc_list_t *item)
+{
+	item->next->prev = item->prev;
+	item->prev->next = item->next;
+	item->prev = item->next = item;
+}
+
+#define uc_list_foreach(item, list) \
+	for (uc_list_t *item = (list)->next; item != (list); item = item->next)
+
+
 /* "failsafe" utility functions */
 
 static inline void *xcalloc(size_t size, size_t nmemb) {
