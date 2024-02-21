@@ -20,6 +20,7 @@
 
 #include "ucode/module.h"
 
+#define ok_return(expr) do { set_error(0, NULL); return (expr); } while(0)
 #define err_return(err, ...) do { set_error(err, __VA_ARGS__); return NULL; } while(0)
 
 static struct {
@@ -100,7 +101,7 @@ _args_get(uc_vm_t *vm, size_t nargs, ...)
 
 	va_end(ap);
 
-	return true;
+	ok_return(true);
 }
 
 #define args_get(vm, nargs, ...) do { if (!_args_get(vm, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
@@ -505,7 +506,7 @@ uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 
 	ubus_add_uloop(&c->ctx);
 
-	return uc_resource_new(conn_type, c);
+	ok_return(uc_resource_new(conn_type, c));
 }
 
 static void
@@ -544,7 +545,7 @@ _conn_get(uc_vm_t *vm, uc_ubus_connection_t **conn)
 
 	*conn = c;
 
-	return true;
+	ok_return(true);
 }
 
 #define conn_get(vm, ptr) do { if (!_conn_get(vm, ptr)) return NULL; } while(0)
@@ -573,7 +574,7 @@ uc_ubus_list(uc_vm_t *vm, size_t nargs)
 		err_return(rv, NULL);
 	}
 
-	return res;
+	ok_return(res);
 }
 
 static void
@@ -707,7 +708,7 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 		err_return(rv, "Failed to invoke function '%s' on object '%s'",
 		           ucv_string_get(funname), ucv_string_get(objname));
 
-	return res.res;
+	ok_return(res.res);
 }
 
 static uc_value_t *
@@ -780,7 +781,7 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 		err_return(rv, "Failed to invoke function '%s' on object '%s'",
 		           ucv_string_get(funname), ucv_string_get(objname));
 
-	return res;
+	ok_return(res);
 }
 
 
@@ -841,7 +842,7 @@ uc_ubus_request_reply(uc_vm_t *vm, size_t nargs)
 
 	uc_ubus_request_finish(*callctx, code, reply);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static uc_value_t *
@@ -867,7 +868,7 @@ uc_ubus_request_error(uc_vm_t *vm, size_t nargs)
 
 	uc_ubus_request_finish(*callctx, code, NULL);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 
@@ -884,7 +885,7 @@ uc_ubus_notify_completed(uc_vm_t *vm, size_t nargs)
 	if (!notifyctx || !*notifyctx)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid notify context");
 
-	return ucv_boolean_new((*notifyctx)->complete);
+	ok_return(ucv_boolean_new((*notifyctx)->complete));
 }
 
 static uc_value_t *
@@ -896,12 +897,12 @@ uc_ubus_notify_abort(uc_vm_t *vm, size_t nargs)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid notify context");
 
 	if ((*notifyctx)->complete)
-		return ucv_boolean_new(false);
+		ok_return(ucv_boolean_new(false));
 
 	ubus_abort_request((*notifyctx)->ctx, &(*notifyctx)->req.req);
 	(*notifyctx)->complete = true;
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static void
@@ -1032,12 +1033,12 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 
 		ucv_put(res);
 
-		return ucv_int64_new(rv);
+		ok_return(ucv_int64_new(rv));
 	}
 
 	ubus_complete_request_async((*uuobj)->ctx, &notifyctx->req.req);
 
-	return res;
+	ok_return(res);
 }
 
 
@@ -1071,7 +1072,7 @@ uc_ubus_object_remove(uc_vm_t *vm, size_t nargs)
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to remove object");
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 
@@ -1087,7 +1088,7 @@ uc_ubus_object_subscribed(uc_vm_t *vm, size_t nargs)
 	if (!uuobj || !*uuobj)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid object context");
 
-	return ucv_boolean_new((*uuobj)->obj.has_subscribers);
+	ok_return(ucv_boolean_new((*uuobj)->obj.has_subscribers));
 }
 
 
@@ -1398,7 +1399,7 @@ uc_ubus_object_methods_validate(uc_value_t *methods)
 		}
 	}
 
-	return true;
+	ok_return(true);
 }
 
 static bool
@@ -1571,7 +1572,7 @@ uc_ubus_publish(uc_vm_t *vm, size_t nargs)
 	uuobj->ctx = &c->ctx;
 	uuobj->registry_index = object_reg_add(vm, ucv_get(res), ucv_get(methods), ucv_get(subscribecb));
 
-	return res;
+	ok_return(res);
 }
 
 
@@ -1605,7 +1606,7 @@ uc_ubus_listener_remove(uc_vm_t *vm, size_t nargs)
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to remove listener object");
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static void
@@ -1660,7 +1661,7 @@ uc_ubus_listener(uc_vm_t *vm, size_t nargs)
 
 	uul->registry_index = listener_reg_add(vm, ucv_get(res), ucv_get(cb));
 
-	return res;
+	ok_return(res);
 }
 
 static uc_value_t *
@@ -1686,7 +1687,7 @@ uc_ubus_event(uc_vm_t *vm, size_t nargs)
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Unable to send event");
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 
@@ -1774,7 +1775,7 @@ uc_ubus_subscriber_subunsub_common(uc_vm_t *vm, size_t nargs, bool subscribe)
 		           subscribe ? "subscribe" : "unsubscribe",
 		           ucv_string_get(objname));
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static uc_value_t *
@@ -1814,7 +1815,7 @@ uc_ubus_subscriber_remove(uc_vm_t *vm, size_t nargs)
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to remove subscriber object");
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static uc_value_t *
@@ -1857,7 +1858,7 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 	uusub->registry_index = subscriber_reg_add(vm,
 		ucv_get(res), ucv_get(notify_cb), ucv_get(remove_cb));
 
-	return res;
+	ok_return(res);
 }
 
 
@@ -1915,7 +1916,7 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Unhandled resource type");
 	}
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 
@@ -1929,7 +1930,7 @@ uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
 	ubus_shutdown(&c->ctx);
 	c->ctx.sock.fd = -1;
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static uc_value_t *
@@ -1938,9 +1939,9 @@ uc_ubus_defer_completed(uc_vm_t *vm, size_t nargs)
 	uc_ubus_deferred_t **d = uc_fn_this("ubus.deferred");
 
 	if (!d || !*d)
-		return NULL;
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid deferred context");
 
-	return ucv_boolean_new((*d)->complete);
+	ok_return(ucv_boolean_new((*d)->complete));
 }
 
 static uc_value_t *
@@ -1949,10 +1950,10 @@ uc_ubus_defer_abort(uc_vm_t *vm, size_t nargs)
 	uc_ubus_deferred_t **d = uc_fn_this("ubus.deferred");
 
 	if (!d || !*d)
-		return NULL;
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid deferred context");
 
 	if ((*d)->complete)
-		return ucv_boolean_new(false);
+		ok_return(ucv_boolean_new(false));
 
 	ubus_abort_request((*d)->ctx, &(*d)->request);
 	uloop_timeout_cancel(&(*d)->timeout);
@@ -1966,7 +1967,7 @@ uc_ubus_defer_abort(uc_vm_t *vm, size_t nargs)
 
 	(*d)->complete = true;
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 
