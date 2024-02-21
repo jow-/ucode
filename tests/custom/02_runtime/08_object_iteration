@@ -1,0 +1,51 @@
+Testing object iteration behavior.
+
+
+1. Testing that deleting properties during iteration is safe.
+
+-- Expect stdout --
+a
+w
+z
+-- End --
+
+-- Testcase --
+{%
+	o1 = { a: 1, b: 2, c: 3 };
+
+	for (k in o1) {
+		delete o1.a;
+		delete o1.b;
+		delete o1.c;
+		print(k, "\n");
+	}
+
+	o2 = { w: 1, x: 2, y: 3, z: 4 };
+
+	for (k in o2) {
+		delete o2.x;
+		delete o2.y;
+		print(k, "\n");
+	}
+%}
+-- End --
+
+
+2. Test that reordering object properties during iteration is safe.
+
+-- Expect stdout --
+c
+b
+c
+-- End --
+
+-- Testcase --
+{%
+	o = { c: 1, b: 2, a: 3 };
+
+	for (k in o) {
+		sort(o);
+		print(k, "\n");
+	}
+%}
+-- End --

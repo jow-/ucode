@@ -207,6 +207,16 @@ typedef struct {
 uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
 
 
+/* Object iteration */
+
+extern uc_list_t uc_object_iterators;
+
+typedef struct {
+	uc_list_t list;
+	struct lh_entry *pos;
+} uc_object_iterator_t;
+
+
 /* Program structure definitions */
 
 uc_declare_vector(uc_sources_t, uc_source_t *);

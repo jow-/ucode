@@ -29,6 +29,11 @@
 #include "ucode/vm.h"
 #include "ucode/program.h"
 
+uc_list_t uc_object_iterators = {
+	.prev = &uc_object_iterators,
+	.next = &uc_object_iterators
+};
+
 static char *uc_default_search_path[] = { LIB_SEARCH_PATH };
 
 uc_parse_config_t uc_default_parse_config = {
@@ -888,6 +893,13 @@ ucv_array_length(uc_value_t *uv)
 static void
 ucv_free_object_entry(struct lh_entry *entry)
 {
+	uc_list_foreach(item, &uc_object_iterators) {
+		uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
+
+		if (iter->pos == entry)
+			iter->pos = entry->next;
+	}
+
 	free(lh_entry_k(entry));
 	ucv_put(lh_entry_v(entry));
 }

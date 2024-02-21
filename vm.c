@@ -2173,62 +2173,130 @@ uc_vm_insn_jmpz(uc_vm_t *vm, uc_vm_insn_t insn)
 	ucv_put(v);
 }
 
+
+static void
+uc_vm_object_iterator_free(void *ud)
+{
+	uc_object_iterator_t *iter = ud;
+
+	uc_list_remove(&iter->list);
+}
+
+static uc_resource_type_t uc_vm_object_iterator_type = {
+	.name = "object iterator",
+	.free = uc_vm_object_iterator_free
+};
+
+static bool
+uc_vm_object_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
+                           uc_value_t *k, uc_value_t *v)
+{
+	uc_resource_t *res = (uc_resource_t *)k;
+	uc_object_t *obj = (uc_object_t *)v;
+	uc_object_iterator_t *iter;
+
+	if (!res) {
+		/* object is empty */
+		if (!obj->table->head)
+			return false;
+
+		res = xalloc(sizeof(*res) + sizeof(uc_object_iterator_t));
+		res->header.type = UC_RESOURCE;
+		res->header.refcount = 1;
+		res->type = &uc_vm_object_iterator_type;
+
+		iter = res->data = (char *)res + sizeof(*res);
+		iter->pos = obj->table->head;
+
+		uc_list_insert(&uc_object_iterators, &iter->list);
+	}
+	else if (ucv_type(k) == UC_RESOURCE &&
+	         res->type == &uc_vm_object_iterator_type && res->data != NULL) {
+
+		iter = res->data;
+	}
+	else {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid object iterator");
+
+		return false;
+	}
+
+	/* no next key */
+	if (!iter->pos) {
+		uc_list_remove(&iter->list);
+
+		return false;
+	}
+
+	uc_vm_stack_push(vm, ucv_string_new(iter->pos->k));
+
+	if (insn == I_NEXTKV)
+		uc_vm_stack_push(vm, ucv_get((uc_value_t *)iter->pos->v));
+
+	uc_vm_stack_push(vm, &res->header);
+	ucv_put(v);
+
+	iter->pos = iter->pos->next;
+
+	return true;
+}
+
+static bool
+uc_vm_array_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
+                          uc_value_t *k, uc_value_t *v)
+{
+	uint64_t n;
+
+	if (!k) {
+		/* array is empty */
+		if (!ucv_array_length(v))
+			return false;
+
+		k = ucv_resource_new(NULL, NULL);
+		n = 0;
+	}
+	else if (ucv_type(k) == UC_RESOURCE) {
+		n = (uintptr_t)ucv_resource_data(k, NULL);
+	}
+	else {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid array iterator");
+
+		return false;
+	}
+
+	/* no next index */
+	if (n >= ucv_array_length(v))
+		return false;
+
+	if (insn == I_NEXTKV)
+		uc_vm_stack_push(vm, ucv_uint64_new(n));
+
+	uc_vm_stack_push(vm, ucv_get(ucv_array_get(v, n)));
+
+	uc_vm_stack_push(vm, k);
+	ucv_put(v);
+
+	((uc_resource_t *)k)->data = (void *)(uintptr_t)(n + 1);
+
+	return true;
+}
+
 static void
 uc_vm_insn_next(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *k = uc_vm_stack_pop(vm);
 	uc_value_t *v = uc_vm_stack_pop(vm);
-	void *end = (void *)~(uintptr_t)0;
-	uc_resource_t *iterk;
-	struct lh_entry *curr;
-	uint64_t n;
-
-	if (k != NULL && ucv_type(k) != UC_RESOURCE) {
-		fprintf(stderr, "Invalid iterator value\n");
-		abort();
-	}
-
-	if (k == NULL)
-		k = ucv_resource_new(NULL, NULL);
-
-	iterk = (uc_resource_t *)k;
 
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
-		curr = iterk->data ? iterk->data : ((uc_object_t *)v)->table->head;
-
-		if (curr != NULL && curr != end) {
-			iterk->data = curr->next ? curr->next : end;
-
-			uc_vm_stack_push(vm, ucv_string_new(curr->k));
-
-			if (insn == I_NEXTKV)
-				uc_vm_stack_push(vm, ucv_get((uc_value_t *)curr->v));
-
-			uc_vm_stack_push(vm, k);
-			ucv_put(v);
-
+		if (uc_vm_object_iterator_next(vm, insn, k, v))
 			return;
-		}
 
 		break;
 
 	case UC_ARRAY:
-		n = (uintptr_t)iterk->data;
-
-		if (n < ucv_array_length(v)) {
-			iterk->data = (void *)(uintptr_t)(n + 1);
-
-			if (insn == I_NEXTKV)
-				uc_vm_stack_push(vm, ucv_uint64_new(n));
-
-			uc_vm_stack_push(vm, ucv_get(ucv_array_get(v, n)));
-
-			uc_vm_stack_push(vm, k);
-			ucv_put(v);
-
+		if (uc_vm_array_iterator_next(vm, insn, k, v))
 			return;
-		}
 
 		break;
 
