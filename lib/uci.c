@@ -1574,12 +1574,12 @@ change_to_uval(uc_vm_t *vm, struct uci_delta *d)
 }
 
 static uc_value_t *
-changes_to_uval(uc_vm_t *vm, struct uci_context *ctx, const char *package)
+changes_to_uval(uc_vm_t *vm, struct uci_context *ctx, const char *package,
+                bool unload)
 {
 	uc_value_t *a = NULL, *c;
 	struct uci_package *p = NULL;
 	struct uci_element *e;
-	bool unload = false;
 
 	uci_foreach_element(&ctx->root, e) {
 		if (strcmp(e->name, package))
@@ -1588,10 +1588,10 @@ changes_to_uval(uc_vm_t *vm, struct uci_context *ctx, const char *package)
 		p = uci_to_package(e);
 	}
 
-	if (!p) {
-		unload = true;
+	if (!p)
 		uci_load(ctx, package, &p);
-	}
+	else
+		unload = false;
 
 	if (!p)
 		return NULL;
@@ -1631,7 +1631,8 @@ changes_to_uval(uc_vm_t *vm, struct uci_context *ctx, const char *package)
  * delta directory and yet unsaved cursor changes.
  *
  * When the optional "config" parameter is specified, the requested
- * configuration is implicitly loaded if it not already loaded into the cursor.
+ * configuration is implicitly loaded if it is not already loaded into the
+ * cursor.
  *
  * Returns a dictionary of change record arrays, keyed by configuration name.
  *
@@ -1678,7 +1679,7 @@ uc_uci_changes(uc_vm_t *vm, size_t nargs)
 		if (conf && strcmp(configs[i], ucv_string_get(conf)))
 			continue;
 
-		chg = changes_to_uval(vm, *c, configs[i]);
+		chg = changes_to_uval(vm, *c, configs[i], !conf);
 
 		if (chg)
 			ucv_object_add(res, configs[i], chg);
