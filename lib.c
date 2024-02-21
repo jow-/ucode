@@ -596,7 +596,7 @@ uc_push(uc_vm_t *vm, size_t nargs)
 }
 
 /**
- * Pops the first item from the given array and returns it.
+ * Pops the last item from the given array and returns it.
  *
  * Returns `null` if the array was empty or if a non-array argument was passed.
  *
