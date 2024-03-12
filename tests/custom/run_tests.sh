@@ -6,12 +6,14 @@ else
 	readlink=readlink
 fi
 
+export LC_ALL=C
+
 testdir=$(dirname "$0")
 topdir=$($readlink -f "$testdir/../..")
 
 line='........................................'
-ucode_bin=${UCODE_BIN:-"$topdir/ucode"}
-ucode_lib=${UCODE_LIB:-"$topdir"}
+export ucode_bin=${UCODE_BIN:-"$topdir/ucode"}
+export ucode_lib=${UCODE_LIB:-"$topdir"}
 
 extract_sections() {
 	local file=$1
@@ -142,14 +144,14 @@ run_test() {
 
 	printf "%s %s " "$name" "${line:${#name}}"
 
-	mkdir "/tmp/test.$$"
-
-	extract_sections "$file" "/tmp/test.$$"
+	dir_4_test=$($readlink -f $(mktemp  -d /tmp/rt.XXXX ))
+	
+	extract_sections "$file" "${dir_4_test}"
 	tests=$?
 
-	[ -f "/tmp/test.$$/001.in" ] && testcase_first=1
+	[ -f "${dir_4_test}/001.in" ] && testcase_first=1
 
-	for res in "/tmp/test.$$/"[0-9]*; do
+	for res in "${dir_4_test}/"[0-9]*; do
 		case "$res" in
 			*.in)
 				count=$((count + 1))
@@ -157,7 +159,7 @@ run_test() {
 				if [ $testcase_first = 1 ]; then
 					# Flush previous test
 					if [ -n "$ein" ]; then
-						run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" "$eargs" "$evars" || failed=$((failed + 1))
+						run_testcase $count "${dir_4_test}" "$ein" "$eout" "$eerr" "$ecode" "$eargs" "$evars" || failed=$((failed + 1))
 						eout=""
 						eerr=""
 						ecode=""
@@ -167,7 +169,7 @@ run_test() {
 
 					ein=$res
 				else
-					run_testcase $count "/tmp/test.$$" "$res" "$eout" "$eerr" "$ecode" "$eargs" "$evars" || failed=$((failed + 1))
+					run_testcase $count "${dir_4_test}" "$res" "$eout" "$eerr" "$ecode" "$eargs" "$evars" || failed=$((failed + 1))
 
 					eout=""
 					eerr=""
@@ -187,15 +189,14 @@ run_test() {
 
 	# Flush last test
 	if [ $testcase_first = 1 ] && [ -n "$eout$eerr$ecode" ]; then
-		run_testcase $count "/tmp/test.$$" "$ein" "$eout" "$eerr" "$ecode" "$eargs" "$evars" || failed=$((failed + 1))
+		run_testcase $count "${dir_4_test}" "$ein" "$eout" "$eerr" "$ecode" "$eargs" "$evars" || failed=$((failed + 1))
 	fi
-
-	rm -r "/tmp/test.$$"
 
 	if [ $failed = 0 ]; then
 		printf "OK\n"
+		rm -r "${dir_4_test}"
 	else
-		printf "%s %s FAILED (%d/%d)\n" "$name" "${line:${#name}}" $failed $tests
+		printf "%s %s FAILED (%d/%d)\ntemp dir was %s\n" "$name" "${line:${#name}}" $failed $tests $dir_4_test
 	fi
 
 	return $failed

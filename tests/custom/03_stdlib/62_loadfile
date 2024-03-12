@@ -152,9 +152,9 @@ Test loading precompiled bytecode
 
 -- Testcase --
 {%
-	import { readlink } from 'fs';
 
-	system(`${readlink('/proc/self/exe')} -T, -c -o ./files/test7.uc -e 'Hello world\n'`);
+	cur_exe=getenv('ucode_bin');
+	system(`${cur_exe} -T, -c -o ./files/test7.uc -e 'Hello world\n'`);
 
 	let fn = loadfile('./files/test7.uc');
 	fn();
