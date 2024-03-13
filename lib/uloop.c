@@ -25,6 +25,7 @@
 #include "ucode/module.h"
 #include "ucode/platform.h"
 
+#define ok_return(expr) do { last_error = 0; return (expr); } while(0)
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
 static uc_resource_type_t *timer_type, *handle_type, *process_type, *task_type, *pipe_type;
@@ -113,7 +114,7 @@ uc_uloop_init(uc_vm_t *vm, size_t nargs)
 	if (rv == -1)
 		err_return(errno);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static uc_value_t *
@@ -130,13 +131,13 @@ uc_uloop_run(uc_vm_t *vm, size_t nargs)
 
 	rv = uloop_run_timeout(t);
 
-	return ucv_int64_new(rv);
+	ok_return(ucv_int64_new(rv));
 }
 
 static uc_value_t *
 uc_uloop_cancelling(uc_vm_t *vm, size_t nargs)
 {
-	return ucv_boolean_new(uloop_cancelling());
+	ok_return(ucv_boolean_new(uloop_cancelling()));
 }
 
 static uc_value_t *
@@ -149,7 +150,7 @@ uc_uloop_running(uc_vm_t *vm, size_t nargs)
 	active = uloop_cancelling();
 	uloop_cancelled = prev;
 
-	return ucv_boolean_new(active);
+	ok_return(ucv_boolean_new(active));
 }
 
 static uc_value_t *
@@ -157,7 +158,7 @@ uc_uloop_end(uc_vm_t *vm, size_t nargs)
 {
 	uloop_end();
 
-	return NULL;
+	ok_return(NULL);
 }
 
 static uc_value_t *
@@ -165,7 +166,7 @@ uc_uloop_done(uc_vm_t *vm, size_t nargs)
 {
 	uloop_done();
 
-	return NULL;
+	ok_return(NULL);
 }
 
 
@@ -202,7 +203,7 @@ uc_uloop_timer_set(uc_vm_t *vm, size_t nargs)
 
 	rv = uloop_timeout_set(&(*timer)->timeout, t);
 
-	return ucv_boolean_new(rv == 0);
+	ok_return(ucv_boolean_new(rv == 0));
 }
 
 static uc_value_t *
@@ -220,7 +221,7 @@ uc_uloop_timer_remaining(uc_vm_t *vm, size_t nargs)
 	rem = (int64_t)uloop_timeout_remaining(&(*timer)->timeout);
 #endif
 
-	return ucv_int64_new(rem);
+	ok_return(ucv_int64_new(rem));
 }
 
 static uc_value_t *
@@ -236,7 +237,7 @@ uc_uloop_timer_cancel(uc_vm_t *vm, size_t nargs)
 
 	uc_uloop_timeout_clear(timer);
 
-	return ucv_boolean_new(rv == 0);
+	ok_return(ucv_boolean_new(rv == 0));
 }
 
 static void
@@ -276,7 +277,7 @@ uc_uloop_timer(uc_vm_t *vm, size_t nargs)
 
 	timer->registry_index = uc_uloop_reg_add(res, callback);
 
-	return res;
+	ok_return(res);
 }
 
 
@@ -305,7 +306,7 @@ uc_uloop_handle_fileno(uc_vm_t *vm, size_t nargs)
 	if (!handle || !*handle)
 		err_return(EINVAL);
 
-	return ucv_int64_new((*handle)->fd.fd);
+	ok_return(ucv_int64_new((*handle)->fd.fd));
 }
 
 static uc_value_t *
@@ -316,7 +317,7 @@ uc_uloop_handle_handle(uc_vm_t *vm, size_t nargs)
 	if (!handle || !*handle)
 		err_return(EINVAL);
 
-	return ucv_get((*handle)->handle);
+	ok_return(ucv_get((*handle)->handle));
 }
 
 static uc_value_t *
@@ -335,7 +336,7 @@ uc_uloop_handle_delete(uc_vm_t *vm, size_t nargs)
 	if (rv != 0)
 		err_return(errno);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static void
@@ -435,7 +436,7 @@ uc_uloop_handle(uc_vm_t *vm, size_t nargs)
 
 	handle->registry_index = uc_uloop_reg_add(res, callback);
 
-	return res;
+	ok_return(res);
 }
 
 
@@ -461,7 +462,7 @@ uc_uloop_process_pid(uc_vm_t *vm, size_t nargs)
 	if (!process || !*process)
 		err_return(EINVAL);
 
-	return ucv_int64_new((*process)->process.pid);
+	ok_return(ucv_int64_new((*process)->process.pid));
 }
 
 static uc_value_t *
@@ -480,7 +481,7 @@ uc_uloop_process_delete(uc_vm_t *vm, size_t nargs)
 	if (rv != 0)
 		err_return(EINVAL);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static void
@@ -562,7 +563,7 @@ uc_uloop_process(uc_vm_t *vm, size_t nargs)
 
 	process->registry_index = uc_uloop_reg_add(res, callback);
 
-	return res;
+	ok_return(res);
 }
 
 
@@ -645,7 +646,7 @@ uc_uloop_pipe_send_common(uc_vm_t *vm, uc_value_t *msg, int fd)
 	if (!rv)
 		err_return(errno);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static uc_value_t *
@@ -660,7 +661,7 @@ uc_uloop_pipe_send(uc_vm_t *vm, size_t nargs)
 	if (!(*pipe)->has_receiver)
 		err_return(EPIPE);
 
-	return uc_uloop_pipe_send_common(vm, msg, (*pipe)->output);
+	ok_return(uc_uloop_pipe_send_common(vm, msg, (*pipe)->output));
 }
 
 static bool
@@ -773,7 +774,7 @@ uc_uloop_pipe_sending(uc_vm_t *vm, size_t nargs)
 	if (!pipe || !*pipe)
 		err_return(EINVAL);
 
-	return ucv_boolean_new((*pipe)->has_sender);
+	ok_return(ucv_boolean_new((*pipe)->has_sender));
 }
 
 static uc_value_t *
@@ -784,7 +785,7 @@ uc_uloop_pipe_receiving(uc_vm_t *vm, size_t nargs)
 	if (!pipe || !*pipe)
 		err_return(EINVAL);
 
-	return ucv_boolean_new((*pipe)->has_receiver);
+	ok_return(ucv_boolean_new((*pipe)->has_receiver));
 }
 
 
@@ -840,7 +841,7 @@ uc_uloop_task_pid(uc_vm_t *vm, size_t nargs)
 	if ((*task)->finished)
 		err_return(ESRCH);
 
-	return ucv_int64_new((*task)->process.pid);
+	ok_return(ucv_int64_new((*task)->process.pid));
 }
 
 static uc_value_t *
@@ -860,7 +861,7 @@ uc_uloop_task_kill(uc_vm_t *vm, size_t nargs)
 	if (rv == -1)
 		err_return(errno);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static uc_value_t *
@@ -871,7 +872,7 @@ uc_uloop_task_finished(uc_vm_t *vm, size_t nargs)
 	if (!task || !*task)
 		err_return(EINVAL);
 
-	return ucv_boolean_new((*task)->finished);
+	ok_return(ucv_boolean_new((*task)->finished));
 }
 
 static void
@@ -1047,7 +1048,7 @@ uc_uloop_task(uc_vm_t *vm, size_t nargs)
 
 	task->registry_index = uc_uloop_reg_add(res, cbs);
 
-	return res;
+	ok_return(res);
 }
 
 
@@ -1085,7 +1086,7 @@ uc_uloop_interval_set(uc_vm_t *vm, size_t nargs)
 
 	rv = uloop_interval_set(&(*interval)->interval, t);
 
-	return ucv_boolean_new(rv == 0);
+	ok_return(ucv_boolean_new(rv == 0));
 }
 
 static uc_value_t *
@@ -1096,7 +1097,7 @@ uc_uloop_interval_remaining(uc_vm_t *vm, size_t nargs)
 	if (!interval || !*interval)
 		err_return(EINVAL);
 
-	return ucv_int64_new(uloop_interval_remaining(&(*interval)->interval));
+	ok_return(ucv_int64_new(uloop_interval_remaining(&(*interval)->interval)));
 }
 
 static uc_value_t *
@@ -1107,7 +1108,7 @@ uc_uloop_interval_expirations(uc_vm_t *vm, size_t nargs)
 	if (!interval || !*interval)
 		err_return(EINVAL);
 
-	return ucv_int64_new((*interval)->interval.expirations);
+	ok_return(ucv_int64_new((*interval)->interval.expirations));
 }
 
 static uc_value_t *
@@ -1123,7 +1124,7 @@ uc_uloop_interval_cancel(uc_vm_t *vm, size_t nargs)
 
 	uc_uloop_interval_clear(interval);
 
-	return ucv_boolean_new(rv == 0);
+	ok_return(ucv_boolean_new(rv == 0));
 }
 
 static void
@@ -1163,7 +1164,7 @@ uc_uloop_interval(uc_vm_t *vm, size_t nargs)
 
 	interval->registry_index = uc_uloop_reg_add(res, callback);
 
-	return res;
+	ok_return(res);
 }
 #endif
 
@@ -1191,7 +1192,7 @@ uc_uloop_signal_signo(uc_vm_t *vm, size_t nargs)
 	if (!signal || !*signal)
 		err_return(EINVAL);
 
-	return ucv_int64_new((*signal)->signal.signo);
+	ok_return(ucv_int64_new((*signal)->signal.signo));
 }
 
 static uc_value_t *
@@ -1210,7 +1211,7 @@ uc_uloop_signal_delete(uc_vm_t *vm, size_t nargs)
 	if (rv != 0)
 		err_return(EINVAL);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static void
@@ -1273,7 +1274,7 @@ uc_uloop_signal(uc_vm_t *vm, size_t nargs)
 
 	signal->registry_index = uc_uloop_reg_add(res, callback);
 
-	return res;
+	ok_return(res);
 }
 #endif
 

@@ -53,6 +53,7 @@
 
 #include "ucode/module.h"
 
+#define ok_return(expr) do { last_error = 0; return (expr); } while(0)
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
 static int last_error = 0;
@@ -178,7 +179,7 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 			err_return(rv);
 	}
 
-	return uc_resource_new(cursor_type, c);
+	ok_return(uc_resource_new(cursor_type, c));
 }
 
 
@@ -366,7 +367,7 @@ uc_uci_load(uc_vm_t *vm, size_t nargs)
 	if (uci_load(*c, s, NULL))
 		err_return((*c)->err);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 /**
@@ -406,11 +407,11 @@ uc_uci_unload(uc_vm_t *vm, size_t nargs)
 		if (!strcmp(e->name, ucv_string_get(conf))) {
 			uci_unload(*c, uci_to_package(e));
 
-			return ucv_boolean_new(true);
+			ok_return(ucv_boolean_new(true));
 		}
 	}
 
-	return ucv_boolean_new(false);
+	ok_return(ucv_boolean_new(false));
 }
 
 static int
@@ -548,26 +549,26 @@ uc_uci_get_any(uc_vm_t *vm, size_t nargs, bool all)
 			if (!ptr.s)
 				err_return(UCI_ERR_NOTFOUND);
 
-			return section_to_uval(vm, ptr.s, -1);
+			ok_return(section_to_uval(vm, ptr.s, -1));
 		}
 
 		if (!ptr.p)
 			err_return(UCI_ERR_NOTFOUND);
 
-		return package_to_uval(vm, ptr.p);
+		ok_return(package_to_uval(vm, ptr.p));
 	}
 
 	if (ptr.option) {
 		if (!ptr.o)
 			err_return(UCI_ERR_NOTFOUND);
 
-		return option_to_uval(vm, ptr.o);
+		ok_return(option_to_uval(vm, ptr.o));
 	}
 
 	if (!ptr.s)
 		err_return(UCI_ERR_NOTFOUND);
 
-	return ucv_string_new(ptr.s->type);
+	ok_return(ucv_string_new(ptr.s->type));
 }
 
 /**
@@ -739,7 +740,7 @@ uc_uci_get_first(uc_vm_t *vm, size_t nargs)
 			continue;
 
 		if (!opt)
-			return ucv_string_new(sc->e.name);
+			ok_return(ucv_string_new(sc->e.name));
 
 		ptr.package = ucv_string_get(conf);
 		ptr.section = sc->e.name;
@@ -755,7 +756,7 @@ uc_uci_get_first(uc_vm_t *vm, size_t nargs)
 		if (!(ptr.flags & UCI_LOOKUP_COMPLETE))
 			err_return(UCI_ERR_NOTFOUND);
 
-		return option_to_uval(vm, ptr.o);
+		ok_return(option_to_uval(vm, ptr.o));
 	}
 
 	err_return(UCI_ERR_NOTFOUND);
@@ -1040,7 +1041,7 @@ uc_uci_set(uc_vm_t *vm, size_t nargs)
 			err_return(rv);
 	}
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 /**
@@ -1119,7 +1120,7 @@ uc_uci_delete(uc_vm_t *vm, size_t nargs)
 	if (rv != UCI_OK)
 		err_return(rv);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 /**
@@ -1228,7 +1229,7 @@ uc_uci_rename(uc_vm_t *vm, size_t nargs)
 	if (rv != UCI_OK)
 		err_return(rv);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 /**
@@ -1336,7 +1337,7 @@ uc_uci_reorder(uc_vm_t *vm, size_t nargs)
 	if (rv != UCI_OK)
 		err_return(rv);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 static int
@@ -1406,7 +1407,7 @@ uc_uci_pkg_command(uc_vm_t *vm, size_t nargs, enum pkg_cmd cmd)
 	if (res != UCI_OK)
 		err_return(res);
 
-	return ucv_boolean_new(true);
+	ok_return(ucv_boolean_new(true));
 }
 
 /**
@@ -1687,7 +1688,7 @@ uc_uci_changes(uc_vm_t *vm, size_t nargs)
 
 	free(configs);
 
-	return res;
+	ok_return(res);
 }
 
 /**
@@ -1789,7 +1790,7 @@ uc_uci_foreach(uc_vm_t *vm, size_t nargs)
 			break;
 	}
 
-	return ucv_boolean_new(ret);
+	ok_return(ucv_boolean_new(ret));
 }
 
 /**
@@ -1832,7 +1833,7 @@ uc_uci_configs(uc_vm_t *vm, size_t nargs)
 
 	free(configs);
 
-	return a;
+	ok_return(a);
 }
 
 
