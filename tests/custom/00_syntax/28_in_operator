@@ -1,0 +1,129 @@
+The "in" operator allows testing whether a given value is an item of
+a specified array or whether a given key is present in a specified
+dictionary.
+
+
+1. The `in` operator returns true if the given element is an item of
+the specified array. Strict equality tests are performed.
+
+-- Expect stdout --
+[
+	true,
+	false,
+	true,
+	false,
+	true,
+	false,
+	true,
+	false
+]
+-- End --
+
+-- Testcase --
+{%
+	let o = {};
+	let a = [ o, {}, "", null, false ];
+
+	printf("%.J\n", [
+		o in a,
+		{} in a,
+		"" in a,
+		"test" in a,
+		null in a,
+		[] in a,
+		false in a,
+		true in a
+	]);
+%}
+-- End --
+
+2. Strict equality when testing array membership should rule out implict
+type coercion.
+
+-- Expect stdout --
+[
+	true,
+	false,
+	false,
+	false,
+	true,
+	false,
+	false
+]
+-- End --
+
+-- Testcase --
+{%
+	let a = [ "", true ];
+
+	printf("%.J\n", [
+		"" in a,
+		0 in a,
+		false in a,
+		null in a,
+		true in a,
+		1 in a,
+		1.0 in a
+	]);
+%}
+-- End --
+
+3. While there is the rule that `(NaN === NaN) == false`, testing for NaN
+in a given array containing NaN should yield `true`.
+
+-- Expect stdout --
+[
+	true
+]
+-- End --
+
+-- Testcase --
+{%
+	let a = [ NaN ];
+
+	printf("%.J\n", [
+		NaN in a
+	]);
+%}
+-- End --
+
+4. When the `in` operator is applied to an object, it tests whether the given
+string value is a key of the specified object. 
+
+-- Expect stdout --
+[
+	true,
+	true,
+	true,
+	false,
+	false,
+	false,
+	false,
+	false
+]
+-- End --
+
+-- Testcase --
+{%
+	let o = { 
+		"1": true,
+		"test": false,
+		"empty": null,
+		"false": 0,
+		"true": 1,
+		"[ ]": "array",
+		"{ }": "object"
+	};
+
+	printf("%.J\n", [
+		"1" in o,
+		"test" in o,
+		"empty" in o,
+		1 in o,        // not implicitly converted to "1"
+		false in o,    // not implicitly converted to "false"
+		true in o,     // not implicitly converted to "true"
+		[] in o,       // not implicitly converted to "[ ]"
+		{} in o        // not implicitly converted to "{ }"
+	]);
+%}
+-- End --
