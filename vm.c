@@ -2074,7 +2074,7 @@ uc_vm_insn_in(uc_vm_t *vm, uc_vm_insn_t insn)
 		     arridx < arrlen; arridx++) {
 			item = ucv_array_get(r2, arridx);
 
-			if (ucv_compare(I_EQ, r1, item, NULL)) {
+			if ((ucv_is_scalar(r1) && ucv_is_scalar(item) && ucv_is_equal(r1, item)) || (r1 == item)) {
 				found = true;
 				break;
 			}
