@@ -993,6 +993,37 @@ uc_vm_raise_exception(uc_vm_t *vm, uc_exception_type_t type, const char *fmt, ..
 	vm->exception.stacktrace = uc_vm_get_error_context(vm);
 }
 
+static bool
+uc_vm_test_strict_equality(uc_value_t *v1, uc_value_t *v2, bool nan_equal)
+{
+	uc_type_t t1 = ucv_type(v1);
+	uc_type_t t2 = ucv_type(v2);
+	double d1, d2;
+
+	if (t1 != t2)
+		return false;
+
+	switch (t1) {
+	case UC_DOUBLE:
+		d1 = ((uc_double_t *)v1)->dbl;
+		d2 = ((uc_double_t *)v2)->dbl;
+
+		if (isnan(d1) && isnan(d2))
+			return nan_equal;
+
+		return (d1 == d2);
+
+	case UC_NULL:
+	case UC_BOOLEAN:
+	case UC_INTEGER:
+	case UC_STRING:
+		return ucv_is_equal(v1, v2);
+
+	default:
+		return (v1 == v2);
+	}
+}
+
 
 static void
 uc_vm_insn_load(uc_vm_t *vm, uc_vm_insn_t insn)
@@ -2066,7 +2097,6 @@ uc_vm_insn_in(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *item;
 	size_t arrlen, arridx;
 	bool found = false;
-	char *key;
 
 	switch (ucv_type(r2)) {
 	case UC_ARRAY:
@@ -2074,7 +2104,7 @@ uc_vm_insn_in(uc_vm_t *vm, uc_vm_insn_t insn)
 		     arridx < arrlen; arridx++) {
 			item = ucv_array_get(r2, arridx);
 
-			if (ucv_compare(I_EQ, r1, item, NULL)) {
+			if (uc_vm_test_strict_equality(r1, item, true)) {
 				found = true;
 				break;
 			}
@@ -2083,14 +2113,8 @@ uc_vm_insn_in(uc_vm_t *vm, uc_vm_insn_t insn)
 		break;
 
 	case UC_OBJECT:
-		if (ucv_type(r1) == UC_STRING) {
+		if (ucv_type(r1) == UC_STRING)
 			ucv_object_get(r2, ucv_string_get(r1), &found);
-		}
-		else {
-			key = ucv_to_string(vm, r1);
-			ucv_object_get(r2, key, &found);
-			free(key);
-		}
 
 		break;
 
@@ -2109,12 +2133,7 @@ uc_vm_insn_equality(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *r2 = uc_vm_stack_pop(vm);
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
-	bool equal;
-
-	if (ucv_is_scalar(r1) && ucv_is_scalar(r2))
-		equal = ucv_is_equal(r1, r2);
-	else
-		equal = (r1 == r2);
+	bool equal = uc_vm_test_strict_equality(r1, r2, false);
 
 	ucv_put(r1);
 	ucv_put(r2);
