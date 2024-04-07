@@ -148,6 +148,7 @@ typedef struct {
 	struct uloop_timeout timeout;
 	struct ubus_context *ctx;
 	size_t registry_index;
+	bool deferred;
 	bool replied;
 	uc_vm_t *vm;
 } uc_ubus_request_t;
@@ -846,6 +847,18 @@ uc_ubus_request_reply(uc_vm_t *vm, size_t nargs)
 }
 
 static uc_value_t *
+uc_ubus_request_defer(uc_vm_t *vm, size_t nargs)
+{
+	uc_ubus_request_t *callctx = uc_fn_thisval("ubus.request");
+
+	if (!callctx)
+		return NULL;
+
+	callctx->deferred = true;
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
 uc_ubus_request_error(uc_vm_t *vm, size_t nargs)
 {
 	uc_ubus_request_t **callctx = uc_fn_this("ubus.request");
@@ -1256,7 +1269,7 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 		/* If neither a deferred ubus request, nor a plain object were
 		 * returned and if reqobj.reply() hasn't been called, immediately
 		 * finish deferred request with UBUS_STATUS_NO_DATA. */
-		else if (!callctx->replied) {
+		else if (!callctx->replied && !callctx->deferred) {
 			rv = UBUS_STATUS_NO_DATA;
 
 			if (ucv_type(res) == UC_INTEGER) {
@@ -2003,6 +2016,7 @@ static const uc_function_list_t object_fns[] = {
 static const uc_function_list_t request_fns[] = {
 	{ "reply",			uc_ubus_request_reply },
 	{ "error",			uc_ubus_request_error },
+	{ "defer",			uc_ubus_request_defer },
 };
 
 static const uc_function_list_t notify_fns[] = {
@@ -2058,6 +2072,7 @@ static void free_object(void *ud) {
 static void free_request(void *ud) {
 	uc_ubus_request_t *callctx = ud;
 
+	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT, NULL);
 	uloop_timeout_cancel(&callctx->timeout);
 	free(callctx);
 }
