@@ -1258,9 +1258,6 @@ uc_uci_rename(uc_vm_t *vm, size_t nargs)
  * @param {number} index
  * The target index to move the section to, starting from `0`.
  *
- * @param {string} [name]
- * The new name of the option to rename.
- *
  * @returns {?boolean}
  *
  * @example
