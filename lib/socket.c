@@ -2431,8 +2431,10 @@ uc_socket_inst_connect(uc_vm_t *vm, size_t nargs)
  *
  * @function module:socket.socket#send
  *
- * @param {string} data
- * The data to be sent through the socket.
+ * @param {*} data
+ * The data to be sent through the socket. String data is sent as-is, any other
+ * type is implicitly converted to a string first before being sent on the
+ * socket.
  *
  * @param {number} [flags]
  * Optional flags that modify the behavior of the send operation.
@@ -2469,11 +2471,12 @@ uc_socket_inst_send(uc_vm_t *vm, size_t nargs)
 	struct sockaddr_storage ss = { 0 };
 	struct sockaddr *sa = NULL;
 	socklen_t salen = 0;
+	char *buf = NULL;
 	ssize_t ret;
 	int sockfd;
 
 	args_get(vm, nargs, &sockfd,
-		"data", UC_STRING, false, &data,
+		"data", UC_NULL, false, &data,
 		"flags", UC_INTEGER, true, &flags,
 		"address", UC_NULL, true, &addr);
 
@@ -2484,9 +2487,15 @@ uc_socket_inst_send(uc_vm_t *vm, size_t nargs)
 		sa = (struct sockaddr *)&ss;
 	}
 
+	if (ucv_type(data) != UC_STRING)
+		buf = ucv_to_string(vm, data);
+
 	ret = sendto(sockfd,
-		ucv_string_get(data), ucv_string_length(data),
+		buf ? buf : ucv_string_get(data),
+		buf ? strlen(buf) : ucv_string_length(data),
 		(flags ? ucv_int64_get(flags) : 0) | MSG_NOSIGNAL, sa, salen);
+
+	free(buf);
 
 	if (ret == -1)
 		err_return(errno, "send()");
