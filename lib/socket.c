@@ -1292,7 +1292,7 @@ uc_socket_inst_setopt(uc_vm_t *vm, size_t nargs)
 	free(st);
 
 	if (ret == -1)
-		err_return(errno, "setsockopt() failed");
+		err_return(errno, "setsockopt()");
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -1419,7 +1419,7 @@ uc_socket_inst_getopt(uc_vm_t *vm, size_t nargs)
 	free(st);
 
 	if (ret == -1)
-		err_return(errno, "getsockopt() failed");
+		err_return(errno, "getsockopt()");
 
 	ok_return(value);
 }
@@ -1448,20 +1448,34 @@ uc_socket_inst_fileno(uc_vm_t *vm, size_t nargs)
 /**
  * Query error information.
  *
- * Returns a string containing a description of the last occurred error or
- * `null` if there is no error information.
+ * Returns a string containing a description of the last occurred error when
+ * the *numeric* argument is absent or false.
+ *
+ * Returns a positive (`errno`) or negative (`EAI_*` constant) error code number
+ * when the *numeric* argument is `true`.
+ *
+ * Returns `null` if there is no error information.
  *
  * @function module:socket#error
  *
+ * @param {boolean} [numeric]
+ * Whether to return a numeric error code (`true`) or a human readable error
+ * message (false).
  *
- * @returns {?string}
+ * @returns {?string|?number}
  *
  * @example
- * // Trigger file system error
- * unlink('/path/does/not/exist');
+ * // Trigger socket error by attempting to bind IPv6 address with IPv4 socket
+ * socket.create(socket.AF_INET, socket.SOCK_STREAM, 0).bind("::", 8080);
  *
- * // Print error (should yield "No such file or directory")
- * print(error(), "\n");
+ * // Print error (should yield "Address family not supported by protocol")
+ * print(socket.error(), "\n");
+ *
+ * // Trigger resolve error
+ * socket.addrinfo("doesnotexist.org");
+ *
+ * // Query error code (should yield -2 for EAI_NONAME)
+ * print(socket.error(true), "\n");  //
  */
 static uc_value_t *
 uc_socket_error(uc_vm_t *vm, size_t nargs)
@@ -1478,18 +1492,13 @@ uc_socket_error(uc_vm_t *vm, size_t nargs)
 	else {
 		buf = ucv_stringbuf_new();
 
-		if (last_error.code == 0 && last_error.msg) {
-			ucv_stringbuf_addstr(buf, last_error.msg, strlen(last_error.msg));
-		}
-		else {
-			if (last_error.code >= 0)
-				ucv_stringbuf_printf(buf, "%s", strerror(last_error.code));
-			else
-				ucv_stringbuf_printf(buf, "%s", gai_strerror(last_error.code));
+		if (last_error.msg)
+			ucv_stringbuf_printf(buf, "%s: ", last_error.msg);
 
-			if (last_error.msg)
-				ucv_stringbuf_printf(buf, ": %s", last_error.msg);
-		}
+		if (last_error.code >= 0)
+			ucv_stringbuf_printf(buf, "%s", strerror(last_error.code));
+		else
+			ucv_stringbuf_printf(buf, "%s", gai_strerror(last_error.code));
 
 		rv = ucv_stringbuf_finish(buf);
 	}
@@ -1640,7 +1649,7 @@ uc_socket_nameinfo(uc_vm_t *vm, size_t nargs)
 		flags ? ucv_int64_get(flags) : 0);
 
 	if (ret != 0)
-		err_return((ret == EAI_SYSTEM) ? errno : ret, "getnameinfo() failed");
+		err_return((ret == EAI_SYSTEM) ? errno : ret, "getnameinfo()");
 
 	rv = ucv_object_new(vm);
 
@@ -1723,7 +1732,7 @@ uc_socket_addrinfo(uc_vm_t *vm, size_t nargs)
 	free(servstr);
 
 	if (ret != 0)
-		err_return((ret == EAI_SYSTEM) ? errno : ret, "getaddrinfo() failed");
+		err_return((ret == EAI_SYSTEM) ? errno : ret, "getaddrinfo()");
 
 	rv = ucv_array_new(vm);
 
@@ -1807,7 +1816,7 @@ uc_socket_poll(uc_vm_t *vm, size_t nargs)
 	if (ret == -1) {
 		ucv_put(rv);
 		uc_vector_clear(&pfds);
-		err_return(errno, "poll() failed");
+		err_return(errno, "poll()");
 	}
 
 	for (size_t i = 0; i < pfds.count; i++)
@@ -1915,7 +1924,7 @@ uc_socket_connect(uc_vm_t *vm, size_t nargs)
 			free(servstr);
 			free(ai_hints);
 			err_return((ret == EAI_SYSTEM) ? errno : ret,
-				"getaddrinfo() failed");
+				"getaddrinfo()");
 		}
 
 		for (ai = ai_results; ai != NULL; ai = ai->ai_next) {
@@ -2005,7 +2014,7 @@ uc_socket_connect(uc_vm_t *vm, size_t nargs)
 
 	if (ret == -1) {
 		err = errno;
-		errmsg = "poll() failed";
+		errmsg = "poll()";
 		goto out;
 	}
 
@@ -2025,7 +2034,7 @@ uc_socket_connect(uc_vm_t *vm, size_t nargs)
 
 	if (fcntl(pp->fd, F_SETFL, ap->flags) == -1) {
 		err = errno;
-		errmsg = "fcntl(F_SETFL) failed";
+		errmsg = "fcntl(F_SETFL)";
 		goto out;
 	}
 
@@ -2128,7 +2137,7 @@ uc_socket_listen(uc_vm_t *vm, size_t nargs)
 		if (ret != 0) {
 			free(ai_hints);
 			err_return((ret == EAI_SYSTEM) ? errno : ret,
-				"getaddrinfo() failed");
+				"getaddrinfo()");
 		}
 
 		for (ai = ai_results, prev_weight = -1; ai != NULL; ai = ai->ai_next) {
@@ -2188,20 +2197,20 @@ uc_socket_listen(uc_vm_t *vm, size_t nargs)
 	fd = socket(ss.ss_family, socktype, protocol);
 
 	if (fd == -1)
-		err_return(errno, "socket() failed");
+		err_return(errno, "socket()");
 
 	ret = bind(fd, (struct sockaddr *)&ss, slen);
 
 	if (ret == -1) {
 		close(fd);
-		err_return(errno, "bind() failed");
+		err_return(errno, "bind()");
 	}
 
 	ret = listen(fd, backlog ? ucv_to_unsigned(backlog) : 128);
 
 	if (ret == -1) {
 		close(fd);
-		err_return(errno, "listen() failed");
+		err_return(errno, "listen()");
 	}
 
 	ok_return(ucv_socket_new(vm, fd));
@@ -2343,7 +2352,7 @@ uc_socket_create(uc_vm_t *vm, size_t nargs)
 		protocol ? (int)ucv_int64_get(protocol) : 0);
 
 	if (sockfd == -1)
-		err_return(errno, "socket() failed");
+		err_return(errno, "socket()");
 
 #if defined(__APPLE__)
 	if (socktype & SOCK_NONBLOCK) {
@@ -2351,19 +2360,19 @@ uc_socket_create(uc_vm_t *vm, size_t nargs)
 
 		if (flags == -1) {
 			close(sockfd);
-			err_return(errno, "fcntl(F_GETFL) failed");
+			err_return(errno, "fcntl(F_GETFL)");
 		}
 
 		if (fcntl(sockfd, F_SETFL, flags | O_NONBLOCK) == -1) {
 			close(sockfd);
-			err_return(errno, "fcntl(F_SETFL) failed");
+			err_return(errno, "fcntl(F_SETFL)");
 		}
 	}
 
 	if (socktype & SOCK_CLOEXEC) {
 		if (fcntl(sockfd, F_SETFD, FD_CLOEXEC) == -1) {
 			close(sockfd);
-			err_return(errno, "fcntl(F_SETFD) failed");
+			err_return(errno, "fcntl(F_SETFD)");
 		}
 	}
 #endif
@@ -2406,7 +2415,7 @@ uc_socket_inst_connect(uc_vm_t *vm, size_t nargs)
 	ret = connect(sockfd, (struct sockaddr *)&ss, slen);
 
 	if (ret == -1)
-		err_return(errno, "connect() failed");
+		err_return(errno, "connect()");
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -2480,7 +2489,7 @@ uc_socket_inst_send(uc_vm_t *vm, size_t nargs)
 		(flags ? ucv_int64_get(flags) : 0) | MSG_NOSIGNAL, sa, salen);
 
 	if (ret == -1)
-		err_return(errno, "send() failed");
+		err_return(errno, "send()");
 
 	ok_return(ucv_int64_new(ret));
 }
@@ -2547,7 +2556,7 @@ uc_socket_inst_recv(uc_vm_t *vm, size_t nargs)
 
 	if (ret == -1) {
 		strbuf_free(buf);
-		err_return(errno, "recv() failed");
+		err_return(errno, "recv()");
 	}
 
 	if (addrobj)
@@ -2597,7 +2606,7 @@ uc_socket_inst_bind(uc_vm_t *vm, size_t nargs)
 			return NULL;
 
 		if (bind(sockfd, (struct sockaddr *)&ss, slen) == -1)
-			err_return(errno, "bind() failed");
+			err_return(errno, "bind()");
 	}
 	else {
 #if defined(__linux__)
@@ -2605,7 +2614,7 @@ uc_socket_inst_bind(uc_vm_t *vm, size_t nargs)
 		slen = sizeof(sval);
 
 		if (getsockopt(sockfd, SOL_SOCKET, SO_DOMAIN, &sval, &slen) == -1)
-			err_return(errno, "getsockopt() failed");
+			err_return(errno, "getsockopt()");
 
 		switch (sval) {
 		case AF_INET6:
@@ -2623,20 +2632,20 @@ uc_socket_inst_bind(uc_vm_t *vm, size_t nargs)
 		}
 
 		if (bind(sockfd, (struct sockaddr *)&ss, slen) == -1)
-			err_return(errno, "bind() failed");
+			err_return(errno, "bind()");
 #else
 		ss.ss_family = AF_INET6;
 		slen = sizeof(struct sockaddr_in6);
 
 		if (bind(sockfd, (struct sockaddr *)&ss, slen) == -1) {
 			if (errno != EAFNOSUPPORT)
-				err_return(errno, "bind() failed");
+				err_return(errno, "bind()");
 
 			ss.ss_family = AF_INET;
 			slen = sizeof(struct sockaddr_in);
 
 			if (bind(sockfd, (struct sockaddr *)&ss, slen) == -1)
-				err_return(errno, "bind() failed");
+				err_return(errno, "bind()");
 		}
 #endif
 	}
@@ -2690,7 +2699,7 @@ uc_socket_inst_listen(uc_vm_t *vm, size_t nargs)
 	ret = listen(sockfd, backlog ? ucv_to_unsigned(backlog) : 128);
 
 	if (ret == -1)
-		err_return(errno, "listen() failed");
+		err_return(errno, "listen()");
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -2758,12 +2767,12 @@ uc_socket_inst_accept(uc_vm_t *vm, size_t nargs)
 	peerfd = accept(sockfd, (struct sockaddr *)&ss, &slen);
 
 	if (peerfd == -1)
-		err_return(errno, "accept() failed");
+		err_return(errno, "accept()");
 
 	if (sockflags & SOCK_CLOEXEC) {
 		if (fcntl(peerfd, F_SETFD, FD_CLOEXEC) == -1) {
 			close(peerfd);
-			err_return(errno, "fcntl(F_SETFD) failed");
+			err_return(errno, "fcntl(F_SETFD)");
 		}
 	}
 
@@ -2772,19 +2781,19 @@ uc_socket_inst_accept(uc_vm_t *vm, size_t nargs)
 
 		if (sockflags == -1) {
 			close(peerfd);
-			err_return(errno, "fcntl(F_GETFL) failed");
+			err_return(errno, "fcntl(F_GETFL)");
 		}
 
 		if (fcntl(peerfd, F_SETFL, sockflags | O_NONBLOCK) == -1) {
 			close(peerfd);
-			err_return(errno, "fcntl(F_SETFL) failed");
+			err_return(errno, "fcntl(F_SETFL)");
 		}
 	}
 #else
 	peerfd = accept4(sockfd, (struct sockaddr *)&ss, &slen, sockflags);
 
 	if (peerfd == -1)
-		err_return(errno, "accept4() failed");
+		err_return(errno, "accept4()");
 #endif
 
 	if (addrobj)
@@ -2839,7 +2848,7 @@ uc_socket_inst_shutdown(uc_vm_t *vm, size_t nargs)
 	ret = shutdown(sockfd, ucv_int64_get(how));
 
 	if (ret == -1)
-		err_return(errno, "shutdown() failed");
+		err_return(errno, "shutdown()");
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -2898,7 +2907,7 @@ uc_socket_inst_peercred(uc_vm_t *vm, size_t nargs)
 	ret = getsockopt(sockfd, SOL_SOCKET, SO_PEERCRED, &cred, &optlen);
 
 	if (ret == -1)
-		err_return(errno, "getsockopt() failed");
+		err_return(errno, "getsockopt()");
 
 	if (optlen != sizeof(cred))
 		err_return(EINVAL, "Invalid credentials received");
@@ -2916,7 +2925,7 @@ uc_socket_inst_peercred(uc_vm_t *vm, size_t nargs)
 	ret = getsockopt(sockfd, SOL_LOCAL, LOCAL_PEERCRED, &cred, &optlen);
 
 	if (ret == -1)
-		err_return(errno, "getsockopt(LOCAL_PEERCRED) failed");
+		err_return(errno, "getsockopt(LOCAL_PEERCRED)");
 
 	if (optlen != sizeof(cred) || cred.cr_version != XUCRED_VERSION)
 		err_return(EINVAL, "Invalid credentials received");
@@ -2931,7 +2940,7 @@ uc_socket_inst_peercred(uc_vm_t *vm, size_t nargs)
 
 	if (ret == -1) {
 		ucv_put(rv);
-		err_return(errno, "getsockopt(LOCAL_PEERPID) failed");
+		err_return(errno, "getsockopt(LOCAL_PEERPID)");
 	}
 
 	ucv_object_add(rv, "pid", ucv_int64_new(pid));
@@ -2980,7 +2989,7 @@ uc_socket_inst_peername(uc_vm_t *vm, size_t nargs)
 	ret = getpeername(sockfd, (struct sockaddr *)&ss, &sslen);
 
 	if (ret == -1)
-		err_return(errno, "getpeername() failed");
+		err_return(errno, "getpeername()");
 
 	addr = ucv_object_new(vm);
 	sockaddr_to_uv(&ss, addr);
@@ -3026,7 +3035,7 @@ uc_socket_inst_sockname(uc_vm_t *vm, size_t nargs)
 	ret = getsockname(sockfd, (struct sockaddr *)&ss, &sslen);
 
 	if (ret == -1)
-		err_return(errno, "getsockname() failed");
+		err_return(errno, "getsockname()");
 
 	addr = ucv_object_new(vm);
 	sockaddr_to_uv(&ss, addr);
@@ -3062,7 +3071,7 @@ uc_socket_inst_close(uc_vm_t *vm, size_t nargs)
 		err_return(EBADF, "Invalid socket context");
 
 	if (!xclose(sockfd))
-		err_return(errno, "close() failed");
+		err_return(errno, "close()");
 
 	ok_return(ucv_boolean_new(true));
 }
