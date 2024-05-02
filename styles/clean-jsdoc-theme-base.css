@@ -153,6 +153,10 @@ article ul p {
     font-family: 'code';
 }
 
+.type-signature {
+    display: inline-block;
+}
+
 .name {
     font-family: 'code';
     font-weight: bold;

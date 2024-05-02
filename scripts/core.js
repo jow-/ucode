@@ -286,7 +286,9 @@ function copyFunction(id) {
 
 function hideTocOnSourcePage() {
     if (isSourcePage()) {
-        document.querySelector('.toc-container').style.display = 'none';
+        var element = document.querySelector('.toc-container');
+	if (element)
+		element.style.display = 'none';
     }
 }
 
@@ -371,7 +373,7 @@ function highlightAndBringLineIntoView() {
     var lineNumber = window.location.hash.replace('#line', '');
 
     try {
-        var selector = '[data-line-number="' + lineNumber + '"';
+        var selector = '[data-line-number="' + lineNumber + '"]';
 
         var element = document.querySelector(selector);
 
