@@ -665,6 +665,11 @@ uc_ubus_have_uloop(void)
 	bool prev = uloop_cancelled;
 	bool active;
 
+#ifdef HAVE_ULOOP_FD_SET_CB
+	if (uloop_fd_set_cb)
+		return true;
+#endif
+
 	uloop_cancelled = true;
 	active = uloop_cancelling();
 	uloop_cancelled = prev;

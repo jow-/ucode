@@ -159,6 +159,7 @@ if(UBUS_SUPPORT)
   set_target_properties(ubus_lib PROPERTIES OUTPUT_NAME ubus PREFIX "")
   target_link_options(ubus_lib PRIVATE ${UCODE_MODULE_LINK_OPTIONS})
   target_link_libraries(ubus_lib ${libubus} ${libblobmsg_json})
+  list(APPEND CMAKE_REQUIRED_LIBRARIES ${libubox})
   file(WRITE "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/test.c" "
     #include <libubus.h>
     int main() { return UBUS_STATUS_NO_MEMORY; }
@@ -166,8 +167,12 @@ if(UBUS_SUPPORT)
   try_compile(HAVE_NEW_UBUS_STATUS_CODES
     ${CMAKE_BINARY_DIR}
     "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/test.c")
+  check_symbol_exists(uloop_fd_set_cb "libubox/uloop.h" FD_SET_CB_EXISTS)
   if(HAVE_NEW_UBUS_STATUS_CODES)
     add_definitions(-DHAVE_NEW_UBUS_STATUS_CODES)
+  endif()
+  if(FD_SET_CB_EXISTS)
+    target_compile_definitions(ubus_lib PUBLIC HAVE_ULOOP_FD_SET_CB)
   endif()
 endif()
 
