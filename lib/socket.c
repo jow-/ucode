@@ -2156,6 +2156,14 @@ uc_socket_poll(uc_vm_t *vm, size_t nargs)
 	ok_return(rv);
 }
 
+static bool
+should_resolve(uc_value_t *host)
+{
+	char *s = ucv_string_get(host);
+
+	return (s != NULL && memchr(s, '/', ucv_string_length(host)) == NULL);
+}
+
 /**
  * Creates a network socket and connects it to the specified host and service.
  *
@@ -2239,7 +2247,7 @@ uc_socket_connect(uc_vm_t *vm, size_t nargs)
 	ai_hints = hints
 		? (struct addrinfo *)uv_to_struct(hints, &st_addrinfo) : NULL;
 
-	if (ucv_type(host) == UC_STRING) {
+	if (should_resolve(host)) {
 		char *servstr = (ucv_type(serv) != UC_STRING)
 			? ucv_to_string(vm, serv) : NULL;
 
