@@ -55,6 +55,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -71,6 +72,10 @@
 
 #include "ucode/module.h"
 #include "ucode/platform.h"
+
+#if defined(__linux__)
+# include <linux/if_packet.h>
+#endif
 
 #if defined(__APPLE__)
 # include <sys/ucred.h>
@@ -265,6 +270,60 @@ strbuf_alloc(size_t size)
 	return sb;
 }
 
+#if defined(__linux__)
+static uc_value_t *
+hwaddr_to_uv(uint8_t *addr, size_t alen)
+{
+	char buf[sizeof("FF:FF:FF:FF:FF:FF:FF:FF")], *p = buf;
+	const char *hex = "0123456789ABCDEF";
+
+	for (size_t i = 0; i < alen && i < 8; i++) {
+		if (i) *p++ = ':';
+		*p++ = hex[addr[i] / 16];
+		*p++ = hex[addr[i] % 16];
+	}
+
+	return ucv_string_new(buf);
+}
+
+static bool
+uv_to_hwaddr(uc_value_t *addr, uint8_t *out, size_t *outlen)
+{
+	const char *p;
+	size_t len;
+
+	memset(out, 0, 8);
+	*outlen = 0;
+
+	if (ucv_type(addr) != UC_STRING)
+		goto err;
+
+	len = ucv_string_length(addr);
+	p = ucv_string_get(addr);
+
+	while (len > 0 && isxdigit(*p) && *outlen < 8) {
+		uint8_t n = (*p > '9') ? 10 + (*p|32) - 'a' : *p - '0';
+		p++, len--;
+
+		if (len > 0 && isxdigit(*p)) {
+			n = n * 16 + ((*p > '9') ? 10 + (*p|32) - 'a' : *p - '0');
+			p++, len--;
+		}
+
+		if (len > 0 && (*p == ':' || *p == '-' || *p == '.'))
+			p++, len--;
+
+		out[(*outlen)++] = n;
+	}
+
+	if (len == 0 || *p == 0)
+		return true;
+
+err:
+	err_return(EINVAL, "Invalid hardware address");
+}
+#endif
+
 static bool
 sockaddr_to_uv(struct sockaddr_storage *ss, uc_value_t *addrobj)
 {
@@ -272,6 +331,9 @@ sockaddr_to_uv(struct sockaddr_storage *ss, uc_value_t *addrobj)
 	struct sockaddr_in6 *s6;
 	struct sockaddr_in *s4;
 	struct sockaddr_un *su;
+#if defined(__linux__)
+	struct sockaddr_ll *sl;
+#endif
 
 	ucv_object_add(addrobj, "family", ucv_uint64_new(ss->ss_family));
 
@@ -321,6 +383,35 @@ sockaddr_to_uv(struct sockaddr_storage *ss, uc_value_t *addrobj)
 			ucv_string_new(su->sun_path));
 
 		return true;
+
+#if defined(__linux__)
+	case AF_PACKET:
+		sl = (struct sockaddr_ll *)ss;
+
+		ucv_object_add(addrobj, "protocol",
+			ucv_uint64_new(ntohs(sl->sll_protocol)));
+
+		ifname = (sl->sll_ifindex > 0)
+			? if_indextoname(sl->sll_ifindex, addrstr) : NULL;
+
+		if (ifname)
+			ucv_object_add(addrobj, "interface",
+				ucv_string_new(ifname));
+		else if (sl->sll_ifindex != 0)
+			ucv_object_add(addrobj, "interface",
+				ucv_int64_new(sl->sll_ifindex));
+
+		ucv_object_add(addrobj, "hardware_type",
+			ucv_uint64_new(sl->sll_hatype));
+
+		ucv_object_add(addrobj, "packet_type",
+			ucv_uint64_new(sl->sll_pkttype));
+
+		ucv_object_add(addrobj, "address",
+			hwaddr_to_uv(sl->sll_addr, sl->sll_halen));
+
+		return true;
+#endif
 	}
 
 	return false;
@@ -376,6 +467,9 @@ uv_to_sockaddr(uc_value_t *addr, struct sockaddr_storage *ss, socklen_t *slen)
 	struct sockaddr_in6 *s6 = (struct sockaddr_in6 *)ss;
 	struct sockaddr_in *s4 = (struct sockaddr_in *)ss;
 	struct sockaddr_un *su = (struct sockaddr_un *)ss;
+#if defined(__linux__)
+	struct sockaddr_ll *sl = (struct sockaddr_ll *)ss;
+#endif
 	uc_value_t *item;
 	unsigned long n;
 	size_t len;
@@ -587,6 +681,71 @@ uv_to_sockaddr(uc_value_t *addr, struct sockaddr_storage *ss, socklen_t *slen)
 			*slen = len;
 
 			ok_return(true);
+
+#if defined(__linux__)
+		case AF_PACKET:
+			fprintf(stderr, "AF_PACKET!\n");
+			item = ucv_object_get(addr, "protocol", NULL);
+
+			if (item) {
+				n = ucv_to_unsigned(item);
+
+				if (errno != 0 || n > 65535)
+					err_return(EINVAL, "Invalid protocol number");
+
+				sl->sll_protocol = htons(n);
+			}
+
+			item = ucv_object_get(addr, "address", NULL);
+
+			if (uv_to_hwaddr(item, sl->sll_addr, &len))
+				sl->sll_halen = len;
+			else
+				return false;
+
+			item = ucv_object_get(addr, "interface", NULL);
+
+			if (ucv_type(item) == UC_STRING) {
+				sl->sll_ifindex = if_nametoindex(ucv_string_get(item));
+
+				if (sl->sll_ifindex == 0)
+					err_return(errno, "Unable to resolve interface %s",
+						ucv_string_get(item));
+			}
+			else if (item != NULL) {
+				sl->sll_ifindex = ucv_to_integer(item);
+
+				if (errno)
+					err_return(errno, "Unable to convert interface to integer");
+			}
+
+			item = ucv_object_get(addr, "hardware_type", NULL);
+
+			if (item) {
+				n = ucv_to_unsigned(item);
+
+				if (errno != 0 || n > 65535)
+					err_return(EINVAL, "Invalid hardware type");
+
+				sl->sll_hatype = n;
+			}
+
+			item = ucv_object_get(addr, "packet_type", NULL);
+
+			if (item) {
+				n = ucv_to_unsigned(item);
+
+				if (errno != 0 || n > 255)
+					err_return(EINVAL, "Invalid packet type");
+
+				sl->sll_pkttype = n;
+			}
+
+			sl->sll_family = AF_PACKET;
+			*slen = sizeof(*sl);
+
+			ok_return(true);
+#endif
 		}
 	}
 
@@ -912,6 +1071,104 @@ static struct_t st_addrinfo = {
 	}
 };
 
+#if defined(__linux__)
+static uc_value_t *
+mr_ifindex_to_uv(void *st)
+{
+	char ifname[IF_NAMESIZE] = { 0 };
+	struct packet_mreq *mr = st;
+
+	if (mr->mr_ifindex > 0 && if_indextoname(mr->mr_ifindex, ifname))
+		return ucv_string_new(ifname);
+
+	return ucv_int64_new(mr->mr_ifindex);
+}
+
+static bool
+mr_ifindex_to_c(void *st, uc_value_t *uv)
+{
+	struct packet_mreq *mr = st;
+
+	if (ucv_type(uv) == UC_STRING) {
+		mr->mr_ifindex = if_nametoindex(ucv_string_get(uv));
+
+		if (mr->mr_ifindex == 0)
+			err_return(errno, "Unable to resolve interface %s",
+				ucv_string_get(uv));
+	}
+	else {
+		mr->mr_ifindex = ucv_to_integer(uv);
+
+		if (errno)
+			err_return(errno, "Unable to convert interface to integer");
+	}
+
+	return true;
+}
+
+static uc_value_t *
+mr_address_to_uv(void *st)
+{
+	struct packet_mreq *mr = st;
+
+	return hwaddr_to_uv(mr->mr_address, mr->mr_alen);
+}
+
+static bool
+mr_address_to_c(void *st, uc_value_t *uv)
+{
+	struct packet_mreq *mr = st;
+	size_t len;
+
+	if (!uv_to_hwaddr(uv, mr->mr_address, &len))
+		return false;
+
+	mr->mr_alen = len;
+
+	return true;
+}
+
+static struct_t st_packet_mreq = {
+	.size = sizeof(struct packet_mreq),
+	.members = (member_t []){
+		STRUCT_MEMBER_CB(interface, mr_ifindex_to_c, mr_ifindex_to_uv),
+		STRUCT_MEMBER(packet_mreq, mr, type, DT_UNSIGNED),
+		STRUCT_MEMBER_CB(address, mr_address_to_c, mr_address_to_uv),
+		{ 0 }
+	}
+};
+
+static struct_t st_tpacket_req = {
+	.size = sizeof(struct tpacket_req),
+	.members = (member_t []){
+		STRUCT_MEMBER(tpacket_req, tp, block_size, DT_UNSIGNED),
+		STRUCT_MEMBER(tpacket_req, tp, block_nr, DT_UNSIGNED),
+		STRUCT_MEMBER(tpacket_req, tp, frame_size, DT_UNSIGNED),
+		STRUCT_MEMBER(tpacket_req, tp, frame_nr, DT_UNSIGNED),
+		{ 0 }
+	}
+};
+
+static struct_t st_tpacket_stats = {
+	.size = sizeof(struct tpacket_stats),
+	.members = (member_t []){
+		STRUCT_MEMBER(tpacket_stats, tp, packets, DT_UNSIGNED),
+		STRUCT_MEMBER(tpacket_stats, tp, drops, DT_UNSIGNED),
+		{ 0 }
+	}
+};
+
+static struct_t st_fanout_args = {
+	.size = sizeof(struct fanout_args),
+	.members = (member_t []){
+		STRUCT_MEMBER_NP(fanout_args, id, DT_UNSIGNED),
+		STRUCT_MEMBER_NP(fanout_args, type_flags, DT_UNSIGNED),
+		STRUCT_MEMBER_NP(fanout_args, max_num_members, DT_UNSIGNED),
+		{ 0 }
+	}
+};
+#endif
+
 #define SV_VOID   (struct_t *)0
 #define SV_INT    (struct_t *)1
 #define SV_INT_RO (struct_t *)2
@@ -1017,7 +1274,22 @@ static sockopt_t sockopts[] = {
 #endif
 
 #if defined(__linux__)
-    { IPPROTO_UDP, UDP_CORK, SV_BOOL }
+    { IPPROTO_UDP, UDP_CORK, SV_BOOL },
+#endif
+
+#if defined(__linux__)
+	{ SOL_PACKET, PACKET_ADD_MEMBERSHIP, &st_packet_mreq },
+	{ SOL_PACKET, PACKET_DROP_MEMBERSHIP, &st_packet_mreq },
+	{ SOL_PACKET, PACKET_AUXDATA, SV_BOOL },
+	{ SOL_PACKET, PACKET_FANOUT, &st_fanout_args },
+	{ SOL_PACKET, PACKET_LOSS, SV_BOOL },
+	{ SOL_PACKET, PACKET_RESERVE, SV_INT },
+	{ SOL_PACKET, PACKET_RX_RING, &st_tpacket_req },
+	{ SOL_PACKET, PACKET_STATISTICS, &st_tpacket_stats },
+	{ SOL_PACKET, PACKET_TIMESTAMP, SV_INT },
+	{ SOL_PACKET, PACKET_TX_RING, &st_tpacket_req },
+	{ SOL_PACKET, PACKET_VERSION, SV_INT },
+	{ SOL_PACKET, PACKET_QDISC_BYPASS, SV_BOOL },
 #endif
 };
 
@@ -1509,10 +1781,11 @@ uc_socket_error(uc_vm_t *vm, size_t nargs)
 /**
  * @typedef {Object} module:socket.socket.SocketAddress
  * @property {number} family
- * Address family, one of AF_INET, AF_INET6 or AF_UNIX.
+ * Address family, one of AF_INET, AF_INET6, AF_UNIX or AF_PACKET.
  *
  * @property {string} address
- * IPv4 or IPv6 address string (AF_INET or AF_INET6 only).
+ * IPv4/IPv6 address string (AF_INET or AF_INET6 only) or hardware address in
+ * hexadecimal notation (AF_PACKET only).
  *
  * @property {number} [port]
  * Port number (AF_INET or AF_INET6 only).
@@ -1521,11 +1794,22 @@ uc_socket_error(uc_vm_t *vm, size_t nargs)
  * IPv6 flow information (AF_INET6 only).
  *
  * @property {string|number} [interface]
- * Link local address scope, either a network device name string or a nonzero
- * positive integer representing a network interface index (AF_INET6 only).
+ * Link local address scope (for IPv6 sockets) or bound network interface
+ * (for packet sockets), either a network device name string or a nonzero
+ * positive integer representing a network interface index (AF_INET6 and
+ * AF_PACKET only).
  *
  * @property {string} path
  * Domain socket filesystem path (AF_UNIX only).
+ *
+ * @property {number} [protocol=0]
+ * Physical layer protocol (AF_PACKET only).
+ *
+ * @property {number} [hardware_type=0]
+ * ARP hardware type (AF_PACKET only).
+ *
+ * @property {number} [packet_type=PACKET_HOST]
+ * Packet type (AF_PACKET only).
  */
 
 /**
@@ -3439,6 +3723,79 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(TCP_SYNCNT);
 	ADD_CONST(TCP_USER_TIMEOUT);
 	ADD_CONST(TCP_WINDOW_CLAMP);
+#endif
+
+	/**
+	 * @typedef
+	 * @name Packet Socket Constants
+	 * @description
+	 * The `SOL_PACKET` constant specifies the packet socket level and may be
+	 * passed as *level* argument value to
+	 * {@link module:socket.socket#getopt|getopt()} and
+	 * {@link module:socket.socket#setopt|setopt()}.
+	 *
+	 * Most `PACKET_*` constants are *option* argument values recognized by
+	 * {@link module:socket.socket#getopt|getopt()}
+	 * and {@link module:socket.socket#setopt|setopt()}, in conjunction with
+	 * the `SOL_PACKET` socket level.
+	 *
+	 * The constants `PACKET_MR_PROMISC`, `PACKET_MR_MULTICAST` and
+	 * `PACKET_MR_ALLMULTI` are used in conjunction with the
+	 * `PACKET_ADD_MEMBERSHIP` and `PACKET_DROP_MEMBERSHIP` options to specify
+	 * the packet socket receive mode.
+	 *
+	 * The constants `PACKET_HOST`, `PACKET_BROADCAST`, `PACKET_MULTICAST`,
+	 * `PACKET_OTHERHOST` and `PACKET_OUTGOING` may be used as *packet_type*
+	 * value in {@link module:socket.socket.SocketAddress|socket address}
+	 * structures.
+	 * @property {number} SOL_PACKET - Socket options at the packet API level.
+	 * @property {number} PACKET_ADD_MEMBERSHIP - Add a multicast group membership.
+	 * @property {number} PACKET_DROP_MEMBERSHIP - Drop a multicast group membership.
+	 * @property {number} PACKET_AUXDATA - Receive auxiliary data (packet info).
+	 * @property {number} PACKET_FANOUT - Configure packet fanout.
+	 * @property {number} PACKET_LOSS - Retrieve the current packet loss statistics.
+	 * @property {number} PACKET_RESERVE - Reserve space for packet headers.
+	 * @property {number} PACKET_RX_RING - Configure a receive ring buffer.
+	 * @property {number} PACKET_STATISTICS - Retrieve packet statistics.
+	 * @property {number} PACKET_TIMESTAMP - Retrieve packet timestamps.
+	 * @property {number} PACKET_TX_RING - Configure a transmit ring buffer.
+	 * @property {number} PACKET_VERSION - Set the packet protocol version.
+	 * @property {number} PACKET_QDISC_BYPASS - Bypass queuing discipline for outgoing packets.
+	 *
+	 * @property {number} PACKET_MR_PROMISC - Enable promiscuous mode.
+	 * @property {number} PACKET_MR_MULTICAST - Receive multicast packets.
+	 * @property {number} PACKET_MR_ALLMULTI - Receive all multicast packets.
+	 *
+	 * @property {number} PACKET_HOST - Receive packets destined for this host.
+	 * @property {number} PACKET_BROADCAST - Receive broadcast packets.
+	 * @property {number} PACKET_MULTICAST - Receive multicast packets.
+	 * @property {number} PACKET_OTHERHOST - Receive packets destined for other hosts.
+	 * @property {number} PACKET_OUTGOING - Transmit packets.
+	 */
+#if defined(__linux__)
+	ADD_CONST(SOL_PACKET);
+	ADD_CONST(PACKET_ADD_MEMBERSHIP);
+	ADD_CONST(PACKET_DROP_MEMBERSHIP);
+	ADD_CONST(PACKET_AUXDATA);
+	ADD_CONST(PACKET_FANOUT);
+	ADD_CONST(PACKET_LOSS);
+	ADD_CONST(PACKET_RESERVE);
+	ADD_CONST(PACKET_RX_RING);
+	ADD_CONST(PACKET_STATISTICS);
+	ADD_CONST(PACKET_TIMESTAMP);
+	ADD_CONST(PACKET_TX_RING);
+	ADD_CONST(PACKET_VERSION);
+	ADD_CONST(PACKET_QDISC_BYPASS);
+
+	ADD_CONST(PACKET_MR_PROMISC);
+	ADD_CONST(PACKET_MR_MULTICAST);
+	ADD_CONST(PACKET_MR_ALLMULTI);
+
+	ADD_CONST(PACKET_HOST);
+	ADD_CONST(PACKET_BROADCAST);
+	ADD_CONST(PACKET_MULTICAST);
+	ADD_CONST(PACKET_OTHERHOST);
+	ADD_CONST(PACKET_OUTGOING);
 #endif
 
 	/**
