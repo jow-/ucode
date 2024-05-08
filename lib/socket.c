@@ -2006,7 +2006,7 @@ uc_socket_addrinfo(uc_vm_t *vm, size_t nargs)
 			return NULL;
 	}
 
-	servstr = (ucv_type(serv) != UC_STRING) ? ucv_to_string(vm, serv) : NULL;
+	servstr = (serv && ucv_type(serv) != UC_STRING) ? ucv_to_string(vm, serv) : NULL;
 	ret = getaddrinfo(ucv_string_get(host),
 		servstr ? servstr : ucv_string_get(serv),
 		ai_hints, &ai_res);
