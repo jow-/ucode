@@ -684,7 +684,6 @@ uv_to_sockaddr(uc_value_t *addr, struct sockaddr_storage *ss, socklen_t *slen)
 
 #if defined(__linux__)
 		case AF_PACKET:
-			fprintf(stderr, "AF_PACKET!\n");
 			item = ucv_object_get(addr, "protocol", NULL);
 
 			if (item) {
