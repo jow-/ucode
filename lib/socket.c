@@ -2228,8 +2228,11 @@ uc_socket_connect(uc_vm_t *vm, size_t nargs)
 		uc_vector_grow(&addresses);
 		ap = &addresses.entries[addresses.count++];
 
-		if (!uv_to_sockaddr(host, &ap->ss, &ap->ai.ai_addrlen))
+		if (!uv_to_sockaddr(host, &ap->ss, &ap->ai.ai_addrlen)) {
+			free(ai_hints);
+			uc_vector_clear(&addresses);
 			return NULL;
+		}
 
 		if (serv) {
 			uint64_t port = ucv_to_unsigned(serv);
