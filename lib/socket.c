@@ -793,14 +793,15 @@ uv_to_fileno(uc_vm_t *vm, uc_value_t *val, int *fileno)
 	return true;
 }
 
-static bool
+static uc_value_t *
 uv_to_pollfd(uc_vm_t *vm, uc_value_t *val, struct pollfd *pfd)
 {
+	uc_value_t *rv;
 	int64_t flags;
 
 	if (ucv_type(val) == UC_ARRAY) {
 		if (!uv_to_fileno(vm, ucv_array_get(val, 0), &pfd->fd))
-			return false;
+			return NULL;
 
 		flags = ucv_to_integer(ucv_array_get(val, 1));
 
@@ -809,16 +810,22 @@ uv_to_pollfd(uc_vm_t *vm, uc_value_t *val, struct pollfd *pfd)
 
 		pfd->events = flags;
 		pfd->revents = 0;
-	}
-	else {
-		if (!uv_to_fileno(vm, val, &pfd->fd))
-			return false;
 
-		pfd->events = POLLIN | POLLERR | POLLHUP;
-		pfd->revents = 0;
+		return ucv_get(val);
 	}
 
-	return true;
+	if (!uv_to_fileno(vm, val, &pfd->fd))
+		return NULL;
+
+	pfd->events = POLLIN | POLLERR | POLLHUP;
+	pfd->revents = 0;
+
+	rv = ucv_array_new_length(vm, 2);
+
+	ucv_array_set(rv, 0, ucv_get(val));
+	ucv_array_set(rv, 1, ucv_uint64_new(pfd->events));
+
+	return rv;
 }
 
 static uc_value_t *
@@ -2046,7 +2053,14 @@ uc_socket_addrinfo(uc_vm_t *vm, size_t nargs)
 /**
  * Polls a number of sockets for state changes.
  *
- * Returns an array of socket poll states.
+ * Returns an array of `[socket, flags]` tuples for each socket with pending
+ * events. When a tuple is passed as socket argument, it is included as-is into
+ * the result tuple array, with the flags entry changed to a bitwise OR-ed value
+ * describing the pending events for this socket. When a plain socket instance
+ * (or another kind of handle) is passed, a new tuple array is created for this
+ * socket within the result tuple array, containing this socket as first and the
+ * bitwise OR-ed pending events as second element.
+ *
  * Returns `null` if an error occurred.
  *
  * @function module:socket#poll
@@ -2060,12 +2074,30 @@ uc_socket_addrinfo(uc_vm_t *vm, size_t nargs)
  *
  * @param {...(module:socket.socket|module:socket.PollSpec)} sockets
  * An arbitrary amount of socket arguments. Each argument may be either a plain
- * {@link module:socket.socket|socket instance} or a `[socket, flags]` tuple
- * specifying the socket and requested poll flags. If a plain socket and not a
- * tuple is provided, the requested poll flags default to
+ * {@link module:socket.socket|socket instance} (or any other kind of handle
+ * implementing a `fileno()` method) or a `[socket, flags]` tuple specifying the
+ * socket and requested poll flags. If a plain socket (or other kind of handle)
+ * instead of a tuple is provided, the requested poll flags default to
  * `POLLIN|POLLERR|POLLHUP` for this socket.
  *
  * @returns {module:socket.PollSpec[]}
+ *
+ * @example
+ * let x = socket.connect("example.org", 80);
+ * let y = socket.connect("example.com", 80);
+ *
+ * // Pass plain socket arguments
+ * let events = socket.poll(10, x, y);
+ * print(events); // [ [ "<socket 0x7>", 0 ], [ "<socket 0x8>", 0 ] ]
+ *
+ * // Passing tuples allows attaching state information and requesting
+ * // different I/O events
+ * let events = socket.poll(10,
+ * 	[ x, socket.POLLOUT | socket.POLLHUP, "This is example.org" ],
+ * 	[ y, socket.POLLOUT | socket.POLLHUP, "This is example.com" ]
+ * );
+ * print(events); // [ [ "<socket 0x7>", 4, "This is example.org" ],
+ *                //   [ "<socket 0x8>", 4, "This is example.com" ] ]
  */
 static uc_value_t *
 uc_socket_poll(uc_vm_t *vm, size_t nargs)
@@ -2086,12 +2118,10 @@ uc_socket_poll(uc_vm_t *vm, size_t nargs)
 
 	for (size_t i = 1; i < nargs; i++) {
 		uc_vector_grow(&pfds);
+		item = uv_to_pollfd(vm, uc_fn_arg(i), &pfds.entries[pfds.count]);
 
-		if (uv_to_pollfd(vm, uc_fn_arg(i), &pfds.entries[pfds.count])) {
-			item = ucv_array_new_length(vm, 2);
-			ucv_array_set(item, 0, ucv_get(uc_fn_arg(i)));
+		if (item)
 			ucv_array_set(rv, pfds.count++, item);
-		}
 	}
 
 	ret = poll(pfds.entries, pfds.count, timeout);
