@@ -96,6 +96,18 @@
 # define AI_CANONIDN 0
 #endif
 
+#ifndef IPV6_FLOWINFO
+# define IPV6_FLOWINFO 11
+#endif
+
+#ifndef IPV6_FLOWLABEL_MGR
+# define IPV6_FLOWLABEL_MGR 32
+#endif
+
+#ifndef IPV6_FLOWINFO_SEND
+# define IPV6_FLOWINFO_SEND 33
+#endif
+
 #define ok_return(expr) do { set_error(0, NULL); return (expr); } while(0)
 #define err_return(err, ...) do { set_error(err, __VA_ARGS__); return NULL; } while(0)
 
@@ -955,7 +967,86 @@ static struct_t st_ip_mreq_source = {
 	}
 };
 
+/* This structure is declared in kernel, but not libc headers, so redeclare it
+   locally */
+struct in6_flowlabel_req_local {
+	struct in6_addr	flr_dst;
+	uint32_t flr_label;
+	uint8_t flr_action;
+	uint8_t flr_share;
+	uint16_t flr_flags;
+	uint16_t flr_expires;
+	uint16_t flr_linger;
+};
+
+static struct_t st_in6_flowlabel_req = {
+	.size = sizeof(struct in6_flowlabel_req_local),
+	.members = (member_t []){
+		STRUCT_MEMBER(in6_flowlabel_req_local, flr, dst, DT_IPV6ADDR),
+		STRUCT_MEMBER(in6_flowlabel_req_local, flr, label, DT_UNSIGNED),
+		STRUCT_MEMBER(in6_flowlabel_req_local, flr, action, DT_UNSIGNED),
+		STRUCT_MEMBER(in6_flowlabel_req_local, flr, share, DT_UNSIGNED),
+		STRUCT_MEMBER(in6_flowlabel_req_local, flr, flags, DT_UNSIGNED),
+		STRUCT_MEMBER(in6_flowlabel_req_local, flr, expires, DT_UNSIGNED),
+		STRUCT_MEMBER(in6_flowlabel_req_local, flr, linger, DT_UNSIGNED),
+		{ 0 }
+	}
+};
+
 #if defined(__linux__)
+static uc_value_t *
+in6_ifindex_to_uv(void *st)
+{
+	char ifname[IF_NAMESIZE] = { 0 };
+	struct ipv6_mreq *mr = st;
+
+	if (mr->ipv6mr_interface > 0 && if_indextoname(mr->ipv6mr_interface, ifname))
+		return ucv_string_new(ifname);
+
+	return ucv_int64_new(mr->ipv6mr_interface);
+}
+
+static bool
+in6_ifindex_to_c(void *st, uc_value_t *uv)
+{
+	struct ipv6_mreq *mr = st;
+
+	if (ucv_type(uv) == UC_STRING) {
+		mr->ipv6mr_interface = if_nametoindex(ucv_string_get(uv));
+
+		if (mr->ipv6mr_interface == 0)
+			err_return(errno, "Unable to resolve interface %s",
+				ucv_string_get(uv));
+	}
+	else {
+		mr->ipv6mr_interface = ucv_to_integer(uv);
+
+		if (errno)
+			err_return(errno, "Unable to convert interface to integer");
+	}
+
+	return true;
+}
+
+static struct_t st_ipv6_mreq = {
+	.size = sizeof(struct ipv6_mreq),
+	.members = (member_t []){
+		STRUCT_MEMBER(ipv6_mreq, ipv6mr, multiaddr, DT_IPV6ADDR),
+		STRUCT_MEMBER_CB(interface, in6_ifindex_to_c, in6_ifindex_to_uv),
+		{ 0 }
+	}
+};
+
+/* NB: this is the same layout as struct ipv6_mreq, so we reuse the callbacks */
+static struct_t st_in6_pktinfo = {
+	.size = sizeof(struct in6_pktinfo),
+	.members = (member_t []){
+		STRUCT_MEMBER(in6_pktinfo, ipi6, addr, DT_IPV6ADDR),
+		STRUCT_MEMBER_CB(interface, in6_ifindex_to_c, in6_ifindex_to_uv),
+		{ 0 }
+	}
+};
+
 static struct_t st_ip_msfilter = {
 	.size = sizeof(struct ip_msfilter),
 	.members = (member_t []){
@@ -1274,6 +1365,52 @@ static sockopt_t sockopts[] = {
     { IPPROTO_IP, IP_RECVORIGDSTADDR, SV_BOOL },
     { IPPROTO_IP, IP_ROUTER_ALERT, SV_BOOL },
     { IPPROTO_IP, IP_TRANSPARENT, SV_BOOL },
+#endif
+
+	{ IPPROTO_IPV6, IPV6_FLOWINFO_SEND, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_FLOWINFO, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_FLOWLABEL_MGR, &st_in6_flowlabel_req },
+	{ IPPROTO_IPV6, IPV6_MULTICAST_HOPS, SV_INT },
+	{ IPPROTO_IPV6, IPV6_MULTICAST_IF, SV_IFNAME },
+	{ IPPROTO_IPV6, IPV6_MULTICAST_LOOP, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_RECVTCLASS, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_TCLASS, SV_INT },
+	{ IPPROTO_IPV6, IPV6_UNICAST_HOPS, SV_INT },
+	{ IPPROTO_IPV6, IPV6_V6ONLY, SV_BOOL },
+#if defined(__linux__)
+	{ IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &st_ipv6_mreq },
+	{ IPPROTO_IPV6, IPV6_ADDR_PREFERENCES, SV_INT },
+	{ IPPROTO_IPV6, IPV6_ADDRFORM, SV_INT },
+	{ IPPROTO_IPV6, IPV6_AUTHHDR, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_AUTOFLOWLABEL, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_DONTFRAG, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_DROP_MEMBERSHIP, &st_ipv6_mreq },
+	{ IPPROTO_IPV6, IPV6_DSTOPTS, SV_STRING },
+	{ IPPROTO_IPV6, IPV6_FREEBIND, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_HOPLIMIT, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_HOPOPTS, SV_STRING },
+	{ IPPROTO_IPV6, IPV6_JOIN_ANYCAST, &st_ipv6_mreq },
+	{ IPPROTO_IPV6, IPV6_LEAVE_ANYCAST, &st_ipv6_mreq },
+	{ IPPROTO_IPV6, IPV6_MINHOPCOUNT, SV_INT },
+	{ IPPROTO_IPV6, IPV6_MTU_DISCOVER, SV_INT },
+	{ IPPROTO_IPV6, IPV6_MTU, SV_INT },
+	{ IPPROTO_IPV6, IPV6_MULTICAST_ALL, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_PKTINFO, &st_in6_pktinfo },
+	{ IPPROTO_IPV6, IPV6_RECVDSTOPTS, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_RECVERR, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_RECVFRAGSIZE, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_RECVHOPLIMIT, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_RECVHOPOPTS, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_RECVORIGDSTADDR, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_RECVPATHMTU, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_RECVPKTINFO, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_RECVRTHDR, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_ROUTER_ALERT_ISOLATE, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_ROUTER_ALERT, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_RTHDR, SV_STRING },
+	{ IPPROTO_IPV6, IPV6_RTHDRDSTOPTS, SV_STRING },
+	{ IPPROTO_IPV6, IPV6_TRANSPARENT, SV_BOOL },
+	{ IPPROTO_IPV6, IPV6_UNICAST_IF, SV_IFNAME },
 #endif
 
     { IPPROTO_TCP, TCP_KEEPCNT, SV_INT },
@@ -3648,6 +3785,110 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(IP_RECVORIGDSTADDR);
 	ADD_CONST(IP_ROUTER_ALERT);
 	ADD_CONST(IP_TRANSPARENT);
+#endif
+
+	/**
+	 * @typedef {Object} IPv6 Protocol Constants
+	 * @description
+	 * The `IPPROTO_IPV6` constant specifies the IPv6 protocol number and may be
+	 * passed as third argument to {@link module:socket#create|create()} as well
+	 * as *level* argument value to {@link module:socket.socket#getopt|getopt()}
+	 * and {@link module:socket.socket#setopt|setopt()}.
+	 *
+	 * The `IPV6_*` constants are option names recognized by
+	 * {@link module:socket.socket#getopt|getopt()}
+	 * and {@link module:socket.socket#setopt|setopt()}, in conjunction with
+	 * the `IPPROTO_IPV6` socket level.
+	 * @property {number} IPPROTO_IPV6 - The IPv6 protocol.
+	 * @property {number} IPV6_ADDRFORM - Turn an AF_INET6 socket into a socket of a different address family. Only AF_INET is supported.
+	 * @property {number} IPV6_ADDR_PREFERENCES - Specify preferences for address selection.
+	 * @property {number} IPV6_ADD_MEMBERSHIP - Add an IPv6 group membership.
+	 * @property {number} IPV6_AUTHHDR - Set delivery of the authentication header control message for incoming datagrams.
+	 * @property {number} IPV6_AUTOFLOWLABEL - Enable or disable automatic flow labels.
+	 * @property {number} IPV6_DONTFRAG - Control whether the socket allows IPv6 fragmentation.
+	 * @property {number} IPV6_DROP_MEMBERSHIP - Drop an IPv6 group membership.
+	 * @property {number} IPV6_DSTOPTS - Set delivery of the destination options control message for incoming datagrams.
+	 * @property {number} IPV6_FLOWINFO_SEND - Control whether flow information is sent.
+	 * @property {number} IPV6_FLOWINFO - Set delivery of the flow ID control message for incoming datagrams.
+	 * @property {number} IPV6_FLOWLABEL_MGR - Manage flow labels.
+	 * @property {number} IPV6_FREEBIND - Allow binding to an IP address not assigned to a network interface.
+	 * @property {number} IPV6_HOPLIMIT - Set delivery of the hop limit control message for incoming datagrams.
+	 * @property {number} IPV6_HOPOPTS - Set delivery of the hop options control message for incoming datagrams.
+	 * @property {number} IPV6_JOIN_ANYCAST - Join an anycast group.
+	 * @property {number} IPV6_LEAVE_ANYCAST - Leave an anycast group.
+	 * @property {number} IPV6_MINHOPCOUNT - Set the minimum hop count.
+	 * @property {number} IPV6_MTU - Retrieve or set the MTU to be used for the socket.
+	 * @property {number} IPV6_MTU_DISCOVER - Control path-MTU discovery on the socket.
+	 * @property {number} IPV6_MULTICAST_ALL - Control whether the socket receives all multicast packets.
+	 * @property {number} IPV6_MULTICAST_HOPS - Set the multicast hop limit for the socket.
+	 * @property {number} IPV6_MULTICAST_IF - Set the device for outgoing multicast packets on the socket.
+	 * @property {number} IPV6_MULTICAST_LOOP - Control whether the socket sees multicast packets that it has sent itself.
+	 * @property {number} IPV6_PKTINFO - Set delivery of the IPV6_PKTINFO control message on incoming datagrams.
+	 * @property {number} IPV6_RECVDSTOPTS - Control receiving of the destination options control message.
+	 * @property {number} IPV6_RECVERR - Control receiving of asynchronous error options.
+	 * @property {number} IPV6_RECVFRAGSIZE - Control receiving of fragment size.
+	 * @property {number} IPV6_RECVHOPLIMIT - Control receiving of hop limit.
+	 * @property {number} IPV6_RECVHOPOPTS - Control receiving of hop options.
+	 * @property {number} IPV6_RECVORIGDSTADDR - Control receiving of the original destination address.
+	 * @property {number} IPV6_RECVPATHMTU - Control receiving of path MTU.
+	 * @property {number} IPV6_RECVPKTINFO - Control receiving of packet information.
+	 * @property {number} IPV6_RECVRTHDR - Control receiving of routing header.
+	 * @property {number} IPV6_RECVTCLASS - Control receiving of traffic class.
+	 * @property {number} IPV6_ROUTER_ALERT_ISOLATE - Control isolation of router alert messages.
+	 * @property {number} IPV6_ROUTER_ALERT - Pass forwarded packets containing a router alert hop-by-hop option to this socket.
+	 * @property {number} IPV6_RTHDR - Set delivery of the routing header control message for incoming datagrams.
+	 * @property {number} IPV6_RTHDRDSTOPTS - Set delivery of the routing header destination options control message.
+	 * @property {number} IPV6_TCLASS - Set the traffic class.
+	 * @property {number} IPV6_TRANSPARENT - Enable transparent proxy support.
+	 * @property {number} IPV6_UNICAST_HOPS - Set the unicast hop limit for the socket.
+	 * @property {number} IPV6_UNICAST_IF - Set the interface for outgoing unicast packets.
+	 * @property {number} IPV6_V6ONLY - Restrict the socket to sending and receiving IPv6 packets only.
+	 */
+	ADD_CONST(IPPROTO_IPV6);
+	ADD_CONST(IPV6_FLOWINFO_SEND);
+	ADD_CONST(IPV6_FLOWINFO);
+	ADD_CONST(IPV6_FLOWLABEL_MGR);
+	ADD_CONST(IPV6_MULTICAST_HOPS);
+	ADD_CONST(IPV6_MULTICAST_IF);
+	ADD_CONST(IPV6_MULTICAST_LOOP);
+	ADD_CONST(IPV6_RECVTCLASS);
+	ADD_CONST(IPV6_TCLASS);
+	ADD_CONST(IPV6_UNICAST_HOPS);
+	ADD_CONST(IPV6_V6ONLY);
+#if defined(__linux__)
+	ADD_CONST(IPV6_ADD_MEMBERSHIP);
+	ADD_CONST(IPV6_ADDR_PREFERENCES);
+	ADD_CONST(IPV6_ADDRFORM);
+	ADD_CONST(IPV6_AUTHHDR);
+	ADD_CONST(IPV6_AUTOFLOWLABEL);
+	ADD_CONST(IPV6_DONTFRAG);
+	ADD_CONST(IPV6_DROP_MEMBERSHIP);
+	ADD_CONST(IPV6_DSTOPTS);
+	ADD_CONST(IPV6_FREEBIND);
+	ADD_CONST(IPV6_HOPLIMIT);
+	ADD_CONST(IPV6_HOPOPTS);
+	ADD_CONST(IPV6_JOIN_ANYCAST);
+	ADD_CONST(IPV6_LEAVE_ANYCAST);
+	ADD_CONST(IPV6_MINHOPCOUNT);
+	ADD_CONST(IPV6_MTU_DISCOVER);
+	ADD_CONST(IPV6_MTU);
+	ADD_CONST(IPV6_MULTICAST_ALL);
+	ADD_CONST(IPV6_PKTINFO);
+	ADD_CONST(IPV6_RECVDSTOPTS);
+	ADD_CONST(IPV6_RECVERR);
+	ADD_CONST(IPV6_RECVFRAGSIZE);
+	ADD_CONST(IPV6_RECVHOPLIMIT);
+	ADD_CONST(IPV6_RECVHOPOPTS);
+	ADD_CONST(IPV6_RECVORIGDSTADDR);
+	ADD_CONST(IPV6_RECVPATHMTU);
+	ADD_CONST(IPV6_RECVPKTINFO);
+	ADD_CONST(IPV6_RECVRTHDR);
+	ADD_CONST(IPV6_ROUTER_ALERT_ISOLATE);
+	ADD_CONST(IPV6_ROUTER_ALERT);
+	ADD_CONST(IPV6_RTHDR);
+	ADD_CONST(IPV6_RTHDRDSTOPTS);
+	ADD_CONST(IPV6_TRANSPARENT);
+	ADD_CONST(IPV6_UNICAST_IF);
 #endif
 
 	/**
