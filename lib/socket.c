@@ -854,7 +854,7 @@ xclose(int *fdptr)
 
 typedef struct {
     const char *name;
-    enum { DT_SIGNED, DT_UNSIGNED, DT_IPV4ADDR, DT_CALLBACK } type;
+    enum { DT_SIGNED, DT_UNSIGNED, DT_IPV4ADDR, DT_IPV6ADDR, DT_CALLBACK } type;
 	union {
     	size_t offset;
 		bool (*to_c)(void *, uc_value_t *);
@@ -1381,6 +1381,17 @@ uv_to_struct(uc_value_t *uv, struct_t *spec)
 
 			break;
 
+		case DT_IPV6ADDR:
+			s = ucv_string_get(fv);
+
+			if (!s || inet_pton(AF_INET6, s, st + m->u1.offset) != 1) {
+				free(st);
+				err_return(EINVAL,
+					"Unable to convert field %s to IPv6 address", m->name);
+			}
+
+			break;
+
 		case DT_CALLBACK:
 			if (m->u1.to_c && !m->u1.to_c(st, fv)) {
 				free(st);
@@ -1397,7 +1408,7 @@ uv_to_struct(uc_value_t *uv, struct_t *spec)
 static uc_value_t *
 struct_to_uv(char *st, struct_t *spec)
 {
-	char s[sizeof("255.255.255.255")];
+	char s[sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255")];
 	uc_value_t *uv, *fv;
 	member_t *m;
 
@@ -1452,6 +1463,12 @@ struct_to_uv(char *st, struct_t *spec)
 
 		case DT_IPV4ADDR:
 			if (inet_ntop(AF_INET, st + m->u1.offset, s, sizeof(s)))
+				fv = ucv_string_new(s);
+
+			break;
+
+		case DT_IPV6ADDR:
+			if (inet_ntop(AF_INET6, st + m->u1.offset, s, sizeof(s)))
 				fv = ucv_string_new(s);
 
 			break;
