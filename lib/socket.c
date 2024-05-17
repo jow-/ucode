@@ -58,6 +58,7 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -69,12 +70,22 @@
 #include <netdb.h>
 #include <poll.h>
 #include <limits.h>
+#include <dirent.h>
+#include <assert.h>
 
 #include "ucode/module.h"
 #include "ucode/platform.h"
 
 #if defined(__linux__)
 # include <linux/if_packet.h>
+
+# ifndef SO_TIMESTAMP_OLD
+#  define SO_TIMESTAMP_OLD SO_TIMESTAMP
+# endif
+
+# ifndef SO_TIMESTAMPNS_OLD
+#  define SO_TIMESTAMPNS_OLD SO_TIMESTAMP
+# endif
 #endif
 
 #if defined(__APPLE__)
@@ -252,8 +263,14 @@ strbuf_size(uc_stringbuf_t *sb)
 static uc_value_t *
 strbuf_finish(uc_stringbuf_t **sb, size_t final_size)
 {
-	uc_string_t *us = (uc_string_t *)(*sb)->buf;
-	size_t buffer_size = strbuf_size(*sb);
+	size_t buffer_size;
+	uc_string_t *us;
+
+	if (!sb || !*sb)
+		return NULL;
+
+	buffer_size = strbuf_size(*sb);
+	us = (uc_string_t *)(*sb)->buf;
 
 	if (final_size > buffer_size)
 		final_size = buffer_size;
@@ -441,6 +458,22 @@ parse_integer(char *s, size_t len)
 	case 2:  return v.i16;
 	case 4:  return v.i32;
 	case 8:  return v.i64;
+	default: return 0;
+	}
+}
+
+static uint64_t
+parse_unsigned(char *s, size_t len)
+{
+	union { uint8_t u8; uint16_t u16; uint32_t u32; uint64_t u64; } v;
+
+	memcpy(&v, s, len < sizeof(v) ? len : sizeof(v));
+
+	switch (len) {
+	case 1:  return v.u8;
+	case 2:  return v.u16;
+	case 4:  return v.u32;
+	case 8:  return v.u64;
 	default: return 0;
 	}
 }
@@ -904,6 +937,12 @@ typedef struct {
 	struct_t *ctype;
 } sockopt_t;
 
+typedef struct {
+	int level;
+	int type;
+	struct_t *ctype;
+} cmsgtype_t;
+
 #define STRUCT_MEMBER_NP(struct_name, member_name, data_type)	\
 	{ #member_name, data_type,									\
 	  { .offset = offsetof(struct struct_name, member_name) },	\
@@ -1043,6 +1082,79 @@ static struct_t st_in6_pktinfo = {
 	.members = (member_t []){
 		STRUCT_MEMBER(in6_pktinfo, ipi6, addr, DT_IPV6ADDR),
 		STRUCT_MEMBER_CB(interface, in6_ifindex_to_c, in6_ifindex_to_uv),
+		{ 0 }
+	}
+};
+
+struct ipv6_recv_error_local {
+	struct {
+		uint32_t ee_errno;
+		uint8_t ee_origin;
+		uint8_t ee_type;
+		uint8_t ee_code;
+		uint8_t ee_pad;
+		uint32_t ee_info;
+		union {
+			uint32_t ee_data;
+			struct {
+				uint16_t ee_len;
+				uint8_t ee_flags;
+				uint8_t ee_reserved;
+			} ee_rfc4884;
+		} u;
+	} ee;
+	struct sockaddr_in6 offender;
+};
+
+static uc_value_t *
+offender_to_uv(void *st)
+{
+	struct ipv6_recv_error_local *e = st;
+	uc_value_t *addr = ucv_object_new(NULL);
+
+	if (sockaddr_to_uv((struct sockaddr_storage *)&e->offender, addr))
+		return addr;
+
+	ucv_put(addr);
+
+	return NULL;
+}
+
+static struct_t st_ip_recv_error = {
+	.size = sizeof(struct ipv6_recv_error_local),
+	.members = (member_t []){
+		STRUCT_MEMBER(ipv6_recv_error_local, ee.ee, errno, DT_UNSIGNED),
+		STRUCT_MEMBER(ipv6_recv_error_local, ee.ee, origin, DT_UNSIGNED),
+		STRUCT_MEMBER(ipv6_recv_error_local, ee.ee, type, DT_UNSIGNED),
+		STRUCT_MEMBER(ipv6_recv_error_local, ee.ee, code, DT_UNSIGNED),
+		STRUCT_MEMBER(ipv6_recv_error_local, ee.ee, info, DT_UNSIGNED),
+		STRUCT_MEMBER(ipv6_recv_error_local, ee.u.ee, data, DT_UNSIGNED),
+		STRUCT_MEMBER(ipv6_recv_error_local, ee.u.ee_rfc4884.ee, len, DT_UNSIGNED),
+		STRUCT_MEMBER(ipv6_recv_error_local, ee.u.ee_rfc4884.ee, flags, DT_UNSIGNED),
+		STRUCT_MEMBER_CB(offender, NULL, offender_to_uv),
+		{ 0 }
+	}
+};
+
+static uc_value_t *
+ip6m_addr_to_uv(void *st)
+{
+	struct ip6_mtuinfo *mi = st;
+	uc_value_t *addr = ucv_object_new(NULL);
+
+	if (sockaddr_to_uv((struct sockaddr_storage *)&mi->ip6m_addr, addr))
+		return addr;
+
+	ucv_put(addr);
+
+	return NULL;
+}
+
+static struct_t st_ip6_mtuinfo = {
+	.size = sizeof(struct ip6_mtuinfo),
+	.members = (member_t []){
+		STRUCT_MEMBER_CB(addr, NULL, ip6m_addr_to_uv),
+		STRUCT_MEMBER(ip6_mtuinfo, ip6m, mtu, DT_UNSIGNED),
 		{ 0 }
 	}
 };
@@ -1270,6 +1382,20 @@ static struct_t st_tpacket_stats = {
 	}
 };
 
+static struct_t st_tpacket_auxdata = {
+	.size = sizeof(struct tpacket_auxdata),
+	.members = (member_t []){
+		STRUCT_MEMBER(tpacket_auxdata, tp, status, DT_UNSIGNED),
+		STRUCT_MEMBER(tpacket_auxdata, tp, len, DT_UNSIGNED),
+		STRUCT_MEMBER(tpacket_auxdata, tp, snaplen, DT_UNSIGNED),
+		STRUCT_MEMBER(tpacket_auxdata, tp, mac, DT_UNSIGNED),
+		STRUCT_MEMBER(tpacket_auxdata, tp, net, DT_UNSIGNED),
+		STRUCT_MEMBER(tpacket_auxdata, tp, vlan_tci, DT_UNSIGNED),
+		STRUCT_MEMBER(tpacket_auxdata, tp, vlan_tpid, DT_UNSIGNED),
+		{ 0 }
+	}
+};
+
 static struct_t st_fanout_args = {
 	.size = sizeof(struct fanout_args),
 	.members = (member_t []){
@@ -1279,6 +1405,58 @@ static struct_t st_fanout_args = {
 		{ 0 }
 	}
 };
+
+struct timeval_old_local {
+	long tv_sec;
+#if defined(__sparc__) && defined(__arch64__)
+	int tv_usec;
+#else
+	long tv_usec;
+#endif
+};
+
+static struct_t st_timeval_old = {
+	.size = sizeof(struct timeval_old_local),
+	.members = (member_t []){
+		STRUCT_MEMBER(timeval_old_local, tv, sec, DT_SIGNED),
+		STRUCT_MEMBER(timeval_old_local, tv, usec, DT_SIGNED),
+		{ 0 }
+	}
+};
+
+# ifdef SO_TIMESTAMP_NEW
+struct timeval_new_local { int64_t tv_sec; int64_t tv_usec; };
+static struct_t st_timeval_new = {
+	.size = sizeof(struct timeval_old_local),
+	.members = (member_t []){
+		STRUCT_MEMBER(timeval_new_local, tv, sec, DT_SIGNED),
+		STRUCT_MEMBER(timeval_new_local, tv, usec, DT_SIGNED),
+		{ 0 }
+	}
+};
+# endif
+
+struct timespec_old_local { long tv_sec; long tv_nsec; };
+static struct_t st_timespec_old = {
+	.size = sizeof(struct timespec_old_local),
+	.members = (member_t []){
+		STRUCT_MEMBER(timespec_old_local, tv, sec, DT_SIGNED),
+		STRUCT_MEMBER(timespec_old_local, tv, nsec, DT_SIGNED),
+		{ 0 }
+	}
+};
+
+# ifdef SO_TIMESTAMPNS_NEW
+struct timespec_new_local { long long tv_sec; long long tv_nsec; };
+static struct_t st_timespec_new = {
+	.size = sizeof(struct timespec_new_local),
+	.members = (member_t []){
+		STRUCT_MEMBER(timespec_new_local, tv, sec, DT_SIGNED),
+		STRUCT_MEMBER(timespec_new_local, tv, nsec, DT_SIGNED),
+		{ 0 }
+	}
+};
+# endif
 #endif
 
 #define SV_VOID		(struct_t *)0
@@ -1287,6 +1465,13 @@ static struct_t st_fanout_args = {
 #define SV_BOOL		(struct_t *)3
 #define SV_STRING	(struct_t *)4
 #define SV_IFNAME	(struct_t *)5
+
+#define CV_INT		(struct_t *)0
+#define CV_UINT		(struct_t *)1
+#define CV_BE32		(struct_t *)2
+#define CV_STRING	(struct_t *)3
+#define CV_SOCKADDR	(struct_t *)4
+#define CV_FDS		(struct_t *)5
 
 static sockopt_t sockopts[] = {
     { SOL_SOCKET, SO_ACCEPTCONN, SV_BOOL },
@@ -1449,6 +1634,52 @@ static sockopt_t sockopts[] = {
 	{ SOL_PACKET, PACKET_TX_RING, &st_tpacket_req },
 	{ SOL_PACKET, PACKET_VERSION, SV_INT },
 	{ SOL_PACKET, PACKET_QDISC_BYPASS, SV_BOOL },
+#endif
+};
+
+static cmsgtype_t cmsgtypes[] = {
+#if defined(__linux__)
+	{ SOL_PACKET, PACKET_AUXDATA, &st_tpacket_auxdata },
+
+	{ SOL_SOCKET, SO_TIMESTAMP_OLD, &st_timeval_old },
+# ifdef SO_TIMESTAMP_NEW
+	{ SOL_SOCKET, SO_TIMESTAMP_NEW, &st_timeval_new },
+# endif
+	{ SOL_SOCKET, SO_TIMESTAMPNS_OLD, &st_timespec_old },
+# ifdef SO_TIMESTAMPNS_NEW
+	{ SOL_SOCKET, SO_TIMESTAMPNS_NEW, &st_timespec_new },
+# endif
+
+	{ SOL_SOCKET, SCM_CREDENTIALS, &st_ucred },
+	{ SOL_SOCKET, SCM_RIGHTS, CV_FDS },
+#endif
+
+	{ IPPROTO_IP, IP_RECVOPTS, SV_STRING },
+	{ IPPROTO_IP, IP_RETOPTS, SV_STRING },
+	{ IPPROTO_IP, IP_TOS, CV_INT },
+	{ IPPROTO_IP, IP_TTL, CV_INT },
+#if defined(__linux__)
+	{ IPPROTO_IP, IP_CHECKSUM, CV_UINT },
+	{ IPPROTO_IP, IP_ORIGDSTADDR, CV_SOCKADDR },
+	{ IPPROTO_IP, IP_RECVERR, &st_ip_recv_error },
+	{ IPPROTO_IP, IP_RECVFRAGSIZE, CV_INT },
+#endif
+
+	{ IPPROTO_IPV6, IPV6_TCLASS, CV_INT },
+	{ IPPROTO_IPV6, IPV6_FLOWINFO, CV_BE32 },
+#if defined(__linux__)
+	{ IPPROTO_IPV6, IPV6_DSTOPTS, CV_STRING },
+	{ IPPROTO_IPV6, IPV6_HOPLIMIT, CV_INT },
+	{ IPPROTO_IPV6, IPV6_HOPOPTS, CV_STRING },
+	{ IPPROTO_IPV6, IPV6_ORIGDSTADDR, CV_SOCKADDR },
+	{ IPPROTO_IPV6, IPV6_PATHMTU, &st_ip6_mtuinfo },
+	{ IPPROTO_IPV6, IPV6_PKTINFO, &st_in6_pktinfo },
+	{ IPPROTO_IPV6, IPV6_RECVERR, &st_ip_recv_error },
+	{ IPPROTO_IPV6, IPV6_RECVFRAGSIZE, CV_INT },
+	{ IPPROTO_IPV6, IPV6_RTHDR, CV_STRING },
+
+	{ IPPROTO_TCP, TCP_CM_INQ, CV_INT },
+	{ IPPROTO_UDP, UDP_GRO, CV_INT },
 #endif
 };
 
@@ -3073,6 +3304,765 @@ uc_socket_inst_recv(uc_vm_t *vm, size_t nargs)
 	ok_return(strbuf_finish(&buf, ret));
 }
 
+uc_declare_vector(strbuf_array_t, uc_stringbuf_t *);
+
+#if defined(__linux__)
+static void optmem_max(size_t *sz) {
+	char buf[sizeof("18446744073709551615")] = { 0 };
+	int fd, rv;
+
+	fd = open("/proc/sys/net/core/optmem_max", O_RDONLY);
+
+	if (fd >= 0) {
+		if (read(fd, buf, sizeof(buf) - 1) > 0) {
+			rv = strtol(buf, NULL, 10);
+
+			if (rv > 0 && (size_t)rv < *sz)
+				*sz = rv;
+		}
+
+		if (fd > 2)
+			close(fd);
+	}
+}
+#else
+# define optmem_max(x)
+#endif
+
+
+/**
+ * Represents a single control (ancillary data) message returned
+ * in the *ancillary* array by {@link module:socket.socket#recvmsg|`recvmsg()`}.
+ *
+ * @typedef {Object} module:socket.socket.ControlMessage
+ * @property {number} level
+ * The message socket level (`cmsg_level`), e.g. `SOL_SOCKET`.
+ *
+ * @property {number} type
+ * The protocol specific message type (`cmsg_type`), e.g. `SCM_RIGHTS`.
+ *
+ * @property {*} data
+ * The payload of the control message. If the control message type is known by
+ * the socket module, it is represented as a mixed value (array, object, number,
+ * etc.) with structure specific to the control message type. If the control
+ * message cannot be decoded, *data* is set to a string value containing the raw
+ * payload.
+ */
+static uc_value_t *
+decode_cmsg(uc_vm_t *vm, struct cmsghdr *cmsg)
+{
+	char *s = (char *)CMSG_DATA(cmsg);
+	size_t sz = cmsg->cmsg_len - sizeof(*cmsg);
+	struct sockaddr_storage *ss;
+	uc_value_t *fdarr;
+	struct stat st;
+	int *fds;
+
+	for (size_t i = 0; i < ARRAY_SIZE(cmsgtypes); i++) {
+
+		if (cmsgtypes[i].level != cmsg->cmsg_level)
+			continue;
+
+		if (cmsgtypes[i].type != cmsg->cmsg_type)
+			continue;
+
+		switch ((uintptr_t)cmsgtypes[i].ctype) {
+		case (uintptr_t)CV_INT:
+			return ucv_int64_new(parse_integer(s, sz));
+
+		case (uintptr_t)CV_UINT:
+		case (uintptr_t)CV_BE32:
+			return ucv_uint64_new(parse_unsigned(s, sz));
+
+		case (uintptr_t)CV_SOCKADDR:
+			ss = (struct sockaddr_storage *)s;
+
+			if ((sz >= sizeof(struct sockaddr_in) &&
+			     ss->ss_family == AF_INET) ||
+			    (sz >= sizeof(struct sockaddr_in6) &&
+			     ss->ss_family == AF_INET6))
+			{
+				uc_value_t *addr = ucv_object_new(vm);
+
+				if (sockaddr_to_uv(ss, addr))
+					return addr;
+
+				ucv_put(addr);
+			}
+
+			return NULL;
+
+		case (uintptr_t)CV_FDS:
+			fdarr = ucv_array_new_length(vm, sz / sizeof(int));
+			fds = (int *)s;
+
+			for (size_t i = 0; i < sz / sizeof(int); i++) {
+				if (fstat(fds[i], &st) == 0) {
+					uc_resource_type_t *t;
+
+					if (S_ISSOCK(st.st_mode)) {
+						t = ucv_resource_type_lookup(vm, "socket");
+
+						ucv_array_push(fdarr,
+							ucv_resource_new(t, (void *)(intptr_t)fds[i]));
+
+						continue;
+					}
+					else if (S_ISDIR(st.st_mode)) {
+						t = ucv_resource_type_lookup(vm, "fs.dir");
+
+						if (t) {
+							DIR *d = fdopendir(fds[i]);
+
+							if (d) {
+								ucv_array_push(fdarr, ucv_resource_new(t, d));
+								continue;
+							}
+						}
+					}
+					else {
+						t = ucv_resource_type_lookup(vm, "fs.file");
+
+						if (t) {
+							int n = fcntl(fds[i], F_GETFL);
+							const char *mode;
+
+							if (n <= 0 || (n & O_ACCMODE) == O_RDONLY)
+								mode = "r";
+							else if ((n & O_ACCMODE) == O_WRONLY)
+								mode = (n & O_APPEND) ? "a" : "w";
+							else
+								mode = (n & O_APPEND) ? "a+" : "w+";
+
+							FILE *f = fdopen(fds[i], mode);
+
+							if (f) {
+								ucv_array_push(fdarr, uc_resource_new(t, f));
+								continue;
+							}
+						}
+					}
+				}
+
+				ucv_array_push(fdarr, ucv_int64_new(fds[i]));
+			}
+
+			return fdarr;
+
+		case (uintptr_t)CV_STRING:
+			break;
+
+		default:
+			if (sz >= cmsgtypes[i].ctype->size)
+				return struct_to_uv(s, cmsgtypes[i].ctype);
+		}
+
+		break;
+	}
+
+	return ucv_string_new_length(s, sz);
+}
+
+static size_t
+estimate_cmsg_size(uc_value_t *uv)
+{
+	int cmsg_level = ucv_to_integer(ucv_object_get(uv, "level", NULL));
+	int cmsg_type = ucv_to_integer(ucv_object_get(uv, "type", NULL));
+	uc_value_t *val = ucv_object_get(uv, "data", NULL);
+
+	for (size_t i = 0; i < ARRAY_SIZE(cmsgtypes); i++) {
+		if (cmsgtypes[i].level != cmsg_level)
+			continue;
+
+		if (cmsgtypes[i].type != cmsg_type)
+			continue;
+
+		switch ((uintptr_t)cmsgtypes[i].ctype) {
+		case (uintptr_t)CV_INT:      return sizeof(int);
+		case (uintptr_t)CV_UINT:     return sizeof(unsigned int);
+		case (uintptr_t)CV_BE32:     return sizeof(uint32_t);
+		case (uintptr_t)CV_SOCKADDR: return sizeof(struct sockaddr_storage);
+		case (uintptr_t)CV_FDS:      return ucv_array_length(val) * sizeof(int);
+		case (uintptr_t)CV_STRING:   return ucv_string_length(val);
+		default:                     return cmsgtypes[i].ctype->size;
+		}
+	}
+
+	switch (ucv_type(val)) {
+		case UC_BOOLEAN: return sizeof(unsigned int);
+		case UC_INTEGER: return sizeof(int);
+		case UC_STRING:  return ucv_string_length(val);
+		default:         return 0;
+	}
+}
+
+static bool
+encode_cmsg(uc_vm_t *vm, uc_value_t *uv, struct cmsghdr *cmsg)
+{
+	struct { int *entries; size_t count; } fds = { 0 };
+	void *dataptr = NULL;
+	socklen_t datasz = 0;
+	char *st = NULL;
+	size_t i;
+	union {
+		int i;
+		unsigned int u;
+		uint32_t u32;
+		struct sockaddr_storage ss;
+	} val;
+
+	cmsg->cmsg_level = ucv_to_integer(ucv_object_get(uv, "level", NULL));
+	cmsg->cmsg_type = ucv_to_integer(ucv_object_get(uv, "type", NULL));
+
+	uc_value_t *data = ucv_object_get(uv, "data", NULL);
+
+	for (i = 0; i < ARRAY_SIZE(cmsgtypes); i++) {
+		if (cmsgtypes[i].level != cmsg->cmsg_level)
+			continue;
+
+		if (cmsgtypes[i].type != cmsg->cmsg_type)
+			continue;
+
+		switch ((uintptr_t)cmsgtypes[i].ctype) {
+		case (uintptr_t)CV_INT:
+			val.i = ucv_to_integer(data);
+			datasz = sizeof(val.i);
+			dataptr = &val;
+			break;
+
+		case (uintptr_t)CV_UINT:
+			val.u = ucv_to_unsigned(data);
+			datasz = sizeof(val.u);
+			dataptr = &val;
+			break;
+
+		case (uintptr_t)CV_BE32:
+			val.u32 = ucv_to_unsigned(data);
+			datasz = sizeof(val.u32);
+			dataptr = &val;
+			break;
+
+		case (uintptr_t)CV_SOCKADDR:
+			if (uv_to_sockaddr(data, &val.ss, &datasz))
+				dataptr = &val;
+			else
+				datasz = 0, dataptr = NULL;
+			break;
+
+		case (uintptr_t)CV_FDS:
+			if (ucv_type(data) == UC_ARRAY) {
+				for (size_t i = 0; i < ucv_array_length(data); i++) {
+					int fd;
+
+					if (uv_to_fileno(vm, ucv_array_get(data, i), &fd))
+						uc_vector_push(&fds, fd);
+				}
+			}
+
+			datasz = sizeof(fds.entries[0]) * fds.count;
+			dataptr = fds.entries;
+			break;
+
+		case (uintptr_t)CV_STRING:
+			datasz = ucv_string_length(data);
+			dataptr = ucv_string_get(data);
+			break;
+
+		default:
+			st = uv_to_struct(data, cmsgtypes[i].ctype);
+			datasz = st ? cmsgtypes[i].ctype->size : 0;
+			dataptr = st;
+			break;
+		}
+
+		break;
+	}
+
+	/* we don't know this kind of control message, guess encoding */
+	if (i == ARRAY_SIZE(cmsgtypes)) {
+		switch (ucv_type(data)) {
+		/* treat boolean as int with values 1 or 0 */
+		case UC_BOOLEAN:
+			val.u = ucv_boolean_get(data);
+			dataptr = &val;
+			datasz = sizeof(val.u);
+			break;
+
+		/* treat integers as int */
+		case UC_INTEGER:
+			if (ucv_is_u64(data)) {
+				val.u = ucv_uint64_get(data);
+				datasz = sizeof(val.u);
+			}
+			else {
+				val.i = ucv_int64_get(data);
+				datasz = sizeof(val.i);
+			}
+
+			dataptr = &val;
+			break;
+
+		/* pass strings as-is */
+		case UC_STRING:
+			dataptr = ucv_string_get(data);
+			datasz = ucv_string_length(data);
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	cmsg->cmsg_len = CMSG_LEN(datasz);
+
+	if (dataptr)
+		memcpy(CMSG_DATA(cmsg), dataptr, datasz);
+
+	uc_vector_clear(&fds);
+	free(st);
+
+	return true;
+}
+
+/**
+ * Sends a message through the socket.
+ *
+ * Sends a message through the socket handle, supporting complex message
+ * structures including multiple data buffers and ancillary data. This function
+ * allows for precise control over the message content and delivery behavior.
+ *
+ * Returns the number of sent bytes.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:socket.socket#sendmsg
+ *
+ * @param {*} [data]
+ * The data to be sent. If a string is provided, it is sent as is. If an array
+ * is specified, each item is sent as a separate `struct iovec`. Non-string
+ * values are implicitly converted to a string and sent. If omitted, only
+ * ancillary data and address are considered.
+ *
+ * @param {module:socket.socket.ControlMessage[]|string} [ancillaryData]
+ * Optional ancillary data to be sent. If an array is provided, each element is
+ * converted to a control message. If a string is provided, it is sent as-is
+ * without further interpretation. Refer to
+ * {@link module:socket.socket#recvmsg|`recvmsg()`} and
+ * {@link module:socket.socket.ControlMessage|ControlMessage} for details.
+ *
+ * @param {module:socket.socket.SocketAddress} [address]
+ * The destination address for the message. If provided, it sets or overrides
+ * the packet destination address.
+ *
+ * @param {number} [flags]
+ * Optional flags to modify the behavior of the send operation. This should be a
+ * bitwise OR-ed combination of `MSG_*` flag values.
+ *
+ * @returns {?number}
+ * Returns the number of bytes sent on success, or `null` if an error occurred.
+ *
+ * @example
+ * // Send file descriptors over domain socket
+ * const f1 = fs.open("example.txt", "w");
+ * const f2 = fs.popen("date +%s", "r");
+ * const sk = socket.connect({ family: socket.AF_UNIX, path: "/tmp/socket" });
+
+ * sk.sendmsg("Hi there, here's some descriptors!", [
+ * 	{ level: socket.SOL_SOCKET, type: socket.SCM_RIGHTS, data: [ f1, f2 ] }
+ * ]);
+ *
+ * // Send multiple values in one datagram
+ * sk.sendmsg([ "This", "is", "one", "message" ]);
+ */
+static uc_value_t *
+uc_socket_inst_sendmsg(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *data, *ancdata, *addr, *flags;
+	struct sockaddr_storage ss = { 0 };
+	strbuf_array_t sbarr = { 0 };
+	struct msghdr msg = { 0 };
+	struct iovec vec = { 0 };
+	int flagval, sockfd;
+	socklen_t slen;
+	ssize_t ret;
+
+	args_get(vm, nargs, &sockfd,
+		"data", UC_NULL, true, &data,
+		"ancillary data", UC_NULL, true, &ancdata,
+		"address", UC_OBJECT, true, &addr,
+		"flags", UC_INTEGER, true, &flags);
+
+	flagval = flags ? ucv_int64_get(flags) : 0;
+
+	/* treat string ancdata arguemnt as raw controldata buffer */
+	if (ucv_type(ancdata) == UC_STRING) {
+		msg.msg_control = ucv_string_get(ancdata);
+		msg.msg_controllen = ucv_string_length(ancdata);
+	}
+	/* encode ancdata passed as array */
+	else if (ucv_type(ancdata) == UC_ARRAY) {
+		msg.msg_controllen = 0;
+
+		for (size_t i = 0; i < ucv_array_length(ancdata); i++) {
+			size_t sz = estimate_cmsg_size(ucv_array_get(ancdata, i));
+
+			if (sz > 0)
+				msg.msg_controllen += CMSG_SPACE(sz);
+		}
+
+		if (msg.msg_controllen > 0) {
+			msg.msg_control = xalloc(msg.msg_controllen);
+
+			struct cmsghdr *cmsg = NULL;
+
+			for (size_t i = 0; i < ucv_array_length(ancdata); i++) {
+#ifdef __clang_analyzer__
+				/* Clang static analyzer assumes that CMSG_*HDR() returns
+				 * allocated heap pointers and not pointers into the
+				 * msg.msg_control buffer. Nudge it. */
+				cmsg = (struct cmsghdr *)msg.msg_control;
+#else
+				cmsg = cmsg ? CMSG_NXTHDR(&msg, cmsg) : CMSG_FIRSTHDR(&msg);
+#endif
+
+				if (!cmsg) {
+					free(msg.msg_control);
+					err_return(ENOBUFS, "Not enough CMSG buffer space");
+				}
+
+				if (!encode_cmsg(vm, ucv_array_get(ancdata, i), cmsg)) {
+					free(msg.msg_control);
+					return NULL;
+				}
+			}
+
+			msg.msg_controllen = (cmsg != NULL)
+				? (char *)cmsg - (char *)msg.msg_control + CMSG_SPACE(cmsg->cmsg_len)
+				: 0;
+		}
+	}
+	else if (ancdata) {
+		err_return(EINVAL, "Ancillary data must be string or array value");
+	}
+
+	/* prepare iov array */
+	if (ucv_type(data) == UC_ARRAY) {
+		msg.msg_iovlen = ucv_array_length(data);
+		msg.msg_iov = (msg.msg_iovlen > 1)
+			? xalloc(sizeof(vec) * msg.msg_iovlen) : &vec;
+
+		for (size_t i = 0; i < (size_t)msg.msg_iovlen; i++) {
+			uc_value_t *item = ucv_array_get(data, i);
+
+			if (ucv_type(item) == UC_STRING) {
+				msg.msg_iov[i].iov_base = _ucv_string_get(&((uc_array_t *)data)->entries[i]);
+				msg.msg_iov[i].iov_len = ucv_string_length(item);
+			}
+			else if (item) {
+				struct printbuf *pb = xprintbuf_new();
+				uc_vector_push(&sbarr, pb);
+				ucv_to_stringbuf(vm, pb, item, false);
+				msg.msg_iov[i].iov_base = pb->buf;
+				msg.msg_iov[i].iov_len = pb->bpos;
+			}
+		}
+	}
+	else if (ucv_type(data) == UC_STRING) {
+		msg.msg_iovlen = 1;
+		msg.msg_iov = &vec;
+		vec.iov_base = ucv_string_get(data);
+		vec.iov_len = ucv_string_length(data);
+	}
+	else if (data) {
+		struct printbuf *pb = xprintbuf_new();
+		uc_vector_push(&sbarr, pb);
+		ucv_to_stringbuf(vm, pb, data, false);
+		msg.msg_iovlen = 1;
+		msg.msg_iov = &vec;
+		vec.iov_base = pb->buf;
+		vec.iov_len = pb->bpos;
+	}
+
+	/* prepare address */
+	if (addr && uv_to_sockaddr(addr, &ss, &slen)) {
+		msg.msg_name = &ss;
+		msg.msg_namelen = slen;
+	}
+
+	/* now send actual data */
+	do {
+		ret = sendmsg(sockfd, &msg, flagval);
+	} while (ret == -1 && errno == EINTR);
+
+	while (sbarr.count > 0)
+		printbuf_free(sbarr.entries[--sbarr.count]);
+
+	uc_vector_clear(&sbarr);
+
+	if (msg.msg_iov != &vec)
+		free(msg.msg_iov);
+
+	free(msg.msg_control);
+
+	if (ret == -1)
+		err_return(errno, "sendmsg()");
+
+	ok_return(ucv_int64_new(ret));
+}
+
+
+
+/**
+ * Represents a message object returned by
+ * {@link module:socket.socket#recvmsg|`recvmsg()`}.
+ *
+ * @typedef {Object} module:socket.socket.ReceivedMessage
+ * @property {number} flags
+ * Integer value containing bitwise OR-ed `MSG_*` result flags returned by the
+ * underlying receive call.
+ *
+ * @property {number} length
+ * Integer value containing the number of bytes returned by the `recvmsg()`
+ * syscall, which might be larger than the received data in case `MSG_TRUNC`
+ * was passed.
+ *
+ * @property {module:socket.socket.SocketAddress} address
+ * The address from which the message was received.
+ *
+ * @property {string[]|string} data
+ * An array of strings, each representing the received message data.
+ * Each string corresponds to one buffer size specified in the *sizes* argument.
+ * If a single receive size was passed instead of an array of sizes, *data* will
+ * hold a string containing the received data.
+ *
+ * @property {module:socket.socket.ControlMessage[]} [ancillary]
+ * An array of received control messages. Only included if a non-zero positive
+ * *ancillarySize* was passed to `recvmsg()`.
+ */
+
+/**
+ * Receives a message from the socket.
+ *
+ * Receives a message from the socket handle, allowing for more complex data
+ * reception compared to `recv()`. This includes the ability to receive
+ * ancillary data (such as file descriptors, credentials, etc.), multiple
+ * message segments, and optional flags to modify the receive behavior.
+ *
+ * Returns an object containing the received message data, ancillary data,
+ * and the sender's address.
+ *
+ * Returns `null` if an error occurred during the receive operation.
+ *
+ * @function module:socket.socket#recvmsg
+ *
+ * @param {number[]|number} [sizes]
+ * Specifies the sizes of the buffers used for receiving the message. If an
+ * array of numbers is provided, each number determines the size of an
+ * individual buffer segment, creating multiple `struct iovec` for reception.
+ * If a single number is provided, a single buffer of that size is used.
+ *
+ * @param {number} [ancillarySize]
+ * The size allocated for the ancillary data buffer. If not provided, ancillary
+ * data is not processed.
+ *
+ * @param {number} [flags]
+ * Optional flags to modify the behavior of the receive operation. This should
+ * be a bitwise OR-ed combination of flag values.
+ *
+ * @returns {?module:socket.socket.ReceivedMessage}
+ * An object containing the received message data, ancillary data,
+ * and the sender's address.
+ *
+ * @example
+ * // Receive file descriptors over domain socket
+ * const sk = socket.listen({ family: socket.AF_UNIX, path: "/tmp/socket" });
+ * sk.setopt(socket.SOL_SOCKET, socket.SO_PASSCRED, true);
+ *
+ * const msg = sk.recvmsg(1024, 1024); *
+ * for (let cmsg in msg.ancillary)
+ *   if (cmsg.level == socket.SOL_SOCKET && cmsg.type == socket.SCM_RIGHTS)
+ *     print(`Got some descriptors: ${cmsg.data}!\n`);
+ *
+ * // Receive message in segments of 10, 128 and 512 bytes
+ * const msg = sk.recvmsg([ 10, 128, 512 ]);
+ * print(`Message parts: ${msg.data[0]}, ${msg.data[1]}, ${msg.data[2]}\n`);
+ *
+ * // Peek buffer
+ * const msg = sk.recvmsg(0, 0, socket.MSG_PEEK|socket.MSG_TRUNC);
+ * print(`Received ${length(msg.data)} bytes, ${msg.length} bytes available\n`);
+ */
+static uc_value_t *
+uc_socket_inst_recvmsg(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *length, *anclength, *flags, *rv;
+	struct sockaddr_storage ss = { 0 };
+	strbuf_array_t sbarr = { 0 };
+	struct msghdr msg = { 0 };
+	struct iovec vec = { 0 };
+	int flagval, sockfd;
+	ssize_t ret;
+
+	args_get(vm, nargs, &sockfd,
+		"length", UC_NULL, true, &length,
+		"ancillary length", UC_INTEGER, true, &anclength,
+		"flags", UC_INTEGER, true, &flags);
+
+	flagval = flags ? ucv_int64_get(flags) : 0;
+
+#if defined(__linux__)
+	flagval |= MSG_CMSG_CLOEXEC;
+#endif
+
+	/* prepare ancillary data buffer */
+	if (anclength) {
+		size_t sz = ucv_to_unsigned(anclength);
+
+		if (errno != 0)
+			err_return(errno, "Invalid ancillary data length");
+
+		optmem_max(&sz);
+
+		if (sz > 0) {
+			msg.msg_controllen = sz;
+			msg.msg_control = xalloc(sz);
+		}
+	}
+
+	/* prepare iov array */
+	if (ucv_type(length) == UC_ARRAY) {
+		msg.msg_iovlen = ucv_array_length(length);
+		msg.msg_iov = (msg.msg_iovlen > 1)
+			? xalloc(sizeof(vec) * msg.msg_iovlen) : &vec;
+
+		for (size_t i = 0; i < (size_t)msg.msg_iovlen; i++) {
+			size_t sz = ucv_to_unsigned(ucv_array_get(length, i));
+
+			if (errno != 0) {
+				while (sbarr.count > 0)
+					strbuf_free(sbarr.entries[--sbarr.count]);
+
+				uc_vector_clear(&sbarr);
+
+				if (msg.msg_iov != &vec)
+					free(msg.msg_iov);
+
+				free(msg.msg_control);
+
+				err_return(errno, "Invalid length value");
+			}
+
+			uc_vector_push(&sbarr, strbuf_alloc(sz));
+			msg.msg_iov[i].iov_base = strbuf_data(sbarr.entries[i]);
+			msg.msg_iov[i].iov_len = sz;
+		}
+	}
+	else {
+		size_t sz = ucv_to_unsigned(length);
+
+		if (errno != 0) {
+			free(msg.msg_control);
+			err_return(errno, "Invalid length value");
+		}
+
+		uc_vector_push(&sbarr, strbuf_alloc(sz));
+
+		msg.msg_iovlen = 1;
+		msg.msg_iov = &vec;
+		vec.iov_base = strbuf_data(sbarr.entries[0]);
+		vec.iov_len = sz;
+	}
+
+	/* now receive actual data */
+	msg.msg_name = &ss;
+	msg.msg_namelen = sizeof(ss);
+
+	do {
+		ret = recvmsg(sockfd, &msg, flagval);
+	} while (ret == -1 && errno == EINTR);
+
+	if (ret == -1) {
+		while (sbarr.count > 0)
+			strbuf_free(sbarr.entries[--sbarr.count]);
+
+		uc_vector_clear(&sbarr);
+
+		if (msg.msg_iov != &vec)
+			free(msg.msg_iov);
+
+		free(msg.msg_control);
+
+		err_return(errno, "recvmsg()");
+	}
+
+	rv = ucv_object_new(vm);
+
+	ucv_object_add(rv, "flags", ucv_int64_new(msg.msg_flags));
+	ucv_object_add(rv, "length", ucv_int64_new(ret));
+
+	if (msg.msg_namelen > 0) {
+		uc_value_t *addr = ucv_object_new(vm);
+
+		if (sockaddr_to_uv(&ss, addr))
+			ucv_object_add(rv, "address", addr);
+		else
+			ucv_put(addr);
+	}
+
+	if (msg.msg_controllen > 0) {
+		uc_value_t *ancillary = ucv_array_new(vm);
+
+		for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+		     cmsg != NULL;
+		     cmsg = CMSG_NXTHDR(&msg, cmsg))
+		{
+			uc_value_t *c = ucv_object_new(vm);
+
+			ucv_object_add(c, "level", ucv_int64_new(cmsg->cmsg_level));
+			ucv_object_add(c, "type", ucv_int64_new(cmsg->cmsg_type));
+			ucv_object_add(c, "data", decode_cmsg(vm, cmsg));
+
+			ucv_array_push(ancillary, c);
+		}
+
+		ucv_object_add(rv, "ancillary", ancillary);
+	}
+
+	if (ret >= 0) {
+		if (ucv_type(length) == UC_ARRAY) {
+			uc_value_t *data = ucv_array_new_length(vm, msg.msg_iovlen);
+
+			for (size_t i = 0; i < (size_t)msg.msg_iovlen; i++) {
+				size_t sz = ret;
+
+				if (sz > msg.msg_iov[i].iov_len)
+					sz = msg.msg_iov[i].iov_len;
+
+				ucv_array_push(data, strbuf_finish(&sbarr.entries[i], sz));
+				ret -= sz;
+			}
+
+			ucv_object_add(rv, "data", data);
+		}
+		else {
+			size_t sz = ret;
+
+			if (sz > msg.msg_iov[0].iov_len)
+				sz = msg.msg_iov[0].iov_len;
+
+			ucv_object_add(rv, "data", strbuf_finish(&sbarr.entries[0], sz));
+		}
+	}
+
+	uc_vector_clear(&sbarr);
+
+	if (msg.msg_iov != &vec)
+		free(msg.msg_iov);
+
+	free(msg.msg_control);
+
+	ok_return(rv);
+}
+
 /**
  * Binds a socket to a specific address.
  *
@@ -3599,7 +4589,9 @@ static const uc_function_list_t socket_fns[] = {
 	{ "listen",		uc_socket_inst_listen },
 	{ "accept",		uc_socket_inst_accept },
 	{ "send",		uc_socket_inst_send },
+	{ "sendmsg",	uc_socket_inst_sendmsg },
 	{ "recv",	    uc_socket_inst_recv },
+	{ "recvmsg",	uc_socket_inst_recvmsg },
 	{ "setopt",		uc_socket_inst_setopt },
 	{ "getopt",		uc_socket_inst_getopt },
 	{ "fileno",		uc_socket_inst_fileno },
@@ -3991,6 +4983,9 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(SO_RXQ_OVFL);
 	ADD_CONST(SO_SNDBUFFORCE);
 	ADD_CONST(SO_TIMESTAMPNS);
+
+	ADD_CONST(SCM_CREDENTIALS);
+	ADD_CONST(SCM_RIGHTS);
 #endif
 
 	/**
