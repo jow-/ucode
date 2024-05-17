@@ -2569,37 +2569,6 @@ uc_socket_listen(uc_vm_t *vm, size_t nargs)
  */
 
 /**
- * Creates a socket and returns its hand
- *
- * The handle will be connected to the process stdin or stdout, depending on the
- * value of the mode argument.
- *
- * The mode argument may be either "r" to open the process for reading (connect
- * to its stdin) or "w" to open the process for writing (connect to its stdout).
- *
- * The mode character "r" or "w" may be optionally followed by "e" to apply the
- * FD_CLOEXEC flag onto the open descriptor.
- *
- * Returns a process handle referring to the executed process.
- *
- * Returns `null` if an error occurred.
- *
- * @function module:fs#popen
- *
- * @param {string} command
- * The command to be executed.
- *
- * @param {string} [mode="r"]
- * The open mode of the process handle.
- *
- * @returns {?module:fs.proc}
- *
- * @example
- * // Open a process
- * const process = popen('command', 'r');
- */
-
-/**
  * Creates a network socket instance.
  *
  * This function creates a new network socket with the specified domain and
