@@ -2461,7 +2461,7 @@ uc_socket_listen(uc_vm_t *vm, size_t nargs)
 	ai_hints = hints
 		? (struct addrinfo *)uv_to_struct(hints, &st_addrinfo) : NULL;
 
-	if (host == NULL || ucv_type(host) == UC_STRING) {
+	if (host == NULL || should_resolve(host)) {
 		char *servstr = (ucv_type(serv) != UC_STRING)
 			? ucv_to_string(vm, serv) : NULL;
 
@@ -2525,7 +2525,12 @@ uc_socket_listen(uc_vm_t *vm, size_t nargs)
 			((struct sockaddr_in *)&ss)->sin_port = htons(port);
 		}
 
-		socktype = ai_hints ? ai_hints->ai_socktype : SOCK_STREAM;
+		int default_socktype = SOCK_STREAM;
+
+		if (ss.ss_family != AF_INET && ss.ss_family != AF_INET6)
+			default_socktype = SOCK_DGRAM;
+
+		socktype = ai_hints ? ai_hints->ai_socktype : default_socktype;
 		protocol = ai_hints ? ai_hints->ai_protocol : 0;
 	}
 
@@ -2548,7 +2553,7 @@ uc_socket_listen(uc_vm_t *vm, size_t nargs)
 
 	ret = listen(fd, backlog ? ucv_to_unsigned(backlog) : 128);
 
-	if (ret == -1) {
+	if (ret == -1 && errno != EOPNOTSUPP) {
 		close(fd);
 		err_return(errno, "listen()");
 	}
