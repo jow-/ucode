@@ -417,6 +417,22 @@ sockaddr_to_uv(struct sockaddr_storage *ss, uc_value_t *addrobj)
 	return false;
 }
 
+static int64_t
+parse_integer(char *s, size_t len)
+{
+	union { int8_t i8; int16_t i16; int32_t i32; int64_t i64; } v;
+
+	memcpy(&v, s, len < sizeof(v) ? len : sizeof(v));
+
+	switch (len) {
+	case 1:  return v.i8;
+	case 2:  return v.i16;
+	case 4:  return v.i32;
+	case 8:  return v.i64;
+	default: return 0;
+	}
+}
+
 static bool
 parse_addr(char *addr, struct sockaddr_storage *ss)
 {
@@ -1174,11 +1190,12 @@ static struct_t st_fanout_args = {
 };
 #endif
 
-#define SV_VOID   (struct_t *)0
-#define SV_INT    (struct_t *)1
-#define SV_INT_RO (struct_t *)2
-#define SV_BOOL   (struct_t *)3
-#define SV_STRING (struct_t *)4
+#define SV_VOID		(struct_t *)0
+#define SV_INT		(struct_t *)1
+#define SV_INT_RO	(struct_t *)2
+#define SV_BOOL		(struct_t *)3
+#define SV_STRING	(struct_t *)4
+#define SV_IFNAME	(struct_t *)5
 
 static sockopt_t sockopts[] = {
     { SOL_SOCKET, SO_ACCEPTCONN, SV_BOOL },
@@ -1568,6 +1585,25 @@ uc_socket_inst_setopt(uc_vm_t *vm, size_t nargs)
 			vallen = ucv_string_length(value);
 			break;
 
+		case (uintptr_t)SV_IFNAME:
+			if (ucv_type(value) == UC_STRING) {
+				soval = if_nametoindex(ucv_string_get(value));
+
+				if (soval <= 0)
+					err_return(errno, "Unable to resolve interface %s",
+						ucv_string_get(value));
+			}
+			else {
+				soval = ucv_to_integer(value);
+
+				if (errno)
+					err_return(errno, "Unable to convert value to integer");
+			}
+
+			valptr = &soval;
+			vallen = sizeof(int);
+			break;
+
 		default:
 			st = uv_to_struct(value, sockopts[i].ctype);
 			valptr = st;
@@ -1620,8 +1656,9 @@ static uc_value_t *
 uc_socket_inst_getopt(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *level, *option, *value = NULL;
-	int sockfd, solvl, soopt, soval, ret;
+	char ival[sizeof(int64_t)] = { 0 };
 	void *valptr = NULL, *st = NULL;
+	int sockfd, solvl, soopt, ret;
 	uc_stringbuf_t *sb = NULL;
 	socklen_t vallen;
 	size_t i;
@@ -1632,7 +1669,6 @@ uc_socket_inst_getopt(uc_vm_t *vm, size_t nargs)
 
 	solvl = ucv_int64_get(level);
 	soopt = ucv_int64_get(option);
-	soval = 0;
 
 	for (i = 0; i < ARRAY_SIZE(sockopts); i++) {
 		if (sockopts[i].level != solvl || sockopts[i].option != soopt)
@@ -1645,8 +1681,9 @@ uc_socket_inst_getopt(uc_vm_t *vm, size_t nargs)
 		case (uintptr_t)SV_INT:
 		case (uintptr_t)SV_INT_RO:
 		case (uintptr_t)SV_BOOL:
-			valptr = &soval;
-			vallen = sizeof(int);
+		case (uintptr_t)SV_IFNAME:
+			valptr = ival;
+			vallen = sizeof(ival);
 			break;
 
 		case (uintptr_t)SV_STRING:
@@ -1686,21 +1723,32 @@ uc_socket_inst_getopt(uc_vm_t *vm, size_t nargs)
 	}
 
 	if (ret == 0) {
+		char ifname[IF_NAMESIZE];
+		int ifidx;
+
 		switch ((uintptr_t)sockopts[i].ctype) {
 		case (uintptr_t)SV_VOID:
 			break;
 
 		case (uintptr_t)SV_INT:
 		case (uintptr_t)SV_INT_RO:
-			value = ucv_int64_new(soval);
+			value = ucv_int64_new(parse_integer(ival, vallen));
 			break;
 
 		case (uintptr_t)SV_BOOL:
-			value = ucv_boolean_new(soval);
+			value = ucv_boolean_new(parse_integer(ival, vallen) != 0);
 			break;
 
 		case (uintptr_t)SV_STRING:
 			value = strbuf_finish(&sb, vallen);
+			break;
+
+		case (uintptr_t)SV_IFNAME:
+			ifidx = parse_integer(ival, vallen);
+			if (if_indextoname(ifidx, ifname))
+				value = ucv_string_new(ifname);
+			else
+				value = ucv_int64_new(ifidx);
 			break;
 
 		default:
