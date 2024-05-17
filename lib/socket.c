@@ -481,14 +481,13 @@ uv_to_sockaddr(uc_value_t *addr, struct sockaddr_storage *ss, socklen_t *slen)
 		len = ucv_string_length(addr);
 
 		if (memchr(s, '/', len) != NULL) {
-			*slen = ucv_string_length(addr);
+			if (len >= sizeof(su->sun_path))
+				len = sizeof(su->sun_path) - 1;
 
-			if (*slen >= sizeof(su->sun_path))
-				*slen = sizeof(su->sun_path) - 1;
-
-			memcpy(su->sun_path, s, *slen);
-			su->sun_path[(*slen)++] = 0;
+			memcpy(su->sun_path, s, len);
+			su->sun_path[len++] = 0;
 			su->sun_family = AF_UNIX;
+			*slen = sizeof(*su);
 
 			ok_return(true);
 		}
@@ -678,7 +677,7 @@ uv_to_sockaddr(uc_value_t *addr, struct sockaddr_storage *ss, socklen_t *slen)
 			memcpy(su->sun_path, ucv_string_get(item), len);
 			su->sun_path[len++] = 0;
 			su->sun_family = AF_UNIX;
-			*slen = len;
+			*slen = sizeof(*su);
 
 			ok_return(true);
 
