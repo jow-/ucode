@@ -91,9 +91,14 @@ typedef struct {
 	size_t from, to, slot, nameidx;
 } uc_varrange_t;
 
+typedef struct {
+	uint8_t bytes;
+	uint8_t insns;
+} uc_offset_t;
+
 uc_declare_vector(uc_ehranges_t, uc_ehrange_t);
 uc_declare_vector(uc_variables_t, uc_varrange_t);
-uc_declare_vector(uc_offsetinfo_t, uint8_t);
+uc_declare_vector(uc_offsetinfo_t, uc_offset_t);
 
 typedef struct {
 	size_t count;
