@@ -26,9 +26,12 @@
 
 __hidden void uc_chunk_init(uc_chunk_t *chunk);
 __hidden void uc_chunk_free(uc_chunk_t *chunk);
-__hidden size_t uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t line);
+__hidden size_t uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t offset);
 
 __hidden void uc_chunk_pop(uc_chunk_t *chunk);
+
+__hidden void uc_chunk_stmt_start(uc_chunk_t *chunk, size_t offset);
+__hidden void uc_chunk_stmt_end(uc_chunk_t *chunk, size_t offset);
 
 size_t uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t offset);
 __hidden void uc_chunk_debug_add_variable(uc_chunk_t *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name);
