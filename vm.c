@@ -34,7 +34,7 @@ static const char *insn_names[__I_MAX] = {
 	__insns
 };
 
-static const int8_t insn_operand_bytes[__I_MAX] = {
+const int8_t uc_vm_insn_format[__I_MAX] = {
 	[I_LOAD] = 4,
 	[I_LOAD8] = 1,
 	[I_LOAD16] = 2,
@@ -96,13 +96,13 @@ uc_vm_insn_to_name(uc_vm_insn_t insn)
 	return insn_names[insn];
 }
 
-static int8_t
+int8_t
 uc_vm_insn_to_argtype(uc_vm_insn_t insn)
 {
 	if (insn < 0 || insn >= __I_MAX)
 		return 0;
 
-	return insn_operand_bytes[insn];
+	return uc_vm_insn_format[insn];
 }
 
 static void
@@ -313,6 +313,11 @@ void uc_vm_free(uc_vm_t *vm)
 
 	uc_vector_clear(&vm->restypes);
 
+	for (i = 0; i < vm->breakpoints.count; i++)
+		free(vm->breakpoints.entries[i]);
+
+	uc_vector_clear(&vm->breakpoints);
+
 	ctx = uc_thread_context_get();
 
 	assert(ctx->refcount > 0);
@@ -360,6 +365,7 @@ uc_vm_is_strict(uc_vm_t *vm)
 static uc_vm_insn_t
 uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 {
+	uc_breakpoints_t *bks = &vm->breakpoints;
 	uc_vm_insn_t insn;
 	int8_t argtype;
 
@@ -368,6 +374,13 @@ uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 #endif
 
 	assert(frame->ip < end);
+
+	for (size_t i = 0; i < bks->count; i++) {
+		uc_breakpoint_t *bk = bks->entries[i];
+
+		if (bk != NULL && (bk->ip == NULL || bk->ip == frame->ip))
+			bk->cb(vm, bk);
+	}
 
 	insn = frame->ip[0];
 	frame->ip++;
@@ -3000,6 +3013,17 @@ uc_vm_signal_dispatch(uc_vm_t *vm)
 }
 
 static uc_vm_status_t
+uc_vm_exception_type_to_status(uc_vm_t *vm)
+{
+	switch (vm->exception.type) {
+	case EXCEPTION_NONE:   return STATUS_OK;
+	case EXCEPTION_EXIT:   return STATUS_EXIT;
+	case EXCEPTION_SYNTAX: return ERROR_COMPILE;
+	default:               return ERROR_RUNTIME;
+	}
+}
+
+static uc_vm_status_t
 uc_vm_execute_chunk(uc_vm_t *vm)
 {
 	uc_callframe_t *frame = NULL;
@@ -3211,6 +3235,12 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 
 		case I_CALL:
 			uc_vm_insn_call(vm);
+
+			if (vm->callframes.count == 0)
+				return uc_vm_exception_type_to_status(vm);
+
+			frame = uc_vm_current_frame(vm);
+			chunk = frame->closure ? uc_vm_frame_chunk(frame) : NULL;
 			break;
 
 		case I_RETURN:

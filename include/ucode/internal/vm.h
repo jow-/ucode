@@ -104,4 +104,8 @@ typedef enum {
 
 extern uint32_t insns[__I_MAX];
 
+extern const int8_t uc_vm_insn_format[__I_MAX];
+
+int8_t uc_vm_insn_to_argtype(uc_vm_insn_t insn);
+
 #endif /* UCODE_INTERNAL_VM_H */
