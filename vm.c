@@ -2769,6 +2769,17 @@ uc_vm_signal_dispatch(uc_vm_t *vm)
 }
 
 static uc_vm_status_t
+uc_vm_exception_type_to_status(uc_vm_t *vm)
+{
+	switch (vm->exception.type) {
+	case EXCEPTION_NONE:   return STATUS_OK;
+	case EXCEPTION_EXIT:   return STATUS_EXIT;
+	case EXCEPTION_SYNTAX: return ERROR_COMPILE;
+	default:               return ERROR_RUNTIME;
+	}
+}
+
+static uc_vm_status_t
 uc_vm_execute_chunk(uc_vm_t *vm)
 {
 	uc_callframe_t *frame = uc_vm_current_frame(vm);
@@ -2968,6 +2979,10 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 		case I_CALL:
 		case I_QCALL:
 			uc_vm_insn_call(vm, insn);
+
+			if (vm->callframes.count == 0)
+				return uc_vm_exception_type_to_status(vm);
+
 			frame = uc_vm_current_frame(vm);
 			chunk = frame->closure ? uc_vm_frame_chunk(frame) : NULL;
 			break;
@@ -2975,6 +2990,10 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 		case I_MCALL:
 		case I_QMCALL:
 			uc_vm_insn_mcall(vm, insn);
+
+			if (vm->callframes.count == 0)
+				return uc_vm_exception_type_to_status(vm);
+
 			frame = uc_vm_current_frame(vm);
 			chunk = frame->closure ? uc_vm_frame_chunk(frame) : NULL;
 			break;
