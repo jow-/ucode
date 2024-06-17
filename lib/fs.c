@@ -739,6 +739,43 @@ uc_fs_seek(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Truncate file to a given size
+ *
+ * Returns `true` if the file was successfully truncated.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:fs.file#truncate
+ *
+ * @param {number} [offset=0]
+ * The offset in bytes.
+ *
+ * @returns {?boolean}
+ */
+static uc_value_t *
+uc_fs_truncate(uc_vm_t *vm, size_t nargs)
+{
+	FILE *fp = uc_fn_thisval("fs.file");
+	uc_value_t *ofs = uc_fn_arg(0);
+	off_t offset;
+
+	if (!fp)
+		err_return(EBADF);
+
+	if (!ofs)
+		offset = 0;
+	else if (ucv_type(ofs) != UC_INTEGER)
+		err_return(EINVAL);
+	else
+		offset = (off_t)ucv_int64_get(ofs);
+
+	if (ftruncate(fileno(fp), offset) < 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+/**
  * Obtain current read position.
  *
  * Obtains the current, absolute read position of the open file.
@@ -2571,6 +2608,7 @@ static const uc_function_list_t file_fns[] = {
 	{ "fileno",		uc_fs_fileno },
 	{ "error",		uc_fs_error },
 	{ "isatty",		uc_fs_isatty },
+	{ "truncate",	uc_fs_truncate },
 };
 
 static const uc_function_list_t dir_fns[] = {
