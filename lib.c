@@ -894,7 +894,10 @@ uc_getenv(uc_vm_t *vm, size_t nargs)
  * 2. The current index
  * 3. The array being filtered
  *
- * Returns a new array containing only retainted items, in the same order as
+ * (Note that the `map` function behaves similarly to `filter` with respect
+ * to its `fn` parameters.)
+ *
+ * Returns a new array containing only retained items, in the same order as
  * the input array.
  *
  * @function module:core#filter
@@ -989,7 +992,7 @@ uc_hex(uc_vm_t *vm, size_t nargs)
 }
 
 /**
- * Converts the given value to an integer.
+ * Converts the given value to an integer, using an optional base.
  *
  * Returns `NaN` if the value is not convertible.
  *
@@ -998,7 +1001,23 @@ uc_hex(uc_vm_t *vm, size_t nargs)
  * @param {*} x
  * The value to be converted to an integer.
  *
+ * @param {int} [base]
+ * The base into which the value is to be converted, the default is 10.
+ * Note that the base parameter is ignored if the `x` value is already numeric.
+ *
  * @returns {number}
+ *
+ * @example
+ * int("123")         // Returns 123
+ * int("123", 10)     // 123
+ * int("10 or more")  // 10
+ * int("12.3")        // 12
+ * int("123", 7)      // 66
+ * int("abc", 16)     // 2748
+ * int("xyz", 36)     // 44027
+ * int(10.10, "2")    // 10, the invalid base is ignored
+ * int("xyz", 16)     // NaN, bad value
+ * int("1010", "2")   // NaN, bad base
  */
 static uc_value_t *
 uc_int(uc_vm_t *vm, size_t nargs)
@@ -1138,6 +1157,16 @@ uc_lc(uc_vm_t *vm, size_t nargs)
  * Transform the array passed as the first argument by invoking the function
  * specified in the second argument for each array item.
  *
+ * The mapping function is invoked with three arguments (see examples, below,
+ * for some possibly counterintuitive usage):
+ *
+ * 1. The array value
+ * 2. The current index
+ * 3. The array being filtered
+ *
+ * (Note that the `filter` function behaves similarly to `map` with respect
+ * to its `fn` parameters.)
+ *
  * Returns a new array of the same length as the input array containing the
  * transformed values.
  *
@@ -1159,6 +1188,28 @@ uc_lc(uc_vm_t *vm, size_t nargs)
  * // map to type names:
  * a = map(["foo", 1, true, null, 2.2], type);
  * // a = ["string", "int", "bool", null, "double"]
+ *
+ * // attempt to naively use built-in 'int' to map an array:
+ * a = map(["x", "2", "11", "7"], int)
+ * // a = [NaN, NaN, 3, NaN]
+ * //
+ * // This is a direct result of 'int' being provided the second, index parameter
+ * // for its base value in the conversion.
+ * //
+ * // The resulting calls to 'int' are as follows:
+ * //  int("x",  0, [...]) - convert "x"  to base 0, 'int' ignores the third value
+ * //  int("2",  1, [...]) - convert "2"  to base 1, digit out of range, so NaN
+ * //  int("11", 2, [...]) - convert "11" to base 2, produced unexpected 3
+ * //  int("7",  3, [...]) - convert "7"  to base 3, digit out of range, NaN again
+ *
+ * // remedy this by using an arrow function to ensure the proper base value
+ * // (in this case, the default of 10) is passed to 'int':
+ * a = map(["x", "2", "1", "7"], (x) => int(x))
+ * // a = [NaN, 2, 1, 7]
+ *
+ * // convert base-2 values:
+ * a = map(["22", "1010", "0001", "0101"], (x) => int(x, 2))
+ * // a = [NaN, 10, 1, 5]
  */
 static uc_value_t *
 uc_map(uc_vm_t *vm, size_t nargs)
@@ -2864,7 +2915,7 @@ uc_require(uc_vm_t *vm, size_t nargs)
  * Convert the given IP address string to an array of byte values.
  *
  * IPv4 addresses result in arrays of 4 integers while IPv6 ones in arrays
- * containing 16 intergers. The resulting array can be turned back into IP
+ * containing 16 integers. The resulting array can be turned back into IP
  * address strings using the inverse `arrtoip()` function.
  *
  * Returns an array containing the address byte values.
@@ -5341,7 +5392,7 @@ uc_gc(uc_vm_t *vm, size_t nargs)
  * @typedef {Object} module:core.ParseConfig
  *
  * @property {boolean} lstrip_blocks
- * Whether to strip whitespace preceeding template directives.
+ * Whether to strip whitespace preceding template directives.
  * See {@link tutorial-02-syntax.html#whitespace-handling|Whitespace handling}.
  *
  * @property {boolean} trim_blocks
