@@ -38,6 +38,8 @@ When invoked with two arguments, returns the given value.
 Hello, World!
 [
 	{
+		"lock": "function lock(...) { [native code] }",
+		"truncate": "function truncate(...) { [native code] }",
 		"isatty": "function isatty(...) { [native code] }",
 		"error": "function error(...) { [native code] }",
 		"fileno": "function fileno(...) { [native code] }",
