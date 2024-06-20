@@ -2825,9 +2825,11 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 				*res = uc_require_imports(vm, closure);
 			}
 
-			uc_vm_stack_pop(vm);
-			uc_vm_stack_pop(vm);
-			uc_vm_stack_pop(vm);
+			if (vm->stack.count >= 3) {
+				uc_vm_stack_pop(vm);
+				uc_vm_stack_pop(vm);
+				uc_vm_stack_pop(vm);
+			}
 		}
 	}
 
