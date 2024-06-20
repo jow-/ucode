@@ -37,7 +37,7 @@ static const char *insn_names[__I_MAX] = {
 	__insns
 };
 
-static const int8_t insn_operand_bytes[__I_MAX] = {
+const int8_t uc_vm_insn_format[__I_MAX] = {
 	[I_LOAD] = 4,
 	[I_LOAD8] = 1,
 	[I_LOAD16] = 2,
@@ -99,13 +99,13 @@ uc_vm_insn_to_name(uc_vm_insn_t insn)
 	return insn_names[insn];
 }
 
-static int8_t
+int8_t
 uc_vm_insn_to_argtype(uc_vm_insn_t insn)
 {
 	if (insn < 0 || insn >= __I_MAX)
 		return 0;
 
-	return insn_operand_bytes[insn];
+	return uc_vm_insn_format[insn];
 }
 
 static void
