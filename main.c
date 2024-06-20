@@ -106,13 +106,19 @@ print_usage(const char *app)
 
 	"-s\n"
 	"  Omit (strip) debug information when compiling files.\n"
-	"  Only meaningful in conjunction with `-c`.\n\n",
+	"  Only meaningful in conjunction with `-c`.\n\n"
+
+	"-x\n"
+	"  Start program in interactive debugger.\n\n",
 		app);
 }
 
+static bool
+parse_library_load(char *opt, uc_vm_t *vm);
 
 static int
-compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *interp, bool print_result)
+compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip,
+        char *interp, bool print_result, bool debugger)
 {
 	uc_value_t *res = NULL;
 	uc_program_t *program;
@@ -139,6 +145,30 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *inter
 
 	if (vm->gc_interval)
 		uc_vm_gc_start(vm, vm->gc_interval);
+
+	if (debugger) {
+		if (!parse_library_load("debug", vm)) {
+			fprintf(stderr, "Unable to load debug module\n");
+			rc = -2;
+			goto out;
+		}
+
+		uc_value_t *dbgmod = ucv_object_get(uc_vm_scope_get(vm), "debug", NULL);
+		uc_value_t *dbgfn = ucv_object_get(dbgmod, "debugger", NULL);
+
+		if (ucv_type(dbgfn) != UC_CFUNCTION) {
+			fprintf(stderr, "Unable to locate debugger function\n");
+			rc = -2;
+			goto out;
+		}
+
+		uc_vm_stack_push(vm, ucv_get(dbgfn));
+		uc_vm_stack_push(vm,
+			ucv_closure_new(vm, uc_program_entry(program), false));
+
+		if (uc_vm_call(vm, false, 1) == EXCEPTION_NONE)
+			ucv_put(uc_vm_stack_pop(vm));
+	}
 
 	rc = uc_vm_execute(vm, program, &res);
 
@@ -499,8 +529,8 @@ appname(const char *argv0)
 int
 main(int argc, char **argv)
 {
-	const char *optspec = "he:p:tg:ST::RD:F:U:l:L:c::o:s";
-	bool strip = false, print_result = false;
+	const char *optspec = "he:p:tg:ST::RD:F:U:l:L:c::o:sx";
+	bool strip = false, print_result = false, debugger = false;
 	char *interp = "/usr/bin/env ucode";
 	uc_source_t *source = NULL;
 	FILE *precompile = NULL;
@@ -635,6 +665,10 @@ main(int argc, char **argv)
 		case 'o':
 			outfile = optarg;
 			break;
+
+		case 'x':
+			debugger = true;
+			break;
 		}
 	}
 
@@ -684,7 +718,7 @@ main(int argc, char **argv)
 
 	ucv_put(o);
 
-	rv = compile(&vm, source, precompile, strip, interp, print_result);
+	rv = compile(&vm, source, precompile, strip, interp, print_result, debugger);
 
 out:
 	uc_search_path_free(&config.module_search_path);
