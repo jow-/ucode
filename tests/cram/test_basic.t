@@ -80,6 +80,9 @@ check that ucode provides exepected help:
     Omit (strip) debug information when compiling files.
     Only meaningful in conjunction with `-c`.
   
+  -x
+    Start program in interactive debugger.
+  
 
 check that ucode prints greetings:
 
