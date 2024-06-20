@@ -101,8 +101,9 @@ typedef struct {
 	uc_parse_config_t *config;
 	uc_lexer_t lex;
 	uc_token_t prev, curr;
-	bool synchronizing;
 	uc_stringbuf_t *error;
+	size_t prev_endpos, curr_endpos;
+	bool synchronizing;
 } uc_parser_t;
 
 typedef struct uc_compiler {
