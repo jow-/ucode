@@ -252,6 +252,8 @@ struct uc_vm {
 		struct sigaction sa;
 		int sigpipe[2];
 	} signal;
+	bool break_requested;
+	int break_notifyfd[2];
 };
 
 

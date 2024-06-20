@@ -225,7 +225,27 @@ uc_vm_signal_handlers_reset(uc_vm_t *vm)
 		vm->signal.sigpipe[i] = -1;
 	}
 
-	tctx->signal_handler_vm = NULL;
+		tctx->signal_handler_vm = NULL;
+}
+
+void uc_vm_break_init(uc_vm_t *vm)
+{
+	vm->break_requested = false;
+	vm->break_notifyfd[0] = -1;
+	vm->break_notifyfd[1] = -1;
+
+	if (pipe2(vm->break_notifyfd, O_CLOEXEC | O_NONBLOCK) == 0) {
+		/* pipe created successfully */
+	}
+}
+
+void uc_vm_break_cleanup(uc_vm_t *vm)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(vm->break_notifyfd); i++) {
+		if (vm->break_notifyfd[i] > STDERR_FILENO)
+			close(vm->break_notifyfd[i]);
+		vm->break_notifyfd[i] = -1;
+	}
 }
 
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
@@ -256,6 +276,8 @@ void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 
 	uc_vm_signal_handlers_setup(vm);
 
+	uc_vm_break_init(vm);
+
 	uc_thread_context_get()->refcount++;
 }
 
@@ -266,6 +288,8 @@ void uc_vm_free(uc_vm_t *vm)
 	size_t i;
 
 	uc_vm_signal_handlers_reset(vm);
+
+	uc_vm_break_cleanup(vm);
 
 	ucv_put(vm->exception.stacktrace);
 	free(vm->exception.message);
@@ -365,7 +389,6 @@ uc_vm_is_strict(uc_vm_t *vm)
 static uc_vm_insn_t
 uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 {
-	uc_breakpoints_t *bks = &vm->breakpoints;
 	uc_vm_insn_t insn;
 	int8_t argtype;
 
@@ -375,8 +398,8 @@ uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 
 	assert(frame->ip < end);
 
-	for (size_t i = 0; i < bks->count; i++) {
-		uc_breakpoint_t *bk = bks->entries[i];
+	for (size_t i = 0; i < vm->breakpoints.count; i++) {
+		uc_breakpoint_t *bk = vm->breakpoints.entries[i];
 
 		if (bk != NULL && (bk->ip == NULL || bk->ip == frame->ip))
 			bk->cb(vm, bk);
@@ -3309,6 +3332,12 @@ exception:
 		/* run handler for signal(s) delivered during previous instruction */
 		if (uc_vm_signal_dispatch(vm) != EXCEPTION_NONE)
 			goto exception;
+
+		/* check for break request */
+		if (vm->break_requested) {
+			vm->break_requested = false;
+			return STATUS_BREAK;
+		}
 	}
 
 	return STATUS_OK;
@@ -3361,6 +3390,13 @@ uc_vm_execute(uc_vm_t *vm, uc_program_t *program, uc_value_t **retval)
 	case STATUS_EXIT:
 		if (retval)
 			*retval = ucv_int64_new(vm->arg.s32);
+
+		break;
+
+	case STATUS_BREAK:
+		/* Break requested - exit gracefully without error */
+		if (retval)
+			*retval = NULL;
 
 		break;
 
@@ -3543,4 +3579,27 @@ int
 uc_vm_signal_notifyfd(uc_vm_t *vm)
 {
 	return vm->signal.sigpipe[0];
+}
+
+bool
+uc_vm_break_requested(uc_vm_t *vm)
+{
+	return vm->break_requested;
+}
+
+void
+uc_vm_break_request(uc_vm_t *vm)
+{
+	vm->break_requested = true;
+
+	if (vm->break_notifyfd[1] >= 0) {
+		char c = 'B';
+		if (write(vm->break_notifyfd[1], &c, 1) == -1) {}
+	}
+}
+
+int
+uc_vm_break_notifyfd(uc_vm_t *vm)
+{
+	return vm->break_notifyfd[0];
 }
