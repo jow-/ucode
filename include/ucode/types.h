@@ -310,8 +310,14 @@ typedef struct {
 	bool mcall, strict;
 } uc_callframe_t;
 
+typedef struct uc_breakpoint {
+	uint8_t *ip;
+	void (*cb)(uc_vm_t *, struct uc_breakpoint *);
+} uc_breakpoint_t;
+
 uc_declare_vector(uc_callframes_t, uc_callframe_t);
 uc_declare_vector(uc_stack_t, uc_value_t *);
+uc_declare_vector(uc_breakpoints_t, uc_breakpoint_t *);
 
 typedef struct printbuf uc_stringbuf_t;
 
@@ -328,7 +334,7 @@ struct uc_vm {
 	uc_source_t *sources;
 	uc_weakref_t values;
 	uc_resource_types_t restypes;
-	char _reserved[sizeof(uc_modexports_t)];
+	uc_breakpoints_t breakpoints;
 	union {
 		uint32_t u32;
 		int32_t s32;

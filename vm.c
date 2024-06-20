@@ -271,6 +271,11 @@ void uc_vm_free(uc_vm_t *vm)
 		free(vm->restypes.entries[i]);
 
 	uc_vector_clear(&vm->restypes);
+
+	for (i = 0; i < vm->breakpoints.count; i++)
+		free(vm->breakpoints.entries[i]);
+
+	uc_vector_clear(&vm->breakpoints);
 }
 
 static uc_chunk_t *
@@ -312,6 +317,7 @@ uc_vm_is_strict(uc_vm_t *vm)
 static uc_vm_insn_t
 uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 {
+	uc_breakpoints_t *bks = &vm->breakpoints;
 	uc_vm_insn_t insn;
 
 #ifndef NDEBUG
@@ -319,6 +325,13 @@ uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 #endif
 
 	assert(frame->ip < end);
+
+	for (size_t i = 0; i < bks->count; i++) {
+		uc_breakpoint_t *bk = bks->entries[i];
+
+		if (bk != NULL && (bk->ip == NULL || bk->ip == frame->ip))
+			bk->cb(vm, bk);
+	}
 
 	insn = frame->ip[0];
 	frame->ip++;
