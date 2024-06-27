@@ -42,6 +42,11 @@
 #define CHUNK 16384
 
 
+typedef struct {
+	z_stream strm;
+	uc_stringbuf_t *outbuf;
+} zstrm_t;
+
 /* zlib init error message */
 static const char * ziniterr(int ret)
 {
@@ -68,23 +73,20 @@ static const char * ziniterr(int ret)
 	return msg;
 }
 
-static uc_stringbuf_t *
-uc_zlib_def_object(uc_vm_t *vm, uc_value_t *obj, z_stream *strm)
+static bool
+uc_zlib_def_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zstrm)
 {
 	int ret;
 	bool eof = false;
 	uc_value_t *rfn, *rbuf;
-	uc_stringbuf_t *buf = NULL;
 
 	rfn = ucv_property_get(obj, "read");
 
 	if (!ucv_is_callable(rfn)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				      "Input object does not implement read() method");
-		return NULL;
+		return false;
 	}
-
-	buf = ucv_stringbuf_new();
 
 	do {
 		rbuf = NULL;
@@ -107,65 +109,61 @@ uc_zlib_def_object(uc_vm_t *vm, uc_value_t *obj, z_stream *strm)
 		/* check EOF */
 		eof = (rbuf == NULL || ucv_string_length(rbuf) == 0);
 
-		strm->next_in = (unsigned char *)ucv_string_get(rbuf);
-		strm->avail_in = ucv_string_length(rbuf);
+		zstrm->strm.next_in = (unsigned char *)ucv_string_get(rbuf);
+		zstrm->strm.avail_in = ucv_string_length(rbuf);
 
 		/* run deflate() on input until output buffer not full */
 		do {
-			// enlarge buf by CHUNK amount as needed
-			printbuf_memset(buf, printbuf_length(buf) + CHUNK - 1, 0, 1);
-			buf->bpos -= CHUNK;
+			// enlarge outbuf by CHUNK amount as needed
+			printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
+			zstrm->outbuf->bpos -= CHUNK;
 
-			strm->avail_out = CHUNK;
-			strm->next_out = (unsigned char *)(buf->buf + buf->bpos);;
+			zstrm->strm.avail_out = CHUNK;
+			zstrm->strm.next_out = (unsigned char *)(zstrm->outbuf->buf + zstrm->outbuf->bpos);;
 
-			ret = deflate(strm, eof ? Z_FINISH : Z_NO_FLUSH);	// no bad return value here
+			ret = deflate(&zstrm->strm, eof ? Z_FINISH : Z_NO_FLUSH);	// no bad return value here
 			assert(ret != Z_STREAM_ERROR);				// state never clobbered (would be mem corruption)
 			(void)ret;		// XXX make annoying compiler that ignores assert() happy
 
 			// update bpos past data written by deflate()
-			buf->bpos += CHUNK - strm->avail_out;
-		} while (strm->avail_out == 0);
-		assert(strm->avail_in == 0);	// all input will be used
+			zstrm->outbuf->bpos += CHUNK - zstrm->strm.avail_out;
+		} while (zstrm->strm.avail_out == 0);
+		assert(zstrm->strm.avail_in == 0);	// all input will be used
 
 		ucv_put(rbuf);	// release rbuf
 	} while (!eof);	// finish compression if all of source has been read in
 	assert(ret == Z_STREAM_END);	// stream will be complete
 
-	return buf;
+	return true;
 
 fail:
 	ucv_put(rbuf);
-	printbuf_free(buf);
-	return NULL;
+	return false;
 }
 
-static uc_stringbuf_t *
-uc_zlib_def_string(uc_vm_t *vm, uc_value_t *str, z_stream *strm)
+static bool
+uc_zlib_def_string(uc_vm_t * const vm, uc_value_t * const str, zstrm_t * const zstrm)
 {
 	int ret;
-	uc_stringbuf_t *buf = NULL;
 
-	buf = ucv_stringbuf_new();
-
-	strm->next_in = (unsigned char *)ucv_string_get(str);
-	strm->avail_in = ucv_string_length(str);
+	zstrm->strm.next_in = (unsigned char *)ucv_string_get(str);
+	zstrm->strm.avail_in = ucv_string_length(str);
 
 	do {
-		printbuf_memset(buf, printbuf_length(buf) + CHUNK - 1, 0, 1);
-		buf->bpos -= CHUNK;
+		printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
+		zstrm->outbuf->bpos -= CHUNK;
 
-		strm->avail_out = CHUNK;
-		strm->next_out = (unsigned char *)(buf->buf + buf->bpos);
+		zstrm->strm.avail_out = CHUNK;
+		zstrm->strm.next_out = (unsigned char *)(zstrm->outbuf->buf + zstrm->outbuf->bpos);
 
-		ret = deflate(strm, Z_FINISH);
+		ret = deflate(&zstrm->strm, Z_FINISH);
 		assert(ret != Z_STREAM_ERROR);
 
-		buf->bpos += CHUNK - strm->avail_out;
+		zstrm->outbuf->bpos += CHUNK - zstrm->strm.avail_out;
 	} while (ret != Z_STREAM_END);
-	assert(strm->avail_in == 0);
+	assert(zstrm->strm.avail_in == 0);
 
-	return buf;
+	return true;
 }
 
 /**
@@ -203,19 +201,21 @@ uc_zlib_def_string(uc_vm_t *vm, uc_value_t *str, z_stream *strm)
  * const deflated = deflate(content, Z_BEST_SPEED);
  */
 static uc_value_t *
-uc_zlib_deflate(uc_vm_t *vm, size_t nargs)
+uc_zlib_deflate(uc_vm_t * const vm, const size_t nargs)
 {
 	uc_value_t *rv = NULL;
 	uc_value_t *src = uc_fn_arg(0);
 	uc_value_t *gzip = uc_fn_arg(1);
 	uc_value_t *level = uc_fn_arg(2);
-	uc_stringbuf_t *buf = NULL;
 	int ret, lvl = Z_DEFAULT_COMPRESSION;
-	bool gz = false;
-	z_stream strm = {
-		.zalloc = Z_NULL,
-		.zfree = Z_NULL,
-		.opaque = Z_NULL,
+	bool success, gz = false;
+	zstrm_t zstrm = {
+		.strm = {
+			.zalloc = Z_NULL,
+			.zfree = Z_NULL,
+			.opaque = Z_NULL,
+		},
+		.outbuf = NULL,
 	};
 
 	if (gzip) {
@@ -236,7 +236,7 @@ uc_zlib_deflate(uc_vm_t *vm, size_t nargs)
 		lvl = (int)ucv_int64_get(level);
 	}
 
-	ret = deflateInit2(&strm, lvl,
+	ret = deflateInit2(&zstrm.strm, lvl,
 			   Z_DEFLATED,		// only allowed method
 			   gz ? 15+16 : 15,	// 15 Zlib default, +16 for gzip
 			   8,			// default value
@@ -246,53 +246,54 @@ uc_zlib_deflate(uc_vm_t *vm, size_t nargs)
 		goto out;
 	}
 
+	zstrm.outbuf = ucv_stringbuf_new();
+
 	switch (ucv_type(src)) {
 	case UC_STRING:
-		buf = uc_zlib_def_string(vm, src, &strm);
+		success = uc_zlib_def_string(vm, src, &zstrm);
 		break;
 
 	case UC_RESOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
-		buf = uc_zlib_def_object(vm, src, &strm);
+		success = uc_zlib_def_object(vm, src, &zstrm);
 		break;
 
 	default:
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				      "Passed value is neither a string nor an object");
+		printbuf_free(zstrm.outbuf);
 		goto out;
 	}
 
-	if (!buf) {
+	if (!success) {
 		if (vm->exception.type == EXCEPTION_NONE)	// do not clobber previous exception
-			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME, "Zlib error: %s", strm.msg);
+			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME, "Zlib error: %s", zstrm.strm.msg);
+		printbuf_free(zstrm.outbuf);
 		goto out;
 	}
 
-	rv = ucv_stringbuf_finish(buf);
+	rv = ucv_stringbuf_finish(zstrm.outbuf);
 
 out:
-	(void)deflateEnd(&strm);
+	(void)deflateEnd(&zstrm.strm);
 	return rv;
 }
 
-static uc_stringbuf_t *
-uc_zlib_inf_object(uc_vm_t *vm, uc_value_t *obj, z_stream *strm)
+static bool
+uc_zlib_inf_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zstrm)
 {
 	int ret = Z_STREAM_ERROR;	// error out if EOF on first loop
 	bool eof = false;
 	uc_value_t *rfn, *rbuf;
-	uc_stringbuf_t *buf = NULL;
 
 	rfn = ucv_property_get(obj, "read");
 
 	if (!ucv_is_callable(rfn)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				      "Input object does not implement read() method");
-		return NULL;
+		return false;
 	}
-
-	buf = ucv_stringbuf_new();
 
 	do {
 		rbuf = NULL;
@@ -317,19 +318,19 @@ uc_zlib_inf_object(uc_vm_t *vm, uc_value_t *obj, z_stream *strm)
 		if (eof)
 			break;
 
-		strm->next_in = (unsigned char *)ucv_string_get(rbuf);
-		strm->avail_in = ucv_string_length(rbuf);
+		zstrm->strm.next_in = (unsigned char *)ucv_string_get(rbuf);
+		zstrm->strm.avail_in = ucv_string_length(rbuf);
 
-		/* run deflate() on input until output buffer not full */
+		/* run inflate() on input until output buffer not full */
 		do {
-			// enlarge buf by CHUNK amount as needed
-			printbuf_memset(buf, printbuf_length(buf) + CHUNK - 1, 0, 1);
-			buf->bpos -= CHUNK;
+			// enlarge outbuf by CHUNK amount as needed
+			printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
+			zstrm->outbuf->bpos -= CHUNK;
 
-			strm->avail_out = CHUNK;
-			strm->next_out = (unsigned char *)(buf->buf + buf->bpos);;
+			zstrm->strm.avail_out = CHUNK;
+			zstrm->strm.next_out = (unsigned char *)(zstrm->outbuf->buf + zstrm->outbuf->bpos);;
 
-			ret = inflate(strm, Z_NO_FLUSH);
+			ret = inflate(&zstrm->strm, Z_NO_FLUSH);
 			assert(ret != Z_STREAM_ERROR);		// state never clobbered (would be mem corruption)
 			switch (ret) {
 			case Z_NEED_DICT:
@@ -339,58 +340,51 @@ uc_zlib_inf_object(uc_vm_t *vm, uc_value_t *obj, z_stream *strm)
 			}
 
 			// update bpos past data written by deflate()
-			buf->bpos += CHUNK - strm->avail_out;
-		} while (strm->avail_out == 0);
+			zstrm->outbuf->bpos += CHUNK - zstrm->strm.avail_out;
+		} while (zstrm->strm.avail_out == 0);
 
 		ucv_put(rbuf);	// release rbuf
 	} while (ret != Z_STREAM_END);	// done when inflate() says it's done
 
-	if (ret != Z_STREAM_END) {	// data error
-		printbuf_free(buf);
-		buf = NULL;
-	}
+	if (ret != Z_STREAM_END)	// data error
+		return false;
 
-	return buf;
+	return true;
 
 fail:
 	ucv_put(rbuf);
-	printbuf_free(buf);
-	return NULL;
+	return false;
 }
 
-static uc_stringbuf_t *
-uc_zlib_inf_string(uc_vm_t *vm, uc_value_t *str, z_stream *strm)
+static bool
+uc_zlib_inf_string(uc_vm_t * const vm, uc_value_t * const str, zstrm_t * const zstrm)
 {
 	int ret;
-	uc_stringbuf_t *buf = NULL;
 
-	buf = ucv_stringbuf_new();
-
-	strm->next_in = (unsigned char *)ucv_string_get(str);
-	strm->avail_in = ucv_string_length(str);
+	zstrm->strm.next_in = (unsigned char *)ucv_string_get(str);
+	zstrm->strm.avail_in = ucv_string_length(str);
 
 	do {
-		printbuf_memset(buf, printbuf_length(buf) + CHUNK - 1, 0, 1);
-		buf->bpos -= CHUNK;
+		printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
+		zstrm->outbuf->bpos -= CHUNK;
 
-		strm->avail_out = CHUNK;
-		strm->next_out = (unsigned char *)(buf->buf + buf->bpos);
+		zstrm->strm.avail_out = CHUNK;
+		zstrm->strm.next_out = (unsigned char *)(zstrm->outbuf->buf + zstrm->outbuf->bpos);
 
-		ret = inflate(strm, Z_FINISH);
+		ret = inflate(&zstrm->strm, Z_FINISH);
 		assert(ret != Z_STREAM_ERROR);
 		switch (ret) {
 		case Z_NEED_DICT:
 		case Z_DATA_ERROR:
 		case Z_MEM_ERROR:
-			printbuf_free(buf);
-			return NULL;
+			return false;
 		}
 
-		buf->bpos += CHUNK - strm->avail_out;
+		zstrm->outbuf->bpos += CHUNK - zstrm->strm.avail_out;
 	} while (ret != Z_STREAM_END);
-	assert(strm->avail_in == 0);
+	assert(zstrm->strm.avail_in == 0);
 
-	return buf;
+	return true;
 }
 
 /**
@@ -415,54 +409,61 @@ uc_zlib_inf_string(uc_vm_t *vm, uc_value_t *str, z_stream *strm)
  * @returns {?string}
  */
 static uc_value_t *
-uc_zlib_inflate(uc_vm_t *vm, size_t nargs)
+uc_zlib_inflate(uc_vm_t * const vm, const size_t nargs)
 {
 	uc_value_t *rv = NULL;
 	uc_value_t *src = uc_fn_arg(0);
-	uc_stringbuf_t *buf = NULL;
+	bool success;
 	int ret;
-	z_stream strm = {
-		.zalloc = Z_NULL,
-		.zfree = Z_NULL,
-		.opaque = Z_NULL,
-		.avail_in = 0,		// must be initialized before call to inflateInit
-		.next_in = Z_NULL,	// must be initialized before call to inflateInit
+	zstrm_t zstrm = {
+		.strm = {
+			.zalloc = Z_NULL,
+			.zfree = Z_NULL,
+			.opaque = Z_NULL,
+			.avail_in = 0,		// must be initialized before call to inflateInit
+			.next_in = Z_NULL,	// must be initialized before call to inflateInit
+		},
+		.outbuf = NULL,
 	};
 
 	/* tell inflateInit2 to perform either zlib or gzip decompression: 15+32 */
-	ret = inflateInit2(&strm, 15+32);
+	ret = inflateInit2(&zstrm.strm, 15+32);
 	if (ret != Z_OK) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME, "Zlib error: %s", ziniterr(ret));
 		goto out;
 	}
 
+	zstrm.outbuf = ucv_stringbuf_new();
+
 	switch (ucv_type(src)) {
 	case UC_STRING:
-		buf = uc_zlib_inf_string(vm, src, &strm);
+		success = uc_zlib_inf_string(vm, src, &zstrm);
 		break;
 
 	case UC_RESOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
-		buf = uc_zlib_inf_object(vm, src, &strm);
+		success = uc_zlib_inf_object(vm, src, &zstrm);
 		break;
 
 	default:
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				      "Passed value is neither a string nor an object");
+		printbuf_free(zstrm.outbuf);
 		goto out;
 	}
 
-	if (!buf) {
+	if (!success) {
 		if (vm->exception.type == EXCEPTION_NONE)	// do not clobber previous exception
-			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME, "Zlib error: %s", strm.msg);
+			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME, "Zlib error: %s", zstrm.strm.msg);
+		printbuf_free(zstrm.outbuf);
 		goto out;
 	}
 
-	rv = ucv_stringbuf_finish(buf);
+	rv = ucv_stringbuf_finish(zstrm.outbuf);
 
 out:
-	(void)inflateEnd(&strm);
+	(void)inflateEnd(&zstrm.strm);
 	return rv;
 }
 
