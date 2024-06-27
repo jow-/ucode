@@ -45,6 +45,7 @@
 typedef struct {
 	z_stream strm;
 	uc_stringbuf_t *outbuf;
+	int flush;
 } zstrm_t;
 
 /* zlib init error message */
@@ -71,6 +72,29 @@ static const char * ziniterr(int ret)
 	}
 
 	return msg;
+}
+
+static int
+def_chunks(zstrm_t * const zstrm)
+{
+	int ret;
+
+	/* run deflate() on input until output buffer not full */
+	do {
+		printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
+		zstrm->outbuf->bpos -= CHUNK;
+
+		zstrm->strm.avail_out = CHUNK;
+		zstrm->strm.next_out = (unsigned char *)(zstrm->outbuf->buf + zstrm->outbuf->bpos);
+
+		ret = deflate(&zstrm->strm, zstrm->flush);
+		assert(ret != Z_STREAM_ERROR);
+
+		zstrm->outbuf->bpos += CHUNK - zstrm->strm.avail_out;
+	} while (zstrm->strm.avail_out == 0);
+	assert(zstrm->strm.avail_in == 0);	// all input will be used
+
+	return ret;
 }
 
 static bool
@@ -112,23 +136,9 @@ uc_zlib_def_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zs
 		zstrm->strm.next_in = (unsigned char *)ucv_string_get(rbuf);
 		zstrm->strm.avail_in = ucv_string_length(rbuf);
 
-		/* run deflate() on input until output buffer not full */
-		do {
-			// enlarge outbuf by CHUNK amount as needed
-			printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
-			zstrm->outbuf->bpos -= CHUNK;
-
-			zstrm->strm.avail_out = CHUNK;
-			zstrm->strm.next_out = (unsigned char *)(zstrm->outbuf->buf + zstrm->outbuf->bpos);;
-
-			ret = deflate(&zstrm->strm, eof ? Z_FINISH : Z_NO_FLUSH);	// no bad return value here
-			assert(ret != Z_STREAM_ERROR);				// state never clobbered (would be mem corruption)
-			(void)ret;		// XXX make annoying compiler that ignores assert() happy
-
-			// update bpos past data written by deflate()
-			zstrm->outbuf->bpos += CHUNK - zstrm->strm.avail_out;
-		} while (zstrm->strm.avail_out == 0);
-		assert(zstrm->strm.avail_in == 0);	// all input will be used
+		zstrm->flush = eof ? Z_FINISH : Z_NO_FLUSH;
+		ret = def_chunks(zstrm);
+		(void)ret;	// XXX make annoying compiler that ignores assert() happy
 
 		ucv_put(rbuf);	// release rbuf
 	} while (!eof);	// finish compression if all of source has been read in
@@ -144,24 +154,10 @@ fail:
 static bool
 uc_zlib_def_string(uc_vm_t * const vm, uc_value_t * const str, zstrm_t * const zstrm)
 {
-	int ret;
-
 	zstrm->strm.next_in = (unsigned char *)ucv_string_get(str);
 	zstrm->strm.avail_in = ucv_string_length(str);
 
-	do {
-		printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
-		zstrm->outbuf->bpos -= CHUNK;
-
-		zstrm->strm.avail_out = CHUNK;
-		zstrm->strm.next_out = (unsigned char *)(zstrm->outbuf->buf + zstrm->outbuf->bpos);
-
-		ret = deflate(&zstrm->strm, Z_FINISH);
-		assert(ret != Z_STREAM_ERROR);
-
-		zstrm->outbuf->bpos += CHUNK - zstrm->strm.avail_out;
-	} while (ret != Z_STREAM_END);
-	assert(zstrm->strm.avail_in == 0);
+	def_chunks(zstrm);
 
 	return true;
 }
@@ -183,7 +179,7 @@ uc_zlib_def_string(uc_vm_t * const vm, uc_value_t * const str, zstrm_t * const z
  * @function module:zlib#deflate
  *
  * @param {string} str_or_resource
- * The string or resource object to be parsed as JSON.
+ * The string or resource object to be compressed.
  *
  * @param {?boolean} [gzip=false]
  * Add a gzip header if true (creates a gzip-compliant output, otherwise defaults to Zlib)
@@ -216,6 +212,7 @@ uc_zlib_deflate(uc_vm_t * const vm, const size_t nargs)
 			.opaque = Z_NULL,
 		},
 		.outbuf = NULL,
+		.flush = Z_FINISH,
 	};
 
 	if (gzip) {
@@ -279,6 +276,34 @@ out:
 	return rv;
 }
 
+static int
+inf_chunks(zstrm_t * const zstrm)
+{
+	int ret;
+
+	/* run inflate() on input until output buffer not full */
+	do {
+		printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
+		zstrm->outbuf->bpos -= CHUNK;
+
+		zstrm->strm.avail_out = CHUNK;
+		zstrm->strm.next_out = (unsigned char *)(zstrm->outbuf->buf + zstrm->outbuf->bpos);
+
+		ret = inflate(&zstrm->strm, zstrm->flush);
+		assert(ret != Z_STREAM_ERROR);
+		switch (ret) {
+		case Z_NEED_DICT:
+		case Z_DATA_ERROR:
+		case Z_MEM_ERROR:
+			return ret;
+		}
+
+		zstrm->outbuf->bpos += CHUNK - zstrm->strm.avail_out;
+	} while (zstrm->strm.avail_out == 0);
+
+	return ret;
+}
+
 static bool
 uc_zlib_inf_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zstrm)
 {
@@ -320,27 +345,13 @@ uc_zlib_inf_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zs
 		zstrm->strm.next_in = (unsigned char *)ucv_string_get(rbuf);
 		zstrm->strm.avail_in = ucv_string_length(rbuf);
 
-		/* run inflate() on input until output buffer not full */
-		do {
-			// enlarge outbuf by CHUNK amount as needed
-			printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
-			zstrm->outbuf->bpos -= CHUNK;
-
-			zstrm->strm.avail_out = CHUNK;
-			zstrm->strm.next_out = (unsigned char *)(zstrm->outbuf->buf + zstrm->outbuf->bpos);;
-
-			ret = inflate(&zstrm->strm, Z_NO_FLUSH);
-			assert(ret != Z_STREAM_ERROR);		// state never clobbered (would be mem corruption)
-			switch (ret) {
-			case Z_NEED_DICT:
-			case Z_DATA_ERROR:
-			case Z_MEM_ERROR:
-				goto fail;
-			}
-
-			// update bpos past data written by deflate()
-			zstrm->outbuf->bpos += CHUNK - zstrm->strm.avail_out;
-		} while (zstrm->strm.avail_out == 0);
+		ret = inf_chunks(zstrm);
+		switch (ret) {
+		case Z_NEED_DICT:
+		case Z_DATA_ERROR:
+		case Z_MEM_ERROR:
+			goto fail;
+		}
 
 		ucv_put(rbuf);	// release rbuf
 	} while (ret != Z_STREAM_END);	// done when inflate() says it's done
@@ -363,27 +374,10 @@ uc_zlib_inf_string(uc_vm_t * const vm, uc_value_t * const str, zstrm_t * const z
 	zstrm->strm.next_in = (unsigned char *)ucv_string_get(str);
 	zstrm->strm.avail_in = ucv_string_length(str);
 
-	do {
-		printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
-		zstrm->outbuf->bpos -= CHUNK;
-
-		zstrm->strm.avail_out = CHUNK;
-		zstrm->strm.next_out = (unsigned char *)(zstrm->outbuf->buf + zstrm->outbuf->bpos);
-
-		ret = inflate(&zstrm->strm, Z_FINISH);
-		assert(ret != Z_STREAM_ERROR);
-		switch (ret) {
-		case Z_NEED_DICT:
-		case Z_DATA_ERROR:
-		case Z_MEM_ERROR:
-			return false;
-		}
-
-		zstrm->outbuf->bpos += CHUNK - zstrm->strm.avail_out;
-	} while (ret != Z_STREAM_END);
+	ret = inf_chunks(zstrm);
 	assert(zstrm->strm.avail_in == 0);
 
-	return true;
+	return Z_STREAM_END == ret;
 }
 
 /**
@@ -436,12 +430,14 @@ uc_zlib_inflate(uc_vm_t * const vm, const size_t nargs)
 
 	switch (ucv_type(src)) {
 	case UC_STRING:
+		zstrm.flush = Z_FINISH;
 		success = uc_zlib_inf_string(vm, src, &zstrm);
 		break;
 
 	case UC_RESOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
+		zstrm.flush = Z_NO_FLUSH;
 		success = uc_zlib_inf_object(vm, src, &zstrm);
 		break;
 
