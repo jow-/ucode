@@ -170,6 +170,7 @@ enum {
 	DF_ARRAY = (1 << 5),
 	DF_BINARY = (1 << 6),
 	DF_RELATED = (1 << 7),
+	DF_REPEATED = (1 << 8),
 };
 
 typedef struct uc_nl_attr_spec {
@@ -1008,26 +1009,6 @@ uc_nl_get_struct_member_u32(char *base, const void *offset)
 	return u32;
 }
 
-static void
-uc_nl_nla_parse(struct nlattr *tb[], int maxtype, struct nlattr *head, int len)
-{
-	struct nlattr *nla;
-	int rem;
-
-	memset(tb, 0, sizeof(struct nlattr *) * (maxtype + 1));
-
-	nla_for_each_attr(nla, head, len, rem) {
-		int type = nla_type(nla);
-
-		if (type <= maxtype)
-			tb[type] = nla;
-	}
-
-	if (rem > 0)
-		fprintf(stderr, "netlink: %d bytes leftover after parsing attributes.\n", rem);
-}
-
-
 static bool
 uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, uc_vm_t *vm, uc_value_t *val, size_t idx);
 
@@ -1051,12 +1032,10 @@ uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsiz
 	if (!tb)
 		return false;
 
-	uc_nl_nla_parse(tb, maxattr, buf + headsize, buflen - headsize);
-
 	nla_for_each_attr(nla, buf + headsize, buflen - headsize, rem) {
 		type = nla_type(nla);
 
-		if (type <= maxattr)
+		if (type <= maxattr && !tb[type])
 			tb[type] = nla;
 	}
 
@@ -1064,7 +1043,28 @@ uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsiz
 		if (attrs[i].attr != 0 && !tb[attrs[i].attr])
 			continue;
 
-		if (attrs[i].flags & DF_MULTIPLE) {
+		if (attrs[i].flags & DF_REPEATED) {
+			arr = ucv_array_new(vm);
+
+			nla = tb[attrs[i].attr];
+			rem = buflen - ((void *)nla - buf);
+			for (; nla_ok(nla, rem); nla = nla_next(nla, &rem)) {
+				if (nla_type(nla) != (int)attrs[i].attr)
+					break;
+				v = uc_nl_convert_attr(&attrs[i], msg, (char *)buf, nla, NULL, vm);
+				if (!v)
+					continue;
+
+				ucv_array_push(arr, v);
+			}
+			if (!ucv_array_length(arr)) {
+				ucv_put(arr);
+				continue;
+			}
+
+			v = arr;
+		}
+		else if (attrs[i].flags & DF_MULTIPLE) {
 			arr = ucv_array_new(vm);
 			nla_nest = tb[attrs[i].attr];
 
