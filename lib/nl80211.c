@@ -169,6 +169,8 @@ enum {
 	DF_OFFSET1 = (1 << 4),
 	DF_ARRAY = (1 << 5),
 	DF_BINARY = (1 << 6),
+	DF_RELATED = (1 << 7),
+	DF_REPEATED = (1 << 8),
 };
 
 typedef struct uc_nl_attr_spec {
@@ -187,6 +189,7 @@ typedef struct uc_nl_nested_spec {
 
 #define SIZE(type) (void *)(uintptr_t)sizeof(struct type)
 #define MEMBER(type, field) (void *)(uintptr_t)offsetof(struct type, field)
+#define ATTRID(id) (void *)(uintptr_t)(id)
 
 static const uc_nl_nested_spec_t nl80211_cqm_nla = {
 	.headsize = 0,
@@ -565,7 +568,7 @@ static const uc_nl_nested_spec_t nl80211_wiphy_bands_iftype_data_nla = {
 		{ NL80211_BAND_IFTYPE_ATTR_IFTYPES, "iftypes", DT_NESTED, 0, &nl80211_ifcomb_limit_types_nla },
 		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_MAC, "he_cap_mac", DT_U8, DF_ARRAY, NULL },
 		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY, "he_cap_phy", DT_U8, DF_ARRAY, NULL },
-		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_MCS_SET, "he_cap_mcs_set", DT_HE_MCS, 0, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_MCS_SET, "he_cap_mcs_set", DT_HE_MCS, DF_RELATED, ATTRID(NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY) },
 		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_PPE, "he_cap_ppe", DT_U8, DF_ARRAY, NULL },
 		{ NL80211_BAND_IFTYPE_ATTR_HE_6GHZ_CAPA, "he_6ghz_capa", DT_U16, 0, NULL },
 		{ NL80211_BAND_IFTYPE_ATTR_VENDOR_ELEMS, "vendor_elems", DT_STRING, DF_BINARY, NULL },
@@ -1006,36 +1009,16 @@ uc_nl_get_struct_member_u32(char *base, const void *offset)
 	return u32;
 }
 
-static void
-uc_nl_nla_parse(struct nlattr *tb[], int maxtype, struct nlattr *head, int len)
-{
-	struct nlattr *nla;
-	int rem;
-
-	memset(tb, 0, sizeof(struct nlattr *) * (maxtype + 1));
-
-	nla_for_each_attr(nla, head, len, rem) {
-		int type = nla_type(nla);
-
-		if (type <= maxtype)
-			tb[type] = nla;
-	}
-
-	if (rem > 0)
-		fprintf(stderr, "netlink: %d bytes leftover after parsing attributes.\n", rem);
-}
-
-
 static bool
 uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, uc_vm_t *vm, uc_value_t *val, size_t idx);
 
 static uc_value_t *
-uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, struct nlattr **tb, uc_vm_t *vm);
+uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, struct nlattr *attr, struct nlattr *attr2, uc_vm_t *vm);
 
 static bool
 uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsize, const uc_nl_attr_spec_t *attrs, size_t nattrs, uc_vm_t *vm, uc_value_t *obj)
 {
-	struct nlattr **tb, *nla, *nla_nest;
+	struct nlattr **tb, *nla, *nla2, *nla_nest;
 	size_t i, type, maxattr = 0;
 	uc_value_t *v, *arr;
 	int rem;
@@ -1049,12 +1032,10 @@ uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsiz
 	if (!tb)
 		return false;
 
-	uc_nl_nla_parse(tb, maxattr, buf + headsize, buflen - headsize);
-
 	nla_for_each_attr(nla, buf + headsize, buflen - headsize, rem) {
 		type = nla_type(nla);
 
-		if (type <= maxattr)
+		if (type <= maxattr && !tb[type])
 			tb[type] = nla;
 	}
 
@@ -1062,7 +1043,28 @@ uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsiz
 		if (attrs[i].attr != 0 && !tb[attrs[i].attr])
 			continue;
 
-		if (attrs[i].flags & DF_MULTIPLE) {
+		if (attrs[i].flags & DF_REPEATED) {
+			arr = ucv_array_new(vm);
+
+			nla = tb[attrs[i].attr];
+			rem = buflen - ((void *)nla - buf);
+			for (; nla_ok(nla, rem); nla = nla_next(nla, &rem)) {
+				if (nla_type(nla) != (int)attrs[i].attr)
+					break;
+				v = uc_nl_convert_attr(&attrs[i], msg, (char *)buf, nla, NULL, vm);
+				if (!v)
+					continue;
+
+				ucv_array_push(arr, v);
+			}
+			if (!ucv_array_length(arr)) {
+				ucv_put(arr);
+				continue;
+			}
+
+			v = arr;
+		}
+		else if (attrs[i].flags & DF_MULTIPLE) {
 			arr = ucv_array_new(vm);
 			nla_nest = tb[attrs[i].attr];
 
@@ -1071,9 +1073,7 @@ uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsiz
 				    attrs[i].auxdata && nla_type(nla) != (intptr_t)attrs[i].auxdata)
 					continue;
 
-				tb[attrs[i].attr] = nla;
-
-				v = uc_nl_convert_attr(&attrs[i], msg, (char *)buf, tb, vm);
+				v = uc_nl_convert_attr(&attrs[i], msg, (char *)buf, nla, NULL, vm);
 
 				if (!v)
 					continue;
@@ -1093,7 +1093,12 @@ uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsiz
 			v = arr;
 		}
 		else {
-			v = uc_nl_convert_attr(&attrs[i], msg, (char *)buf, tb, vm);
+			if (attrs[i].flags & DF_RELATED)
+				nla2 = tb[(uintptr_t)attrs[i].auxdata];
+			else
+				nla2 = NULL;
+
+			v = uc_nl_convert_attr(&attrs[i], msg, (char *)buf, tb[attrs[i].attr], nla2, vm);
 
 			if (!v)
 				continue;
@@ -1183,7 +1188,7 @@ uc_nl_parse_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *
 }
 
 static uc_value_t *
-uc_nl_convert_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr **tb, uc_vm_t *vm)
+uc_nl_convert_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, uc_vm_t *vm)
 {
 	const uc_nl_nested_spec_t *nest = spec->auxdata;
 	uc_value_t *nested_obj;
@@ -1192,13 +1197,13 @@ uc_nl_convert_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 	if (!nest)
 		return NULL;
 
-	if (!nla_check_len(tb[spec->attr], nest->headsize))
+	if (!nla_check_len(attr, nest->headsize))
 		return NULL;
 
 	nested_obj = ucv_object_new(vm);
 
 	rv = uc_nl_convert_attrs(msg,
-		nla_data(tb[spec->attr]), nla_len(tb[spec->attr]), nest->headsize,
+		nla_data(attr), nla_len(attr), nest->headsize,
 		nest->attrs, nest->nattrs,
 		vm, nested_obj);
 
@@ -1212,17 +1217,17 @@ uc_nl_convert_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 }
 
 static uc_value_t *
-uc_nl_convert_rta_ht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr **tb, uc_vm_t *vm)
+uc_nl_convert_rta_ht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, uc_vm_t *vm)
 {
 	uc_value_t *mcs_obj, *mcs_idx;
 	uint16_t max_rate = 0;
 	uint8_t *mcs;
 	size_t i;
 
-	if (!nla_check_len(tb[spec->attr], 16))
+	if (!nla_check_len(attr, 16))
 		return NULL;
 
-	mcs = nla_data(tb[spec->attr]);
+	mcs = nla_data(attr);
 	mcs_obj = ucv_object_new(vm);
 
 	max_rate = (mcs[10] | ((mcs[11] & 0x3) << 8));
@@ -1247,16 +1252,16 @@ uc_nl_convert_rta_ht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 }
 
 static uc_value_t *
-uc_nl_convert_rta_ht_cap(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr **tb, uc_vm_t *vm)
+uc_nl_convert_rta_ht_cap(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, uc_vm_t *vm)
 {
 	uc_value_t *cap_obj, *mcs_obj, *rx_mask;
 	struct ieee80211_ht_cap *cap;
 	size_t i;
 
-	if (!nla_check_len(tb[spec->attr], sizeof(*cap)))
+	if (!nla_check_len(attr, sizeof(*cap)))
 		return NULL;
 
-	cap = nla_data(tb[spec->attr]);
+	cap = nla_data(attr);
 	cap_obj = ucv_object_new(vm);
 
 	ucv_object_add(cap_obj, "cap_info", ucv_uint64_new(le16toh(cap->cap_info)));
@@ -1281,17 +1286,17 @@ uc_nl_convert_rta_ht_cap(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 }
 
 static uc_value_t *
-uc_nl_convert_rta_vht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr **tb, uc_vm_t *vm)
+uc_nl_convert_rta_vht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, uc_vm_t *vm)
 {
 	uc_value_t *mcs_obj, *mcs_set, *mcs_entry, *mcs_idx;
 	size_t i, j, max_idx;
 	uint16_t u16;
 	uint8_t *mcs;
 
-	if (!nla_check_len(tb[spec->attr], 8))
+	if (!nla_check_len(attr, 8))
 		return NULL;
 
-	mcs = nla_data(tb[spec->attr]);
+	mcs = nla_data(attr);
 	mcs_obj = ucv_object_new(vm);
 
 	u16 = mcs[0] | (mcs[1] << 8);
@@ -1352,7 +1357,7 @@ uc_nl_convert_rta_vht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, str
 }
 
 static uc_value_t *
-uc_nl_convert_rta_he_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr **tb, uc_vm_t *vm)
+uc_nl_convert_rta_he_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, struct nlattr *phy_attr, uc_vm_t *vm)
 {
 	uint8_t bw_support_mask[] = { (1 << 1) | (1 << 2), (1 << 3), (1 << 4) };
 	uc_value_t *mcs_set, *mcs_bw, *mcs_dir, *mcs_entry, *mcs_idx;
@@ -1360,13 +1365,13 @@ uc_nl_convert_rta_he_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 	uint16_t u16, phy_cap_0 = 0;
 	size_t i, j, k, l, max_idx;
 
-	if (!nla_check_len(tb[spec->attr], sizeof(mcs)))
+	if (!nla_check_len(attr, sizeof(mcs)))
 		return NULL;
 
-	if (nla_check_len(tb[NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY], sizeof(phy_cap_0)))
-		phy_cap_0 = nla_get_u16(tb[NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY]);
+	if (nla_check_len(phy_attr, sizeof(phy_cap_0)))
+		phy_cap_0 = nla_get_u16(phy_attr);
 
-	memcpy(mcs, nla_data(tb[spec->attr]), sizeof(mcs));
+	memcpy(mcs, nla_data(attr), sizeof(mcs));
 
 	mcs_set = ucv_array_new_length(vm, 3);
 
@@ -1423,14 +1428,14 @@ uc_nl_convert_rta_he_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, stru
 }
 
 static uc_value_t *
-uc_nl_convert_rta_ie(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr **tb, uc_vm_t *vm)
+uc_nl_convert_rta_ie(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, uc_vm_t *vm)
 {
 	uc_value_t *ie_arr, *ie_obj;
 	uint8_t *ie;
 	size_t len;
 
-	len = nla_len(tb[spec->attr]);
-	ie = nla_data(tb[spec->attr]);
+	len = nla_len(attr);
+	ie = nla_data(attr);
 
 	if (len < 2)
 		return NULL;
@@ -1699,7 +1704,7 @@ uc_nl_convert_numval(const uc_nl_attr_spec_t *spec, char *base)
 }
 
 static uc_value_t *
-uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, struct nlattr **tb, uc_vm_t *vm)
+uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, struct nlattr *attr, struct nlattr *attr2, uc_vm_t *vm)
 {
 	union { uint8_t u8; uint16_t u16; uint32_t u32; uint64_t u64; size_t sz; } t = { 0 };
 	char buf[sizeof("FF:FF:FF:FF:FF:FF")];
@@ -1716,17 +1721,17 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 	case DT_U64:
 		if (spec->flags & DF_ARRAY) {
 			assert(spec->attr != 0);
-			assert((nla_len(tb[spec->attr]) % dt_sizes[spec->type]) == 0);
+			assert((nla_len(attr) % dt_sizes[spec->type]) == 0);
 
-			v = ucv_array_new_length(vm, nla_len(tb[spec->attr]) / dt_sizes[spec->type]);
+			v = ucv_array_new_length(vm, nla_len(attr) / dt_sizes[spec->type]);
 
-			for (i = 0; i < nla_len(tb[spec->attr]); i += dt_sizes[spec->type])
-				ucv_array_push(v, uc_nl_convert_numval(spec, nla_data(tb[spec->attr]) + i));
+			for (i = 0; i < nla_len(attr); i += dt_sizes[spec->type])
+				ucv_array_push(v, uc_nl_convert_numval(spec, nla_data(attr) + i));
 
 			return v;
 		}
-		else if (nla_check_len(tb[spec->attr], dt_sizes[spec->type])) {
-			return uc_nl_convert_numval(spec, nla_data(tb[spec->attr]));
+		else if (nla_check_len(attr, dt_sizes[spec->type])) {
+			return uc_nl_convert_numval(spec, nla_data(attr));
 		}
 
 		return NULL;
@@ -1734,15 +1739,15 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 	case DT_BOOL:
 		if (spec->attr == 0)
 			t.u8 = uc_nl_get_struct_member_u8(base, spec->auxdata);
-		else if (nla_check_len(tb[spec->attr], sizeof(t.u8)))
-			t.u8 = nla_get_u8(tb[spec->attr]);
+		else if (nla_check_len(attr, sizeof(t.u8)))
+			t.u8 = nla_get_u8(attr);
 
 		return ucv_boolean_new(t.u8 != 0);
 
 	case DT_FLAG:
 		if (spec->attr == 0)
 			t.u8 = uc_nl_get_struct_member_u8(base, spec->auxdata);
-		else if (tb[spec->attr] != NULL)
+		else if (attr != NULL)
 			t.u8 = 1;
 
 		return ucv_boolean_new(t.u8 != 0);
@@ -1750,21 +1755,21 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 	case DT_STRING:
 		assert(spec->attr != 0);
 
-		if (!nla_check_len(tb[spec->attr], 1))
+		if (!nla_check_len(attr, 1))
 			return NULL;
 
-		t.sz = nla_len(tb[spec->attr]);
+		t.sz = nla_len(attr);
 
 		if (!(spec->flags & DF_BINARY))
 			t.sz -= 1;
 
-		return ucv_string_new_length(nla_data(tb[spec->attr]), t.sz);
+		return ucv_string_new_length(nla_data(attr), t.sz);
 
 	case DT_NETDEV:
 		if (spec->attr == 0)
 			t.u32 = uc_nl_get_struct_member_u32(base, spec->auxdata);
-		else if (nla_check_len(tb[spec->attr], sizeof(t.u32)))
-			t.u32 = nla_get_u32(tb[spec->attr]);
+		else if (nla_check_len(attr, sizeof(t.u32)))
+			t.u32 = nla_get_u32(attr);
 
 		if (if_indextoname(t.u32, buf))
 			return ucv_string_new(buf);
@@ -1774,10 +1779,10 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 	case DT_LLADDR:
 		assert(spec->attr != 0);
 
-		if (!nla_check_len(tb[spec->attr], sizeof(*ea)))
+		if (!nla_check_len(attr, sizeof(*ea)))
 			return NULL;
 
-		ea = nla_data(tb[spec->attr]);
+		ea = nla_data(attr);
 
 		snprintf(buf, sizeof(buf), "%02x:%02x:%02x:%02x:%02x:%02x",
 			ea->ether_addr_octet[0], ea->ether_addr_octet[1],
@@ -1789,29 +1794,29 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 	case DT_INADDR:
 		assert(spec->attr != 0);
 
-		if (!nla_check_len(tb[spec->attr], sizeof(struct in_addr)) ||
-		    !inet_ntop(AF_INET, nla_data(tb[spec->attr]), buf, sizeof(buf)))
+		if (!nla_check_len(attr, sizeof(struct in_addr)) ||
+		    !inet_ntop(AF_INET, nla_data(attr), buf, sizeof(buf)))
 			return NULL;
 
 		return ucv_string_new(buf);
 
 	case DT_NESTED:
-		return uc_nl_convert_rta_nested(spec, msg, tb, vm);
+		return uc_nl_convert_rta_nested(spec, msg, attr, vm);
 
 	case DT_HT_MCS:
-		return uc_nl_convert_rta_ht_mcs(spec, msg, tb, vm);
+		return uc_nl_convert_rta_ht_mcs(spec, msg, attr, vm);
 
 	case DT_HT_CAP:
-		return uc_nl_convert_rta_ht_cap(spec, msg, tb, vm);
+		return uc_nl_convert_rta_ht_cap(spec, msg, attr, vm);
 
 	case DT_VHT_MCS:
-		return uc_nl_convert_rta_vht_mcs(spec, msg, tb, vm);
+		return uc_nl_convert_rta_vht_mcs(spec, msg, attr, vm);
 
 	case DT_HE_MCS:
-		return uc_nl_convert_rta_he_mcs(spec, msg, tb, vm);
+		return uc_nl_convert_rta_he_mcs(spec, msg, attr, attr2, vm);
 
 	case DT_IE:
-		return uc_nl_convert_rta_ie(spec, msg, tb, vm);
+		return uc_nl_convert_rta_ie(spec, msg, attr, vm);
 
 	default:
 		assert(0);
