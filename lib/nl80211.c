@@ -65,6 +65,9 @@ __attribute__((format(printf, 2, 3))) static void
 set_error(int errcode, const char *fmt, ...) {
 	va_list ap;
 
+	if (errcode == -(NLE_MAX + 1))
+		return;
+
 	free(last_error.msg);
 
 	last_error.code = errcode;
@@ -2080,7 +2083,15 @@ cb_errno(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg)
 {
 	int *ret = arg;
 
-	*ret = err->error;
+	if (err->error > 0) {
+		set_error(NLE_RANGE,
+			"Illegal error code %d in netlink reply", err->error);
+
+		*ret = -(NLE_MAX + 1);
+	}
+	else {
+		*ret = -nl_syserr2nlerr(err->error);
+	}
 
 	return NL_STOP;
 }
