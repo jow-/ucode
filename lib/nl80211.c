@@ -1685,6 +1685,30 @@ uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, 
 		break;
 
 	case DT_NESTED:
+		if (spec->flags & DF_ARRAY) {
+			const uc_nl_nested_spec_t *nested = spec->auxdata;
+
+			assert(nested != NULL);
+			assert(nested->headsize > 0);
+
+			if (ucv_type(val) != UC_ARRAY)
+				return nla_parse_error(spec, vm, val, "not an array");
+
+			nla = nla_reserve(msg, spec->attr, ucv_array_length(val) * nested->headsize);
+			s = nla_data(nla);
+
+			for (i = 0; i < ucv_array_length(val); i++) {
+				item = ucv_array_get(val, i);
+
+				if (!uc_nl_parse_attrs(msg, s, nested->attrs, nested->nattrs, vm, item))
+					return false;
+
+				s += nested->headsize;
+			}
+
+			return true;
+		}
+
 		if (!uc_nl_parse_rta_nested(spec, msg, base, vm, val))
 			return false;
 
@@ -1824,6 +1848,34 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 		return ucv_string_new(buf);
 
 	case DT_NESTED:
+		if (spec->flags & DF_ARRAY) {
+			const uc_nl_nested_spec_t *nested = spec->auxdata;
+
+			assert(nested != NULL);
+			assert(nested->headsize > 0);
+			assert((nla_len(attr) % nested->headsize) == 0);
+
+			v = ucv_array_new_length(vm, nla_len(attr) / nested->headsize);
+
+			for (i = 0; i < nla_len(attr); i += nested->headsize) {
+				uc_value_t *item = ucv_object_new(vm);
+
+				ucv_array_push(v, item);
+
+				bool rv = uc_nl_convert_attrs(msg,
+					nla_data(attr) + i, nla_len(attr) - i, nested->headsize,
+					nested->attrs, nested->nattrs, vm, item);
+
+				if (!rv) {
+					ucv_put(v);
+
+					return NULL;
+				}
+			}
+
+			return v;
+		}
+
 		return uc_nl_convert_rta_nested(spec, msg, attr, vm);
 
 	case DT_HT_MCS:
