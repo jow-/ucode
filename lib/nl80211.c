@@ -1905,8 +1905,6 @@ static struct {
 	struct nl_sock *sock;
 	struct nl_sock *evsock;
 	struct nl_cache *cache;
-	struct genl_family *nl80211;
-	struct genl_family *nlctrl;
 	struct uloop_fd evsock_fd;
 	struct nl_cb *evsock_cb;
 } nl80211_conn;
