@@ -39,6 +39,7 @@ limitations under the License.
 
 #include <linux/nl80211.h>
 #include <linux/ieee80211.h>
+#include <linux/mac80211_hwsim.h>
 #include <libubox/uloop.h>
 
 #include "ucode/module.h"
@@ -64,6 +65,9 @@ static struct {
 __attribute__((format(printf, 2, 3))) static void
 set_error(int errcode, const char *fmt, ...) {
 	va_list ap;
+
+	if (errcode == -(NLE_MAX + 1))
+		return;
 
 	free(last_error.msg);
 
@@ -371,7 +375,7 @@ static const uc_nl_nested_spec_t nl80211_nan_func_nla = {
 	}
 };
 
-static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_req_data_ftm_nla = {
+static const uc_nl_nested_spec_t nl80211_peer_measurements_type_ftm_nla = {
 	.headsize = 0,
 	.nattrs = 13,
 	.attrs = {
@@ -395,7 +399,7 @@ static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_req_data_nla = 
 	.headsize = 0,
 	.nattrs = 2,
 	.attrs = {
-		{ NL80211_PMSR_TYPE_FTM, "ftm", DT_NESTED, 0, &nl80211_peer_measurements_peers_req_data_ftm_nla },
+		{ NL80211_PMSR_TYPE_FTM, "ftm", DT_NESTED, 0, &nl80211_peer_measurements_type_ftm_nla },
 		{ NL80211_PMSR_REQ_ATTR_GET_AP_TSF, "get_ap_tsf", DT_FLAG, 0, NULL },
 	}
 };
@@ -419,13 +423,34 @@ static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_chan_nla = {
 	}
 };
 
+static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_resp_data_nla = {
+	.headsize = 0,
+	.nattrs = 1,
+	.attrs = {
+		{ NL80211_PMSR_TYPE_FTM, "ftm", DT_NESTED, 0, &nl80211_peer_measurements_type_ftm_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_resp_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_PMSR_RESP_ATTR_STATUS, "status", DT_U32, 0, NULL },
+		{ NL80211_PMSR_RESP_ATTR_HOST_TIME, "host_time", DT_U64, 0, NULL },
+		{ NL80211_PMSR_RESP_ATTR_AP_TSF, "ap_tsf", DT_U64, 0, NULL },
+		{ NL80211_PMSR_RESP_ATTR_FINAL, "final", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_RESP_ATTR_DATA, "data", DT_NESTED, 0, &nl80211_peer_measurements_peers_resp_data_nla },
+	}
+};
+
 static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_nla = {
 	.headsize = 0,
-	.nattrs = 3,
+	.nattrs = 4,
 	.attrs = {
 		{ NL80211_PMSR_PEER_ATTR_ADDR, "addr", DT_LLADDR, 0, NULL },
 		{ NL80211_PMSR_PEER_ATTR_REQ, "req", DT_NESTED, 0, &nl80211_peer_measurements_peers_req_nla },
-		{ NL80211_PMSR_PEER_ATTR_CHAN, "chan", DT_NESTED, 0, &nl80211_peer_measurements_peers_chan_nla }
+		{ NL80211_PMSR_PEER_ATTR_CHAN, "chan", DT_NESTED, 0, &nl80211_peer_measurements_peers_chan_nla },
+		{ NL80211_PMSR_PEER_ATTR_RESP, "resp", DT_NESTED, 0, &nl80211_peer_measurements_peers_resp_nla }
 	}
 };
 
@@ -959,6 +984,78 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_MAX_AP_ASSOC_STA, "max_ap_assoc", DT_U16, 0, NULL },
 		{ NL80211_ATTR_SURVEY_INFO, "survey_info", DT_NESTED, 0, &nl80211_survey_info_nla },
 		{ NL80211_ATTR_WIPHY_RADIOS, "radios", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &nl80211_wiphy_radio_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t hwsim_tx_info_struct = {
+	.headsize = sizeof(struct hwsim_tx_rate),
+	.nattrs = 2,
+	.attrs = {
+		{ NLA_UNSPEC, "idx", DT_S8, 0, MEMBER(hwsim_tx_rate, idx) },
+		{ NLA_UNSPEC, "count", DT_U8, 0, MEMBER(hwsim_tx_rate, count) },
+	}
+};
+
+static const uc_nl_nested_spec_t hwsim_tx_info_flags_struct = {
+	.headsize = sizeof(struct hwsim_tx_rate_flag),
+	.nattrs = 2,
+	.attrs = {
+		{ NLA_UNSPEC, "idx", DT_S8, 0, MEMBER(hwsim_tx_rate_flag, idx) },
+		{ NLA_UNSPEC, "flags", DT_U16, 0, MEMBER(hwsim_tx_rate_flag, flags) },
+	}
+};
+
+static const uc_nl_nested_spec_t hwsim_pmsr_support_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_PMSR_ATTR_MAX_PEERS, "max_peers", DT_U32, 0, NULL },
+		{ NL80211_PMSR_ATTR_REPORT_AP_TSF, "report_ap_tsf", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_ATTR_RANDOMIZE_MAC_ADDR, "randomize_mac_addr", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_ATTR_TYPE_CAPA, "type_capa", DT_U32, 0, NULL },
+		{ NL80211_PMSR_ATTR_PEERS, "peers", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &nl80211_peer_measurements_peers_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t hwsim_pmsr_request_nla = {
+	.headsize = 0,
+	.nattrs = 1,
+	.attrs = {
+		{ NL80211_ATTR_PEER_MEASUREMENTS, "peer_measurements", DT_NESTED, 0, &nl80211_peer_measurements_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t hwsim_msg = {
+	.headsize = 0,
+	.nattrs = 27,
+	.attrs = {
+		{ HWSIM_ATTR_ADDR_RECEIVER, "addr_receiver", DT_LLADDR, 0, NULL },
+		{ HWSIM_ATTR_ADDR_TRANSMITTER, "addr_transmitter", DT_LLADDR, 0, NULL },
+		{ HWSIM_ATTR_FRAME, "frame", DT_STRING, DF_BINARY, NULL },
+		{ HWSIM_ATTR_FLAGS, "flags", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_RX_RATE, "rx_rate", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_SIGNAL, "signal", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_TX_INFO, "tx_info", DT_NESTED, DF_ARRAY, &hwsim_tx_info_struct },
+		{ HWSIM_ATTR_COOKIE, "cookie", DT_U64, 0, NULL },
+		{ HWSIM_ATTR_CHANNELS, "channels", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_RADIO_ID, "radio_id", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_REG_HINT_ALPHA2, "reg_hint_alpha2", DT_STRING, DF_BINARY, NULL },
+		{ HWSIM_ATTR_REG_CUSTOM_REG, "reg_custom_reg", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_REG_STRICT_REG, "reg_strict_reg", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_SUPPORT_P2P_DEVICE, "support_p2p_device", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_USE_CHANCTX, "use_chanctx", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_DESTROY_RADIO_ON_CLOSE, "destroy_radio_on_close", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_RADIO_NAME, "radio_name", DT_STRING, DF_BINARY, NULL },
+		{ HWSIM_ATTR_NO_VIF, "no_vif", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_FREQ, "freq", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_TX_INFO_FLAGS, "tx_info_flags", DT_NESTED, DF_ARRAY, &hwsim_tx_info_flags_struct },
+		{ HWSIM_ATTR_PERM_ADDR, "perm_addr", DT_LLADDR, 0, NULL },
+		{ HWSIM_ATTR_IFTYPE_SUPPORT, "iftype_support", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_CIPHER_SUPPORT, "cipher_support", DT_U32, DF_ARRAY, NULL },
+		{ HWSIM_ATTR_MLO_SUPPORT, "mlo_support", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_PMSR_SUPPORT, "pmsr_support", DT_NESTED, 0, &hwsim_pmsr_support_nla },
+		{ HWSIM_ATTR_PMSR_REQUEST, "pmsr_request", DT_NESTED, 0, &hwsim_pmsr_request_nla },
+		{ HWSIM_ATTR_PMSR_RESULT, "pmsr_result", DT_NESTED, 0, &hwsim_pmsr_support_nla },
 	}
 };
 
@@ -1682,6 +1779,30 @@ uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, 
 		break;
 
 	case DT_NESTED:
+		if (spec->flags & DF_ARRAY) {
+			const uc_nl_nested_spec_t *nested = spec->auxdata;
+
+			assert(nested != NULL);
+			assert(nested->headsize > 0);
+
+			if (ucv_type(val) != UC_ARRAY)
+				return nla_parse_error(spec, vm, val, "not an array");
+
+			nla = nla_reserve(msg, spec->attr, ucv_array_length(val) * nested->headsize);
+			s = nla_data(nla);
+
+			for (i = 0; i < ucv_array_length(val); i++) {
+				item = ucv_array_get(val, i);
+
+				if (!uc_nl_parse_attrs(msg, s, nested->attrs, nested->nattrs, vm, item))
+					return false;
+
+				s += nested->headsize;
+			}
+
+			return true;
+		}
+
 		if (!uc_nl_parse_rta_nested(spec, msg, base, vm, val))
 			return false;
 
@@ -1821,6 +1942,34 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 		return ucv_string_new(buf);
 
 	case DT_NESTED:
+		if (spec->flags & DF_ARRAY) {
+			const uc_nl_nested_spec_t *nested = spec->auxdata;
+
+			assert(nested != NULL);
+			assert(nested->headsize > 0);
+			assert((nla_len(attr) % nested->headsize) == 0);
+
+			v = ucv_array_new_length(vm, nla_len(attr) / nested->headsize);
+
+			for (i = 0; i < nla_len(attr); i += nested->headsize) {
+				uc_value_t *item = ucv_object_new(vm);
+
+				ucv_array_push(v, item);
+
+				bool rv = uc_nl_convert_attrs(msg,
+					nla_data(attr) + i, nla_len(attr) - i, nested->headsize,
+					nested->attrs, nested->nattrs, vm, item);
+
+				if (!rv) {
+					ucv_put(v);
+
+					return NULL;
+				}
+			}
+
+			return v;
+		}
+
 		return uc_nl_convert_rta_nested(spec, msg, attr, vm);
 
 	case DT_HT_MCS:
@@ -1850,8 +1999,6 @@ static struct {
 	struct nl_sock *sock;
 	struct nl_sock *evsock;
 	struct nl_cache *cache;
-	struct genl_family *nl80211;
-	struct genl_family *nlctrl;
 	struct uloop_fd evsock_fd;
 	struct nl_cb *evsock_cb;
 } nl80211_conn;
@@ -1868,6 +2015,7 @@ typedef struct {
 	uc_vm_t *vm;
 	uc_value_t *res;
 	bool merge;
+	const uc_nl_nested_spec_t *spec;
 } request_state_t;
 
 
@@ -1970,7 +2118,7 @@ cb_reply(struct nl_msg *msg, void *arg)
 
 	rv = uc_nl_convert_attrs(msg,
 		genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
-		0, nl80211_msg.attrs, nl80211_msg.nattrs, s->vm, o);
+		0, s->spec->attrs, s->spec->nattrs, s->vm, o);
 
 	if (rv) {
 		if (hdr->nlmsg_flags & NLM_F_MULTI) {
@@ -2080,7 +2228,15 @@ cb_errno(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg)
 {
 	int *ret = arg;
 
-	*ret = err->error;
+	if (err->error > 0) {
+		set_error(NLE_RANGE,
+			"Illegal error code %d in netlink reply", err->error);
+
+		*ret = -(NLE_MAX + 1);
+	}
+	else {
+		*ret = -nl_syserr2nlerr(err->error);
+	}
 
 	return NL_STOP;
 }
@@ -2413,7 +2569,7 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 	uint16_t flagval = 0;
 	struct nl_msg *msg;
 	struct nl_cb *cb;
-	int ret, id;
+	int ret, id, cid;
 
 	if (ucv_type(cmd) != UC_INTEGER || ucv_int64_get(cmd) < 0 ||
 	    (flags != NULL && ucv_type(flags) != UC_INTEGER) ||
@@ -2435,23 +2591,28 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 	if (!msg)
 		err_return(NLE_NOMEM, NULL);
 
-	id = uc_nl_find_family_id("nl80211");
+	cid = ucv_int64_get(cmd);
+
+	if (cid >= HWSIM_CMD_OFFSET) {
+		id = uc_nl_find_family_id("MAC80211_HWSIM");
+		cid -= HWSIM_CMD_OFFSET;
+		st.spec = &hwsim_msg;
+	}
+	else {
+		id = uc_nl_find_family_id("nl80211");
+		st.merge = (cid == NL80211_CMD_GET_WIPHY);
+		st.spec = &nl80211_msg;
+	}
 
 	if (id < 0)
 		err_return(-id, NULL);
 
-	genlmsg_put(msg, 0, 0, id, 0, flagval, ucv_int64_get(cmd), 0);
+	genlmsg_put(msg, 0, 0, id, 0, flagval, cid, 0);
 
-	if (!uc_nl_parse_attrs(msg, nlmsg_data(nlmsg_hdr(msg)), nl80211_msg.attrs, nl80211_msg.nattrs, vm, payload)) {
+	if (!uc_nl_parse_attrs(msg, nlmsg_data(nlmsg_hdr(msg)), st.spec->attrs, st.spec->nattrs, vm, payload)) {
 		nlmsg_free(msg);
 
 		return NULL;
-	}
-
-	switch (ucv_int64_get(cmd)) {
-	case NL80211_CMD_GET_WIPHY:
-		st.merge = true;
-		break;
 	}
 
 	cb = nl_cb_alloc(NL_CB_DEFAULT);
@@ -2477,7 +2638,7 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 	nl_cb_put(cb);
 
 	if (ret < 0)
-		err_return(nl_syserr2nlerr(ret), NULL);
+		err_return(ret, NULL);
 
 	switch (st.state) {
 	case STATE_REPLIED:
@@ -2742,6 +2903,18 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(NL80211_CMD_CH_SWITCH_STARTED_NOTIFY);
 	ADD_CONST(NL80211_CMD_TDLS_CHANNEL_SWITCH);
 	ADD_CONST(NL80211_CMD_TDLS_CANCEL_CHANNEL_SWITCH);
+
+	ADD_CONST(HWSIM_CMD_REGISTER),
+	ADD_CONST(HWSIM_CMD_FRAME),
+	ADD_CONST(HWSIM_CMD_TX_INFO_FRAME),
+	ADD_CONST(HWSIM_CMD_NEW_RADIO),
+	ADD_CONST(HWSIM_CMD_DEL_RADIO),
+	ADD_CONST(HWSIM_CMD_GET_RADIO),
+	ADD_CONST(HWSIM_CMD_ADD_MAC_ADDR),
+	ADD_CONST(HWSIM_CMD_DEL_MAC_ADDR),
+	ADD_CONST(HWSIM_CMD_START_PMSR),
+	ADD_CONST(HWSIM_CMD_ABORT_PMSR),
+	ADD_CONST(HWSIM_CMD_REPORT_PMSR),
 
 	ADD_CONST(NL80211_IFTYPE_ADHOC);
 	ADD_CONST(NL80211_IFTYPE_STATION);
