@@ -201,6 +201,14 @@ read_stdin(void)
 
 	stdin_unused = NULL;
 
+	/* On empty stdin, provide a dummy buffer and ensure that it is
+	 * at least one byte long, due to
+	 * https://github.com/google/sanitizers/issues/627 */
+	if (p == NULL) {
+		p = xstrdup("\n");
+		tlen = 1;
+	}
+
 	return uc_source_new_buffer("[stdin]", p, tlen);
 }
 
