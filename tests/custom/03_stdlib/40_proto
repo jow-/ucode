@@ -38,6 +38,7 @@ When invoked with two arguments, returns the given value.
 Hello, World!
 [
 	{
+		"ioctl": "function ioctl(...) { [native code] }",
 		"lock": "function lock(...) { [native code] }",
 		"truncate": "function truncate(...) { [native code] }",
 		"isatty": "function isatty(...) { [native code] }",
