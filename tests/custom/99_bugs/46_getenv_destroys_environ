@@ -1,0 +1,13 @@
+A call to getenv() without parameters destroys environ, and subsequent calls
+to getenv() (with or without parameter) return nothing.
+
+-- Testcase --
+{%
+	getenv();
+	print(length(getenv()) > 0, '\n');
+%}
+-- End --
+
+-- Expect stdout --
+true
+-- End --
