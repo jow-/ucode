@@ -122,7 +122,7 @@ typedef enum {
 
 #define GC_DEFAULT_INTERVAL 1000
 
-extern uint32_t insns[__I_MAX];
+extern const int8_t uc_vm_insn_format[__I_MAX];
 
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config);
 void uc_vm_free(uc_vm_t *vm);

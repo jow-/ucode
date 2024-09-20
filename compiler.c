@@ -240,9 +240,11 @@ uc_compiler_parse_advance(uc_compiler_t *compiler)
 {
 	ucv_put(compiler->parser->prev.uv);
 	compiler->parser->prev = compiler->parser->curr;
+	compiler->parser->prev_endpos = compiler->parser->curr_endpos;
 
 	while (true) {
 		compiler->parser->curr = *uc_lexer_next_token(&compiler->parser->lex);
+		compiler->parser->curr_endpos = compiler->parser->lex.source->off;
 
 		if (compiler->parser->curr.type != TK_ERROR)
 			break;
@@ -453,6 +455,22 @@ uc_compiler_reladdr(uc_compiler_t *compiler, size_t from, size_t to)
 	}
 
 	return (size_t)(delta + 0x7fffffff);
+}
+
+static void
+uc_compiler_emit_stmt_start(uc_compiler_t *compiler, uc_token_t *tok)
+{
+	uc_chunk_stmt_start(
+		uc_compiler_current_chunk(compiler),
+		uc_compiler_set_srcpos(compiler, tok->pos));
+}
+
+static void
+uc_compiler_emit_stmt_end(uc_compiler_t *compiler)
+{
+	uc_chunk_stmt_end(
+		uc_compiler_current_chunk(compiler),
+		uc_compiler_set_srcpos(compiler, compiler->parser->prev_endpos));
 }
 
 static size_t
@@ -1300,9 +1318,15 @@ uc_compiler_compile_nullish_assignment(uc_compiler_t *compiler, uc_value_t *var)
 }
 
 static void
-uc_compiler_compile_expression(uc_compiler_t *compiler)
+uc_compiler_compile_expression(uc_compiler_t *compiler, bool tag_stmt)
 {
+	if (tag_stmt)
+		uc_compiler_emit_stmt_start(compiler, &compiler->parser->curr);
+
 	uc_compiler_parse_precedence(compiler, P_COMMA);
+
+	if (tag_stmt)
+		uc_compiler_emit_stmt_end(compiler);
 }
 
 static bool
@@ -1397,8 +1421,10 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 		}
 	}
 	else {
+		uc_compiler_emit_stmt_start(&fncompiler, &compiler->parser->curr);
 		uc_compiler_parse_precedence(&fncompiler, P_ASSIGN);
 		uc_compiler_emit_insn(&fncompiler, 0, I_RETURN);
+		uc_compiler_emit_stmt_end(&fncompiler);
 	}
 
 	/* emit load instruction for function value */
@@ -1572,7 +1598,7 @@ uc_compiler_compile_paren(uc_compiler_t *compiler)
 	 * expression or reached the closing paren. If neither applies, we have a
 	 * syntax error. */
 	if (!uc_compiler_parse_check(compiler, TK_RPAREN))
-		uc_compiler_compile_expression(compiler);
+		uc_compiler_compile_expression(compiler, false);
 
 	/* A subsequent slash cannot be a regular expression literal */
 	compiler->parser->lex.no_regexp = true;
@@ -1744,7 +1770,7 @@ uc_compiler_compile_template(uc_compiler_t *compiler)
 			uc_compiler_emit_insn(compiler, 0, I_ADD);
 		}
 		else if (uc_compiler_parse_match(compiler, TK_PLACEH)) {
-			uc_compiler_compile_expression(compiler);
+			uc_compiler_compile_expression(compiler, true);
 			uc_compiler_emit_insn(compiler, 0, I_ADD);
 			uc_compiler_parse_consume(compiler, TK_RBRACE);
 		}
@@ -1757,7 +1783,7 @@ uc_compiler_compile_template(uc_compiler_t *compiler)
 static void
 uc_compiler_compile_comma(uc_compiler_t *compiler)
 {
-	uc_compiler_emit_insn(compiler, 0, I_POP);
+	uc_compiler_emit_insn(compiler, compiler->parser->curr.pos, I_POP);
 	uc_compiler_parse_precedence(compiler, P_ASSIGN);
 }
 
@@ -1937,7 +1963,7 @@ uc_compiler_compile_subscript(uc_compiler_t *compiler)
 	compiler->exprstack->flags |= optional_chaining ? F_OPTCHAINING : 0;
 
 	/* compile lhs */
-	uc_compiler_compile_expression(compiler);
+	uc_compiler_compile_expression(compiler, false);
 
 	/* no regexp literal possible after computed property access */
 	compiler->parser->lex.no_regexp = true;
@@ -2219,15 +2245,19 @@ uc_compiler_compile_declexpr(uc_compiler_t *compiler, bool constant)
 static void
 uc_compiler_compile_local(uc_compiler_t *compiler)
 {
+	uc_compiler_emit_stmt_start(compiler, &compiler->parser->prev);
 	uc_compiler_compile_declexpr(compiler, false);
 	uc_compiler_parse_consume(compiler, TK_SCOL);
+	uc_compiler_emit_stmt_end(compiler);
 }
 
 static void
 uc_compiler_compile_const(uc_compiler_t *compiler)
 {
+	uc_compiler_emit_stmt_start(compiler, &compiler->parser->prev);
 	uc_compiler_compile_declexpr(compiler, true);
 	uc_compiler_parse_consume(compiler, TK_SCOL);
+	uc_compiler_emit_stmt_end(compiler);
 }
 
 static uc_tokentype_t
@@ -2265,7 +2295,7 @@ uc_compiler_compile_if(uc_compiler_t *compiler)
 
 	/* parse & compile condition expression */
 	uc_compiler_parse_consume(compiler, TK_LPAREN);
-	uc_compiler_compile_expression(compiler);
+	uc_compiler_compile_expression(compiler, true);
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 
 	/* conditional jump to else/elif branch */
@@ -2290,7 +2320,7 @@ uc_compiler_compile_if(uc_compiler_t *compiler)
 				/* parse & compile elsif condition */
 				uc_compiler_parse_advance(compiler);
 				uc_compiler_parse_consume(compiler, TK_LPAREN);
-				uc_compiler_compile_expression(compiler);
+				uc_compiler_compile_expression(compiler, true);
 				uc_compiler_parse_consume(compiler, TK_RPAREN);
 				uc_compiler_parse_consume(compiler, TK_COLON);
 
@@ -2376,7 +2406,7 @@ uc_compiler_compile_while(uc_compiler_t *compiler)
 
 	/* parse & compile loop condition */
 	uc_compiler_parse_consume(compiler, TK_LPAREN);
-	uc_compiler_compile_expression(compiler);
+	uc_compiler_compile_expression(compiler, true);
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 
 	/* conditional jump to end */
@@ -2438,7 +2468,8 @@ uc_compiler_compile_for_in(uc_compiler_t *compiler, bool local, uc_token_t *kvar
 	}
 
 	/* value to iterate */
-	uc_compiler_compile_expression(compiler);
+	uc_compiler_compile_expression(compiler, false);
+	uc_compiler_emit_stmt_end(compiler);
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 	uc_compiler_emit_insn(compiler, 0, I_SLOC);
 	uc_compiler_emit_u32(compiler, 0, val_slot);
@@ -2555,7 +2586,7 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 			}
 			/* ... otherwise an unrelated expression */
 			else {
-				uc_compiler_compile_expression(compiler);
+				uc_compiler_compile_expression(compiler, false);
 				uc_compiler_emit_insn(compiler, 0, I_POP);
 			}
 		}
@@ -2564,10 +2595,11 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 	}
 	/* ... otherwise try parsing an entire expression (which might be absent) */
 	else if (!uc_compiler_parse_check(compiler, TK_SCOL)) {
-		uc_compiler_compile_expression(compiler);
+		uc_compiler_compile_expression(compiler, false);
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 	}
 
+	uc_compiler_emit_stmt_end(compiler);
 	uc_compiler_parse_consume(compiler, TK_SCOL);
 
 
@@ -2575,7 +2607,7 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 	if (!uc_compiler_parse_check(compiler, TK_SCOL)) {
 		cond_off = chunk->count;
 
-		uc_compiler_compile_expression(compiler);
+		uc_compiler_compile_expression(compiler, true);
 
 		test_off = uc_compiler_emit_jmpz(compiler, 0);
 	}
@@ -2590,7 +2622,7 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 	incr_off = chunk->count;
 
 	if (!uc_compiler_parse_check(compiler, TK_RPAREN)) {
-		uc_compiler_compile_expression(compiler);
+		uc_compiler_compile_expression(compiler, true);
 		uc_compiler_emit_insn(compiler, 0, I_POP);
 	}
 
@@ -2640,6 +2672,8 @@ uc_compiler_compile_for(uc_compiler_t *compiler)
 	bool local;
 
 	uc_compiler_parse_consume(compiler, TK_LPAREN);
+
+	uc_compiler_emit_stmt_start(compiler, &compiler->parser->curr);
 
 	/* check the next few tokens and see if we have either a
 	 * `let x in` / `let x, y` expression or an ordinary initializer
@@ -2701,7 +2735,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 
 	/* parse and compile match value */
 	uc_compiler_parse_consume(compiler, TK_LPAREN);
-	uc_compiler_compile_expression(compiler);
+	uc_compiler_compile_expression(compiler, true);
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 	uc_compiler_parse_consume(compiler, TK_LBRACE);
 
@@ -2751,7 +2785,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 			skip_jmp = uc_compiler_emit_jmp(compiler, 0);
 
 			/* compile case value expression */
-			uc_compiler_compile_expression(compiler);
+			uc_compiler_compile_expression(compiler, false);
 			uc_compiler_parse_consume(compiler, TK_COLON);
 
 			/* Store three values in case offset list:
@@ -3008,7 +3042,7 @@ uc_compiler_compile_tplexp(uc_compiler_t *compiler)
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t off = chunk->count;
 
-	uc_compiler_compile_expression(compiler);
+	uc_compiler_compile_expression(compiler, true);
 
 	/* XXX: the lexer currently emits a superfluous trailing semicolon... */
 	uc_compiler_parse_match(compiler, TK_SCOL);
@@ -3051,7 +3085,7 @@ uc_compiler_compile_expstmt(uc_compiler_t *compiler)
 	if (uc_compiler_parse_match(compiler, TK_SCOL))
 		return TK_NULL;
 
-	uc_compiler_compile_expression(compiler);
+	uc_compiler_compile_expression(compiler, false);
 
 	/* allow omitting final semicolon */
 	switch (compiler->parser->curr.type) {
@@ -3092,32 +3126,39 @@ uc_compiler_compile_statement(uc_compiler_t *compiler)
 
 	compiler->exprstack = &expr;
 
-	if (uc_compiler_parse_match(compiler, TK_IF))
-		uc_compiler_compile_if(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_WHILE))
-		uc_compiler_compile_while(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_FOR))
-		uc_compiler_compile_for(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_SWITCH))
-		uc_compiler_compile_switch(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_TRY))
-		uc_compiler_compile_try(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_FUNC))
-		uc_compiler_compile_funcdecl(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_BREAK))
-		uc_compiler_compile_control(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_CONTINUE))
-		uc_compiler_compile_control(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_RETURN))
-		uc_compiler_compile_return(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_TEXT))
-		uc_compiler_compile_text(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_LEXP))
-		uc_compiler_compile_tplexp(compiler);
-	else if (uc_compiler_parse_match(compiler, TK_LBRACE))
+	if (uc_compiler_parse_match(compiler, TK_LBRACE)) {
 		last_statement_type = uc_compiler_compile_block(compiler);
-	else
-		last_statement_type = uc_compiler_compile_expstmt(compiler);
+	}
+	else {
+		uc_compiler_emit_stmt_start(compiler, &compiler->parser->curr);
+
+		if (uc_compiler_parse_match(compiler, TK_IF))
+			uc_compiler_compile_if(compiler);
+		else if (uc_compiler_parse_match(compiler, TK_WHILE))
+			uc_compiler_compile_while(compiler);
+		else if (uc_compiler_parse_match(compiler, TK_FOR))
+			uc_compiler_compile_for(compiler);
+		else if (uc_compiler_parse_match(compiler, TK_SWITCH))
+			uc_compiler_compile_switch(compiler);
+		else if (uc_compiler_parse_match(compiler, TK_TRY))
+			uc_compiler_compile_try(compiler);
+		else if (uc_compiler_parse_match(compiler, TK_FUNC))
+			uc_compiler_compile_funcdecl(compiler);
+		else if (uc_compiler_parse_match(compiler, TK_BREAK))
+			uc_compiler_compile_control(compiler);
+		else if (uc_compiler_parse_match(compiler, TK_CONTINUE))
+			uc_compiler_compile_control(compiler);
+		else if (uc_compiler_parse_match(compiler, TK_RETURN))
+			uc_compiler_compile_return(compiler);
+		else if (uc_compiler_parse_match(compiler, TK_TEXT))
+			uc_compiler_compile_text(compiler);
+		else if (uc_compiler_parse_match(compiler, TK_LEXP))
+			uc_compiler_compile_tplexp(compiler);
+		else
+			last_statement_type = uc_compiler_compile_expstmt(compiler);
+
+		uc_compiler_emit_stmt_end(compiler);
+	}
 
 	compiler->exprstack = expr.parent;
 
@@ -3206,8 +3247,11 @@ uc_compiler_compile_export(uc_compiler_t *compiler)
 		return;
 	}
 
+	uc_compiler_emit_stmt_start(compiler, &compiler->parser->prev);
+
 	if (uc_compiler_parse_match(compiler, TK_LBRACE)) {
 		uc_compiler_compile_exportlist(compiler);
+		uc_compiler_emit_stmt_end(compiler);
 
 		return;
 	}
@@ -3219,7 +3263,7 @@ uc_compiler_compile_export(uc_compiler_t *compiler)
 	else if (uc_compiler_parse_match(compiler, TK_FUNC))
 		uc_compiler_compile_funcdecl(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_DEFAULT))
-		uc_compiler_compile_expression(compiler);
+		uc_compiler_compile_expression(compiler, false);
 	else
 		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
 			"Unexpected token\nExpecting 'let', 'const', 'function', 'default' or '{'");
@@ -3241,6 +3285,8 @@ uc_compiler_compile_export(uc_compiler_t *compiler)
 	}
 
 	uc_compiler_parse_consume(compiler, TK_SCOL);
+
+	uc_compiler_emit_stmt_end(compiler);
 }
 
 static uc_program_t *
@@ -3645,6 +3691,8 @@ uc_compiler_compile_import(uc_compiler_t *compiler)
 		return;
 	}
 
+	uc_compiler_emit_stmt_start(compiler, &compiler->parser->prev);
+
 	/* import { ... } from */
 	if (uc_compiler_parse_match(compiler, TK_LBRACE)) {
 		uc_compiler_compile_importlist(compiler, namelist);
@@ -3700,6 +3748,8 @@ uc_compiler_compile_import(uc_compiler_t *compiler)
 	uc_compiler_compile_module(compiler, ucv_string_get(compiler->parser->prev.uv), namelist);
 
 	uc_compiler_parse_consume(compiler, TK_SCOL);
+
+	uc_compiler_emit_stmt_end(compiler);
 
 	ucv_put(namelist);
 }
