@@ -854,21 +854,22 @@ uc_getenv(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *key = uc_fn_arg(0), *rv = NULL;
 	extern char **environ;
+	char **env = environ;
 	char *k, *v;
 
 	if (!key) {
 		rv = ucv_object_new(vm);
 
-		while (*environ) {
-			v = strchr(*environ, '=');
+		while (*env) {
+			v = strchr(*env, '=');
 
 			if (v) {
-				xasprintf(&k, "%.*s", (int)(v - *environ), *environ);
+				xasprintf(&k, "%.*s", (int)(v - *env), *env);
 				ucv_object_add(rv, k, ucv_string_new(v + 1));
 				free(k);
 			}
 
-			environ++;
+			env++;
 		}
 	}
 	else if (ucv_type(key) == UC_STRING) {
