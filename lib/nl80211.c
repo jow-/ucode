@@ -588,7 +588,7 @@ static const uc_nl_nested_spec_t nl80211_wiphy_bands_rates_nla = {
 
 static const uc_nl_nested_spec_t nl80211_wiphy_bands_iftype_data_nla = {
 	.headsize = 0,
-	.nattrs = 7,
+	.nattrs = 9,
 	.attrs = {
 		{ NL80211_BAND_IFTYPE_ATTR_IFTYPES, "iftypes", DT_NESTED, 0, &nl80211_ifcomb_limit_types_nla },
 		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_MAC, "he_cap_mac", DT_U8, DF_ARRAY, NULL },
@@ -597,6 +597,8 @@ static const uc_nl_nested_spec_t nl80211_wiphy_bands_iftype_data_nla = {
 		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_PPE, "he_cap_ppe", DT_U8, DF_ARRAY, NULL },
 		{ NL80211_BAND_IFTYPE_ATTR_HE_6GHZ_CAPA, "he_6ghz_capa", DT_U16, 0, NULL },
 		{ NL80211_BAND_IFTYPE_ATTR_VENDOR_ELEMS, "vendor_elems", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC, "eht_cap_mac", DT_U8, DF_ARRAY, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_EHT_CAP_PHY, "eht_cap_phy", DT_U8, DF_ARRAY, NULL },
 	}
 };
 
