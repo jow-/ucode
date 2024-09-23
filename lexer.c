@@ -174,16 +174,23 @@ emit_buffer(uc_lexer_t *lex, ssize_t pos, int type, const char *strip_trailing_c
 static uc_token_t *
 parse_comment(uc_lexer_t *lex, int kind)
 {
+	size_t off = lex->source->off - 1;
 	int ch;
+
+	uc_vector_push(&lex->buffer, '/');
 
 	while (true) {
 		ch = next_char(lex);
 
+		uc_vector_push(&lex->buffer, ch);
+
 		if (kind == '/' && (ch == '\n' || ch == EOF))
 			break;
 
-		if (kind == '*' && ch == '*' && check_char(lex, '/'))
+		if (kind == '*' && ch == '*' && check_char(lex, '/')) {
+			uc_vector_push(&lex->buffer, '/');
 			break;
+		}
 
 		if (ch == EOF) {
 			lex->state = UC_LEX_EOF;
@@ -192,7 +199,7 @@ parse_comment(uc_lexer_t *lex, int kind)
 		}
 	}
 
-	return NULL;
+	return emit_buffer(lex, off, TK_COMMENT, NULL);
 }
 
 static void
@@ -957,8 +964,7 @@ lex_step(uc_lexer_t *lex)
 
 					/* found start of statement block */
 					case '%':
-						lex->state = UC_LEX_IDENTIFY_TOKEN;
-						lex->block = STATEMENTS;
+						lex->state = UC_LEX_BLOCK_STATEMENT_EMIT_TAG;
 
 						if (check_char(lex, '-'))
 							strip = " \n\t\v\f\r";
@@ -1019,11 +1025,12 @@ lex_step(uc_lexer_t *lex)
 				return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated template block"));
 			}
 
+			tok = emit_op(lex, lex->lastoff, TK_COMMENT, NULL);
+
 			lex->lastoff = lex->source->off;
 			lex->state = UC_LEX_IDENTIFY_BLOCK;
 
-			continue;
-
+			return tok;
 
 		case UC_LEX_BLOCK_EXPRESSION_EMIT_TAG:
 			lex->state = UC_LEX_IDENTIFY_TOKEN;
@@ -1031,6 +1038,11 @@ lex_step(uc_lexer_t *lex)
 
 			return emit_op(lex, lex->source->off - 2, TK_LEXP, NULL);
 
+		case UC_LEX_BLOCK_STATEMENT_EMIT_TAG:
+			lex->state = UC_LEX_IDENTIFY_TOKEN;
+			lex->block = STATEMENTS;
+
+			return emit_op(lex, lex->source->off - 2, TK_LSTM, NULL);
 
 		case UC_LEX_IDENTIFY_TOKEN:
 			do { tok = lex_find_token(lex); } while (tok == NULL);
@@ -1049,7 +1061,7 @@ lex_step(uc_lexer_t *lex)
 				lex->state = UC_LEX_IDENTIFY_BLOCK;
 				lex->block = NONE;
 
-				tok = emit_op(lex, -2, TK_SCOL, NULL);
+				tok = emit_op(lex, -2, TK_RSTM, NULL);
 			}
 
 			/* found end of expression block */
