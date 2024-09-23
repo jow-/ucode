@@ -177,10 +177,10 @@ typedef struct {
 } uc_lexer_t;
 
 
-__hidden void uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source);
-__hidden void uc_lexer_free(uc_lexer_t *lex);
+void uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source);
+void uc_lexer_free(uc_lexer_t *lex);
 
-__hidden uc_token_t *uc_lexer_next_token(uc_lexer_t *lex);
+uc_token_t *uc_lexer_next_token(uc_lexer_t *lex);
 
 __hidden bool uc_lexer_is_keyword(uc_value_t *label);
 
