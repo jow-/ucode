@@ -1,0 +1,17 @@
+Ensure that unquoted property names following spread expressions in object
+declaration literals are not treated as keywords.
+
+-- Testcase --
+{%
+printf("%.J\n", {
+	...{},
+	for: true
+});
+%}
+-- End --
+
+-- Expect stdout --
+{
+	"for": true
+}
+-- End --
