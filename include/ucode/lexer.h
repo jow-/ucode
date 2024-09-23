@@ -138,6 +138,7 @@ typedef struct {
 	uc_tokentype_t type;
 	uc_value_t *uv;
 	size_t pos;
+	size_t end;
 } uc_token_t;
 
 typedef struct {
