@@ -2060,6 +2060,7 @@ uc_compiler_compile_object(uc_compiler_t *compiler)
 			/* emit merge operation */
 			uc_compiler_emit_insn(compiler, 0, I_MOBJ);
 
+			compiler->parser->lex.no_keyword = true;
 			continue;
 		}
 
