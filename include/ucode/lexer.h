@@ -121,12 +121,14 @@ typedef enum {
 	TK_EXPORT,
 
 	TK_EOF,
+	TK_COMMENT,
 	TK_ERROR
 } uc_tokentype_t;
 
 typedef enum {
 	UC_LEX_IDENTIFY_BLOCK,
 	UC_LEX_BLOCK_EXPRESSION_EMIT_TAG,
+	UC_LEX_BLOCK_STATEMENT_EMIT_TAG,
 	UC_LEX_BLOCK_COMMENT,
 	UC_LEX_IDENTIFY_TOKEN,
 	UC_LEX_PLACEHOLDER_START,
@@ -138,6 +140,7 @@ typedef struct {
 	uc_tokentype_t type;
 	uc_value_t *uv;
 	size_t pos;
+	size_t end;
 } uc_token_t;
 
 typedef struct {
@@ -174,10 +177,10 @@ typedef struct {
 } uc_lexer_t;
 
 
-__hidden void uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source);
-__hidden void uc_lexer_free(uc_lexer_t *lex);
+void uc_lexer_init(uc_lexer_t *lex, uc_parse_config_t *config, uc_source_t *source);
+void uc_lexer_free(uc_lexer_t *lex);
 
-__hidden uc_token_t *uc_lexer_next_token(uc_lexer_t *lex);
+uc_token_t *uc_lexer_next_token(uc_lexer_t *lex);
 
 __hidden bool uc_lexer_is_keyword(uc_value_t *label);
 

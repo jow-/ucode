@@ -145,6 +145,8 @@ emit_op(uc_lexer_t *lex, ssize_t pos, int type, uc_value_t *uv)
 	else
 		lex->curr.pos = (size_t)pos;
 
+	lex->curr.end = lex->source->off;
+
 	return &lex->curr;
 }
 
@@ -172,16 +174,23 @@ emit_buffer(uc_lexer_t *lex, ssize_t pos, int type, const char *strip_trailing_c
 static uc_token_t *
 parse_comment(uc_lexer_t *lex, int kind)
 {
+	size_t off = lex->source->off - 1;
 	int ch;
+
+	uc_vector_push(&lex->buffer, '/');
 
 	while (true) {
 		ch = next_char(lex);
 
+		uc_vector_push(&lex->buffer, ch);
+
 		if (kind == '/' && (ch == '\n' || ch == EOF))
 			break;
 
-		if (kind == '*' && ch == '*' && check_char(lex, '/'))
+		if (kind == '*' && ch == '*' && check_char(lex, '/')) {
+			uc_vector_push(&lex->buffer, '/');
 			break;
+		}
 
 		if (ch == EOF) {
 			lex->state = UC_LEX_EOF;
@@ -190,7 +199,7 @@ parse_comment(uc_lexer_t *lex, int kind)
 		}
 	}
 
-	return NULL;
+	return emit_buffer(lex, off, TK_COMMENT, NULL);
 }
 
 static void
@@ -338,7 +347,7 @@ parse_escape(uc_lexer_t *lex, const char *regex_macros)
 static uc_token_t *
 parse_string(uc_lexer_t *lex, int kind)
 {
-	uc_token_t *err;
+	uc_token_t *err, *tok;
 	unsigned type;
 	int code, ch;
 	size_t off;
@@ -359,7 +368,10 @@ parse_string(uc_lexer_t *lex, int kind)
 			if (type == TK_TEMPLATE && check_char(lex, '{')) {
 				lex->state = UC_LEX_PLACEHOLDER_START;
 
-				return emit_buffer(lex, off, type, NULL);
+				tok = emit_buffer(lex, off, type, NULL);
+				tok->end -= 2;
+
+				return tok;
 			}
 
 			uc_vector_push(&lex->buffer, '$');
@@ -952,8 +964,7 @@ lex_step(uc_lexer_t *lex)
 
 					/* found start of statement block */
 					case '%':
-						lex->state = UC_LEX_IDENTIFY_TOKEN;
-						lex->block = STATEMENTS;
+						lex->state = UC_LEX_BLOCK_STATEMENT_EMIT_TAG;
 
 						if (check_char(lex, '-'))
 							strip = " \n\t\v\f\r";
@@ -987,6 +998,8 @@ lex_step(uc_lexer_t *lex)
 			if (!tok)
 				continue;
 
+			tok->end -= 2;
+
 			return tok;
 
 
@@ -1012,18 +1025,24 @@ lex_step(uc_lexer_t *lex)
 				return emit_op(lex, lex->lastoff, TK_ERROR, ucv_string_new("Unterminated template block"));
 			}
 
+			tok = emit_op(lex, lex->lastoff, TK_COMMENT, NULL);
+
 			lex->lastoff = lex->source->off;
 			lex->state = UC_LEX_IDENTIFY_BLOCK;
 
-			continue;
-
+			return tok;
 
 		case UC_LEX_BLOCK_EXPRESSION_EMIT_TAG:
 			lex->state = UC_LEX_IDENTIFY_TOKEN;
 			lex->block = EXPRESSION;
 
-			return emit_op(lex, lex->source->off, TK_LEXP, NULL);
+			return emit_op(lex, lex->source->off - 2, TK_LEXP, NULL);
 
+		case UC_LEX_BLOCK_STATEMENT_EMIT_TAG:
+			lex->state = UC_LEX_IDENTIFY_TOKEN;
+			lex->block = STATEMENTS;
+
+			return emit_op(lex, lex->source->off - 2, TK_LSTM, NULL);
 
 		case UC_LEX_IDENTIFY_TOKEN:
 			do { tok = lex_find_token(lex); } while (tok == NULL);
@@ -1042,7 +1061,7 @@ lex_step(uc_lexer_t *lex)
 				lex->state = UC_LEX_IDENTIFY_BLOCK;
 				lex->block = NONE;
 
-				tok = emit_op(lex, -2, TK_SCOL, NULL);
+				tok = emit_op(lex, -2, TK_RSTM, NULL);
 			}
 
 			/* found end of expression block */
@@ -1092,7 +1111,10 @@ lex_step(uc_lexer_t *lex)
 		case UC_LEX_PLACEHOLDER_END:
 			lex->state = UC_LEX_IDENTIFY_TOKEN;
 
-			return parse_string(lex, '`');
+			tok = parse_string(lex, '`');
+			tok->pos++;
+
+			return tok;
 
 
 		case UC_LEX_EOF:

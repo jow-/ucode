@@ -242,7 +242,17 @@ uc_compiler_parse_advance(uc_compiler_t *compiler)
 	compiler->parser->prev = compiler->parser->curr;
 
 	while (true) {
-		compiler->parser->curr = *uc_lexer_next_token(&compiler->parser->lex);
+		uc_token_t *tok = uc_lexer_next_token(&compiler->parser->lex);
+
+		if (tok->type == TK_COMMENT || tok->type == TK_LSTM) {
+			ucv_put(tok->uv);
+			continue;
+		}
+		else if (tok->type == TK_RSTM) {
+			tok->type = TK_SCOL;
+		}
+
+		compiler->parser->curr = *tok;
 
 		if (compiler->parser->curr.type != TK_ERROR)
 			break;
