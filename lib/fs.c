@@ -130,8 +130,10 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 		if (llen == 4 && !strcmp(lstr, "line")) {
 			llen = getline(&p, &rlen, *fp);
 
-			if (llen == -1)
+			if (llen == -1) {
+				free(p);
 				err_return(errno);
+			}
 
 			len = (size_t)llen;
 		}
@@ -158,8 +160,10 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 		else if (llen == 1) {
 			llen = getdelim(&p, &rlen, *lstr, *fp);
 
-			if (llen == -1)
+			if (llen == -1) {
+				free(p);
 				err_return(errno);
+			}
 
 			len = (size_t)llen;
 		}
