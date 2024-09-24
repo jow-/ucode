@@ -96,7 +96,7 @@ include(FindPkgConfig)
 pkg_check_modules(JSONC REQUIRED json-c)
 include_directories(${JSONC_INCLUDE_DIRS})
 
-set(UCODE_SOURCES lexer.c lib.c vm.c chunk.c vallist.c compiler.c source.c types.c program.c platform.c)
+set(UCODE_SOURCES lexer.c lib.c vm.c chunk.c vallist.c compiler.c source.c types.c program.c platform.c arith.c)
 add_library(libucode SHARED ${UCODE_SOURCES})
 set(SOVERSION 0 CACHE STRING "Override ucode library version")
 set_target_properties(libucode PROPERTIES OUTPUT_NAME ucode SOVERSION ${SOVERSION})
