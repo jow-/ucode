@@ -29,6 +29,7 @@
 #include "ucode/program.h"
 #include "ucode/lib.h" /* uc_error_context_format() */
 #include "ucode/platform.h"
+#include "ucode/arith.h"
 
 #undef __insn
 #define __insn(_name) #_name,
@@ -91,6 +92,15 @@ static const char *exception_type_strings[] = {
 	[EXCEPTION_EXIT] = "Exit"
 };
 
+
+static inline uc_tokentype_t
+uc_vm_insn_to_token(uc_vm_insn_t insn)
+{
+	if (insn >= I_BOR && insn <= I_MINUS)
+		return TK_BOR + (insn - I_BOR);
+
+	return TK_ERROR;
+}
 
 static void
 uc_vm_reset_stack(uc_vm_t *vm)
@@ -1375,356 +1385,6 @@ uc_vm_insn_store_local(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_vm_stack_set(vm, frame->stackframe + vm->arg.u32, val);
 }
 
-static int64_t
-int64(uc_value_t *nv, uint64_t *u64)
-{
-	int64_t n;
-
-	n = ucv_int64_get(nv);
-	*u64 = 0;
-
-	if (errno == ERANGE) {
-		n = INT64_MAX;
-		*u64 = ucv_uint64_get(nv);
-	}
-
-	return n;
-}
-
-static uint64_t
-abs64(int64_t n)
-{
-	if (n == INT64_MIN)
-		return 0x8000000000000000ULL;
-
-	if (n < 0)
-		return -n;
-
-	return n;
-}
-
-
-static uc_value_t *
-uc_vm_value_bitop(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_value_t *operand)
-{
-	uc_value_t *nv1, *nv2, *rv = NULL;
-	uint64_t u1, u2;
-	int64_t n1, n2;
-
-	nv1 = ucv_to_number(value);
-	nv2 = ucv_to_number(operand);
-
-	n1 = int64(nv1, &u1);
-	n2 = int64(nv2, &u2);
-
-	if (n1 < 0 || n2 < 0) {
-		switch (operation) {
-		case I_LSHIFT:
-			rv = ucv_int64_new(n1 << n2);
-			break;
-
-		case I_RSHIFT:
-			rv = ucv_int64_new(n1 >> n2);
-			break;
-
-		case I_BAND:
-			rv = ucv_int64_new(n1 & n2);
-			break;
-
-		case I_BXOR:
-			rv = ucv_int64_new(n1 ^ n2);
-			break;
-
-		case I_BOR:
-			rv = ucv_int64_new(n1 | n2);
-			break;
-
-		default:
-			break;
-		}
-	}
-	else {
-		if (!u1) u1 = (uint64_t)n1;
-		if (!u2) u2 = (uint64_t)n2;
-
-		switch (operation) {
-		case I_LSHIFT:
-			rv = ucv_uint64_new(u1 << (u2 % (sizeof(uint64_t) * CHAR_BIT)));
-			break;
-
-		case I_RSHIFT:
-			rv = ucv_uint64_new(u1 >> (u2 % (sizeof(uint64_t) * CHAR_BIT)));
-			break;
-
-		case I_BAND:
-			rv = ucv_uint64_new(u1 & u2);
-			break;
-
-		case I_BXOR:
-			rv = ucv_uint64_new(u1 ^ u2);
-			break;
-
-		case I_BOR:
-			rv = ucv_uint64_new(u1 | u2);
-			break;
-
-		default:
-			break;
-		}
-	}
-
-	ucv_put(nv1);
-	ucv_put(nv2);
-
-	return rv;
-}
-
-static uc_value_t *
-uc_vm_string_concat(uc_vm_t *vm, uc_value_t *v1, uc_value_t *v2)
-{
-	char buf[sizeof(void *)], *s1, *s2;
-	uc_stringbuf_t *sbuf;
-	size_t l1, l2;
-
-	/* optimize cases for string+string concat... */
-	if (ucv_type(v1) == UC_STRING && ucv_type(v2) == UC_STRING) {
-		s1 = ucv_string_get(v1);
-		s2 = ucv_string_get(v2);
-		l1 = ucv_string_length(v1);
-		l2 = ucv_string_length(v2);
-
-		/* ... result fits into a tagged pointer */
-		if (l1 + l2 + 1 < sizeof(buf)) {
-			memcpy(&buf[0], s1, l1);
-			memcpy(&buf[l1], s2, l2);
-
-			return ucv_string_new_length(buf, l1 + l2);
-		}
-	}
-
-	sbuf = ucv_stringbuf_new();
-
-	ucv_to_stringbuf(vm, sbuf, v1, false);
-	ucv_to_stringbuf(vm, sbuf, v2, false);
-
-	return ucv_stringbuf_finish(sbuf);
-}
-
-static uint64_t
-upow64(uint64_t base, uint64_t exponent)
-{
-	uint64_t result = 1;
-
-	while (exponent) {
-		if (exponent & 1)
-			result *= base;
-
-		exponent >>= 1;
-		base *= base;
-	}
-
-	return result;
-}
-
-static uc_value_t *
-uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_value_t *operand)
-{
-	uc_value_t *nv1, *nv2, *rv = NULL;
-	uint64_t u1, u2;
-	int64_t n1, n2;
-	double d1, d2;
-
-	if (operation == I_LSHIFT || operation == I_RSHIFT ||
-	    operation == I_BAND || operation == I_BXOR || operation == I_BOR)
-		return uc_vm_value_bitop(vm, operation, value, operand);
-
-	if (operation == I_ADD && (ucv_type(value) == UC_STRING || ucv_type(operand) == UC_STRING))
-		return uc_vm_string_concat(vm, value, operand);
-
-	nv1 = ucv_to_number(value);
-	nv2 = ucv_to_number(operand);
-
-	/* any operation involving NaN results in NaN */
-	if (!nv1 || !nv2) {
-		ucv_put(nv1);
-		ucv_put(nv2);
-
-		return ucv_double_new(NAN);
-	}
-	if (ucv_type(nv1) == UC_DOUBLE || ucv_type(nv2) == UC_DOUBLE) {
-		d1 = ucv_double_get(nv1);
-		d2 = ucv_double_get(nv2);
-
-		switch (operation) {
-		case I_ADD:
-		case I_PLUS:
-			rv = ucv_double_new(d1 + d2);
-			break;
-
-		case I_SUB:
-		case I_MINUS:
-			rv = ucv_double_new(d1 - d2);
-			break;
-
-		case I_MUL:
-			rv = ucv_double_new(d1 * d2);
-			break;
-
-		case I_DIV:
-			if (d2 == 0.0)
-				rv = ucv_double_new(INFINITY);
-			else if (isnan(d2))
-				rv = ucv_double_new(NAN);
-			else if (!isfinite(d2))
-				rv = ucv_double_new(isfinite(d1) ? 0.0 : NAN);
-			else
-				rv = ucv_double_new(d1 / d2);
-
-			break;
-
-		case I_MOD:
-			rv = ucv_double_new(fmod(d1, d2));
-			break;
-
-		case I_EXP:
-			rv = ucv_double_new(pow(d1, d2));
-			break;
-
-		default:
-			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
-			                      "undefined arithmetic operation %d",
-			                      operation);
-			break;
-		}
-	}
-	else {
-		n1 = int64(nv1, &u1);
-		n2 = int64(nv2, &u2);
-
-		switch (operation) {
-		case I_ADD:
-		case I_PLUS:
-			if (n1 < 0 || n2 < 0) {
-				if (u1)
-					rv = ucv_uint64_new(u1 - abs64(n2));
-				else if (u2)
-					rv = ucv_uint64_new(u2 - abs64(n1));
-				else
-					rv = ucv_int64_new(n1 + n2);
-			}
-			else {
-				if (!u1) u1 = (uint64_t)n1;
-				if (!u2) u2 = (uint64_t)n2;
-
-				rv = ucv_uint64_new(u1 + u2);
-			}
-
-			break;
-
-		case I_SUB:
-		case I_MINUS:
-			if (n1 < 0 && n2 < 0) {
-				if (n1 > n2)
-					rv = ucv_uint64_new(abs64(n2) - abs64(n1));
-				else
-					rv = ucv_int64_new(n1 - n2);
-			}
-			else if (n1 >= 0 && n2 >= 0) {
-				if (!u1) u1 = (uint64_t)n1;
-				if (!u2) u2 = (uint64_t)n2;
-
-				if (u2 > u1)
-					rv = ucv_int64_new(-(u2 - u1));
-				else
-					rv = ucv_uint64_new(u1 - u2);
-			}
-			else if (n1 >= 0) {
-				if (!u1) u1 = (uint64_t)n1;
-
-				rv = ucv_uint64_new(u1 + abs64(n2));
-			}
-			else {
-				rv = ucv_int64_new(n1 - n2);
-			}
-
-			break;
-
-		case I_MUL:
-			if (n1 < 0 && n2 < 0) {
-				rv = ucv_uint64_new(abs64(n1) * abs64(n2));
-			}
-			else if (n1 >= 0 && n2 >= 0) {
-				if (!u1) u1 = (uint64_t)n1;
-				if (!u2) u2 = (uint64_t)n2;
-
-				rv = ucv_uint64_new(u1 * u2);
-			}
-			else {
-				rv = ucv_int64_new(n1 * n2);
-			}
-
-			break;
-
-		case I_DIV:
-			if (n2 == 0) {
-				rv = ucv_double_new(INFINITY);
-			}
-			else if (n1 < 0 || n2 < 0) {
-				rv = ucv_int64_new(n1 / n2);
-			}
-			else {
-				if (!u1) u1 = (uint64_t)n1;
-				if (!u2) u2 = (uint64_t)n2;
-
-				rv = ucv_uint64_new(u1 / u2);
-			}
-
-			break;
-
-		case I_MOD:
-			if (n1 < 0 || n2 < 0) {
-				rv = ucv_int64_new(n1 % n2);
-			}
-			else {
-				if (!u1) u1 = (uint64_t)n1;
-				if (!u2) u2 = (uint64_t)n2;
-
-				rv = ucv_uint64_new(u1 % u2);
-			}
-
-			break;
-
-		case I_EXP:
-			if (n1 < 0 || n2 < 0) {
-				if (n1 < 0 && n2 < 0)
-					rv = ucv_double_new(-(1.0 / (double)upow64(abs64(n1), abs64(n2))));
-				else if (n2 < 0)
-					rv = ucv_double_new(1.0 / (double)upow64(abs64(n1), abs64(n2)));
-				else
-					rv = ucv_int64_new(-upow64(abs64(n1), abs64(n2)));
-			}
-			else {
-				if (!u1) u1 = (uint64_t)n1;
-				if (!u2) u2 = (uint64_t)n2;
-
-				rv = ucv_uint64_new(upow64(u1, u2));
-			}
-
-			break;
-
-		default:
-			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
-			                      "undefined arithmetic operation %d",
-			                      operation);
-			break;
-		}
-	}
-
-	ucv_put(nv1);
-	ucv_put(nv2);
-
-	return rv;
-}
 
 static void
 uc_vm_insn_update_var(uc_vm_t *vm, uc_vm_insn_t insn)
@@ -1759,7 +1419,8 @@ uc_vm_insn_update_var(uc_vm_t *vm, uc_vm_insn_t insn)
 		scope = next;
 	}
 
-	val = uc_vm_value_arith(vm, vm->arg.u32 >> 24, val, inc);
+	val = ucv_arith_binary(vm,
+		uc_vm_insn_to_token(vm->arg.u32 >> 24), val, inc);
 
 	ucv_object_add(scope, ucv_string_get(name), ucv_get(val));
 	uc_vm_stack_push(vm, val);
@@ -1781,7 +1442,9 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_ARRAY:
 		if (assert_mutable_value(vm, v)) {
 			val = ucv_key_get(vm, v, k);
-			uc_vm_stack_push(vm, ucv_key_set(vm, v, k, uc_vm_value_arith(vm, vm->arg.u8, val, inc)));
+			uc_vm_stack_push(vm, ucv_key_set(vm, v, k,
+				ucv_arith_binary(vm, uc_vm_insn_to_token(vm->arg.u8),
+				                 val, inc)));
 		}
 
 		break;
@@ -1814,7 +1477,8 @@ uc_vm_insn_update_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 	else
 		val = vm->stack.entries[ref->slot];
 
-	val = uc_vm_value_arith(vm, vm->arg.u32 >> 24, val, inc);
+	val = ucv_arith_binary(vm, uc_vm_insn_to_token(vm->arg.u32 >> 24),
+	                       val, inc);
 
 	uc_vm_stack_push(vm, val);
 
@@ -1837,8 +1501,8 @@ uc_vm_insn_update_local(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *inc = uc_vm_stack_pop(vm);
 	uc_value_t *val;
 
-	val = uc_vm_value_arith(vm, vm->arg.u32 >> 24,
-	                        vm->stack.entries[frame->stackframe + slot], inc);
+	val = ucv_arith_binary(vm, uc_vm_insn_to_token(vm->arg.u32 >> 24),
+	                       vm->stack.entries[frame->stackframe + slot], inc);
 
 	uc_vm_stack_push(vm, val);
 
@@ -1952,13 +1616,13 @@ uc_vm_insn_mobj(uc_vm_t *vm, uc_vm_insn_t insn)
 }
 
 static void
-uc_vm_insn_arith(uc_vm_t *vm, uc_vm_insn_t insn)
+uc_vm_insn_arith_binary(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *r2 = uc_vm_stack_pop(vm);
 	uc_value_t *r1 = uc_vm_stack_pop(vm);
 	uc_value_t *rv;
 
-	rv = uc_vm_value_arith(vm, insn, r1, r2);
+	rv = ucv_arith_binary(vm, uc_vm_insn_to_token(insn), r1, r2);
 
 	ucv_put(r1);
 	ucv_put(r2);
@@ -1967,112 +1631,16 @@ uc_vm_insn_arith(uc_vm_t *vm, uc_vm_insn_t insn)
 }
 
 static void
-uc_vm_insn_plus_minus(uc_vm_t *vm, uc_vm_insn_t insn)
-{
-	uc_value_t *v = uc_vm_stack_pop(vm), *nv;
-	bool is_sub = (insn == I_MINUS);
-	int64_t n;
-	double d;
-
-	if (ucv_type(v) == UC_STRING) {
-		nv = uc_number_parse(ucv_string_get(v), NULL);
-
-		if (nv) {
-			ucv_put(v);
-			v = nv;
-		}
-	}
-
-	switch (ucv_type(v)) {
-	case UC_INTEGER:
-		n = ucv_int64_get(v);
-
-		/* numeric value is in range 9223372036854775808..18446744073709551615 */
-		if (errno == ERANGE) {
-			if (is_sub)
-				/* make negation of large numeric value result in smallest negative value */
-				uc_vm_stack_push(vm, ucv_int64_new(INT64_MIN));
-			else
-				/* for positive number coercion return value as-is */
-				uc_vm_stack_push(vm, ucv_get(v));
-		}
-
-		/* numeric value is in range -9223372036854775808..9223372036854775807 */
-		else {
-			if (is_sub) {
-				if (n == INT64_MIN)
-					/* make negation of minimum value result in maximum signed positive value */
-					uc_vm_stack_push(vm, ucv_int64_new(INT64_MAX));
-				else
-					/* for all other values flip the sign */
-					uc_vm_stack_push(vm, ucv_int64_new(-n));
-			}
-			else {
-				/* for positive number coercion return value as-is */
-				uc_vm_stack_push(vm, ucv_get(v));
-			}
-		}
-
-		break;
-
-	case UC_DOUBLE:
-		d = ucv_double_get(v);
-		uc_vm_stack_push(vm, ucv_double_new(is_sub ? -d : d));
-		break;
-
-	case UC_BOOLEAN:
-		n = (int64_t)ucv_boolean_get(v);
-		uc_vm_stack_push(vm, ucv_int64_new(is_sub ? -n : n));
-		break;
-
-	case UC_NULL:
-		uc_vm_stack_push(vm, ucv_int64_new(0));
-		break;
-
-	default:
-		uc_vm_stack_push(vm, ucv_double_new(NAN));
-	}
-
-	ucv_put(v);
-}
-
-static void
-uc_vm_insn_bitop(uc_vm_t *vm, uc_vm_insn_t insn)
-{
-	uc_value_t *r2 = uc_vm_stack_pop(vm);
-	uc_value_t *r1 = uc_vm_stack_pop(vm);
-	uc_value_t *rv;
-
-	rv = uc_vm_value_bitop(vm, insn, r1, r2);
-
-	ucv_put(r1);
-	ucv_put(r2);
-
-	uc_vm_stack_push(vm, rv);
-}
-
-static void
-uc_vm_insn_complement(uc_vm_t *vm, uc_vm_insn_t insn)
+uc_vm_insn_arith_unary(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *v = uc_vm_stack_pop(vm);
-	uc_value_t *nv;
-	uint64_t u;
-	int64_t n;
+	uc_value_t *rv;
 
-	nv = ucv_to_number(v);
-	n = int64(nv, &u);
+	rv = ucv_arith_unary(vm, uc_vm_insn_to_token(insn), v);
 
-	if (n < 0) {
-		uc_vm_stack_push(vm, ucv_int64_new(~n));
-	}
-	else {
-		if (!u) u = (uint64_t)n;
-
-		uc_vm_stack_push(vm, ucv_uint64_new(~u));
-	}
-
-	ucv_put(nv);
 	ucv_put(v);
+
+	uc_vm_stack_push(vm, rv);
 }
 
 static void
@@ -2840,24 +2408,18 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 		case I_DIV:
 		case I_MOD:
 		case I_EXP:
-			uc_vm_insn_arith(vm, insn);
-			break;
-
-		case I_PLUS:
-		case I_MINUS:
-			uc_vm_insn_plus_minus(vm, insn);
-			break;
-
 		case I_LSHIFT:
 		case I_RSHIFT:
 		case I_BAND:
 		case I_BXOR:
 		case I_BOR:
-			uc_vm_insn_bitop(vm, insn);
+			uc_vm_insn_arith_binary(vm, insn);
 			break;
 
+		case I_PLUS:
+		case I_MINUS:
 		case I_COMPL:
-			uc_vm_insn_complement(vm, insn);
+			uc_vm_insn_arith_unary(vm, insn);
 			break;
 
 		case I_EQS:
