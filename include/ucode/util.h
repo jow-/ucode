@@ -42,43 +42,6 @@
 #endif
 
 
-/* vector macros */
-
-#define UC_VECTOR_CHUNK_SIZE 8
-
-#define uc_declare_vector(name, type) \
-	typedef struct { \
-		size_t count; \
-		type *entries; \
-	} name
-
-#define uc_vector_grow(vec) \
-	do { \
-		if (((vec)->count % UC_VECTOR_CHUNK_SIZE) == 0) { \
-			(vec)->entries = xrealloc((vec)->entries, sizeof((vec)->entries[0]) * ((vec)->count + UC_VECTOR_CHUNK_SIZE)); \
-			memset(&(vec)->entries[(vec)->count], 0, sizeof((vec)->entries[0]) * UC_VECTOR_CHUNK_SIZE); \
-		} \
-	} while(0)
-
-#define uc_vector_clear(vec) \
-	do { \
-		free((vec)->entries); \
-		(vec)->entries = NULL; \
-		(vec)->count = 0; \
-	} while(0)
-
-#define uc_vector_first(vec) \
-	(&((vec)->entries[0]))
-
-#define uc_vector_last(vec) \
-	(&((vec)->entries[(vec)->count - 1]))
-
-#define uc_vector_push(vec, val) do { \
-	uc_vector_grow(vec); \
-	(vec)->entries[(vec)->count++] = (val); \
-} while(0)
-
-
 /* linked lists */
 
 typedef struct uc_list {
@@ -194,5 +157,71 @@ static inline struct printbuf *xprintbuf_new(void) {
 
 	return pb;
 }
+
+
+/* vector macros */
+
+#define UC_VECTOR_CHUNK_SIZE 8
+
+#define uc_declare_vector(name, type) \
+	typedef struct { \
+		size_t count; \
+		type *entries; \
+	} name
+
+static inline void *
+uc_vector_grow_(void **base, size_t num, size_t sz)
+{
+	if ((num % UC_VECTOR_CHUNK_SIZE) == 0) {
+		char *p;
+
+		if ((num + UC_VECTOR_CHUNK_SIZE) >= (SIZE_MAX / sz) ||
+			(p = xrealloc(*base, (num + UC_VECTOR_CHUNK_SIZE) * sz)) == NULL)
+			return NULL;
+
+		*base = p;
+		memset(p + num * sz, 0, sz * UC_VECTOR_CHUNK_SIZE);
+	}
+
+	return (char *)*base + num * sz;
+}
+
+static inline void *
+uc_vector_push_(void **base, size_t *num, size_t sz, void *val)
+{
+	char *p = uc_vector_grow_(base, *num, sz);
+
+	if (p == NULL)
+		return NULL;
+
+	*num += 1;
+
+	return memcpy(p, val, sz);
+}
+
+#define uc_vector_grow(vec)                                            \
+	uc_vector_grow_((void **)&(vec)->entries, (vec)->count,            \
+	                sizeof(*(vec)->entries))
+
+#define uc_vector_push(vec, ...) ({                                    \
+	typeof(*(vec)->entries) val = __VA_ARGS__;                         \
+	(typeof((vec)->entries))uc_vector_push_((void **)&(vec)->entries,  \
+	                                        &(vec)->count,             \
+	                                        sizeof((vec)->entries[0]), \
+	                                        &val);                     \
+})
+
+#define uc_vector_clear(vec) \
+	do { \
+		free((vec)->entries); \
+		(vec)->entries = NULL; \
+		(vec)->count = 0; \
+	} while(0)
+
+#define uc_vector_first(vec) \
+	(&((vec)->entries[0]))
+
+#define uc_vector_last(vec) \
+	((vec)->count ? &((vec)->entries[(vec)->count - 1]) : NULL)
 
 #endif /* UCODE_UTIL_H */
