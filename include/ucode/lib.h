@@ -83,6 +83,17 @@ uc_resource_new(uc_resource_type_t *type, void *data)
 	return ucv_resource_new(type, data);
 }
 
+static inline uc_value_t *
+ucv_resource_create(uc_vm_t *vm, const char *typename, void *value)
+{
+    uc_resource_type_t *t = NULL;
+
+    if (typename && (t = ucv_resource_type_lookup(vm, typename)) == NULL)
+        return NULL;
+
+    return uc_resource_new(t, value);
+}
+
 static inline uc_resource_type_t *
 _uc_type_declare(uc_vm_t *vm, const char *name, const uc_function_list_t *list, size_t len, void (*freefn)(void *))
 {

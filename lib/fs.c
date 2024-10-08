@@ -68,12 +68,12 @@
 #include "ucode/module.h"
 #include "ucode/platform.h"
 
-#define err_return(err) do { last_error = err; return NULL; } while(0)
-
-//static const uc_ops *ops;
-static uc_resource_type_t *file_type, *proc_type, *dir_type;
-
-static int last_error = 0;
+static uc_value_t *
+err_return( uc_vm_t *vm, int err )
+{
+	uc_vm_registry_set( vm, "fs.last_error", ucv_int64_new( err ) );
+	return NULL;
+}
 
 /**
  * Query error information.
@@ -96,15 +96,17 @@ static int last_error = 0;
 static uc_value_t *
 uc_fs_error(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *errmsg;
-
-	if (last_error == 0)
+	uc_value_t *last_error = uc_vm_registry_get( vm, "fs.last_error" );
+	if( !last_error )
+		return NULL;
+	int err = ucv_to_integer( last_error );
+	if( !err )
 		return NULL;
 
-	errmsg = ucv_string_new(strerror(last_error));
-	last_error = 0;
-
-	return errmsg;
+	// reset error
+	err_return( vm, 0 );
+	
+	return ucv_string_new(strerror( err ));
 }
 
 static uc_value_t *
@@ -121,7 +123,7 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 	FILE **fp = uc_fn_this(type);
 
 	if (!fp || !*fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	if (ucv_type(limit) == UC_STRING) {
 		lstr = ucv_string_get(limit);
@@ -132,7 +134,7 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 
 			if (llen == -1) {
 				free(p);
-				err_return(errno);
+				return err_return(vm,errno);
 			}
 
 			len = (size_t)llen;
@@ -145,7 +147,7 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 
 				if (!tmp) {
 					free(p);
-					err_return(ENOMEM);
+					return err_return(vm,ENOMEM);
 				}
 
 				memcpy(tmp + len, buf, rlen);
@@ -162,7 +164,7 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 
 			if (llen == -1) {
 				free(p);
-				err_return(errno);
+				return err_return(vm,errno);
 			}
 
 			len = (size_t)llen;
@@ -180,17 +182,17 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 		p = calloc(1, lsize);
 
 		if (!p)
-			err_return(ENOMEM);
+			return err_return(vm,ENOMEM);
 
 		len = fread(p, 1, lsize, *fp);
 
 		if (ferror(*fp)) {
 			free(p);
-			err_return(errno);
+			return err_return(vm,errno);
 		}
 	}
 	else {
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 	}
 
 	rv = ucv_string_new_length(p, len);
@@ -209,7 +211,7 @@ uc_fs_write_common(uc_vm_t *vm, size_t nargs, const char *type)
 	FILE **fp = uc_fn_this(type);
 
 	if (!fp || !*fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	if (ucv_type(data) == UC_STRING) {
 		len = ucv_string_length(data);
@@ -223,7 +225,7 @@ uc_fs_write_common(uc_vm_t *vm, size_t nargs, const char *type)
 	}
 
 	if (wsize < len && ferror(*fp))
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_int64_new(wsize);
 }
@@ -234,10 +236,10 @@ uc_fs_flush_common(uc_vm_t *vm, size_t nargs, const char *type)
 	FILE **fp = uc_fn_this(type);
 
 	if (!fp || !*fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	if (fflush(*fp) != EOF)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -250,12 +252,12 @@ uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
 	FILE **fp = uc_fn_this(type);
 
 	if (!fp || !*fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	fd = fileno(*fp);
 
 	if (fd == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_int64_new(fd);
 }
@@ -316,13 +318,13 @@ uc_fs_pclose(uc_vm_t *vm, size_t nargs)
 	int rc;
 
 	if (!fp || !*fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	rc = pclose(*fp);
 	*fp = NULL;
 
 	if (rc == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	if (WIFEXITED(rc))
 		return ucv_int64_new(WEXITSTATUS(rc));
@@ -503,15 +505,15 @@ uc_fs_popen(uc_vm_t *vm, size_t nargs)
 	FILE *fp;
 
 	if (ucv_type(comm) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	fp = popen(ucv_string_get(comm),
 		ucv_type(mode) == UC_STRING ? ucv_string_get(mode) : "r");
 
 	if (!fp)
-		err_return(errno);
+		return err_return(vm,errno);
 
-	return uc_resource_new(proc_type, fp);
+	return ucv_resource_create(vm, "fs.proc", fp);
 }
 
 
@@ -568,7 +570,7 @@ uc_fs_close(uc_vm_t *vm, size_t nargs)
 	FILE **fp = uc_fn_this("fs.file");
 
 	if (!fp || !*fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	fclose(*fp);
 	*fp = NULL;
@@ -723,26 +725,26 @@ uc_fs_seek(uc_vm_t *vm, size_t nargs)
 	FILE **fp = uc_fn_this("fs.file");
 
 	if (!fp || !*fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	if (!ofs)
 		offset = 0;
 	else if (ucv_type(ofs) != UC_INTEGER)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 	else
 		offset = (off_t)ucv_int64_get(ofs);
 
 	if (!how)
 		whence = 0;
 	else if (ucv_type(how) != UC_INTEGER)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 	else
 		whence = (int)ucv_int64_get(how);
 
 	res = fseeko(*fp, offset, whence);
 
 	if (res < 0)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -769,17 +771,17 @@ uc_fs_truncate(uc_vm_t *vm, size_t nargs)
 	off_t offset;
 
 	if (!fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	if (!ofs)
 		offset = 0;
 	else if (ucv_type(ofs) != UC_INTEGER)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 	else
 		offset = (off_t)ucv_int64_get(ofs);
 
 	if (ftruncate(fileno(fp), offset) < 0)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -816,10 +818,10 @@ uc_fs_lock(uc_vm_t *vm, size_t nargs)
 	char *m;
 
 	if (!fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	if (ucv_type(mode) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	m = ucv_string_get(mode);
 	for (i = 0; m[i]; i++) {
@@ -828,12 +830,12 @@ uc_fs_lock(uc_vm_t *vm, size_t nargs)
 		case 'x': op |= LOCK_EX; break;
 		case 'n': op |= LOCK_NB; break;
 		case 'u': op |= LOCK_UN; break;
-		default: err_return(EINVAL);
+		default: return err_return(vm,EINVAL);
 		}
 	}
 
 	if (flock(fileno(fp), op) < 0)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -859,12 +861,12 @@ uc_fs_tell(uc_vm_t *vm, size_t nargs)
 	FILE **fp = uc_fn_this("fs.file");
 
 	if (!fp || !*fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	offset = ftello(*fp);
 
 	if (offset < 0)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_int64_new(offset);
 }
@@ -892,12 +894,12 @@ uc_fs_isatty(uc_vm_t *vm, size_t nargs)
 	int fd;
 
 	if (!fp || !*fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	fd = fileno(*fp);
 
 	if (fd == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(isatty(fd) == 1);
 }
@@ -1000,15 +1002,15 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 	bool freebuf = false;
 
 	if (!fp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	fd = fileno(fp);
 	if (fd == -1)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	if (ucv_type(direction) != UC_INTEGER || ucv_type(type) != UC_INTEGER ||
 	    ucv_type(num) != UC_INTEGER || ucv_type(size) != UC_INTEGER)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	dir = ucv_uint64_get(direction);
 	sz = ucv_uint64_get(size);
@@ -1021,7 +1023,7 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 		break;
 	case 1: /* ioctl write */
 		if (ucv_type(payload) != UC_STRING)
-			err_return(EINVAL);
+			return err_return(vm,EINVAL);
 
 		req = _IOC(_IOC_WRITE, ty, nr, sz);
 		buf = ucv_string_get(payload);
@@ -1030,7 +1032,7 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 		req = _IOC(_IOC_READ, ty, nr, sz);
 		buf = xalloc(sz);
 		if (!buf)
-			err_return(ENOMEM);
+			return err_return(vm,ENOMEM);
 
 		freebuf = true;
 		break;
@@ -1038,7 +1040,7 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 		req = _IOC((_IOC_READ|_IOC_WRITE), ty, nr, sz);
 		buf = ucv_string_get(payload);
 		break;
-	default: err_return(EINVAL);
+	default: return err_return(vm,EINVAL);
 	}
 
 	ret = ioctl(fd, req, buf);
@@ -1046,7 +1048,7 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 		if (freebuf)
 			free(buf);
 
-		err_return(errno);
+		return err_return(vm,errno);
 	}
 
 	if (dir >= 2) {
@@ -1120,7 +1122,7 @@ uc_fs_open(uc_vm_t *vm, size_t nargs)
 	char *m;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	m = (ucv_type(mode) == UC_STRING) ? ucv_string_get(mode) : "r";
 
@@ -1141,7 +1143,7 @@ uc_fs_open(uc_vm_t *vm, size_t nargs)
 		break;
 
 	default:
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 	}
 
 	for (i = 1; m[i]; i++) {
@@ -1154,7 +1156,7 @@ uc_fs_open(uc_vm_t *vm, size_t nargs)
 
 	if (perm) {
 		if (ucv_type(perm) != UC_INTEGER)
-			err_return(EINVAL);
+			return err_return(vm,EINVAL);
 
 		open_perm = ucv_int64_get(perm);
 	}
@@ -1175,10 +1177,10 @@ uc_fs_open(uc_vm_t *vm, size_t nargs)
 	if (!fp) {
 		i = errno;
 		close(fd);
-		err_return(i);
+		return err_return(vm,i);
 	}
 
-	return uc_resource_new(file_type, fp);
+	return ucv_resource_create(vm, "fs.file", fp);
 }
 
 /**
@@ -1224,20 +1226,20 @@ uc_fs_fdopen(uc_vm_t *vm, size_t nargs)
 	FILE *fp;
 
 	if (ucv_type(fdno) != UC_INTEGER)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	n = ucv_int64_get(fdno);
 
 	if (n < 0 || n > INT_MAX)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	fp = fdopen((int)n,
 		ucv_type(mode) == UC_STRING ? ucv_string_get(mode) : "r");
 
 	if (!fp)
-		err_return(errno);
+		return err_return(vm,errno);
 
-	return uc_resource_new(file_type, fp);
+	return ucv_resource_create(vm, "fs.file", fp);
 }
 
 
@@ -1285,13 +1287,13 @@ uc_fs_readdir(uc_vm_t *vm, size_t nargs)
 	struct dirent *e;
 
 	if (!dp || !*dp)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	errno = 0;
 	e = readdir(*dp);
 
 	if (!e)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_string_new(e->d_name);
 }
@@ -1319,12 +1321,12 @@ uc_fs_telldir(uc_vm_t *vm, size_t nargs)
 	long position;
 
 	if (!dp || !*dp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	position = telldir(*dp);
 
 	if (position == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_int64_new((int64_t)position);
 }
@@ -1366,10 +1368,10 @@ uc_fs_seekdir(uc_vm_t *vm, size_t nargs)
 	long position;
 
 	if (ucv_type(ofs) != UC_INTEGER)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (!dp || !*dp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	position = (long)ucv_int64_get(ofs);
 
@@ -1397,7 +1399,7 @@ uc_fs_closedir(uc_vm_t *vm, size_t nargs)
 	DIR **dp = uc_fn_this("fs.dir");
 
 	if (!dp || !*dp)
-		err_return(EBADF);
+		return err_return(vm,EBADF);
 
 	closedir(*dp);
 	*dp = NULL;
@@ -1431,14 +1433,14 @@ uc_fs_opendir(uc_vm_t *vm, size_t nargs)
 	DIR *dp;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	dp = opendir(ucv_string_get(path));
 
 	if (!dp)
-		err_return(errno);
+		return err_return(vm,errno);
 
-	return uc_resource_new(dir_type, dp);
+	return ucv_resource_create(vm, "fs.dir", dp);
 }
 
 /**
@@ -1468,7 +1470,7 @@ uc_fs_readlink(uc_vm_t *vm, size_t nargs)
 	char *buf = NULL, *tmp;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	do {
 		buflen += 128;
@@ -1476,7 +1478,7 @@ uc_fs_readlink(uc_vm_t *vm, size_t nargs)
 
 		if (!tmp) {
 			free(buf);
-			err_return(ENOMEM);
+			return err_return(vm,ENOMEM);
 		}
 
 		buf = tmp;
@@ -1484,7 +1486,7 @@ uc_fs_readlink(uc_vm_t *vm, size_t nargs)
 
 		if (rv == -1) {
 			free(buf);
-			err_return(errno);
+			return err_return(vm,errno);
 		}
 
 		if (rv < buflen)
@@ -1540,17 +1542,17 @@ uc_fs_stat_common(uc_vm_t *vm, size_t nargs, bool use_lstat)
 	int rv;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	rv = (use_lstat ? lstat : stat)(ucv_string_get(path), &st);
 
 	if (rv == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	res = ucv_object_new(vm);
 
 	if (!res)
-		err_return(ENOMEM);
+		return err_return(vm,ENOMEM);
 
 	o = ucv_object_new(vm);
 
@@ -1690,10 +1692,10 @@ uc_fs_mkdir(uc_vm_t *vm, size_t nargs)
 
 	if (ucv_type(path) != UC_STRING ||
 	    (mode && ucv_type(mode) != UC_INTEGER))
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (mkdir(ucv_string_get(path), (mode_t)(mode ? ucv_int64_get(mode) : 0777)) == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -1722,10 +1724,10 @@ uc_fs_rmdir(uc_vm_t *vm, size_t nargs)
 	uc_value_t *path = uc_fn_arg(0);
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (rmdir(ucv_string_get(path)) == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -1759,10 +1761,10 @@ uc_fs_symlink(uc_vm_t *vm, size_t nargs)
 
 	if (ucv_type(dest) != UC_STRING ||
 	    ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (symlink(ucv_string_get(dest), ucv_string_get(path)) == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -1791,10 +1793,10 @@ uc_fs_unlink(uc_vm_t *vm, size_t nargs)
 	uc_value_t *path = uc_fn_arg(0);
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (unlink(ucv_string_get(path)) == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -1827,7 +1829,7 @@ uc_fs_getcwd(uc_vm_t *vm, size_t nargs)
 
 		if (!tmp) {
 			free(buf);
-			err_return(ENOMEM);
+			return err_return(vm,ENOMEM);
 		}
 
 		buf = tmp;
@@ -1839,7 +1841,7 @@ uc_fs_getcwd(uc_vm_t *vm, size_t nargs)
 			continue;
 
 		free(buf);
-		err_return(errno);
+		return err_return(vm,errno);
 	}
 	while (true);
 
@@ -1875,10 +1877,10 @@ uc_fs_chdir(uc_vm_t *vm, size_t nargs)
 	uc_value_t *path = uc_fn_arg(0);
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (chdir(ucv_string_get(path)) == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -1913,10 +1915,10 @@ uc_fs_chmod(uc_vm_t *vm, size_t nargs)
 
 	if (ucv_type(path) != UC_STRING ||
 	    ucv_type(mode) != UC_INTEGER)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (chmod(ucv_string_get(path), (mode_t)ucv_int64_get(mode)) == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -2062,14 +2064,14 @@ uc_fs_chown(uc_vm_t *vm, size_t nargs)
 	gid_t gid;
 
 	if (ucv_type(path) != UC_STRING)
-	    err_return(EINVAL);
+	    return err_return(vm,EINVAL);
 
 	if (!uc_fs_resolve_user(user, &uid) ||
 	    !uc_fs_resolve_group(group, &gid))
-		err_return(errno);
+		return err_return(vm,errno);
 
 	if (chown(ucv_string_get(path), uid, gid) == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -2103,10 +2105,10 @@ uc_fs_rename(uc_vm_t *vm, size_t nargs)
 
 	if (ucv_type(oldpath) != UC_STRING ||
 	    ucv_type(newpath) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (rename(ucv_string_get(oldpath), ucv_string_get(newpath)))
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -2123,7 +2125,7 @@ uc_fs_glob(uc_vm_t *vm, size_t nargs)
 
 		if (ucv_type(pat) != UC_STRING) {
 			globfree(&gl);
-			err_return(EINVAL);
+			return err_return(vm,EINVAL);
 		}
 
 		glob(ucv_string_get(pat), i ? GLOB_APPEND : 0, NULL, &gl);
@@ -2165,7 +2167,7 @@ uc_fs_dirname(uc_vm_t *vm, size_t nargs)
 	char *s;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	i = ucv_string_length(path);
 	s = ucv_string_get(path);
@@ -2214,7 +2216,7 @@ uc_fs_basename(uc_vm_t *vm, size_t nargs)
 	char *s;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	len = ucv_string_length(path);
 	s = ucv_string_get(path);
@@ -2271,7 +2273,7 @@ uc_fs_lsdir(uc_vm_t *vm, size_t nargs)
 	DIR *d;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	switch (ucv_type(pat)) {
 	case UC_NULL:
@@ -2280,13 +2282,13 @@ uc_fs_lsdir(uc_vm_t *vm, size_t nargs)
 		break;
 
 	default:
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 	}
 
 	d = opendir(ucv_string_get(path));
 
 	if (!d)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	res = ucv_array_new(vm);
 
@@ -2357,7 +2359,7 @@ uc_fs_mkstemp(uc_vm_t *vm, size_t nargs)
 	int fd;
 
 	if (template && ucv_type(template) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	t = ucv_string_get(template);
 	l = ucv_string_length(template);
@@ -2387,7 +2389,7 @@ uc_fs_mkstemp(uc_vm_t *vm, size_t nargs)
 
 	if (fd == -1) {
 		free(path);
-		err_return(errno);
+		return err_return(vm,errno);
 	}
 
 	unlink(path);
@@ -2397,10 +2399,10 @@ uc_fs_mkstemp(uc_vm_t *vm, size_t nargs)
 
 	if (!fp) {
 		close(fd);
-		err_return(errno);
+		return err_return(vm,errno);
 	}
 
-	return uc_resource_new(file_type, fp);
+	return ucv_resource_create(vm, "fs.file", fp);
 }
 
 /**
@@ -2450,10 +2452,10 @@ uc_fs_access(uc_vm_t *vm, size_t nargs)
 	char *p;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (test && ucv_type(test) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	for (p = ucv_string_get(test); p && *p; p++) {
 		switch (*p) {
@@ -2474,12 +2476,12 @@ uc_fs_access(uc_vm_t *vm, size_t nargs)
 			break;
 
 		default:
-			err_return(EINVAL);
+			return err_return(vm,EINVAL);
 		}
 	}
 
 	if (access(ucv_string_get(path), mode) == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	return ucv_boolean_new(true);
 }
@@ -2521,11 +2523,11 @@ uc_fs_readfile(uc_vm_t *vm, size_t nargs)
 	FILE *fp;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (size) {
 		if (ucv_type(size) != UC_INTEGER)
-			err_return(EINVAL);
+			return err_return(vm,EINVAL);
 
 		limit = ucv_int64_get(size);
 	}
@@ -2533,7 +2535,7 @@ uc_fs_readfile(uc_vm_t *vm, size_t nargs)
 	fp = fopen(ucv_string_get(path), "r");
 
 	if (!fp)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	buf = ucv_stringbuf_new();
 
@@ -2562,7 +2564,7 @@ uc_fs_readfile(uc_vm_t *vm, size_t nargs)
 	if (ferror(fp)) {
 		fclose(fp);
 		printbuf_free(buf);
-		err_return(errno);
+		return err_return(vm,errno);
 	}
 
 	fclose(fp);
@@ -2635,11 +2637,11 @@ uc_fs_writefile(uc_vm_t *vm, size_t nargs)
 	FILE *fp;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	if (size) {
 		if (ucv_type(size) != UC_INTEGER)
-			err_return(EINVAL);
+			return err_return(vm,EINVAL);
 
 		limit = ucv_int64_get(size);
 	}
@@ -2647,7 +2649,7 @@ uc_fs_writefile(uc_vm_t *vm, size_t nargs)
 	fp = fopen(ucv_string_get(path), "w");
 
 	if (!fp)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	if (data && ucv_type(data) != UC_STRING) {
 		buf = xprintbuf_new();
@@ -2676,7 +2678,7 @@ uc_fs_writefile(uc_vm_t *vm, size_t nargs)
 	fclose(fp);
 
 	if (err)
-		err_return(err);
+		return err_return(vm,err);
 
 	return ucv_uint64_new(wlen);
 }
@@ -2706,12 +2708,12 @@ uc_fs_realpath(uc_vm_t *vm, size_t nargs)
 	char *resolved;
 
 	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+		return err_return(vm,EINVAL);
 
 	resolved = realpath(ucv_string_get(path), NULL);
 
 	if (!resolved)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	rv = ucv_string_new(resolved);
 
@@ -2748,7 +2750,7 @@ uc_fs_pipe(uc_vm_t *vm, size_t nargs)
 	uc_value_t *rv;
 
 	if (pipe(pfds) == -1)
-		err_return(errno);
+		return err_return(vm,errno);
 
 	rfp = fdopen(pfds[0], "r");
 
@@ -2756,7 +2758,7 @@ uc_fs_pipe(uc_vm_t *vm, size_t nargs)
 		err = errno;
 		close(pfds[0]);
 		close(pfds[1]);
-		err_return(err);
+		return err_return(vm,err);
 	}
 
 	wfp = fdopen(pfds[1], "w");
@@ -2765,13 +2767,13 @@ uc_fs_pipe(uc_vm_t *vm, size_t nargs)
 		err = errno;
 		fclose(rfp);
 		close(pfds[1]);
-		err_return(err);
+		return err_return(vm,err);
 	}
 
 	rv = ucv_array_new_length(vm, 2);
 
-	ucv_array_push(rv, uc_resource_new(file_type, rfp));
-	ucv_array_push(rv, uc_resource_new(file_type, wfp));
+	ucv_array_push(rv, ucv_resource_create(vm, "fs.file", rfp));
+	ucv_array_push(rv, ucv_resource_create(vm, "fs.file", wfp));
 
 	return rv;
 }
@@ -2873,9 +2875,9 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
 
-	proc_type = uc_type_declare(vm, "fs.proc", proc_fns, close_proc);
-	file_type = uc_type_declare(vm, "fs.file", file_fns, close_file);
-	dir_type = uc_type_declare(vm, "fs.dir", dir_fns, close_dir);
+	uc_type_declare(vm, "fs.proc", proc_fns, close_proc);
+	uc_type_declare(vm, "fs.dir", dir_fns, close_dir);
+	uc_resource_type_t *file_type = uc_type_declare(vm, "fs.file", file_fns, close_file);
 
 	ucv_object_add(scope, "stdin", uc_resource_new(file_type, stdin));
 	ucv_object_add(scope, "stdout", uc_resource_new(file_type, stdout));
