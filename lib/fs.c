@@ -68,12 +68,11 @@
 #include "ucode/module.h"
 #include "ucode/platform.h"
 
-#define err_return(err) do { last_error = err; return NULL; } while(0)
+#define err_return(err) do { \
+	uc_vm_registry_set(vm, "fs.last_error", ucv_int64_new(err)); \
+	return NULL; \
+} while(0)
 
-//static const uc_ops *ops;
-static uc_resource_type_t *file_type, *proc_type, *dir_type;
-
-static int last_error = 0;
 
 /**
  * Query error information.
@@ -96,15 +95,14 @@ static int last_error = 0;
 static uc_value_t *
 uc_fs_error(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *errmsg;
+	int last_error = ucv_int64_get(uc_vm_registry_get(vm, "fs.last_error"));
 
 	if (last_error == 0)
 		return NULL;
 
-	errmsg = ucv_string_new(strerror(last_error));
-	last_error = 0;
+	uc_vm_registry_set(vm, "fs.last_error", ucv_int64_new(0));
 
-	return errmsg;
+	return ucv_string_new(strerror(last_error));
 }
 
 static uc_value_t *
@@ -511,7 +509,7 @@ uc_fs_popen(uc_vm_t *vm, size_t nargs)
 	if (!fp)
 		err_return(errno);
 
-	return uc_resource_new(proc_type, fp);
+	return ucv_resource_create(vm, "fs.proc", fp);
 }
 
 
@@ -1178,7 +1176,7 @@ uc_fs_open(uc_vm_t *vm, size_t nargs)
 		err_return(i);
 	}
 
-	return uc_resource_new(file_type, fp);
+	return ucv_resource_create(vm, "fs.file", fp);
 }
 
 /**
@@ -1237,7 +1235,7 @@ uc_fs_fdopen(uc_vm_t *vm, size_t nargs)
 	if (!fp)
 		err_return(errno);
 
-	return uc_resource_new(file_type, fp);
+	return ucv_resource_create(vm, "fs.file", fp);
 }
 
 
@@ -1438,7 +1436,7 @@ uc_fs_opendir(uc_vm_t *vm, size_t nargs)
 	if (!dp)
 		err_return(errno);
 
-	return uc_resource_new(dir_type, dp);
+	return ucv_resource_create(vm, "fs.dir", dp);
 }
 
 /**
@@ -2400,7 +2398,7 @@ uc_fs_mkstemp(uc_vm_t *vm, size_t nargs)
 		err_return(errno);
 	}
 
-	return uc_resource_new(file_type, fp);
+	return ucv_resource_create(vm, "fs.file", fp);
 }
 
 /**
@@ -2770,8 +2768,8 @@ uc_fs_pipe(uc_vm_t *vm, size_t nargs)
 
 	rv = ucv_array_new_length(vm, 2);
 
-	ucv_array_push(rv, uc_resource_new(file_type, rfp));
-	ucv_array_push(rv, uc_resource_new(file_type, wfp));
+	ucv_array_push(rv, ucv_resource_create(vm, "fs.file", rfp));
+	ucv_array_push(rv, ucv_resource_create(vm, "fs.file", wfp));
 
 	return rv;
 }
@@ -2873,9 +2871,10 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
 
-	proc_type = uc_type_declare(vm, "fs.proc", proc_fns, close_proc);
-	file_type = uc_type_declare(vm, "fs.file", file_fns, close_file);
-	dir_type = uc_type_declare(vm, "fs.dir", dir_fns, close_dir);
+	uc_type_declare(vm, "fs.proc", proc_fns, close_proc);
+	uc_type_declare(vm, "fs.dir", dir_fns, close_dir);
+
+	uc_resource_type_t *file_type = uc_type_declare(vm, "fs.file", file_fns, close_file);
 
 	ucv_object_add(scope, "stdin", uc_resource_new(file_type, stdin));
 	ucv_object_add(scope, "stdout", uc_resource_new(file_type, stdout));
