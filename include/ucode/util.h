@@ -55,7 +55,7 @@
 #define uc_vector_grow(vec) \
 	do { \
 		if (((vec)->count % UC_VECTOR_CHUNK_SIZE) == 0) { \
-			(vec)->entries = xrealloc((vec)->entries, sizeof((vec)->entries[0]) * ((vec)->count + UC_VECTOR_CHUNK_SIZE)); \
+			*(void **)&(vec)->entries = xrealloc((vec)->entries, sizeof((vec)->entries[0]) * ((vec)->count + UC_VECTOR_CHUNK_SIZE)); \
 			memset(&(vec)->entries[(vec)->count], 0, sizeof((vec)->entries[0]) * UC_VECTOR_CHUNK_SIZE); \
 		} \
 	} while(0)
