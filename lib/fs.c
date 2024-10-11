@@ -1002,12 +1002,12 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 	uc_value_t *num = uc_fn_arg(2);
 	uc_value_t *size = uc_fn_arg(3);
 	uc_value_t *payload = uc_fn_arg(4);
+	uc_string_t *mem = NULL;
 	char *buf = NULL;
 	unsigned long req = 0;
 	unsigned int dir, ty, nr;
 	size_t sz;
 	int fd, ret;
-	bool freebuf = false;
 
 	if (!fp)
 		err_return(EBADF);
@@ -1027,47 +1027,51 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 
 	switch (dir) {
 	case IOC_DIR_NONE:
-		req = _IOC(IOC_DIR_NONE, ty, nr, 0);
+		sz = 0;
 		break;
 	case IOC_DIR_WRITE:
 		if (ucv_type(payload) != UC_STRING)
 			err_return(EINVAL);
 
-		req = _IOC(IOC_DIR_WRITE, ty, nr, sz);
 		buf = ucv_string_get(payload);
 		break;
 	case IOC_DIR_READ:
-		req = _IOC(IOC_DIR_READ, ty, nr, sz);
-		buf = xalloc(sz);
-		if (!buf)
+		mem = xalloc(sizeof(uc_string_t) + sz + 1);
+		if (!mem)
 			err_return(ENOMEM);
 
-		freebuf = true;
+		mem->header.type = UC_STRING;
+		mem->header.refcount = 1;
+		mem->length = sz;
+		buf = mem->str;
+
 		break;
 	case IOC_DIR_RW:
-		req = _IOC(IOC_DIR_RW, ty, nr, sz);
-		buf = ucv_string_get(payload);
+		if (ucv_type(payload) != UC_STRING)
+			err_return(EINVAL);
+
+		mem = (uc_string_t *)payload;
+		buf = mem->str;
+		sz = mem->length;
+
 		break;
 	default: err_return(EINVAL);
 	}
 
+	req = _IOC(dir, ty, nr, sz);
 	ret = ioctl(fd, req, buf);
 	if (ret < 0) {
-		if (freebuf)
-			free(buf);
+		if (dir == IOC_DIR_READ)
+			free(mem);
 
 		err_return(errno);
 	}
 
-	if (dir == IOC_DIR_READ || dir == IOC_DIR_RW) {
-		payload = ucv_string_new_length(buf, sz);
-		if (freebuf)
-			free(buf);
+	if (mem) {
+		return &mem->header;
 	} else {
-		payload = ucv_uint64_new(ret);
+		return ucv_uint64_new(ret);
 	}
-
-	return payload;
 }
 
 #endif
