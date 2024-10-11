@@ -2232,11 +2232,8 @@ uc_fs_basename(uc_vm_t *vm, size_t nargs)
 }
 
 static int
-uc_fs_lsdir_sort_fn(const void *k1, const void *k2)
+uc_fs_lsdir_sort_fn(uc_value_t * const *v1, uc_value_t * const *v2,void *)
 {
-	uc_value_t * const *v1 = k1;
-	uc_value_t * const *v2 = k2;
-
 	return strcmp(ucv_string_get(*v1), ucv_string_get(*v2));
 }
 
@@ -2310,7 +2307,7 @@ uc_fs_lsdir(uc_vm_t *vm, size_t nargs)
 
 	closedir(d);
 
-	ucv_array_sort(res, uc_fs_lsdir_sort_fn);
+	ucv_array_sort(res, uc_fs_lsdir_sort_fn,0);
 
 	return res;
 }

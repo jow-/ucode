@@ -791,14 +791,16 @@ ucv_array_unshift(uc_value_t *uv, uc_value_t *item)
 }
 
 void
-ucv_array_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
+ucv_array_sort(uc_value_t *uv, int (*cmp)(uc_value_t * const *,uc_value_t * const *,void *),void *ctx)
 {
 	uc_array_t *array = (uc_array_t *)uv;
 
 	if (ucv_type(uv) != UC_ARRAY || array->count <= 1)
 		return;
 
-	qsort(array->entries, array->count, sizeof(array->entries[0]), cmp);
+	qsort_r(array->entries, array->count, sizeof(array->entries[0]), 
+		(int (*)(const void *,const void *,void *))cmp, 
+		ctx);
 }
 
 bool
@@ -968,7 +970,8 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 }
 
 void
-ucv_object_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
+ucv_object_sort(uc_value_t *uv, 
+	int (*cmp)(struct lh_entry * const *, struct lh_entry * const *, void *), void *ctx )
 {
 	uc_object_t *object = (uc_object_t *)uv;
 	struct lh_table *t;
@@ -989,7 +992,9 @@ ucv_object_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
 	if (!keys.entries)
 		return;
 
-	qsort(keys.entries, keys.count, sizeof(keys.entries[0]), cmp);
+	qsort_r(keys.entries, keys.count, sizeof(keys.entries[0]), 
+		(int (*)(const void *,const void *,void *))cmp, 
+		ctx);
 
 	for (i = 0; i < keys.count; i++) {
 		e = keys.entries[i];
