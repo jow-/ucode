@@ -388,6 +388,7 @@ uc_value_t *ucv_array_push(uc_value_t *, uc_value_t *);
 uc_value_t *ucv_array_shift(uc_value_t *);
 uc_value_t *ucv_array_unshift(uc_value_t *, uc_value_t *);
 void ucv_array_sort(uc_value_t *, int (*)(const void *, const void *));
+void ucv_array_sort_r(uc_value_t *, int (*)(uc_value_t *, uc_value_t *, void *), void *);
 bool ucv_array_delete(uc_value_t *, size_t, size_t);
 bool ucv_array_set(uc_value_t *, size_t, uc_value_t *);
 size_t ucv_array_length(uc_value_t *);
@@ -396,6 +397,7 @@ uc_value_t *ucv_object_new(uc_vm_t *);
 uc_value_t *ucv_object_get(uc_value_t *, const char *, bool *);
 bool ucv_object_add(uc_value_t *, const char *, uc_value_t *);
 void ucv_object_sort(uc_value_t *, int (*)(const void *, const void *));
+void ucv_object_sort_r(uc_value_t *, int (*)(const char *, uc_value_t *, const char *, uc_value_t *, void *), void *);
 bool ucv_object_delete(uc_value_t *, const char *);
 size_t ucv_object_length(uc_value_t *);
 
