@@ -1396,12 +1396,23 @@ static struct_t st_tpacket_auxdata = {
 	}
 };
 
+struct fanout_args_local {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+	uint16_t id;
+	uint16_t type_flags;
+#else
+	uint16_t type_flags;
+	uint16_t id;
+#endif
+	uint32_t max_num_members;
+};
+
 static struct_t st_fanout_args = {
-	.size = sizeof(struct fanout_args),
+	.size = sizeof(struct fanout_args_local),
 	.members = (member_t []){
-		STRUCT_MEMBER_NP(fanout_args, id, DT_UNSIGNED),
-		STRUCT_MEMBER_NP(fanout_args, type_flags, DT_UNSIGNED),
-		STRUCT_MEMBER_NP(fanout_args, max_num_members, DT_UNSIGNED),
+		STRUCT_MEMBER_NP(fanout_args_local, id, DT_UNSIGNED),
+		STRUCT_MEMBER_NP(fanout_args_local, type_flags, DT_UNSIGNED),
+		STRUCT_MEMBER_NP(fanout_args_local, max_num_members, DT_UNSIGNED),
 		{ 0 }
 	}
 };
