@@ -896,8 +896,8 @@ ucv_free_object_entry(struct lh_entry *entry)
 	uc_list_foreach(item, &uc_object_iterators) {
 		uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
-		if (iter->pos == entry)
-			iter->pos = entry->next;
+		if (iter->u.pos == entry)
+			iter->u.pos = entry->next;
 	}
 
 	free(lh_entry_k(entry));
@@ -946,12 +946,47 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 	existing_entry = lh_table_lookup_entry_w_hash(object->table, (const void *)key, hash);
 
 	if (existing_entry == NULL) {
+		bool rehash = (object->table->count >= object->table->size * LH_LOAD_FACTOR);
+
+		/* insert will rehash table, backup affected iterator states */
+		if (rehash) {
+			uc_list_foreach(item, &uc_object_iterators) {
+				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
+
+				if (iter->table != object->table)
+					continue;
+
+				if (iter->u.pos == NULL)
+					continue;
+
+				iter->u.kh.k = iter->u.pos->k;
+				iter->u.kh.hash = lh_get_hash(iter->table, iter->u.kh.k);
+			}
+		}
+
 		k = xstrdup(key);
 
 		if (lh_table_insert_w_hash(object->table, k, val, hash, 0) != 0) {
 			free(k);
 
 			return false;
+		}
+
+		/* restore affected iterator state pointer after rehash */
+		if (rehash) {
+			uc_list_foreach(item, &uc_object_iterators) {
+				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
+
+				if (iter->table != object->table)
+					continue;
+
+				if (iter->u.kh.k == NULL)
+					continue;
+
+				iter->u.pos = lh_table_lookup_entry_w_hash(iter->table,
+				                                           iter->u.kh.k,
+				                                           iter->u.kh.hash);
+			}
 		}
 
 		return true;

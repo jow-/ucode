@@ -2225,7 +2225,8 @@ uc_vm_object_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
 		res->type = &uc_vm_object_iterator_type;
 
 		iter = res->data = (char *)res + sizeof(*res);
-		iter->pos = obj->table->head;
+		iter->table = obj->table;
+		iter->u.pos = obj->table->head;
 
 		uc_list_insert(&uc_object_iterators, &iter->list);
 	}
@@ -2241,21 +2242,21 @@ uc_vm_object_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
 	}
 
 	/* no next key */
-	if (!iter->pos) {
+	if (!iter->u.pos) {
 		uc_list_remove(&iter->list);
 
 		return false;
 	}
 
-	uc_vm_stack_push(vm, ucv_string_new(iter->pos->k));
+	uc_vm_stack_push(vm, ucv_string_new(iter->u.pos->k));
 
 	if (insn == I_NEXTKV)
-		uc_vm_stack_push(vm, ucv_get((uc_value_t *)iter->pos->v));
+		uc_vm_stack_push(vm, ucv_get((uc_value_t *)iter->u.pos->v));
 
 	uc_vm_stack_push(vm, &res->header);
 	ucv_put(v);
 
-	iter->pos = iter->pos->next;
+	iter->u.pos = iter->u.pos->next;
 
 	return true;
 }
