@@ -153,11 +153,13 @@ emit_op(uc_lexer_t *lex, ssize_t pos, int type, uc_value_t *uv)
 static uc_token_t *
 emit_buffer(uc_lexer_t *lex, ssize_t pos, int type, const char *strip_trailing_chars) {
 	uc_token_t *rv = NULL;
+	char *p;
 
 	if (lex->buffer.count) {
 		if (strip_trailing_chars)
-			while (lex->buffer.count > 0 && strchr(strip_trailing_chars, *uc_vector_last(&lex->buffer)))
-				lex->buffer.count--;
+			for (p = uc_vector_last(&lex->buffer);
+			     p && strchr(strip_trailing_chars, *p);
+			     lex->buffer.count--, p = uc_vector_last(&lex->buffer));
 
 		rv = emit_op(lex, pos, type, ucv_string_new_length(uc_vector_first(&lex->buffer), lex->buffer.count));
 

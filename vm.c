@@ -431,11 +431,7 @@ uc_vm_resolve_upval(uc_vm_t *vm, uc_value_t *value)
 void
 uc_vm_stack_push(uc_vm_t *vm, uc_value_t *value)
 {
-	uc_vector_grow(&vm->stack);
-
-	ucv_put(vm->stack.entries[vm->stack.count]);
-	vm->stack.entries[vm->stack.count] = uc_vm_resolve_upval(vm, value);
-	vm->stack.count++;
+	uc_vector_push(&vm->stack, value);
 
 	if (vm->trace) {
 		fprintf(stderr, "  [+%zd] %s\n",
@@ -488,14 +484,13 @@ uc_vm_call_native(uc_vm_t *vm, uc_value_t *ctx, uc_cfunction_t *fptr, bool mcall
 	uc_callframe_t *frame;
 
 	/* add new callframe */
-	uc_vector_grow(&vm->callframes);
-
-	frame = &vm->callframes.entries[vm->callframes.count++];
-	frame->stackframe = vm->stack.count - nargs - 1;
-	frame->cfunction = fptr;
-	frame->closure = NULL;
-	frame->ctx = ctx;
-	frame->mcall = mcall;
+	frame = uc_vector_push(&vm->callframes, {
+		.stackframe = vm->stack.count - nargs - 1,
+		.cfunction = fptr,
+		.closure = NULL,
+		.ctx = ctx,
+		.mcall = mcall
+	});
 
 	if (vm->trace)
 		uc_vm_frame_dump(vm, frame);
@@ -641,16 +636,15 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 		}
 	}
 
-	uc_vector_grow(&vm->callframes);
-
-	frame = &vm->callframes.entries[vm->callframes.count++];
-	frame->stackframe = stackoff;
-	frame->cfunction = NULL;
-	frame->closure = closure;
-	frame->ctx = ctx;
-	frame->ip = function->chunk.entries;
-	frame->mcall = mcall;
-	frame->strict = function->strict;
+	frame = uc_vector_push(&vm->callframes, {
+		.stackframe = stackoff,
+		.cfunction = NULL,
+		.closure = closure,
+		.ctx = ctx,
+		.ip = function->chunk.entries,
+		.mcall = mcall,
+		.strict = function->strict
+	});
 
 	if (vm->trace)
 		uc_vm_frame_dump(vm, frame);
@@ -3032,13 +3026,12 @@ uc_vm_execute(uc_vm_t *vm, uc_program_t *program, uc_value_t **retval)
 	uc_stringbuf_t *buf;
 	uc_value_t *val;
 
-	uc_vector_grow(&vm->callframes);
-
-	frame = &vm->callframes.entries[vm->callframes.count++];
-	frame->closure = closure;
-	frame->stackframe = 0;
-	frame->ip = uc_vm_frame_chunk(frame)->entries;
-	frame->strict = fn->strict;
+	frame = uc_vector_push(&vm->callframes, {
+		.closure = closure,
+		.stackframe = 0,
+		.ip = closure->function->chunk.entries,
+		.strict = fn->strict
+	});
 
 	if (vm->trace) {
 		buf = xprintbuf_new();
