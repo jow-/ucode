@@ -724,6 +724,7 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 	uc_ubus_deferred_t *defer;
 	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
+	uc_callframe_t *frame;
 	uint32_t id;
 
 	conn_get(vm, &c);
@@ -762,7 +763,8 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 		uloop_timeout_set(&defer->timeout, c->timeout * 1000);
 
 		res = uc_resource_new(defer_type, defer);
-		conn = uc_vector_last(&vm->callframes)->ctx;
+		frame = uc_vector_last(&vm->callframes);
+		conn = frame ? frame->ctx : NULL;
 
 		defer->registry_index = request_reg_add(vm, ucv_get(res), ucv_get(replycb), ucv_get(conn));
 
