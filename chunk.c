@@ -67,9 +67,7 @@ uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t offset)
 	uc_offsetinfo_t *offsets = &chunk->debuginfo.offsets;
 	size_t i;
 
-	uc_vector_grow(chunk);
-
-	chunk->entries[chunk->count] = byte;
+	uc_vector_push(chunk, byte);
 
 	/* offset info is encoded in bytes, for each byte, the first three bits
 	 * specify the number of source text bytes to advance since the last entry
@@ -81,13 +79,11 @@ uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t offset)
 		 * instructions each */
 		for (i = offset; i > OFFSETINFO_MAX_BYTES; i -= OFFSETINFO_MAX_BYTES) {
 			/* advance by 7 bytes */
-			uc_vector_grow(offsets);
-			offsets->entries[offsets->count++] = OFFSETINFO_ENCODE(OFFSETINFO_MAX_BYTES, 0);
+			uc_vector_push(offsets, OFFSETINFO_ENCODE(OFFSETINFO_MAX_BYTES, 0));
 		}
 
 		/* advance by `i` bytes, count one instruction */
-		uc_vector_grow(offsets);
-		offsets->entries[offsets->count++] = OFFSETINFO_ENCODE(i, 1);
+		uc_vector_push(offsets, OFFSETINFO_ENCODE(i, 1));
 	}
 
 	/* update instruction count at current offset entry */
@@ -97,18 +93,18 @@ uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t offset)
 		 * emit another offset entry with the initial three bits set to zero */
 		if (OFFSETINFO_NUM_INSNS(offsets->entries[offsets->count - 1]) >= OFFSETINFO_MAX_INSNS) {
 			/* advance by 0 bytes, count one instruction */
-			uc_vector_grow(offsets);
-			offsets->entries[offsets->count++] = OFFSETINFO_ENCODE(0, 1);
+			uc_vector_push(offsets, OFFSETINFO_ENCODE(0, 1));
 		}
 		else {
-			offsets->entries[offsets->count - 1] = OFFSETINFO_ENCODE(
-				OFFSETINFO_NUM_BYTES(offsets->entries[offsets->count - 1]),
-				OFFSETINFO_NUM_INSNS(offsets->entries[offsets->count - 1]) + 1
-			);
+			uint8_t *prev = uc_vector_last(offsets);
+
+			*prev = OFFSETINFO_ENCODE(
+				OFFSETINFO_NUM_BYTES(*prev),
+				OFFSETINFO_NUM_INSNS(*prev) + 1);
 		}
 	}
 
-	return chunk->count++;
+	return chunk->count - 1;
 }
 
 void
@@ -124,10 +120,9 @@ uc_chunk_pop(uc_chunk_t *chunk)
 	n_insns = OFFSETINFO_NUM_INSNS(offsets->entries[offsets->count - 1]);
 
 	if (n_insns > 0) {
-		offsets->entries[offsets->count - 1] = OFFSETINFO_ENCODE(
-			OFFSETINFO_NUM_BYTES(offsets->entries[offsets->count - 1]),
-			n_insns - 1
-		);
+		uint8_t *prev = uc_vector_last(offsets);
+
+		*prev = OFFSETINFO_ENCODE(OFFSETINFO_NUM_BYTES(*prev), n_insns - 1);
 	}
 	else {
 		offsets->count--;
@@ -162,14 +157,12 @@ uc_chunk_debug_add_variable(uc_chunk_t *chunk, size_t from, size_t to, size_t sl
 	if (upval)
 		slot += (size_t)-1 / 2;
 
-	uc_vector_grow(variables);
-
-	variables->entries[variables->count].nameidx = uc_vallist_add(varnames, name);
-	variables->entries[variables->count].slot    = slot;
-	variables->entries[variables->count].from    = from;
-	variables->entries[variables->count].to      = to;
-
-	variables->count++;
+	uc_vector_push(variables, {
+		.nameidx = uc_vallist_add(varnames, name),
+		.slot    = slot,
+		.from    = from,
+		.to      = to
+	});
 }
 
 uc_value_t *

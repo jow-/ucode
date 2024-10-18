@@ -52,7 +52,6 @@
 
 #include "ucode/module.h"
 
-static bool srand_called = false;
 
 /**
  * Returns the absolute value of the given numeric value.
@@ -398,11 +397,11 @@ uc_rand(uc_vm_t *vm, size_t nargs)
 {
 	struct timeval tv;
 
-	if (!srand_called) {
+	if (!ucv_boolean_get(uc_vm_registry_get(vm, "math.srand_called"))) {
 		gettimeofday(&tv, NULL);
 		srand((tv.tv_sec * 1000) + (tv.tv_usec / 1000));
 
-		srand_called = true;
+		uc_vm_registry_set(vm, "math.srand_called", ucv_boolean_new(true));
 	}
 
 	return ucv_int64_new(rand());
@@ -429,7 +428,7 @@ uc_srand(uc_vm_t *vm, size_t nargs)
 	int64_t n = ucv_to_integer(uc_fn_arg(0));
 
 	srand((unsigned int)n);
-	srand_called = true;
+	uc_vm_registry_set(vm, "math.srand_called", ucv_boolean_new(true));
 
 	return NULL;
 }
@@ -477,4 +476,6 @@ static const uc_function_list_t math_fns[] = {
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, math_fns);
+
+	uc_vm_registry_set(vm, "math.srand_called", ucv_boolean_new(false));
 }

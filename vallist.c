@@ -106,7 +106,10 @@ uc_number_parse_common(const char *buf, bool octal, char **end)
 	if (base >= 10 && (**end == '.' || (**end|32) == 'e')) {
 		d = strtod(p, end);
 
-		if (!isspace(**end) && **end != 0)
+		while (isspace(**end))
+			(*end)++;
+
+		if (**end != 0)
 			return NULL;
 
 		if (neg)
@@ -115,7 +118,10 @@ uc_number_parse_common(const char *buf, bool octal, char **end)
 		return ucv_double_new(d);
 	}
 
-	if (!isspace(**end) && **end != 0)
+	while (isspace(**end))
+		(*end)++;
+
+	if (**end != 0)
 		return NULL;
 
 	if (neg) {

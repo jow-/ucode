@@ -213,7 +213,14 @@ extern uc_list_t uc_object_iterators;
 
 typedef struct {
 	uc_list_t list;
-	struct lh_entry *pos;
+	struct lh_table *table;
+	union {
+		struct lh_entry *pos;
+		struct {
+			const void *k;
+			unsigned long hash;
+		} kh;
+	} u;
 } uc_object_iterator_t;
 
 

@@ -823,14 +823,13 @@ uc_compiler_declare_local(uc_compiler_t *compiler, uc_value_t *name, bool consta
 		}
 	}
 
-	uc_vector_grow(locals);
-
-	locals->entries[locals->count].name = ucv_get(name);
-	locals->entries[locals->count].depth = -1;
-	locals->entries[locals->count].captured = false;
-	locals->entries[locals->count].from = chunk->count;
-	locals->entries[locals->count].constant = constant;
-	locals->count++;
+	uc_vector_push(locals, {
+		.name = ucv_get(name),
+		.depth = -1,
+		.captured = false,
+		.from = chunk->count,
+		.constant = constant
+	});
 
 	return -1;
 }
@@ -896,16 +895,16 @@ uc_compiler_add_upval(uc_compiler_t *compiler, size_t idx, bool local, uc_value_
 		return -1;
 	}
 
-	uc_vector_grow(upvals);
-
-	upvals->entries[upvals->count].local = local;
-	upvals->entries[upvals->count].index = idx;
-	upvals->entries[upvals->count].name  = ucv_get(name);
-	upvals->entries[upvals->count].constant = constant;
+	uc_vector_push(upvals, {
+		.local = local,
+		.index = idx,
+		.name  = ucv_get(name),
+		.constant = constant
+	});
 
 	function->nupvals++;
 
-	return upvals->count++;
+	return upvals->count - 1;
 }
 
 static ssize_t
@@ -1618,10 +1617,8 @@ uc_compiler_compile_call(uc_compiler_t *compiler)
 	if (!uc_compiler_parse_check(compiler, TK_RPAREN)) {
 		do {
 			/* if this is a spread arg, remember the argument index */
-			if (uc_compiler_parse_match(compiler, TK_ELLIP)) {
-				uc_vector_grow(&spreads);
-				spreads.entries[spreads.count++] = nargs;
-			}
+			if (uc_compiler_parse_match(compiler, TK_ELLIP))
+				uc_vector_push(&spreads, nargs);
 
 			/* compile argument expression */
 			uc_compiler_parse_precedence(compiler, P_ASSIGN);
@@ -2175,14 +2172,14 @@ uc_compiler_declare_internal(uc_compiler_t *compiler, size_t srcpos, const char 
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	uc_locals_t *locals = &compiler->locals;
 
-	uc_vector_grow(locals);
+	uc_vector_push(locals, {
+		.name = ucv_string_new(name),
+		.depth = compiler->scope_depth,
+		.captured = false,
+		.from = chunk->count
+	});
 
-	locals->entries[locals->count].name = ucv_string_new(name);
-	locals->entries[locals->count].depth = compiler->scope_depth;
-	locals->entries[locals->count].captured = false;
-	locals->entries[locals->count].from = chunk->count;
-
-	return locals->count++;
+	return locals->count - 1;
 }
 
 static void
@@ -2292,8 +2289,7 @@ uc_compiler_compile_if(uc_compiler_t *compiler)
 			/* we just compiled an elsif block */
 			if (!expect_endif && type == TK_ELIF) {
 				/* emit jump to skip to the end */
-				uc_vector_grow(&elifs);
-				elifs.entries[elifs.count++] = uc_compiler_emit_jmp(compiler, 0);
+				uc_vector_push(&elifs, uc_compiler_emit_jmp(compiler, 0));
 
 				/* point previous conditional jump to beginning of branch */
 				uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
@@ -2310,8 +2306,7 @@ uc_compiler_compile_if(uc_compiler_t *compiler)
 			}
 			else if (!expect_endif && type == TK_ELSE) {
 				/* emit jump to skip to the end */
-				uc_vector_grow(&elifs);
-				elifs.entries[elifs.count++] = uc_compiler_emit_jmp(compiler, 0);
+				uc_vector_push(&elifs, uc_compiler_emit_jmp(compiler, 0));
 
 				/* point previous conditional jump to beginning of branch */
 				uc_compiler_set_jmpaddr(compiler, jmpz_off, chunk->count);
@@ -2746,13 +2741,9 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 			 * For the `default` case, beginning and end offsets of the
 			 * condition expression are equal.
 			 */
-			uc_vector_grow(&cases);
+			uc_vector_extend(&cases, 3);
 			cases.entries[cases.count++] = (locals->count - 1) - value_slot;
-
-			uc_vector_grow(&cases);
 			cases.entries[cases.count++] = chunk->count;
-
-			uc_vector_grow(&cases);
 			cases.entries[cases.count++] = chunk->count;
 		}
 
@@ -2770,13 +2761,9 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 			 *  2) beginning of condition expression
 			 *  3) end of condition expression
 			 */
-			uc_vector_grow(&cases);
+			uc_vector_extend(&cases, 3);
 			cases.entries[cases.count++] = (locals->count - 1) - value_slot;
-
-			uc_vector_grow(&cases);
 			cases.entries[cases.count++] = skip_jmp + 5;
-
-			uc_vector_grow(&cases);
 			cases.entries[cases.count++] = uc_compiler_emit_jmp(compiler, 0);
 
 			/* patch jump skipping over the case value */
@@ -2911,13 +2898,12 @@ uc_compiler_compile_try(uc_compiler_t *compiler)
 
 	/* Catch block ---------------------------------------------------------- */
 	if (try_to > try_from) {
-		uc_vector_grow(ranges);
-
-		ranges->entries[ranges->count].from   = try_from;
-		ranges->entries[ranges->count].to     = try_to;
-		ranges->entries[ranges->count].target = chunk->count;
-		ranges->entries[ranges->count].slot   = ehvar_slot;
-		ranges->count++;
+		uc_vector_push(ranges, {
+			.from   = try_from,
+			.to     = try_to,
+			.target = chunk->count,
+			.slot   = ehvar_slot
+		});
 	}
 
 	uc_compiler_enter_scope(compiler);
@@ -2983,10 +2969,8 @@ uc_compiler_compile_control(uc_compiler_t *compiler)
 		uc_compiler_emit_insn(compiler, 0,
 			locals->entries[i - 1].captured ? I_CUPV : I_POP);
 
-	uc_vector_grow(p);
-
-	p->entries[p->count++] =
-		uc_compiler_emit_jmp_dest(compiler, pos, chunk->count + type);
+	uc_vector_push(p,
+		uc_compiler_emit_jmp_dest(compiler, pos, chunk->count + type));
 
 	uc_compiler_parse_consume(compiler, TK_SCOL);
 }

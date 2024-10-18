@@ -1,0 +1,40 @@
+Ensure that adding keys to an object currently being iterated will not
+clobber active iterators pointing into that object due to a reallocation
+of the underlying hash table array.
+
+-- Testcase --
+{%
+	let obj = { '0': 0, '1': 1 };
+	let i = 2;
+
+	for (let k, v in obj) {
+		while (i < 16) {
+			obj[i] = i;
+			i++;
+		}
+	}
+
+	printf("%.J\n", obj);
+%}
+-- End --
+
+-- Expect stdout --
+{
+	"0": 0,
+	"1": 1,
+	"2": 2,
+	"3": 3,
+	"4": 4,
+	"5": 5,
+	"6": 6,
+	"7": 7,
+	"8": 8,
+	"9": 9,
+	"10": 10,
+	"11": 11,
+	"12": 12,
+	"13": 13,
+	"14": 14,
+	"15": 15
+}
+-- End --
