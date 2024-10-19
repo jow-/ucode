@@ -157,10 +157,7 @@ uc_source_type_test(uc_source_t *source)
 void
 uc_source_line_next(uc_source_t *source)
 {
-	uc_lineinfo_t *lines = &source->lineinfo;
-
-	uc_vector_grow(lines);
-	lines->entries[lines->count++] = 0x80;
+	uc_vector_push(&source->lineinfo, 0x80);
 }
 
 void
@@ -183,11 +180,8 @@ uc_source_line_update(uc_source_t *source, size_t off)
 
 		while (off > 0) {
 			n = (off > 0x7f) ? 0x7f : off;
-			uc_vector_grow(lines);
-			entry = uc_vector_last(lines);
-			entry[1] = n;
+			uc_vector_push(lines, n);
 			off -= n;
-			lines->count++;
 		}
 	}
 }

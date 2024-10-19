@@ -705,17 +705,13 @@ ucv_array_new_length(uc_vm_t *vm, size_t length)
 {
 	uc_array_t *array;
 
-	/* XXX */
-	length = 0;
-
-	array = xalloc(sizeof(*array) + length * sizeof(array->entries[0]));
+	array = xalloc(sizeof(*array));
 	array->header.type = UC_ARRAY;
 	array->header.refcount = 1;
 
-	if (length > 0)
-		array->count = length;
-
-	uc_vector_grow(array);
+	/* preallocate memory */
+	if (length)
+		uc_vector_extend(array, length);
 
 	if (vm) {
 		ucv_ref(&vm->values, &array->ref);
@@ -779,10 +775,9 @@ ucv_array_unshift(uc_value_t *uv, uc_value_t *item)
 	if (ucv_type(uv) != UC_ARRAY)
 		return NULL;
 
-	array->count++;
-	uc_vector_grow(array);
+	uc_vector_extend(array, 1);
 
-	for (i = array->count; i > 1; i--)
+	for (i = ++array->count; i > 1; i--)
 		array->entries[i - 1] = array->entries[i - 2];
 
 	array->entries[0] = item;
@@ -828,9 +823,8 @@ ucv_array_delete(uc_value_t *uv, size_t offset, size_t count)
 	        &array->entries[offset + count],
 	        (array->count - (offset + count)) * sizeof(array->entries[0]));
 
+	uc_vector_reduce(array, count);
 	array->count -= count;
-
-	uc_vector_grow(array);
 
 	return true;
 }
@@ -839,24 +833,13 @@ bool
 ucv_array_set(uc_value_t *uv, size_t index, uc_value_t *item)
 {
 	uc_array_t *array = (uc_array_t *)uv;
-	size_t old_count, new_count;
 
 	if (ucv_type(uv) != UC_ARRAY)
 		return false;
 
 	if (index >= array->count) {
-		old_count = array->count;
-		new_count = (index + 1) & ~(UC_VECTOR_CHUNK_SIZE - 1);
-
-		if (new_count > old_count) {
-			array->count = new_count;
-			uc_vector_grow(array);
-		}
-
+		uc_vector_extend(array, index + 1 - array->count);
 		array->count = index + 1;
-
-		while (old_count < array->count)
-			array->entries[old_count++] = NULL;
 	}
 	else {
 		ucv_put(array->entries[index]);
@@ -898,8 +881,8 @@ ucv_free_object_entry(struct lh_entry *entry)
 	uc_list_foreach(item, &uc_object_iterators) {
 		uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
-		if (iter->pos == entry)
-			iter->pos = entry->next;
+		if (iter->u.pos == entry)
+			iter->u.pos = entry->next;
 	}
 
 	free(lh_entry_k(entry));
@@ -948,12 +931,47 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 	existing_entry = lh_table_lookup_entry_w_hash(object->table, (const void *)key, hash);
 
 	if (existing_entry == NULL) {
+		bool rehash = (object->table->count >= object->table->size * LH_LOAD_FACTOR);
+
+		/* insert will rehash table, backup affected iterator states */
+		if (rehash) {
+			uc_list_foreach(item, &uc_object_iterators) {
+				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
+
+				if (iter->table != object->table)
+					continue;
+
+				if (iter->u.pos == NULL)
+					continue;
+
+				iter->u.kh.k = iter->u.pos->k;
+				iter->u.kh.hash = lh_get_hash(iter->table, iter->u.kh.k);
+			}
+		}
+
 		k = xstrdup(key);
 
 		if (lh_table_insert_w_hash(object->table, k, val, hash, 0) != 0) {
 			free(k);
 
 			return false;
+		}
+
+		/* restore affected iterator state pointer after rehash */
+		if (rehash) {
+			uc_list_foreach(item, &uc_object_iterators) {
+				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
+
+				if (iter->table != object->table)
+					continue;
+
+				if (iter->u.kh.k == NULL)
+					continue;
+
+				iter->u.pos = lh_table_lookup_entry_w_hash(iter->table,
+				                                           iter->u.kh.k,
+				                                           iter->u.kh.hash);
+			}
 		}
 
 		return true;
@@ -1121,8 +1139,7 @@ ucv_resource_type_add(uc_vm_t *vm, const char *name, uc_value_t *proto, void (*f
 	type->proto = proto;
 	type->free = freefn;
 
-	uc_vector_grow(&vm->restypes);
-	vm->restypes.entries[vm->restypes.count++] = type;
+	uc_vector_push(&vm->restypes, type);
 
 	return type;
 }

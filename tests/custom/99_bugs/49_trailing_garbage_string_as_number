@@ -1,0 +1,23 @@
+Ensure that numeric strings followed by non-whitespace are treated as NaN.
+
+-- Testcase --
+{%
+printf("%.J\n", [
+	"1" == 1,
+	" 1" == 1,
+	"1 " == 1,
+	"1a" == 1,
+	"1 a" == 1
+]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	true,
+	true,
+	true,
+	false,
+	false
+]
+-- End --
