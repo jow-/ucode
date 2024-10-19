@@ -206,10 +206,14 @@ typedef struct {
 
 uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
 
+/* Thread local data */
+struct uc_threadlocal
+{
+	/* Object iteration */
+	uc_list_t object_iterators;	
+}; 
 
-/* Object iteration */
-
-extern uc_list_t uc_object_iterators;
+extern __thread struct uc_threadlocal *uc_threadlocal_data;
 
 typedef struct {
 	uc_list_t list;
@@ -387,7 +391,7 @@ uc_value_t *ucv_array_pop(uc_value_t *);
 uc_value_t *ucv_array_push(uc_value_t *, uc_value_t *);
 uc_value_t *ucv_array_shift(uc_value_t *);
 uc_value_t *ucv_array_unshift(uc_value_t *, uc_value_t *);
-void ucv_array_sort(uc_value_t *, int (*)(const void *, const void *));
+void ucv_array_sort(uc_value_t *, int (*)(uc_value_t * const *, uc_value_t * const *,void *),void *);
 bool ucv_array_delete(uc_value_t *, size_t, size_t);
 bool ucv_array_set(uc_value_t *, size_t, uc_value_t *);
 size_t ucv_array_length(uc_value_t *);
@@ -395,7 +399,7 @@ size_t ucv_array_length(uc_value_t *);
 uc_value_t *ucv_object_new(uc_vm_t *);
 uc_value_t *ucv_object_get(uc_value_t *, const char *, bool *);
 bool ucv_object_add(uc_value_t *, const char *, uc_value_t *);
-void ucv_object_sort(uc_value_t *, int (*)(const void *, const void *));
+void ucv_object_sort(uc_value_t *, int (*)(struct lh_entry * const *, struct lh_entry * const *,void *), void *);
 bool ucv_object_delete(uc_value_t *, const char *);
 size_t ucv_object_length(uc_value_t *);
 
