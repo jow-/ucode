@@ -206,10 +206,14 @@ typedef struct {
 
 uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
 
+/* Thread local data */
+struct uc_threadlocal
+{
+	/* Object iteration */
+	uc_list_t object_iterators;	
+}; 
 
-/* Object iteration */
-
-extern uc_list_t uc_object_iterators;
+extern __thread struct uc_threadlocal *uc_threadlocal_data;
 
 typedef struct {
 	uc_list_t list;

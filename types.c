@@ -29,10 +29,7 @@
 #include "ucode/vm.h"
 #include "ucode/program.h"
 
-uc_list_t uc_object_iterators = {
-	.prev = &uc_object_iterators,
-	.next = &uc_object_iterators
-};
+__thread struct uc_threadlocal *uc_threadlocal_data;
 
 static char *uc_default_search_path[] = { LIB_SEARCH_PATH };
 
@@ -878,7 +875,7 @@ ucv_array_length(uc_value_t *uv)
 static void
 ucv_free_object_entry(struct lh_entry *entry)
 {
-	uc_list_foreach(item, &uc_object_iterators) {
+	uc_list_foreach(item, &uc_threadlocal_data->object_iterators) {
 		uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 		if (iter->u.pos == entry)
@@ -935,7 +932,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 
 		/* insert will rehash table, backup affected iterator states */
 		if (rehash) {
-			uc_list_foreach(item, &uc_object_iterators) {
+			uc_list_foreach(item, &uc_threadlocal_data->object_iterators) {
 				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 				if (iter->table != object->table)
@@ -959,7 +956,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 
 		/* restore affected iterator state pointer after rehash */
 		if (rehash) {
-			uc_list_foreach(item, &uc_object_iterators) {
+			uc_list_foreach(item, &uc_threadlocal_data->object_iterators) {
 				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 				if (iter->table != object->table)

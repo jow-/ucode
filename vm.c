@@ -145,7 +145,7 @@ uc_vm_alloc_global_scope(uc_vm_t *vm)
 static void
 uc_vm_output_exception(uc_vm_t *vm, uc_exception_t *ex);
 
-static uc_vm_t *signal_handler_vm;
+static __thread uc_vm_t *signal_handler_vm;
 
 static void
 uc_vm_signal_handler(int sig)
@@ -178,8 +178,20 @@ uc_vm_signal_handlers_setup(uc_vm_t *vm)
 	sigemptyset(&vm->signal.sa.sa_mask);
 }
 
+static void 
+uc_vm_signal_handler_destroy( uc_vm_t *vm )
+{
+	signal_handler_vm = 0;
+	// TODO: Acually put back the stored previous handler?
+}
+
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 {
+	// Initialize thread local data
+	uc_threadlocal_data = xalloc( sizeof( struct uc_threadlocal ) );
+	uc_threadlocal_data->object_iterators.next = &uc_threadlocal_data->object_iterators;
+	uc_threadlocal_data->object_iterators.prev = &uc_threadlocal_data->object_iterators;
+
 	vm->exception.type = EXCEPTION_NONE;
 	vm->exception.message = NULL;
 
@@ -210,6 +222,8 @@ void uc_vm_free(uc_vm_t *vm)
 	uc_upvalref_t *ref;
 	size_t i;
 
+	uc_vm_signal_handler_destroy( vm );
+
 	ucv_put(vm->exception.stacktrace);
 	free(vm->exception.message);
 
@@ -235,6 +249,9 @@ void uc_vm_free(uc_vm_t *vm)
 		free(vm->restypes.entries[i]);
 
 	uc_vector_clear(&vm->restypes);
+
+	free( uc_threadlocal_data );
+	uc_threadlocal_data = 0;
 }
 
 static uc_chunk_t *
@@ -778,18 +795,20 @@ uc_vm_exception_tostring(uc_vm_t *vm, size_t nargs)
 	return message ? ucv_get(message) : ucv_string_new("Exception");
 }
 
-static uc_value_t *exception_prototype = NULL;
-
 static uc_value_t *
 uc_vm_exception_new(uc_vm_t *vm, uc_exception_type_t type, const char *message, uc_value_t *stacktrace)
 {
 	uc_value_t *exo;
+	uc_value_t *exception_prototype = uc_vm_registry_get( vm, "core.exception_proto" );
 
-	if (exception_prototype == NULL) {
+	if( NULL == exception_prototype )
+	{
 		exception_prototype = ucv_object_new(vm);
 
 		ucv_object_add(exception_prototype, "tostring",
 			ucv_cfunction_new("tostring", uc_vm_exception_tostring));
+
+		uc_vm_registry_set( vm, "core.exception_proto", exception_prototype );
 	}
 
 	exo = ucv_object_new(vm);
@@ -2222,7 +2241,7 @@ uc_vm_object_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
 		iter->table = obj->table;
 		iter->u.pos = obj->table->head;
 
-		uc_list_insert(&uc_object_iterators, &iter->list);
+		uc_list_insert(&uc_threadlocal_data->object_iterators, &iter->list);
 	}
 	else if (ucv_type(k) == UC_RESOURCE &&
 	         res->type == &uc_vm_object_iterator_type && res->data != NULL) {
