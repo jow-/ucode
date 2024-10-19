@@ -29,11 +29,6 @@
 #include "ucode/vm.h"
 #include "ucode/program.h"
 
-uc_list_t uc_object_iterators = {
-	.prev = &uc_object_iterators,
-	.next = &uc_object_iterators
-};
-
 static char *uc_default_search_path[] = { LIB_SEARCH_PATH };
 
 uc_parse_config_t uc_default_parse_config = {
@@ -898,7 +893,7 @@ ucv_array_length(uc_value_t *uv)
 static void
 ucv_free_object_entry(struct lh_entry *entry)
 {
-	uc_list_foreach(item, &uc_object_iterators) {
+	uc_list_foreach(item, &uc_thread_context_get()->object_iterators) {
 		uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 		if (iter->u.pos == entry)
@@ -955,7 +950,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 
 		/* insert will rehash table, backup affected iterator states */
 		if (rehash) {
-			uc_list_foreach(item, &uc_object_iterators) {
+			uc_list_foreach(item, &uc_thread_context_get()->object_iterators) {
 				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 				if (iter->table != object->table)
@@ -979,7 +974,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 
 		/* restore affected iterator state pointer after rehash */
 		if (rehash) {
-			uc_list_foreach(item, &uc_object_iterators) {
+			uc_list_foreach(item, &uc_thread_context_get()->object_iterators) {
 				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 				if (iter->table != object->table)
@@ -2480,4 +2475,19 @@ uc_search_path_init(uc_search_path_t *search_path)
 
 	for (i = 0; i < ARRAY_SIZE(uc_default_search_path); i++)
 		uc_vector_push(search_path, xstrdup(uc_default_search_path[i]));
+}
+
+
+static __thread uc_thread_context_t *tls_ctx;
+
+uc_thread_context_t *
+uc_thread_context_get(void)
+{
+	if (tls_ctx == NULL) {
+		tls_ctx = xalloc(sizeof(*tls_ctx));
+		tls_ctx->object_iterators.prev = &tls_ctx->object_iterators;
+		tls_ctx->object_iterators.next = &tls_ctx->object_iterators;
+	}
+
+	return tls_ctx;
 }

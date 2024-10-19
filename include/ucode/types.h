@@ -206,11 +206,6 @@ typedef struct {
 
 uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
 
-
-/* Object iteration */
-
-extern uc_list_t uc_object_iterators;
-
 typedef struct {
 	uc_list_t list;
 	struct lh_table *table;
@@ -268,6 +263,19 @@ uc_search_path_free(uc_search_path_t *search_path) {
 
 	uc_vector_clear(search_path);
 }
+
+
+/* TLS data */
+
+typedef struct {
+	/* VM owning installed signal handlers */
+	uc_vm_t *signal_handler_vm;
+
+	/* Object iteration */
+	uc_list_t object_iterators;
+} uc_thread_context_t;
+
+__hidden uc_thread_context_t *uc_thread_context_get(void);
 
 
 /* VM definitions */
