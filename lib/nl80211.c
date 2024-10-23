@@ -330,7 +330,7 @@ static const uc_nl_nested_spec_t nl80211_mesh_setup_nla = {
 
 static const uc_nl_nested_spec_t nl80211_mntr_flags_nla = {
 	.headsize = 0,
-	.nattrs = 6,
+	.nattrs = 7,
 	.attrs = {
 		{ NL80211_MNTR_FLAG_FCSFAIL, "fcsfail", DT_FLAG, 0, NULL },
 		{ NL80211_MNTR_FLAG_PLCPFAIL, "plcpfail", DT_FLAG, 0, NULL },
@@ -338,6 +338,7 @@ static const uc_nl_nested_spec_t nl80211_mntr_flags_nla = {
 		{ NL80211_MNTR_FLAG_OTHER_BSS, "other_bss", DT_FLAG, 0, NULL },
 		{ NL80211_MNTR_FLAG_COOK_FRAMES, "cook_frames", DT_FLAG, 0, NULL },
 		{ NL80211_MNTR_FLAG_ACTIVE, "active", DT_FLAG, 0, NULL },
+		{ NL80211_MNTR_FLAG_SKIP_TX, "skip_tx", DT_FLAG, 0, NULL },
 	}
 };
 
@@ -850,17 +851,18 @@ static const uc_nl_nested_spec_t nl80211_radio_freq_range_nla = {
 
 static const uc_nl_nested_spec_t nl80211_wiphy_radio_nla = {
 	.headsize = 0,
-	.nattrs = 3,
+	.nattrs = 4,
 	.attrs = {
 		{ NL80211_WIPHY_RADIO_ATTR_INDEX, "index", DT_U32, 0, NULL },
 		{ NL80211_WIPHY_RADIO_ATTR_FREQ_RANGE, "freq_ranges", DT_NESTED, DF_REPEATED, &nl80211_radio_freq_range_nla },
 		{ NL80211_WIPHY_RADIO_ATTR_INTERFACE_COMBINATION, "interface_combinations", DT_NESTED, DF_REPEATED, &nl80211_ifcomb_nla },
+		{ NL80211_WIPHY_RADIO_ATTR_ANTENNA_MASK, "antenna_mask", DT_U32, 0, NULL },
 	}
 };
 
 static const uc_nl_nested_spec_t nl80211_msg = {
 	.headsize = 0,
-	.nattrs = 129,
+	.nattrs = 130,
 	.attrs = {
 		{ NL80211_ATTR_4ADDR, "4addr", DT_U8, 0, NULL },
 		{ NL80211_ATTR_AIRTIME_WEIGHT, "airtime_weight", DT_U16, 0, NULL },
@@ -991,6 +993,7 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_MAX_AP_ASSOC_STA, "max_ap_assoc", DT_U16, 0, NULL },
 		{ NL80211_ATTR_SURVEY_INFO, "survey_info", DT_NESTED, 0, &nl80211_survey_info_nla },
 		{ NL80211_ATTR_WIPHY_RADIOS, "radios", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &nl80211_wiphy_radio_nla },
+		{ NL80211_ATTR_VIF_RADIO_MASK, "vif_radio_mask", DT_U32, 0, NULL },
 	}
 };
 
