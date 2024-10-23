@@ -695,7 +695,7 @@ static const uc_nl_nested_spec_t nl80211_bss_nla = {
 
 static const uc_nl_nested_spec_t nl80211_sta_info_bitrate_nla = {
 	.headsize = 0,
-	.nattrs = 18,
+	.nattrs = 22,
 	.attrs = {
 		{ NL80211_RATE_INFO_BITRATE, "bitrate", DT_U16, 0, NULL },
 		{ NL80211_RATE_INFO_BITRATE32, "bitrate32", DT_U32, 0, NULL },
@@ -709,10 +709,14 @@ static const uc_nl_nested_spec_t nl80211_sta_info_bitrate_nla = {
 		{ NL80211_RATE_INFO_HE_GI, "he_gi", DT_U8, 0, NULL },
 		{ NL80211_RATE_INFO_HE_DCM, "he_dcm", DT_U8, 0, NULL },
 		{ NL80211_RATE_INFO_HE_RU_ALLOC, "he_ru_alloc", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_EHT_MCS, "eht_mcs", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_EHT_NSS, "eht_nss", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_EHT_GI, "eht_gi", DT_U8, 0, NULL },
 		{ NL80211_RATE_INFO_40_MHZ_WIDTH, "width_40", DT_FLAG, 0, NULL },
 		{ NL80211_RATE_INFO_80_MHZ_WIDTH, "width_80", DT_FLAG, 0, NULL },
 		{ NL80211_RATE_INFO_80P80_MHZ_WIDTH, "width_80p80", DT_FLAG, 0, NULL },
 		{ NL80211_RATE_INFO_160_MHZ_WIDTH, "width_160", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_320_MHZ_WIDTH, "width_320", DT_FLAG, 0, NULL },
 		{ NL80211_RATE_INFO_10_MHZ_WIDTH, "width_10", DT_FLAG, 0, NULL },
 		{ NL80211_RATE_INFO_5_MHZ_WIDTH, "width_5", DT_FLAG, 0, NULL },
 	}
@@ -856,7 +860,7 @@ static const uc_nl_nested_spec_t nl80211_wiphy_radio_nla = {
 
 static const uc_nl_nested_spec_t nl80211_msg = {
 	.headsize = 0,
-	.nattrs = 128,
+	.nattrs = 129,
 	.attrs = {
 		{ NL80211_ATTR_4ADDR, "4addr", DT_U8, 0, NULL },
 		{ NL80211_ATTR_AIRTIME_WEIGHT, "airtime_weight", DT_U16, 0, NULL },
@@ -883,6 +887,7 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_DFS_REGION, "dfs_region", DT_U8, 0, NULL },
 		{ NL80211_ATTR_DTIM_PERIOD, "dtim_period", DT_U32, 0, NULL },
 		{ NL80211_ATTR_DURATION, "duration", DT_U32, 0, NULL },
+		{ NL80211_ATTR_EXT_FEATURES, "extended_features", DT_U8, DF_ARRAY, NULL },
 		{ NL80211_ATTR_FEATURE_FLAGS, "feature_flags", DT_U32, 0, NULL },
 		{ NL80211_ATTR_FRAME, "frame", DT_STRING, DF_BINARY, NULL },
 		{ NL80211_ATTR_FRAME_MATCH, "frame_match", DT_STRING, DF_BINARY, NULL },
