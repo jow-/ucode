@@ -29,10 +29,7 @@
 #include "ucode/vm.h"
 #include "ucode/program.h"
 
-uc_list_t uc_object_iterators = {
-	.prev = &uc_object_iterators,
-	.next = &uc_object_iterators
-};
+__thread struct uc_threadlocal *uc_threadlocal_data;
 
 static char *uc_default_search_path[] = { LIB_SEARCH_PATH };
 
@@ -786,14 +783,16 @@ ucv_array_unshift(uc_value_t *uv, uc_value_t *item)
 }
 
 void
-ucv_array_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
+ucv_array_sort(uc_value_t *uv, int (*cmp)(uc_value_t * const *,uc_value_t * const *,void *),void *ctx)
 {
 	uc_array_t *array = (uc_array_t *)uv;
 
 	if (ucv_type(uv) != UC_ARRAY || array->count <= 1)
 		return;
 
-	qsort(array->entries, array->count, sizeof(array->entries[0]), cmp);
+	qsort_r(array->entries, array->count, sizeof(array->entries[0]), 
+		(int (*)(const void *,const void *,void *))cmp, 
+		ctx);
 }
 
 bool
@@ -876,7 +875,7 @@ ucv_array_length(uc_value_t *uv)
 static void
 ucv_free_object_entry(struct lh_entry *entry)
 {
-	uc_list_foreach(item, &uc_object_iterators) {
+	uc_list_foreach(item, &uc_threadlocal_data->object_iterators) {
 		uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 		if (iter->u.pos == entry)
@@ -933,7 +932,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 
 		/* insert will rehash table, backup affected iterator states */
 		if (rehash) {
-			uc_list_foreach(item, &uc_object_iterators) {
+			uc_list_foreach(item, &uc_threadlocal_data->object_iterators) {
 				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 				if (iter->table != object->table)
@@ -957,7 +956,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 
 		/* restore affected iterator state pointer after rehash */
 		if (rehash) {
-			uc_list_foreach(item, &uc_object_iterators) {
+			uc_list_foreach(item, &uc_threadlocal_data->object_iterators) {
 				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 				if (iter->table != object->table)
@@ -986,7 +985,8 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 }
 
 void
-ucv_object_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
+ucv_object_sort(uc_value_t *uv, 
+	int (*cmp)(struct lh_entry * const *, struct lh_entry * const *, void *), void *ctx )
 {
 	uc_object_t *object = (uc_object_t *)uv;
 	struct lh_table *t;
@@ -1007,7 +1007,9 @@ ucv_object_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
 	if (!keys.entries)
 		return;
 
-	qsort(keys.entries, keys.count, sizeof(keys.entries[0]), cmp);
+	qsort_r(keys.entries, keys.count, sizeof(keys.entries[0]), 
+		(int (*)(const void *,const void *,void *))cmp, 
+		ctx);
 
 	for (i = 0; i < keys.count; i++) {
 		e = keys.entries[i];
