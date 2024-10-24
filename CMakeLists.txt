@@ -67,6 +67,7 @@ option(ULOOP_SUPPORT "Uloop plugin support" ${DEFAULT_ULOOP_SUPPORT})
 option(LOG_SUPPORT "Log plugin support" ON)
 option(SOCKET_SUPPORT "Socket plugin support" ON)
 option(ZLIB_SUPPORT "Zlib plugin support" ${DEFAULT_ZLIB_SUPPORT})
+option(ASYNC_SUPPORT "Async plugin support" ON)
 
 set(LIB_SEARCH_PATH "${CMAKE_INSTALL_PREFIX}/lib/ucode/*.so:${CMAKE_INSTALL_PREFIX}/share/ucode/*.uc:./*.so:./*.uc" CACHE STRING "Default library search path")
 string(REPLACE ":" "\", \"" LIB_SEARCH_DEFINE "${LIB_SEARCH_PATH}")
@@ -289,6 +290,14 @@ if(ZLIB_SUPPORT)
   target_link_options(zlib_lib PRIVATE ${UCODE_MODULE_LINK_OPTIONS})
   target_link_libraries(zlib_lib ZLIB::ZLIB)
 endif()
+
+if(ASYNC_SUPPORT)
+  set(LIBRARIES ${LIBRARIES} async_lib)
+  add_library(async_lib MODULE lib/async/manager.c lib/async/promise.c lib/async/timer.c lib/async/callback.c )
+  set_target_properties(async_lib PROPERTIES OUTPUT_NAME async PREFIX "")
+  target_link_options(async_lib PRIVATE ${UCODE_MODULE_LINK_OPTIONS})
+endif()
+
 
 if(UNIT_TESTING)
   enable_testing()
