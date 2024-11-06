@@ -15,7 +15,7 @@ jobs:
 
       - name: Setup
         run: |
-          brew install json-c
+          brew install json-c libmd
 
       - name: Build minimal version
         run: |
