@@ -356,6 +356,7 @@ if(CRYPTO_MBEDTLS_SUPPORT)
   target_include_directories(crypto_mbedtls_lib PRIVATE ${MBEDTLS_INCLUDE_DIR})
   target_link_options(crypto_mbedtls_lib PRIVATE ${UCODE_MODULE_LINK_OPTIONS})
   target_link_libraries(crypto_mbedtls_lib libucode ${MBEDTLS_LIBRARIES})
+  install(FILES lib/crypto.uc DESTINATION share/ucode)
 endif()
 
 if(UNIT_TESTING)
