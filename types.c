@@ -2237,8 +2237,9 @@ uc_value_t *
 ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 {
 	uc_value_t *o, *v = NULL;
+	bool found = false;
+	uc_upvalref_t *ref;
 	int64_t idx;
-	bool found;
 	char *k;
 
 	if (ucv_type(scope) == UC_ARRAY) {
@@ -2247,23 +2248,48 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 		if (idx < 0 && idx > INT64_MIN && (uint64_t)llabs(idx) <= ucv_array_length(scope))
 			idx += ucv_array_length(scope);
 
-		if (idx >= 0 && (uint64_t)idx < ucv_array_length(scope))
-			return ucv_get(ucv_array_get(scope, idx));
+		if (idx >= 0 && (uint64_t)idx < ucv_array_length(scope)) {
+			v = ucv_array_get(scope, idx);
+			found = true;
+		}
 	}
 
-	k = ucv_key_to_string(vm, key);
+	if (!found) {
+		k = ucv_key_to_string(vm, key);
 
-	for (o = scope; o; o = ucv_prototype_get(o)) {
-		if (ucv_type(o) != UC_OBJECT)
-			continue;
+		for (o = scope; o; o = ucv_prototype_get(o)) {
+			if (ucv_type(o) != UC_OBJECT)
+				continue;
 
-		v = ucv_object_get(o, k ? k : ucv_string_get(key), &found);
+			v = ucv_object_get(o, k ? k : ucv_string_get(key), &found);
 
-		if (found)
-			break;
+			if (found)
+				break;
+		}
+
+		free(k);
 	}
 
-	free(k);
+	/* Handle upvalue values in objects; under some specific circumstances
+	   objects may contain upvalues, this primarily happens with wildcard module
+	   import namespace dictionaries. */
+#ifdef __clang_analyzer__
+	/* Clang static analyzer does not understand that ucv_type(NULL) can't
+	 * possibly yield UC_UPVALUE. Nudge it. */
+	if (v != NULL && ucv_type(v) == UC_UPVALUE)
+#else
+	if (ucv_type(v) == UC_UPVALUE)
+#endif
+	{
+		ref = (uc_upvalref_t *)v;
+
+		if (ref->closed)
+			return ucv_get(ref->value);
+		else if (vm)
+			return ucv_get(vm->stack.entries[ref->slot]);
+		else
+			return NULL;
+	}
 
 	return ucv_get(v);
 }

@@ -431,7 +431,7 @@ uc_vm_resolve_upval(uc_vm_t *vm, uc_value_t *value)
 void
 uc_vm_stack_push(uc_vm_t *vm, uc_value_t *value)
 {
-	uc_vector_push(&vm->stack, value);
+	uc_vector_push(&vm->stack, uc_vm_resolve_upval(vm, value));
 
 	if (vm->trace) {
 		fprintf(stderr, "  [+%zd] %s\n",

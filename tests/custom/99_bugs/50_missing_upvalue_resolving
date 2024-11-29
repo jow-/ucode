@@ -1,0 +1,27 @@
+Commit e5fe6b1 ("treewide: refactor vector usage code") accidentially dropped
+the upvalue resolving logic from uc_vm_stack_push(), leading to unresolved
+upvalues leaking into the script execution context.
+
+-- File test.uc --
+export let obj = { foo: true, bar: false };
+-- End --
+
+-- Testcase --
+import * as test from "./files/test.uc";
+
+printf("%.J\n", [
+	type(test.obj),
+	test.obj.foo
+]);
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+[
+	"object",
+	true
+]
+-- End --
