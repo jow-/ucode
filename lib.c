@@ -1403,14 +1403,14 @@ uc_reverse(uc_vm_t *vm, size_t nargs)
 }
 
 
-static struct {
+typedef struct {
 	uc_vm_t *vm;
 	bool ex;
 	uc_value_t *fn;
-} sort_ctx;
+} sort_ctx_t;
 
 static int
-default_cmp(uc_value_t *v1, uc_value_t *v2)
+default_cmp(uc_value_t *v1, uc_value_t *v2, uc_vm_t *vm)
 {
 	char *s1, *s2;
 	bool f1, f2;
@@ -1425,8 +1425,8 @@ default_cmp(uc_value_t *v1, uc_value_t *v2)
 	}
 
 	/* otherwise convert both operands to strings and compare lexically */
-	s1 = uc_cast_string(sort_ctx.vm, &v1, &f1);
-	s2 = uc_cast_string(sort_ctx.vm, &v2, &f2);
+	s1 = uc_cast_string(vm, &v1, &f1);
+	s2 = uc_cast_string(vm, &v2, &f2);
 
 	res = strcmp(s1, s2);
 
@@ -1437,31 +1437,30 @@ default_cmp(uc_value_t *v1, uc_value_t *v2)
 }
 
 static int
-array_sort_fn(const void *k1, const void *k2)
+array_sort_fn(uc_value_t *v1, uc_value_t *v2, void *ud)
 {
 	uc_value_t *rv, *null = ucv_int64_new(0);
-	uc_value_t * const *v1 = k1;
-	uc_value_t * const *v2 = k2;
+	sort_ctx_t *ctx = ud;
 	int res;
 
-	if (!sort_ctx.fn)
-		return default_cmp(*v1, *v2);
+	if (!ctx->fn)
+		return default_cmp(v1, v2, ctx->vm);
 
-	if (sort_ctx.ex)
+	if (ctx->ex)
 		return 0;
 
-	uc_vm_ctx_push(sort_ctx.vm);
-	uc_vm_stack_push(sort_ctx.vm, ucv_get(sort_ctx.fn));
-	uc_vm_stack_push(sort_ctx.vm, ucv_get(*v1));
-	uc_vm_stack_push(sort_ctx.vm, ucv_get(*v2));
+	uc_vm_ctx_push(ctx->vm);
+	uc_vm_stack_push(ctx->vm, ucv_get(ctx->fn));
+	uc_vm_stack_push(ctx->vm, ucv_get(v1));
+	uc_vm_stack_push(ctx->vm, ucv_get(v2));
 
-	if (uc_vm_call(sort_ctx.vm, true, 2)) {
-		sort_ctx.ex = true;
+	if (uc_vm_call(ctx->vm, true, 2)) {
+		ctx->ex = true;
 
 		return 0;
 	}
 
-	rv = uc_vm_stack_pop(sort_ctx.vm);
+	rv = uc_vm_stack_pop(ctx->vm);
 
 	ucv_compare(0, rv, null, &res);
 
@@ -1472,33 +1471,33 @@ array_sort_fn(const void *k1, const void *k2)
 }
 
 static int
-object_sort_fn(const void *k1, const void *k2)
+object_sort_fn(const char *k1, uc_value_t *v1, const char *k2, uc_value_t *v2,
+               void *ud)
 {
 	uc_value_t *rv, *null = ucv_int64_new(0);
-	struct lh_entry * const *e1 = k1;
-	struct lh_entry * const *e2 = k2;
+	sort_ctx_t *ctx = ud;
 	int res;
 
-	if (!sort_ctx.fn)
-		return strcmp((char *)lh_entry_k(*e1), (char *)lh_entry_k(*e2));
+	if (!ctx->fn)
+		return strcmp(k1, k2);
 
-	if (sort_ctx.ex)
+	if (ctx->ex)
 		return 0;
 
-	uc_vm_ctx_push(sort_ctx.vm);
-	uc_vm_stack_push(sort_ctx.vm, ucv_get(sort_ctx.fn));
-	uc_vm_stack_push(sort_ctx.vm, ucv_string_new((char *)lh_entry_k(*e1)));
-	uc_vm_stack_push(sort_ctx.vm, ucv_string_new((char *)lh_entry_k(*e2)));
-	uc_vm_stack_push(sort_ctx.vm, ucv_get((uc_value_t *)lh_entry_v(*e1)));
-	uc_vm_stack_push(sort_ctx.vm, ucv_get((uc_value_t *)lh_entry_v(*e2)));
+	uc_vm_ctx_push(ctx->vm);
+	uc_vm_stack_push(ctx->vm, ucv_get(ctx->fn));
+	uc_vm_stack_push(ctx->vm, ucv_string_new(k1));
+	uc_vm_stack_push(ctx->vm, ucv_string_new(k2));
+	uc_vm_stack_push(ctx->vm, ucv_get(v1));
+	uc_vm_stack_push(ctx->vm, ucv_get(v2));
 
-	if (uc_vm_call(sort_ctx.vm, true, 4)) {
-		sort_ctx.ex = true;
+	if (uc_vm_call(ctx->vm, true, 4)) {
+		ctx->ex = true;
 
 		return 0;
 	}
 
-	rv = uc_vm_stack_pop(sort_ctx.vm);
+	rv = uc_vm_stack_pop(ctx->vm);
 
 	ucv_compare(0, rv, null, &res);
 
@@ -1542,27 +1541,29 @@ uc_sort(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *val = uc_fn_arg(0);
 	uc_value_t *fn = uc_fn_arg(1);
+	sort_ctx_t ctx = {
+		.vm = vm,
+		.fn = fn,
+		.ex = false
+	};
 
 	if (!assert_mutable(vm, val))
 		return NULL;
 
-	sort_ctx.vm = vm;
-	sort_ctx.fn = fn;
-
 	switch (ucv_type(val)) {
 	case UC_ARRAY:
-		ucv_array_sort(val, array_sort_fn);
+		ucv_array_sort_r(val, array_sort_fn, &ctx);
 		break;
 
 	case UC_OBJECT:
-		ucv_object_sort(val, object_sort_fn);
+		ucv_object_sort_r(val, object_sort_fn, &ctx);
 		break;
 
 	default:
 		return NULL;
 	}
 
-	return sort_ctx.ex ? NULL : ucv_get(val);
+	return ctx.ex ? NULL : ucv_get(val);
 }
 
 /**
