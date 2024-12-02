@@ -185,6 +185,26 @@ uc_vm_signal_handlers_setup(uc_vm_t *vm)
 	tctx->signal_handler_vm = vm;
 }
 
+static void
+uc_vm_signal_handlers_reset(uc_vm_t *vm)
+{
+	uc_thread_context_t *tctx = uc_thread_context_get();
+	struct sigaction sa = { 0 };
+	size_t signo;
+
+	if (vm != tctx->signal_handler_vm)
+		return;
+
+	sa.sa_handler = SIG_DFL;
+	sigemptyset(&sa.sa_mask);
+
+	for (signo = 0; signo < ucv_array_length(vm->signal.handler); signo++)
+		if (ucv_is_callable(ucv_array_get(vm->signal.handler, signo)))
+			sigaction(signo, &sa, NULL);
+
+	tctx->signal_handler_vm = NULL;
+}
+
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 {
 	vm->exception.type = EXCEPTION_NONE;
@@ -216,6 +236,8 @@ void uc_vm_free(uc_vm_t *vm)
 {
 	uc_upvalref_t *ref;
 	size_t i;
+
+	uc_vm_signal_handlers_reset(vm);
 
 	ucv_put(vm->exception.stacktrace);
 	free(vm->exception.message);
