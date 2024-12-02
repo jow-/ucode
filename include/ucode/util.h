@@ -267,4 +267,32 @@ uc_vector_extend_(char **base, size_t itemsize, size_t count, size_t add)
 	     iter != NULL && iter >= (vec)->entries; \
 	     iter--)
 
+#ifdef __APPLE__
+
+# define uc_vector_sort_cb(fn_, optype_, udtype_, ...) \
+	int fn_(void *ud, const void *k1, const void *k2) { \
+		optype_ v1 = *(optype_ *)k1; \
+		optype_ v2 = *(optype_ *)k2; \
+		udtype_ ctx = (udtype_)ud; \
+		__VA_ARGS__ \
+	}
+
+# define uc_vector_sort(v_, cmp_, ud_) \
+	qsort_r((v_)->entries, (v_)->count, sizeof((v_)->entries[0]), ud_, cmp_)
+
+#else
+
+# define uc_vector_sort_cb(fn_, optype_, udtype_, ...) \
+	int fn_(const void *k1, const void *k2, void *ud) { \
+		optype_ v1 = *(optype_ *)k1; \
+		optype_ v2 = *(optype_ *)k2; \
+		udtype_ ctx = (udtype_)ud; \
+		__VA_ARGS__ \
+	}
+
+# define uc_vector_sort(v_, cmp_, ud_) \
+	qsort_r((v_)->entries, (v_)->count, sizeof((v_)->entries[0]), cmp_, ud_)
+
+#endif
+
 #endif /* UCODE_UTIL_H */

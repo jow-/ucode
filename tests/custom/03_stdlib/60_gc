@@ -45,11 +45,11 @@ Returns an object count if the given operation is `count`.
 -- End --
 
 -- Expect stdout --
-Count #1: 6
-Count #2: 7
-Count #3: 6
-Count #4: 7
-Count #5: 6
+Count #1: 5
+Count #2: 6
+Count #3: 5
+Count #4: 6
+Count #5: 5
 -- End --
 
 
@@ -84,24 +84,24 @@ Testing enabling the automatic collector.
 -- End --
 
 -- Expect stdout --
-Count #1: 7
-Count #2: 14
-Count #3: 14
-Count #4: 14
-Count #5: 14
-Count #6: 14
-Count #7: 14
-Count #8: 14
-Count #9: 14
-Count #10: 14
-Count #11: 14
-Count #12: 24
-Count #13: 34
-Count #14: 44
-Count #15: 54
-Count #16: 64
-Count #17: 74
-Count #18: 84
-Count #19: 94
-Count #20: 104
+Count #1: 6
+Count #2: 12
+Count #3: 12
+Count #4: 12
+Count #5: 12
+Count #6: 12
+Count #7: 12
+Count #8: 12
+Count #9: 12
+Count #10: 12
+Count #11: 12
+Count #12: 22
+Count #13: 32
+Count #14: 42
+Count #15: 52
+Count #16: 62
+Count #17: 72
+Count #18: 82
+Count #19: 92
+Count #20: 102
 -- End --

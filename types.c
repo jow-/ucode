@@ -29,11 +29,6 @@
 #include "ucode/vm.h"
 #include "ucode/program.h"
 
-uc_list_t uc_object_iterators = {
-	.prev = &uc_object_iterators,
-	.next = &uc_object_iterators
-};
-
 static char *uc_default_search_path[] = { LIB_SEARCH_PATH };
 
 uc_parse_config_t uc_default_parse_config = {
@@ -785,6 +780,28 @@ ucv_array_unshift(uc_value_t *uv, uc_value_t *item)
 	return item;
 }
 
+typedef struct {
+	int (*cmp)(uc_value_t *, uc_value_t *, void *);
+	void *ud;
+} array_sort_ctx_t;
+
+static uc_vector_sort_cb(ucv_array_sort_r_cb, uc_value_t *, array_sort_ctx_t *, {
+	return ctx->cmp(v1, v2, ctx->ud);
+});
+
+void
+ucv_array_sort_r(uc_value_t *uv,
+                 int (*cmp)(uc_value_t *, uc_value_t *, void *), void *ud)
+{
+	array_sort_ctx_t ctx = { .cmp = cmp, .ud = ud };
+	uc_array_t *array = (uc_array_t *)uv;
+
+	if (ucv_type(uv) != UC_ARRAY || array->count <= 1)
+		return;
+
+	uc_vector_sort(array, ucv_array_sort_r_cb, &ctx);
+}
+
 void
 ucv_array_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
 {
@@ -876,7 +893,7 @@ ucv_array_length(uc_value_t *uv)
 static void
 ucv_free_object_entry(struct lh_entry *entry)
 {
-	uc_list_foreach(item, &uc_object_iterators) {
+	uc_list_foreach(item, &uc_thread_context_get()->object_iterators) {
 		uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 		if (iter->u.pos == entry)
@@ -933,7 +950,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 
 		/* insert will rehash table, backup affected iterator states */
 		if (rehash) {
-			uc_list_foreach(item, &uc_object_iterators) {
+			uc_list_foreach(item, &uc_thread_context_get()->object_iterators) {
 				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 				if (iter->table != object->table)
@@ -957,7 +974,7 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 
 		/* restore affected iterator state pointer after rehash */
 		if (rehash) {
-			uc_list_foreach(item, &uc_object_iterators) {
+			uc_list_foreach(item, &uc_thread_context_get()->object_iterators) {
 				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
 
 				if (iter->table != object->table)
@@ -985,8 +1002,29 @@ ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 	return true;
 }
 
-void
-ucv_object_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
+
+typedef struct {
+	int (*cmp)(const void *, const void *);
+	int (*cmpr)(const char *, uc_value_t *, const char *, uc_value_t *, void *);
+	void *ud;
+} object_sort_ctx_t;
+
+static uc_vector_sort_cb(ucv_object_sort_cb, const void *, object_sort_ctx_t *, {
+	(void)v1;
+	(void)v2;
+
+	return ctx->cmp(k1, k2);
+});
+
+static uc_vector_sort_cb(ucv_object_sort_r_cb, const struct lh_entry *, object_sort_ctx_t *, {
+	return ctx->cmpr(
+		v1 ? lh_entry_k(v1) : NULL, v1 ? lh_entry_v(v1) : NULL,
+		v2 ? lh_entry_k(v2) : NULL, v2 ? lh_entry_v(v2) : NULL,
+		ctx->ud);
+});
+
+static void
+ucv_object_sort_common(uc_value_t *uv, object_sort_ctx_t *ctx)
 {
 	uc_object_t *object = (uc_object_t *)uv;
 	struct lh_table *t;
@@ -1007,7 +1045,8 @@ ucv_object_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
 	if (!keys.entries)
 		return;
 
-	qsort(keys.entries, keys.count, sizeof(keys.entries[0]), cmp);
+	uc_vector_sort(&keys,
+		ctx->cmpr ? ucv_object_sort_r_cb : ucv_object_sort_cb, ctx);
 
 	for (i = 0; i < keys.count; i++) {
 		e = keys.entries[i];
@@ -1025,6 +1064,25 @@ ucv_object_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
 	}
 
 	uc_vector_clear(&keys);
+}
+
+void
+ucv_object_sort_r(uc_value_t *uv,
+                  int (*cmp)(const char *, uc_value_t *,
+                             const char *, uc_value_t *, void *),
+                  void *ud)
+{
+	object_sort_ctx_t ctx = { .cmp = NULL, .cmpr = cmp, .ud = ud };
+
+	ucv_object_sort_common(uv, &ctx);
+}
+
+void
+ucv_object_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
+{
+	object_sort_ctx_t ctx = { .cmp = cmp, .cmpr = NULL, .ud = NULL };
+
+	ucv_object_sort_common(uv, &ctx);
 }
 
 bool
@@ -2417,4 +2475,19 @@ uc_search_path_init(uc_search_path_t *search_path)
 
 	for (i = 0; i < ARRAY_SIZE(uc_default_search_path); i++)
 		uc_vector_push(search_path, xstrdup(uc_default_search_path[i]));
+}
+
+
+static __thread uc_thread_context_t *tls_ctx;
+
+uc_thread_context_t *
+uc_thread_context_get(void)
+{
+	if (tls_ctx == NULL) {
+		tls_ctx = xalloc(sizeof(*tls_ctx));
+		tls_ctx->object_iterators.prev = &tls_ctx->object_iterators;
+		tls_ctx->object_iterators.next = &tls_ctx->object_iterators;
+	}
+
+	return tls_ctx;
 }

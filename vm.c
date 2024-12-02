@@ -145,37 +145,64 @@ uc_vm_alloc_global_scope(uc_vm_t *vm)
 static void
 uc_vm_output_exception(uc_vm_t *vm, uc_exception_t *ex);
 
-static uc_vm_t *signal_handler_vm;
-
 static void
 uc_vm_signal_handler(int sig)
 {
-	assert(signal_handler_vm);
+	uc_vm_t *vm = uc_thread_context_get()->signal_handler_vm;
 
-	uc_vm_signal_raise(signal_handler_vm, sig);
+	assert(vm);
+
+	uc_vm_signal_raise(vm, sig);
 }
 
 static void
 uc_vm_signal_handlers_setup(uc_vm_t *vm)
 {
+	uc_thread_context_t *tctx;
+
 	memset(&vm->signal, 0, sizeof(vm->signal));
 
 	vm->signal.sigpipe[0] = -1;
 	vm->signal.sigpipe[1] = -1;
 
-	if (!vm->config->setup_signal_handlers)
+	if (vm->config->setup_signal_handlers)
+		return;
+
+	tctx = uc_thread_context_get();
+
+	if (tctx->signal_handler_vm)
 		return;
 
 	if (pipe2(vm->signal.sigpipe, O_CLOEXEC | O_NONBLOCK) != 0)
 		return;
-
-	signal_handler_vm = vm;
 
 	vm->signal.handler = ucv_array_new_length(vm, UC_SYSTEM_SIGNAL_COUNT);
 
 	vm->signal.sa.sa_handler = uc_vm_signal_handler;
 	vm->signal.sa.sa_flags = SA_RESTART | SA_ONSTACK;
 	sigemptyset(&vm->signal.sa.sa_mask);
+
+	tctx->signal_handler_vm = vm;
+}
+
+static void
+uc_vm_signal_handlers_reset(uc_vm_t *vm)
+{
+	uc_thread_context_t *tctx = uc_thread_context_get();
+	struct sigaction sa = { 0 };
+	size_t signo;
+
+	if (vm != tctx->signal_handler_vm)
+		return;
+
+	sa.sa_handler = SIG_DFL;
+	sigemptyset(&sa.sa_mask);
+
+	for (signo = 0; signo < ucv_array_length(vm->signal.handler); signo++)
+		if (ucv_is_callable(ucv_array_get(vm->signal.handler, signo)))
+			sigaction(signo, &sa, NULL);
+
+	tctx->signal_handler_vm = NULL;
 }
 
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
@@ -209,6 +236,8 @@ void uc_vm_free(uc_vm_t *vm)
 {
 	uc_upvalref_t *ref;
 	size_t i;
+
+	uc_vm_signal_handlers_reset(vm);
 
 	ucv_put(vm->exception.stacktrace);
 	free(vm->exception.message);
@@ -778,11 +807,10 @@ uc_vm_exception_tostring(uc_vm_t *vm, size_t nargs)
 	return message ? ucv_get(message) : ucv_string_new("Exception");
 }
 
-static uc_value_t *exception_prototype = NULL;
-
 static uc_value_t *
 uc_vm_exception_new(uc_vm_t *vm, uc_exception_type_t type, const char *message, uc_value_t *stacktrace)
 {
+	uc_value_t *exception_prototype = uc_vm_registry_get(vm, "vm.exception.proto");
 	uc_value_t *exo;
 
 	if (exception_prototype == NULL) {
@@ -790,6 +818,8 @@ uc_vm_exception_new(uc_vm_t *vm, uc_exception_type_t type, const char *message, 
 
 		ucv_object_add(exception_prototype, "tostring",
 			ucv_cfunction_new("tostring", uc_vm_exception_tostring));
+
+		uc_vm_registry_set(vm, "vm.exception.proto", exception_prototype);
 	}
 
 	exo = ucv_object_new(vm);
@@ -2222,7 +2252,7 @@ uc_vm_object_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
 		iter->table = obj->table;
 		iter->u.pos = obj->table->head;
 
-		uc_list_insert(&uc_object_iterators, &iter->list);
+		uc_list_insert(&uc_thread_context_get()->object_iterators, &iter->list);
 	}
 	else if (ucv_type(k) == UC_RESOURCE &&
 	         res->type == &uc_vm_object_iterator_type && res->data != NULL) {
