@@ -433,11 +433,11 @@ void *ucv_resource_data(uc_value_t *uv, const char *);
 void **ucv_resource_dataptr(uc_value_t *, const char *);
 
 static inline uc_value_t *
-ucv_resource_create(uc_vm_t *vm, const char *typename, void *value)
+ucv_resource_create(uc_vm_t *vm, const char *type, void *value)
 {
     uc_resource_type_t *t = NULL;
 
-    if (typename && (t = ucv_resource_type_lookup(vm, typename)) == NULL)
+    if (type && (t = ucv_resource_type_lookup(vm, type)) == NULL)
         return NULL;
 
     return ucv_resource_new(t, value);
