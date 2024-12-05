@@ -2024,7 +2024,8 @@ typedef struct {
 	reply_state_t state;
 	uc_vm_t *vm;
 	uc_value_t *res;
-	bool merge;
+	bool merge_phy_info;
+	bool single_phy_info;
 	const uc_nl_nested_spec_t *spec;
 } request_state_t;
 
@@ -2132,14 +2133,23 @@ cb_reply(struct nl_msg *msg, void *arg)
 
 	if (rv) {
 		if (hdr->nlmsg_flags & NLM_F_MULTI) {
-			if (!s->res)
-				s->res = ucv_array_new(s->vm);
-
-			if (s->merge) {
+			if (s->merge_phy_info && s->single_phy_info) {
+				if (!s->res) {
+					s->res = o;
+				}
+				else {
+					deep_merge_object(s->res, o);
+					ucv_put(o);
+				}
+			}
+			else if (s->merge_phy_info) {
 				idx = ucv_object_get(o, "wiphy", NULL);
 				i = idx ? ucv_int64_get(idx) : -1;
 
 				if (i >= 0) {
+					if (!s->res)
+						s->res = ucv_array_new(s->vm);
+
 					idx = ucv_array_get(s->res, i);
 
 					if (idx) {
@@ -2152,6 +2162,9 @@ cb_reply(struct nl_msg *msg, void *arg)
 				}
 			}
 			else {
+				if (!s->res)
+					s->res = ucv_array_new(s->vm);
+
 				ucv_array_push(s->res, o);
 			}
 		}
@@ -2608,9 +2621,19 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 		cid -= HWSIM_CMD_OFFSET;
 		st.spec = &hwsim_msg;
 	}
+	else if (cid == NL80211_CMD_GET_WIPHY) {
+		id = uc_nl_find_family_id("nl80211");
+		st.spec = &nl80211_msg;
+		st.merge_phy_info = true;
+
+		if (ucv_object_get(payload, "wiphy", NULL) != NULL)
+			st.single_phy_info = true;
+
+		if (ucv_is_truish(ucv_object_get(payload, "split_wiphy_dump", NULL)))
+			flagval |= NLM_F_DUMP;
+	}
 	else {
 		id = uc_nl_find_family_id("nl80211");
-		st.merge = (cid == NL80211_CMD_GET_WIPHY);
 		st.spec = &nl80211_msg;
 	}
 
