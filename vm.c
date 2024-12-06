@@ -165,7 +165,7 @@ uc_vm_signal_handlers_setup(uc_vm_t *vm)
 	vm->signal.sigpipe[0] = -1;
 	vm->signal.sigpipe[1] = -1;
 
-	if (vm->config->setup_signal_handlers)
+	if (!vm->config->setup_signal_handlers)
 		return;
 
 	tctx = uc_thread_context_get();
