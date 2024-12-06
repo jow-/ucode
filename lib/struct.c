@@ -371,8 +371,6 @@
 #include "ucode/module.h"
 #include "ucode/vallist.h"
 
-static uc_resource_type_t *struct_type;
-
 typedef struct formatdef {
 	char format;
 	ssize_t size;
@@ -394,6 +392,13 @@ typedef struct {
 	size_t ncodes;
 	formatcode_t codes[];
 } formatstate_t;
+
+typedef struct {
+	uc_resource_t resource;
+	size_t length;
+	size_t capacity;
+	size_t position;
+} formatbuffer_t;
 
 
 /* Define various structs to figure out the alignments of types */
@@ -2474,12 +2479,56 @@ overflow:
 	return NULL;
 }
 
-static uc_value_t *
-uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
+static bool
+grow_buffer(uc_vm_t *vm, void **buf, size_t *bufsz, size_t length)
 {
-	size_t ncode, arg, off;
+	const size_t overhead = sizeof(uc_string_t) + 1;
+
+	if (length > *bufsz) {
+		size_t old_size = *bufsz;
+		size_t new_size = (length + 7u) & ~7u;
+
+		if (*buf != NULL) {
+			new_size = *bufsz;
+
+			while (length > new_size) {
+				if (new_size > SIZE_MAX - (new_size >> 1)) {
+					uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+						"Overflow reallocating buffer from %zu to %zu bytes",
+						*bufsz, length);
+
+					return false;
+				}
+
+				new_size += ((new_size >> 1) + 7u) & ~7u;
+			}
+		}
+
+		char *tmp = realloc(*buf, new_size + overhead);
+
+		if (!tmp) {
+			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+				"Error reallocating buffer to %zu+%zu bytes: %m",
+				new_size, overhead);
+
+			return false;
+		}
+
+		memset(tmp + overhead + old_size - 1, 0, new_size - old_size + 1);
+
+		*buf = tmp;
+		*bufsz = new_size;
+	}
+
+	return true;
+}
+
+static bool
+uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff,
+               void **buf, size_t *pos, size_t *capacity)
+{
+	size_t ncode, arg, off, new_pos;
 	formatcode_t *code;
-	uc_string_t *buf;
 	ssize_t size, n;
 	const void *p;
 
@@ -2504,16 +2553,16 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 		}
 	}
 
-	buf = xalloc(sizeof(*buf) + state->size + off + 1);
-	buf->header.type = UC_STRING;
-	buf->header.refcount = 1;
-	buf->length = state->size + off;
+	new_pos = *pos + state->size + off;
+
+	if (!grow_buffer(vm, buf, capacity, new_pos))
+		return NULL;
 
 	for (ncode = 0, code = &state->codes[0], off = 0;
 	     ncode < state->ncodes;
 	     code = &state->codes[++ncode]) {
 		const formatdef_t *e = code->fmtdef;
-		char *res = buf->str + code->offset + off;
+		char *res = *buf + sizeof(uc_string_t) + *pos + code->offset + off;
 		ssize_t j = code->repeat;
 
 		while (j--) {
@@ -2526,7 +2575,7 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 						"Argument for '*' must be a string");
 
-					goto err;
+					return false;
 				}
 
 				n = ucv_string_length(v);
@@ -2547,7 +2596,7 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 						"Argument for 's' must be a string");
 
-					goto err;
+					return false;
 				}
 
 				n = ucv_string_length(v);
@@ -2564,7 +2613,7 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 						"Argument for 'p' must be a string");
 
-					goto err;
+					return false;
 				}
 
 				n = ucv_string_length(v);
@@ -2583,69 +2632,43 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 			}
 			else {
 				if (!e->pack(vm, res, v, e))
-					goto err;
+					return false;
 			}
 
 			res += size;
 		}
 	}
 
-	return &buf->header;
+	*pos = new_pos;
 
-err:
-	free(buf);
-
-	return NULL;
+	return true;
 }
 
 static uc_value_t *
-uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
+uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state,
+                 const char *buf, long long pos, size_t *rem, bool single)
 {
-	uc_value_t *bufval = uc_fn_arg(argoff);
-	uc_value_t *offset = uc_fn_arg(argoff + 1);
-	const char *startfrom = NULL;
-	ssize_t bufrem, size, n;
 	uc_value_t *result;
 	formatcode_t *code;
 	size_t ncode, off;
+	ssize_t size, n;
 
-	if (ucv_type(bufval) != UC_STRING) {
-		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
-			"Buffer value not a string");
+	if (pos < 0)
+		pos += *rem;
 
+	if (pos < 0 || (size_t)pos >= *rem)
 		return NULL;
-	}
 
-	startfrom = ucv_string_get(bufval);
-	bufrem = ucv_string_length(bufval);
+	buf += pos;
+	*rem -= pos;
 
-	if (offset) {
-		if (ucv_type(offset) != UC_INTEGER) {
-			uc_vm_raise_exception(vm, EXCEPTION_TYPE,
-				"Offset value not an integer");
-
-			return NULL;
-		}
-
-		n = (ssize_t)ucv_int64_get(offset);
-
-		if (n < 0)
-			n += bufrem;
-
-		if (n < 0 || n >= bufrem)
-			return NULL;
-
-		startfrom += n;
-		bufrem -= n;
-	}
-
-	result = ucv_array_new(vm);
+	result = single ? NULL : ucv_array_new(vm);
 
 	for (ncode = 0, code = &state->codes[0], off = 0;
 	     ncode < state->ncodes;
 	     code = &state->codes[++ncode]) {
 		const formatdef_t *e = code->fmtdef;
-		const char *res = startfrom + code->offset + off;
+		const char *res = buf + code->offset + off;
 		ssize_t j = code->repeat;
 
 		while (j--) {
@@ -2654,12 +2677,12 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 			size = code->size;
 
 			if (e->format == '*') {
-				if (size == -1 || size > bufrem)
-					size = bufrem;
+				if (size == -1 || (size_t)size > *rem)
+					size = *rem;
 
 				off += size;
 			}
-			else if (size > bufrem) {
+			else if (size >= 0 && (size_t)size > *rem) {
 				goto fail;
 			}
 
@@ -2681,10 +2704,13 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 			if (v == NULL)
 				goto fail;
 
-			ucv_array_push(result, v);
-
 			res += size;
-			bufrem -= size;
+			*rem -= size;
+
+			if (single)
+				return v;
+
+			ucv_array_push(result, v);
 		}
 	}
 
@@ -2728,7 +2754,8 @@ static uc_value_t *
 uc_pack(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *fmtval = uc_fn_arg(0);
-	uc_value_t *res = NULL;
+	size_t pos = 0, capacity = 0;
+	uc_string_t *us = NULL;
 	formatstate_t *state;
 
 	state = parse_format(vm, fmtval);
@@ -2736,11 +2763,20 @@ uc_pack(uc_vm_t *vm, size_t nargs)
 	if (!state)
 		return NULL;
 
-	res = uc_pack_common(vm, nargs, state, 1);
+	if (!uc_pack_common(vm, nargs, state, 1, (void **)&us, &pos, &capacity)) {
+		free(state);
+		free(us);
+
+		return NULL;
+	}
 
 	free(state);
 
-	return res;
+	us->header.type = UC_STRING;
+	us->header.refcount = 1;
+	us->length = pos;
+
+	return &us->header;
 }
 
 /**
@@ -2780,15 +2816,32 @@ static uc_value_t *
 uc_unpack(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *fmtval = uc_fn_arg(0);
+	uc_value_t *bufval = uc_fn_arg(1);
+	uc_value_t *offset = uc_fn_arg(2);
 	uc_value_t *res = NULL;
 	formatstate_t *state;
+	long long pos = 0;
+	size_t rem;
+	char *buf;
+
+	if (ucv_type(bufval) != UC_STRING) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+			"Buffer value not a string");
+
+		return NULL;
+	}
+
+	if (offset && !ucv_as_longlong(vm, offset, &pos))
+		return NULL;
 
 	state = parse_format(vm, fmtval);
 
 	if (!state)
 		return NULL;
 
-	res = uc_unpack_common(vm, nargs, state, 1);
+	buf = ucv_string_get(bufval);
+	rem = ucv_string_length(bufval);
+	res = uc_unpack_common(vm, nargs, state, buf, pos, &rem, false);
 
 	free(state);
 
@@ -2848,15 +2901,7 @@ uc_struct_new(uc_vm_t *vm, size_t nargs)
 	if (!state)
 		return NULL;
 
-	return uc_resource_new(struct_type, state);
-}
-
-static void
-uc_struct_gc(void *ud)
-{
-	formatstate_t *state = ud;
-
-	free(state);
+	return ucv_resource_create(vm, "struct.format", state);
 }
 
 /**
@@ -2884,12 +2929,24 @@ uc_struct_gc(void *ud)
 static uc_value_t *
 uc_struct_pack(uc_vm_t *vm, size_t nargs)
 {
-	formatstate_t **state = uc_fn_this("struct");
+	formatstate_t **state = uc_fn_this("struct.format");
+	size_t pos = 0, capacity = 0;
+	uc_string_t *us = NULL;
 
 	if (!state || !*state)
 		return NULL;
 
-	return uc_pack_common(vm, nargs, *state, 0);
+	if (!uc_pack_common(vm, nargs, *state, 0, (void **)&us, &pos, &capacity)) {
+		free(us);
+
+		return NULL;
+	}
+
+	us->header.type = UC_STRING;
+	us->header.refcount = 1;
+	us->length = pos;
+
+	return &us->header;
 }
 
 /**
@@ -2923,12 +2980,682 @@ uc_struct_pack(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_struct_unpack(uc_vm_t *vm, size_t nargs)
 {
-	formatstate_t **state = uc_fn_this("struct");
+	formatstate_t **state = uc_fn_this("struct.format");
+	uc_value_t *bufval = uc_fn_arg(0);
+	uc_value_t *offset = uc_fn_arg(1);
+	long long pos = 0;
+	size_t rem;
+	char *buf;
 
 	if (!state || !*state)
 		return NULL;
 
-	return uc_unpack_common(vm, nargs, *state, 0);
+	if (ucv_type(bufval) != UC_STRING) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+			"Buffer value not a string");
+
+		return NULL;
+	}
+
+	if (offset && !ucv_as_longlong(vm, offset, &pos))
+		return NULL;
+
+	buf = ucv_string_get(bufval);
+	rem = ucv_string_length(bufval);
+
+	return uc_unpack_common(vm, nargs, *state, buf, pos, &rem, false);
+}
+
+
+/**
+ * Represents a struct buffer instance created by `buffer()`.
+ *
+ * @class module:struct.buffer
+ * @hideconstructor
+ *
+ * @see {@link module:struct#buffer|buffer()}
+ *
+ * @example
+ *
+ * const buf = struct.buffer();
+ *
+ * buf.put('I', 12345);
+ *
+ * const value = buf.get('I');
+ */
+
+/**
+ * Creates a new struct buffer instance.
+ *
+ * The `buffer()` function creates a new struct buffer object that can be used
+ * for incremental packing and unpacking of binary data. If an initial data
+ * string is provided, the buffer is initialized with this content.
+ *
+ * Note that even when initial data is provided, the buffer position is always
+ * set to zero. This design assumes that the primary intent when initializing
+ * a buffer with data is to read (unpack) from the beginning. If you want to
+ * append data to a pre-initialized buffer, you need to explicitly move the
+ * position to the end, either by calling `end()` or by setting the position
+ * manually with `pos()`.
+ *
+ * Returns a new struct buffer instance.
+ *
+ * @function module:struct#buffer
+ *
+ * @param {string} [initialData]
+ * Optional initial data to populate the buffer with.
+ *
+ * @returns {module:struct.buffer}
+ *
+ * @example
+ * // Create an empty buffer
+ * const emptyBuf = struct.buffer();
+ *
+ * // Create a buffer with initial data
+ * const dataBuf = struct.buffer("\x01\x02\x03\x04");
+ *
+ * // Read from the beginning of the initialized buffer
+ * const value = dataBuf.get('I');
+ *
+ * // Append data to the initialized buffer
+ * dataBuf.end().put('I', 5678);
+ *
+ * // Alternative chained syntax for initializing and appending
+ * const buf = struct.buffer("\x01\x02\x03\x04").end().put('I', 5678);
+ */
+static uc_value_t *
+uc_fmtbuf_new(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = xalloc(sizeof(*buffer));
+	uc_value_t *init_data = uc_fn_arg(0);
+
+	buffer->resource.header.type = UC_RESOURCE;
+	buffer->resource.header.refcount = 1;
+	buffer->resource.type = ucv_resource_type_lookup(vm, "struct.buffer");
+
+	if (ucv_type(init_data) == UC_STRING)  {
+		char *buf = ucv_string_get(init_data);
+		size_t len = ucv_string_length(init_data);
+
+		if (!grow_buffer(vm, &buffer->resource.data, &buffer->capacity, len)) {
+			free(buffer);
+
+			return NULL;
+		}
+
+		buffer->length = len;
+		memcpy((char *)buffer->resource.data + sizeof(uc_string_t), buf, len);
+	}
+
+	return &buffer->resource.header;
+}
+
+static formatbuffer_t *
+formatbuffer_ctx(uc_vm_t *vm)
+{
+	uc_value_t *ctx = vm->callframes.entries[vm->callframes.count - 1].ctx;
+
+	if (ucv_type(ctx) != UC_RESOURCE)
+		return NULL;
+
+	uc_resource_t *res = (uc_resource_t *)ctx;
+
+	if (!res->type || strcmp(res->type->name, "struct.buffer") != 0)
+		return NULL;
+
+	return (formatbuffer_t *)res;
+}
+
+/**
+ * Get or set the current position in the buffer.
+ *
+ * If called without arguments, returns the current position.
+ * If called with a position argument, sets the current position to that value.
+ *
+ * @function module:struct.buffer#pos
+ *
+ * @param {number} [position]
+ * The position to set. If omitted, the current position is returned.
+ *
+ * @returns {number|module:struct.buffer}
+ * If called without arguments, returns the current position.
+ * If called with a position argument, returns the buffer instance for chaining.
+ *
+ * @example
+ * const currentPos = buf.pos();
+ * buf.pos(10);  // Set position to 10
+ */
+static uc_value_t *
+uc_fmtbuf_pos(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *new_pos = uc_fn_arg(0);
+
+	if (!buffer)
+		return NULL;
+
+	if (new_pos) {
+		long long pos;
+
+		if (!ucv_as_longlong(vm, new_pos, &pos))
+			return NULL;
+
+		if (pos < 0) pos += buffer->length;
+		if (pos < 0) pos = 0;
+
+		if (!grow_buffer(vm, &buffer->resource.data, &buffer->capacity, pos))
+			return NULL;
+
+		buffer->position = pos;
+
+		if (buffer->position > buffer->length)
+			buffer->length = buffer->position;
+
+		return ucv_get(&buffer->resource.header);
+	}
+
+	return ucv_uint64_new(buffer->position);
+}
+
+/**
+ * Get or set the current buffer length.
+ *
+ * If called without arguments, returns the current length of the buffer.
+ * If called with a length argument, sets the buffer length to that value,
+ * padding the data with trailing zero bytes or truncating it depending on
+ * whether the updated length is larger or smaller than the current length
+ * respectively.
+ *
+ * In case the updated length is smaller than the current buffer offset, the
+ * position is updated accordingly, so that it points to the new end of the
+ * truncated buffer data.
+ *
+ * @function module:struct.buffer#length
+ *
+ * @param {number} [length]
+ * The length to set. If omitted, the current length is returned.
+ *
+ * @returns {number|module:struct.buffer}
+ * If called without arguments, returns the current length.
+ * If called with a length argument, returns the buffer instance for chaining.
+ *
+ * @example
+ * const buf = struct.buffer("abc"); // Initialize buffer with three bytes
+ * const currentLen = buf.length();  // Returns 3
+ *
+ * buf.length(6);                    // Extend to 6 bytes
+ * buf.slice();                      // Trailing null bytes: "abc\x00\x00\x00"
+ *
+ * buf.length(2);                    // Truncate to 2 bytes
+ * buf.slice();                      // Truncated data: "ab"
+ */
+static uc_value_t *
+uc_fmtbuf_length(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *new_len = uc_fn_arg(0);
+
+	if (!buffer)
+		return NULL;
+
+	if (new_len) {
+		size_t len;
+
+		if (!ucv_as_size_t(vm, new_len, &len))
+			return NULL;
+
+		if (len > buffer->length) {
+			if (!grow_buffer(vm, &buffer->resource.data, &buffer->capacity, len))
+				return NULL;
+
+			buffer->length = len;
+		}
+		else if (len < buffer->length) {
+			memset((char *)buffer->resource.data + sizeof(uc_string_t) + len,
+				0, buffer->length - len);
+
+			buffer->length = len;
+
+			if (len < buffer->position)
+				buffer->position = len;
+		}
+
+		return ucv_get(&buffer->resource.header);
+	}
+
+	return ucv_uint64_new(buffer->length);
+}
+
+/**
+ * Set the buffer position to the start (0).
+ *
+ * @function module:struct.buffer#start
+ *
+ * @returns {module:struct.buffer}
+ * The buffer instance.
+ *
+ * @example
+ * buf.start();
+ */
+static uc_value_t *
+uc_fmtbuf_start(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+
+	if (!buffer)
+		return NULL;
+
+	buffer->position = 0;
+
+	return ucv_get(&buffer->resource.header);
+}
+
+/**
+ * Set the buffer position to the end.
+ *
+ * @function module:struct.buffer#end
+ *
+ * @returns {module:struct.buffer}
+ * The buffer instance.
+ *
+ * @example
+ * buf.end();
+ */
+static uc_value_t *
+uc_fmtbuf_end(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+
+	if (!buffer)
+		return NULL;
+
+	buffer->position = buffer->length;
+
+	return ucv_get(&buffer->resource.header);
+}
+
+/**
+ * Pack data into the buffer at the current position.
+ *
+ * The `put()` function packs the given values into the buffer according to
+ * the specified format string, starting at the current buffer position.
+ * The format string follows the same syntax as used in `struct.pack()`.
+ *
+ * For a detailed explanation of the format string syntax, refer to the
+ * ["Format Strings" section]{@link module:struct} in the module
+ * documentation.
+ *
+ * @function module:struct.buffer#put
+ *
+ * @param {string} format
+ * The format string specifying how to pack the data.
+ *
+ * @param {...*} values
+ * The values to pack into the buffer.
+ *
+ * @returns {module:struct.buffer}
+ * The buffer instance.
+ *
+ * @see {@link module:struct#pack|struct.pack()}
+ *
+ * @example
+ * buf.put('II', 1234, 5678);
+ */
+static uc_value_t *
+uc_fmtbuf_put(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *fmt = uc_fn_arg(0);
+	formatstate_t *state;
+	bool res;
+
+	if (!buffer)
+		return NULL;
+
+	state = parse_format(vm, fmt);
+
+	if (!state)
+		return NULL;
+
+	res = uc_pack_common(vm, nargs, state, 1,
+		&buffer->resource.data, &buffer->position, &buffer->capacity);
+
+	free(state);
+
+	if (!res)
+		return NULL;
+
+	if (buffer->position > buffer->length)
+		buffer->length = buffer->position;
+
+	return ucv_get(&buffer->resource.header);
+}
+
+static uc_value_t *
+fmtbuf_get_common(uc_vm_t *vm, size_t nargs, bool single)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *fmt = uc_fn_arg(0);
+	formatstate_t *state;
+	uc_value_t *result;
+	size_t rem;
+	char *buf;
+
+	if (!buffer)
+		return NULL;
+
+	if (single && ucv_type(fmt) == UC_INTEGER) {
+		int64_t len = ucv_int64_get(fmt);
+
+		if (errno != 0)
+			goto ebounds;
+
+		size_t spos, epos;
+
+		if (len < 0) {
+			if (len == INT64_MIN)
+				goto ebounds;
+
+			if ((uint64_t)-len > buffer->position)
+				return NULL;
+
+			spos = buffer->position + len;
+			epos = buffer->position;
+		}
+		else {
+			if ((uint64_t)len > (SIZE_MAX - buffer->position))
+				goto ebounds;
+
+			if (buffer->position + len > buffer->length)
+				return NULL;
+
+			spos = buffer->position;
+			epos = buffer->position + len;
+
+			buffer->position = epos;
+		}
+
+		return ucv_string_new_length(
+			(char *)buffer->resource.data + sizeof(uc_string_t) + spos,
+			epos - spos);
+
+ebounds:
+		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+			"Length value out of bounds");
+
+		return NULL;
+	}
+
+	state = parse_format(vm, fmt);
+
+	if (!state)
+		return NULL;
+
+	if (single && (state->ncodes != 1 || state->codes[0].repeat != 1)) {
+		free(state);
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+			"get() expects a format string for a single value. "
+			"Use read() for multiple values.");
+
+		return NULL;
+	}
+
+	rem = buffer->length;
+	buf = (char *)buffer->resource.data + sizeof(uc_string_t);
+
+	result = uc_unpack_common(vm, nargs, state,
+		buf, buffer->position, &rem, single);
+
+	if (result)
+		buffer->position = buffer->length - rem;
+
+	free(state);
+
+	return result;
+}
+
+/**
+ * Unpack a single value from the buffer at the current position.
+ *
+ * The `get()` function unpacks a single value from the buffer according to the
+ * specified format string, starting at the current buffer position.
+ * The format string follows the same syntax as used in `struct.unpack()`.
+ *
+ * For a detailed explanation of the format string syntax, refer to the
+ * ["Format Strings" section]{@link module:struct} in the module documentation.
+ *
+ * Alternatively, `get()` accepts a postive or negative integer as format, which
+ * specifies the length of a string to unpack before or after the current
+ * position. Negative values extract that many bytes before the current offset
+ * while postive ones extracts that many bytes after.
+ *
+ * @function module:struct.buffer#get
+ *
+ * @param {string|number} format
+ * The format string specifying how to unpack the data.
+ *
+ * @returns {*}
+ * The unpacked value.
+ *
+ * @see {@link module:struct#unpack|struct.unpack()}
+ *
+ * @example
+ * const val = buf.get('I');
+ * const str = buf.get(5);    // equivalent to buf.get('5s')
+ * const str = buf.get(-3);   // equivalent to buf.pos(buf.pos() - 3).get('3s')
+ */
+static uc_value_t *
+uc_fmtbuf_get(uc_vm_t *vm, size_t nargs)
+{
+	return fmtbuf_get_common(vm, nargs, true);
+}
+
+/**
+ * Unpack multiple values from the buffer at the current position.
+ *
+ * The `read()` function unpacks multiple values from the buffer according to
+ * the specified format string, starting at the current buffer position.
+ * The format string follows the same syntax as used in `struct.unpack()`.
+ *
+ * For a detailed explanation of the format string syntax, refer to the
+ * ["Format Strings" section]{@link module:struct} in the module documentation.
+ *
+ * @function module:struct.buffer#get
+ *
+ * @param {string} format
+ * The format string specifying how to unpack the data.
+ *
+ * @returns {array}
+ * An array containing the unpacked values.
+ *
+ * @see {@link module:struct#unpack|struct.unpack()}
+ *
+ * @example
+ * const values = buf.get('II');
+ */
+static uc_value_t *
+uc_fmtbuf_read(uc_vm_t *vm, size_t nargs)
+{
+	return fmtbuf_get_common(vm, nargs, false);
+}
+
+/**
+ * Extract a slice of the buffer content.
+ *
+ * The `slice()` function returns a substring of the buffer content
+ * between the specified start and end positions.
+ *
+ * Both the start and end position values may be negative, in which case they're
+ * relative to the end of the buffer, e.g. `slice(-3)` will extract the last
+ * three bytes of data.
+ *
+ * @function module:struct.buffer#slice
+ *
+ * @param {number} [start=0]
+ * The starting position of the slice.
+ *
+ * @param {number} [end=buffer.length()]
+ * The ending position of the slice (exclusive).
+ *
+ * @returns {string}
+ * A string containing the specified slice of the buffer content.
+ *
+ * @example
+ * const slice = buf.slice(4, 8);
+ */
+static uc_value_t *
+uc_fmtbuf_slice(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *from = uc_fn_arg(0);
+	uc_value_t *to = uc_fn_arg(1);
+	long long spos, epos;
+	char *buf;
+
+	if (!buffer)
+		return NULL;
+
+	spos = 0;
+	epos = buffer->length;
+
+	if (from && !ucv_as_longlong(vm, from, &spos))
+		return NULL;
+
+	if (to && !ucv_as_longlong(vm, to, &epos))
+		return NULL;
+
+	if (spos < 0) spos += buffer->length;
+	if (spos < 0) spos = 0;
+	if ((unsigned long long)spos > buffer->length) spos = buffer->length;
+
+	if (epos < 0) epos += buffer->length;
+	if (epos < spos) epos = spos;
+	if ((unsigned long long)epos > buffer->length) epos = buffer->length;
+
+	buf = (char *)buffer->resource.data + sizeof(uc_string_t) + spos;
+
+	return ucv_string_new_length(buf, epos - spos);
+}
+
+/**
+ * Set a slice of the buffer content to given byte value.
+ *
+ * The `set()` function overwrites a substring of the buffer content with the
+ * given byte value, similar to the C `memset()` function, between the specified
+ * start and end positions.
+ *
+ * Both the start and end position values may be negative, in which case they're
+ * relative to the end of the buffer, e.g. `set(0, -2)` will overwrite the last
+ * two bytes of data with `\x00`.
+ *
+ * When the start or end positions are beyond the current buffer length, the
+ * buffer is grown accordingly.
+ *
+ * @function module:struct.buffer#set
+ *
+ * @param {number|string} [value=0]
+ * The byte value to use when overwriting buffer contents. When a string is
+ * given, the first character is used as value.
+ *
+ * @param {number} [start=0]
+ * The position to start overwriting from.
+ *
+ * @param {number} [end=buffer.length()]
+ * The position to end overwriting (exclusive).
+ *
+ * @returns {module:struct.buffer}
+ * The buffer instance.
+ *
+ * @example
+ * const buf = struct.buffer("abcde");
+ * buf.set("X", 2, 4).slice();  // Buffer content is now "abXXe"
+ * buf.set().slice();           // Buffer content is now "\x00\x00\x00\x00\x00"
+ */
+static uc_value_t *
+uc_fmtbuf_set(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *byte = uc_fn_arg(0);
+	uc_value_t *from = uc_fn_arg(1);
+	uc_value_t *to = uc_fn_arg(2);
+	long long spos, epos;
+	long bval;
+
+	if (!buffer)
+		return NULL;
+
+	bval = 0;
+	spos = 0;
+	epos = buffer->length;
+
+	if (ucv_type(byte) == UC_STRING)
+		bval = *ucv_string_get(byte);
+	else if (byte && !ucv_as_long(vm, byte, &bval))
+		return NULL;
+
+	if (from && !ucv_as_longlong(vm, from, &spos))
+		return NULL;
+
+	if (to && !ucv_as_longlong(vm, to, &epos))
+		return NULL;
+
+	if (spos < 0) spos += buffer->length;
+	if (spos < 0) spos = 0;
+
+	if (epos < 0) epos += buffer->length;
+
+	if (epos > spos) {
+		if ((unsigned long long)epos > buffer->length) {
+			if (!grow_buffer(vm, &buffer->resource.data, &buffer->capacity, epos))
+				return NULL;
+
+			buffer->length = epos;
+		}
+
+		memset((char *)buffer->resource.data + sizeof(uc_string_t) + spos,
+			bval, epos - spos);
+	}
+
+	return ucv_get(&buffer->resource.header);
+}
+
+/**
+ * Extract and remove all content from the buffer.
+ *
+ * The `pull()` function returns all content of the buffer as a string
+ * and resets the buffer to an empty state.
+ *
+ * @function module:struct.buffer#pull
+ *
+ * @returns {string}
+ * A string containing all the buffer content.
+ *
+ * @example
+ * const allData = buf.pull();
+ */
+static uc_value_t *
+uc_fmtbuf_pull(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_string_t *us;
+
+	if (!buffer)
+		return NULL;
+
+	if (!buffer->resource.data)
+		return ucv_string_new_length("", 0);
+
+	us = buffer->resource.data;
+	us->header.type = UC_STRING;
+	us->header.refcount = 1;
+	us->length = buffer->length;
+
+	buffer->resource.data = NULL;
+	buffer->capacity = 0;
+	buffer->position = 0;
+	buffer->length = 0;
+
+	return ucv_get(&us->header);
 }
 
 
@@ -2937,10 +3664,24 @@ static const uc_function_list_t struct_inst_fns[] = {
 	{ "unpack",	uc_struct_unpack }
 };
 
+static const uc_function_list_t buffer_inst_fns[] = {
+	{ "pos",	uc_fmtbuf_pos },
+	{ "length", uc_fmtbuf_length },
+	{ "start",	uc_fmtbuf_start },
+	{ "end",	uc_fmtbuf_end },
+	{ "set",	uc_fmtbuf_set },
+	{ "put",	uc_fmtbuf_put },
+	{ "get",	uc_fmtbuf_get },
+	{ "read",	uc_fmtbuf_read },
+	{ "slice",	uc_fmtbuf_slice },
+	{ "pull",	uc_fmtbuf_pull },
+};
+
 static const uc_function_list_t struct_fns[] = {
 	{ "pack",	uc_pack },
 	{ "unpack",	uc_unpack },
-	{ "new",	uc_struct_new }
+	{ "new",	uc_struct_new },
+	{ "buffer",	uc_fmtbuf_new }
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
@@ -2949,5 +3690,6 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 
 	uc_function_list_register(scope, struct_fns);
 
-	struct_type = uc_type_declare(vm, "struct", struct_inst_fns, uc_struct_gc);
+	uc_type_declare(vm, "struct.format", struct_inst_fns, free);
+	uc_type_declare(vm, "struct.buffer", buffer_inst_fns, free);
 }
