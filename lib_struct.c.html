@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en" style="font-size:16px"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link type="text/css" rel="stylesheet" href="ucode.css"><title>Source: lib/struct.c</title><!--[if lt IE 9]>
       <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
-    <![endif]--><script src="scripts/third-party/hljs.js" defer="defer"></script><script src="scripts/third-party/hljs-line-num.js" defer="defer"></script><script src="scripts/third-party/popper.js" defer="defer"></script><script src="scripts/third-party/tippy.js" defer="defer"></script><script src="scripts/third-party/tocbot.min.js"></script><script>var baseURL="/",locationPathname="";baseURL=(locationPathname=document.location.pathname).substr(0,locationPathname.lastIndexOf("/")+1)</script><link rel="stylesheet" href="styles/clean-jsdoc-theme.min.css"><svg aria-hidden="true" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:none"><defs><symbol id="copy-icon" viewbox="0 0 488.3 488.3"><g><path d="M314.25,85.4h-227c-21.3,0-38.6,17.3-38.6,38.6v325.7c0,21.3,17.3,38.6,38.6,38.6h227c21.3,0,38.6-17.3,38.6-38.6V124    C352.75,102.7,335.45,85.4,314.25,85.4z M325.75,449.6c0,6.4-5.2,11.6-11.6,11.6h-227c-6.4,0-11.6-5.2-11.6-11.6V124    c0-6.4,5.2-11.6,11.6-11.6h227c6.4,0,11.6,5.2,11.6,11.6V449.6z"/><path d="M401.05,0h-227c-21.3,0-38.6,17.3-38.6,38.6c0,7.5,6,13.5,13.5,13.5s13.5-6,13.5-13.5c0-6.4,5.2-11.6,11.6-11.6h227    c6.4,0,11.6,5.2,11.6,11.6v325.7c0,6.4-5.2,11.6-11.6,11.6c-7.5,0-13.5,6-13.5,13.5s6,13.5,13.5,13.5c21.3,0,38.6-17.3,38.6-38.6    V38.6C439.65,17.3,422.35,0,401.05,0z"/></g></symbol><symbol id="search-icon" viewBox="0 0 512 512"><g><g><path d="M225.474,0C101.151,0,0,101.151,0,225.474c0,124.33,101.151,225.474,225.474,225.474    c124.33,0,225.474-101.144,225.474-225.474C450.948,101.151,349.804,0,225.474,0z M225.474,409.323    c-101.373,0-183.848-82.475-183.848-183.848S124.101,41.626,225.474,41.626s183.848,82.475,183.848,183.848    S326.847,409.323,225.474,409.323z"/></g></g><g><g><path d="M505.902,476.472L386.574,357.144c-8.131-8.131-21.299-8.131-29.43,0c-8.131,8.124-8.131,21.306,0,29.43l119.328,119.328    c4.065,4.065,9.387,6.098,14.715,6.098c5.321,0,10.649-2.033,14.715-6.098C514.033,497.778,514.033,484.596,505.902,476.472z"/></g></g></symbol><symbol id="font-size-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11.246 15H4.754l-2 5H.6L7 4h2l6.4 16h-2.154l-2-5zm-.8-2L8 6.885 5.554 13h4.892zM21 12.535V12h2v8h-2v-.535a4 4 0 1 1 0-6.93zM19 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></symbol><symbol id="add-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></symbol><symbol id="minus-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M5 11h14v2H5z"/></symbol><symbol id="dark-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol><symbol id="light-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol><symbol id="reset-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M18.537 19.567A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10c0 2.136-.67 4.116-1.81 5.74L17 12h3a8 8 0 1 0-2.46 5.772l.997 1.795z"/></symbol><symbol id="down-icon" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7803 6.21967C13.0732 6.51256 13.0732 6.98744 12.7803 7.28033L8.53033 11.5303C8.23744 11.8232 7.76256 11.8232 7.46967 11.5303L3.21967 7.28033C2.92678 6.98744 2.92678 6.51256 3.21967 6.21967C3.51256 5.92678 3.98744 5.92678 4.28033 6.21967L8 9.93934L11.7197 6.21967C12.0126 5.92678 12.4874 5.92678 12.7803 6.21967Z"></path></symbol><symbol id="codepen-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M16.5 13.202L13 15.535v3.596L19.197 15 16.5 13.202zM14.697 12L12 10.202 9.303 12 12 13.798 14.697 12zM20 10.869L18.303 12 20 13.131V10.87zM19.197 9L13 4.869v3.596l3.5 2.333L19.197 9zM7.5 10.798L11 8.465V4.869L4.803 9 7.5 10.798zM4.803 15L11 19.131v-3.596l-3.5-2.333L4.803 15zM4 13.131L5.697 12 4 10.869v2.262zM2 9a1 1 0 0 1 .445-.832l9-6a1 1 0 0 1 1.11 0l9 6A1 1 0 0 1 22 9v6a1 1 0 0 1-.445.832l-9 6a1 1 0 0 1-1.11 0l-9-6A1 1 0 0 1 2 15V9z"/></symbol><symbol id="close-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></symbol><symbol id="menu-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/></symbol><symbol id="toc-icon" viewBox="0 0 460 460"><path d="M40 70a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 190a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 310a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM430 80H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 200H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 320H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60z"/></symbol></defs></svg></head><body data-theme="light"><div class="sidebar-container"><div class="sidebar" id="sidebar"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="sidebar-items-container"><div class="sidebar-section-title with-arrow" data-isopen="false" id="ejmbeef7TuJHxDCzIGB4D"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="eLeHQsHpnGCylMwK2Pwkf"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div></div></div><div class="navbar-container" id="VuAckcnZhf"><nav class="navbar"><div class="navbar-left-items"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="navbar-right-items"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div><nav></nav></nav></div><div class="body-wrapper"><div class="main-content"><div class="main-wrapper"><section id="source-page" class="source-page"><header><h1 id="title" class="has-anchor">lib_struct.c</h1></header><article><pre class="prettyprint source lang-js"><code>/*
+    <![endif]--><script src="scripts/third-party/hljs.js" defer="defer"></script><script src="scripts/third-party/hljs-line-num.js" defer="defer"></script><script src="scripts/third-party/popper.js" defer="defer"></script><script src="scripts/third-party/tippy.js" defer="defer"></script><script src="scripts/third-party/tocbot.min.js"></script><script>var baseURL="/",locationPathname="";baseURL=(locationPathname=document.location.pathname).substr(0,locationPathname.lastIndexOf("/")+1)</script><link rel="stylesheet" href="styles/clean-jsdoc-theme.min.css"><svg aria-hidden="true" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:none"><defs><symbol id="copy-icon" viewbox="0 0 488.3 488.3"><g><path d="M314.25,85.4h-227c-21.3,0-38.6,17.3-38.6,38.6v325.7c0,21.3,17.3,38.6,38.6,38.6h227c21.3,0,38.6-17.3,38.6-38.6V124    C352.75,102.7,335.45,85.4,314.25,85.4z M325.75,449.6c0,6.4-5.2,11.6-11.6,11.6h-227c-6.4,0-11.6-5.2-11.6-11.6V124    c0-6.4,5.2-11.6,11.6-11.6h227c6.4,0,11.6,5.2,11.6,11.6V449.6z"/><path d="M401.05,0h-227c-21.3,0-38.6,17.3-38.6,38.6c0,7.5,6,13.5,13.5,13.5s13.5-6,13.5-13.5c0-6.4,5.2-11.6,11.6-11.6h227    c6.4,0,11.6,5.2,11.6,11.6v325.7c0,6.4-5.2,11.6-11.6,11.6c-7.5,0-13.5,6-13.5,13.5s6,13.5,13.5,13.5c21.3,0,38.6-17.3,38.6-38.6    V38.6C439.65,17.3,422.35,0,401.05,0z"/></g></symbol><symbol id="search-icon" viewBox="0 0 512 512"><g><g><path d="M225.474,0C101.151,0,0,101.151,0,225.474c0,124.33,101.151,225.474,225.474,225.474    c124.33,0,225.474-101.144,225.474-225.474C450.948,101.151,349.804,0,225.474,0z M225.474,409.323    c-101.373,0-183.848-82.475-183.848-183.848S124.101,41.626,225.474,41.626s183.848,82.475,183.848,183.848    S326.847,409.323,225.474,409.323z"/></g></g><g><g><path d="M505.902,476.472L386.574,357.144c-8.131-8.131-21.299-8.131-29.43,0c-8.131,8.124-8.131,21.306,0,29.43l119.328,119.328    c4.065,4.065,9.387,6.098,14.715,6.098c5.321,0,10.649-2.033,14.715-6.098C514.033,497.778,514.033,484.596,505.902,476.472z"/></g></g></symbol><symbol id="font-size-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11.246 15H4.754l-2 5H.6L7 4h2l6.4 16h-2.154l-2-5zm-.8-2L8 6.885 5.554 13h4.892zM21 12.535V12h2v8h-2v-.535a4 4 0 1 1 0-6.93zM19 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></symbol><symbol id="add-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></symbol><symbol id="minus-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M5 11h14v2H5z"/></symbol><symbol id="dark-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol><symbol id="light-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol><symbol id="reset-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M18.537 19.567A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10c0 2.136-.67 4.116-1.81 5.74L17 12h3a8 8 0 1 0-2.46 5.772l.997 1.795z"/></symbol><symbol id="down-icon" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7803 6.21967C13.0732 6.51256 13.0732 6.98744 12.7803 7.28033L8.53033 11.5303C8.23744 11.8232 7.76256 11.8232 7.46967 11.5303L3.21967 7.28033C2.92678 6.98744 2.92678 6.51256 3.21967 6.21967C3.51256 5.92678 3.98744 5.92678 4.28033 6.21967L8 9.93934L11.7197 6.21967C12.0126 5.92678 12.4874 5.92678 12.7803 6.21967Z"></path></symbol><symbol id="codepen-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M16.5 13.202L13 15.535v3.596L19.197 15 16.5 13.202zM14.697 12L12 10.202 9.303 12 12 13.798 14.697 12zM20 10.869L18.303 12 20 13.131V10.87zM19.197 9L13 4.869v3.596l3.5 2.333L19.197 9zM7.5 10.798L11 8.465V4.869L4.803 9 7.5 10.798zM4.803 15L11 19.131v-3.596l-3.5-2.333L4.803 15zM4 13.131L5.697 12 4 10.869v2.262zM2 9a1 1 0 0 1 .445-.832l9-6a1 1 0 0 1 1.11 0l9 6A1 1 0 0 1 22 9v6a1 1 0 0 1-.445.832l-9 6a1 1 0 0 1-1.11 0l-9-6A1 1 0 0 1 2 15V9z"/></symbol><symbol id="close-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></symbol><symbol id="menu-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/></symbol><symbol id="toc-icon" viewBox="0 0 460 460"><path d="M40 70a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 190a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 310a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM430 80H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 200H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 320H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60z"/></symbol></defs></svg></head><body data-theme="light"><div class="sidebar-container"><div class="sidebar" id="sidebar"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="sidebar-items-container"><div class="sidebar-section-title with-arrow" data-isopen="false" id="OxBQmoTqCfDoJBsa8F86y"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="F5Y8_JAftDv61cP9CP2qw"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div></div></div><div class="navbar-container" id="VuAckcnZhf"><nav class="navbar"><div class="navbar-left-items"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="navbar-right-items"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div><nav></nav></nav></div><div class="body-wrapper"><div class="main-content"><div class="main-wrapper"><section id="source-page" class="source-page"><header><h1 id="title" class="has-anchor">lib_struct.c</h1></header><article><pre class="prettyprint source lang-js"><code>/*
  * Binary data packing/unpacking module for ucode.
  * Copyright (C) 2021 Jo-Philipp Wich &lt;jo@mein.io>
  *
@@ -373,8 +373,6 @@
 #include "ucode/module.h"
 #include "ucode/vallist.h"
 
-static uc_resource_type_t *struct_type;
-
 typedef struct formatdef {
 	char format;
 	ssize_t size;
@@ -396,6 +394,13 @@ typedef struct {
 	size_t ncodes;
 	formatcode_t codes[];
 } formatstate_t;
+
+typedef struct {
+	uc_resource_t resource;
+	size_t length;
+	size_t capacity;
+	size_t position;
+} formatbuffer_t;
 
 
 /* Define various structs to figure out the alignments of types */
@@ -2476,12 +2481,56 @@ overflow:
 	return NULL;
 }
 
-static uc_value_t *
-uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
+static bool
+grow_buffer(uc_vm_t *vm, void **buf, size_t *bufsz, size_t length)
 {
-	size_t ncode, arg, off;
+	const size_t overhead = sizeof(uc_string_t) + 1;
+
+	if (length > *bufsz) {
+		size_t old_size = *bufsz;
+		size_t new_size = (length + 7u) &amp; ~7u;
+
+		if (*buf != NULL) {
+			new_size = *bufsz;
+
+			while (length > new_size) {
+				if (new_size > SIZE_MAX - (new_size >> 1)) {
+					uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+						"Overflow reallocating buffer from %zu to %zu bytes",
+						*bufsz, length);
+
+					return false;
+				}
+
+				new_size += ((new_size >> 1) + 7u) &amp; ~7u;
+			}
+		}
+
+		char *tmp = realloc(*buf, new_size + overhead);
+
+		if (!tmp) {
+			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+				"Error reallocating buffer to %zu+%zu bytes: %m",
+				new_size, overhead);
+
+			return false;
+		}
+
+		memset(tmp + overhead + old_size - 1, 0, new_size - old_size + 1);
+
+		*buf = tmp;
+		*bufsz = new_size;
+	}
+
+	return true;
+}
+
+static bool
+uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff,
+               void **buf, size_t *pos, size_t *capacity)
+{
+	size_t ncode, arg, off, new_pos;
 	formatcode_t *code;
-	uc_string_t *buf;
 	ssize_t size, n;
 	const void *p;
 
@@ -2506,16 +2555,16 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 		}
 	}
 
-	buf = xalloc(sizeof(*buf) + state->size + off + 1);
-	buf->header.type = UC_STRING;
-	buf->header.refcount = 1;
-	buf->length = state->size + off;
+	new_pos = *pos + state->size + off;
+
+	if (!grow_buffer(vm, buf, capacity, new_pos))
+		return NULL;
 
 	for (ncode = 0, code = &amp;state->codes[0], off = 0;
 	     ncode &lt; state->ncodes;
 	     code = &amp;state->codes[++ncode]) {
 		const formatdef_t *e = code->fmtdef;
-		char *res = buf->str + code->offset + off;
+		char *res = *buf + sizeof(uc_string_t) + *pos + code->offset + off;
 		ssize_t j = code->repeat;
 
 		while (j--) {
@@ -2528,7 +2577,7 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 						"Argument for '*' must be a string");
 
-					goto err;
+					return false;
 				}
 
 				n = ucv_string_length(v);
@@ -2549,7 +2598,7 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 						"Argument for 's' must be a string");
 
-					goto err;
+					return false;
 				}
 
 				n = ucv_string_length(v);
@@ -2566,7 +2615,7 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 						"Argument for 'p' must be a string");
 
-					goto err;
+					return false;
 				}
 
 				n = ucv_string_length(v);
@@ -2585,69 +2634,43 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 			}
 			else {
 				if (!e->pack(vm, res, v, e))
-					goto err;
+					return false;
 			}
 
 			res += size;
 		}
 	}
 
-	return &amp;buf->header;
+	*pos = new_pos;
 
-err:
-	free(buf);
-
-	return NULL;
+	return true;
 }
 
 static uc_value_t *
-uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
+uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state,
+                 const char *buf, long long pos, size_t *rem, bool single)
 {
-	uc_value_t *bufval = uc_fn_arg(argoff);
-	uc_value_t *offset = uc_fn_arg(argoff + 1);
-	const char *startfrom = NULL;
-	ssize_t bufrem, size, n;
 	uc_value_t *result;
 	formatcode_t *code;
 	size_t ncode, off;
+	ssize_t size, n;
 
-	if (ucv_type(bufval) != UC_STRING) {
-		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
-			"Buffer value not a string");
+	if (pos &lt; 0)
+		pos += *rem;
 
+	if (pos &lt; 0 || (size_t)pos >= *rem)
 		return NULL;
-	}
 
-	startfrom = ucv_string_get(bufval);
-	bufrem = ucv_string_length(bufval);
+	buf += pos;
+	*rem -= pos;
 
-	if (offset) {
-		if (ucv_type(offset) != UC_INTEGER) {
-			uc_vm_raise_exception(vm, EXCEPTION_TYPE,
-				"Offset value not an integer");
-
-			return NULL;
-		}
-
-		n = (ssize_t)ucv_int64_get(offset);
-
-		if (n &lt; 0)
-			n += bufrem;
-
-		if (n &lt; 0 || n >= bufrem)
-			return NULL;
-
-		startfrom += n;
-		bufrem -= n;
-	}
-
-	result = ucv_array_new(vm);
+	result = single ? NULL : ucv_array_new(vm);
 
 	for (ncode = 0, code = &amp;state->codes[0], off = 0;
 	     ncode &lt; state->ncodes;
 	     code = &amp;state->codes[++ncode]) {
 		const formatdef_t *e = code->fmtdef;
-		const char *res = startfrom + code->offset + off;
+		const char *res = buf + code->offset + off;
 		ssize_t j = code->repeat;
 
 		while (j--) {
@@ -2656,12 +2679,12 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 			size = code->size;
 
 			if (e->format == '*') {
-				if (size == -1 || size > bufrem)
-					size = bufrem;
+				if (size == -1 || (size_t)size > *rem)
+					size = *rem;
 
 				off += size;
 			}
-			else if (size > bufrem) {
+			else if (size >= 0 &amp;&amp; (size_t)size > *rem) {
 				goto fail;
 			}
 
@@ -2683,10 +2706,13 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff)
 			if (v == NULL)
 				goto fail;
 
-			ucv_array_push(result, v);
-
 			res += size;
-			bufrem -= size;
+			*rem -= size;
+
+			if (single)
+				return v;
+
+			ucv_array_push(result, v);
 		}
 	}
 
@@ -2730,7 +2756,8 @@ static uc_value_t *
 uc_pack(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *fmtval = uc_fn_arg(0);
-	uc_value_t *res = NULL;
+	size_t pos = 0, capacity = 0;
+	uc_string_t *us = NULL;
 	formatstate_t *state;
 
 	state = parse_format(vm, fmtval);
@@ -2738,11 +2765,20 @@ uc_pack(uc_vm_t *vm, size_t nargs)
 	if (!state)
 		return NULL;
 
-	res = uc_pack_common(vm, nargs, state, 1);
+	if (!uc_pack_common(vm, nargs, state, 1, (void **)&amp;us, &amp;pos, &amp;capacity)) {
+		free(state);
+		free(us);
+
+		return NULL;
+	}
 
 	free(state);
 
-	return res;
+	us->header.type = UC_STRING;
+	us->header.refcount = 1;
+	us->length = pos;
+
+	return &amp;us->header;
 }
 
 /**
@@ -2782,15 +2818,32 @@ static uc_value_t *
 uc_unpack(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *fmtval = uc_fn_arg(0);
+	uc_value_t *bufval = uc_fn_arg(1);
+	uc_value_t *offset = uc_fn_arg(2);
 	uc_value_t *res = NULL;
 	formatstate_t *state;
+	long long pos = 0;
+	size_t rem;
+	char *buf;
+
+	if (ucv_type(bufval) != UC_STRING) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+			"Buffer value not a string");
+
+		return NULL;
+	}
+
+	if (offset &amp;&amp; !ucv_as_longlong(vm, offset, &amp;pos))
+		return NULL;
 
 	state = parse_format(vm, fmtval);
 
 	if (!state)
 		return NULL;
 
-	res = uc_unpack_common(vm, nargs, state, 1);
+	buf = ucv_string_get(bufval);
+	rem = ucv_string_length(bufval);
+	res = uc_unpack_common(vm, nargs, state, buf, pos, &amp;rem, false);
 
 	free(state);
 
@@ -2850,15 +2903,7 @@ uc_struct_new(uc_vm_t *vm, size_t nargs)
 	if (!state)
 		return NULL;
 
-	return uc_resource_new(struct_type, state);
-}
-
-static void
-uc_struct_gc(void *ud)
-{
-	formatstate_t *state = ud;
-
-	free(state);
+	return ucv_resource_create(vm, "struct.format", state);
 }
 
 /**
@@ -2886,12 +2931,24 @@ uc_struct_gc(void *ud)
 static uc_value_t *
 uc_struct_pack(uc_vm_t *vm, size_t nargs)
 {
-	formatstate_t **state = uc_fn_this("struct");
+	formatstate_t **state = uc_fn_this("struct.format");
+	size_t pos = 0, capacity = 0;
+	uc_string_t *us = NULL;
 
 	if (!state || !*state)
 		return NULL;
 
-	return uc_pack_common(vm, nargs, *state, 0);
+	if (!uc_pack_common(vm, nargs, *state, 0, (void **)&amp;us, &amp;pos, &amp;capacity)) {
+		free(us);
+
+		return NULL;
+	}
+
+	us->header.type = UC_STRING;
+	us->header.refcount = 1;
+	us->length = pos;
+
+	return &amp;us->header;
 }
 
 /**
@@ -2925,12 +2982,682 @@ uc_struct_pack(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_struct_unpack(uc_vm_t *vm, size_t nargs)
 {
-	formatstate_t **state = uc_fn_this("struct");
+	formatstate_t **state = uc_fn_this("struct.format");
+	uc_value_t *bufval = uc_fn_arg(0);
+	uc_value_t *offset = uc_fn_arg(1);
+	long long pos = 0;
+	size_t rem;
+	char *buf;
 
 	if (!state || !*state)
 		return NULL;
 
-	return uc_unpack_common(vm, nargs, *state, 0);
+	if (ucv_type(bufval) != UC_STRING) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+			"Buffer value not a string");
+
+		return NULL;
+	}
+
+	if (offset &amp;&amp; !ucv_as_longlong(vm, offset, &amp;pos))
+		return NULL;
+
+	buf = ucv_string_get(bufval);
+	rem = ucv_string_length(bufval);
+
+	return uc_unpack_common(vm, nargs, *state, buf, pos, &amp;rem, false);
+}
+
+
+/**
+ * Represents a struct buffer instance created by `buffer()`.
+ *
+ * @class module:struct.buffer
+ * @hideconstructor
+ *
+ * @see {@link module:struct#buffer|buffer()}
+ *
+ * @example
+ *
+ * const buf = struct.buffer();
+ *
+ * buf.put('I', 12345);
+ *
+ * const value = buf.get('I');
+ */
+
+/**
+ * Creates a new struct buffer instance.
+ *
+ * The `buffer()` function creates a new struct buffer object that can be used
+ * for incremental packing and unpacking of binary data. If an initial data
+ * string is provided, the buffer is initialized with this content.
+ *
+ * Note that even when initial data is provided, the buffer position is always
+ * set to zero. This design assumes that the primary intent when initializing
+ * a buffer with data is to read (unpack) from the beginning. If you want to
+ * append data to a pre-initialized buffer, you need to explicitly move the
+ * position to the end, either by calling `end()` or by setting the position
+ * manually with `pos()`.
+ *
+ * Returns a new struct buffer instance.
+ *
+ * @function module:struct#buffer
+ *
+ * @param {string} [initialData]
+ * Optional initial data to populate the buffer with.
+ *
+ * @returns {module:struct.buffer}
+ *
+ * @example
+ * // Create an empty buffer
+ * const emptyBuf = struct.buffer();
+ *
+ * // Create a buffer with initial data
+ * const dataBuf = struct.buffer("\x01\x02\x03\x04");
+ *
+ * // Read from the beginning of the initialized buffer
+ * const value = dataBuf.get('I');
+ *
+ * // Append data to the initialized buffer
+ * dataBuf.end().put('I', 5678);
+ *
+ * // Alternative chained syntax for initializing and appending
+ * const buf = struct.buffer("\x01\x02\x03\x04").end().put('I', 5678);
+ */
+static uc_value_t *
+uc_fmtbuf_new(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = xalloc(sizeof(*buffer));
+	uc_value_t *init_data = uc_fn_arg(0);
+
+	buffer->resource.header.type = UC_RESOURCE;
+	buffer->resource.header.refcount = 1;
+	buffer->resource.type = ucv_resource_type_lookup(vm, "struct.buffer");
+
+	if (ucv_type(init_data) == UC_STRING)  {
+		char *buf = ucv_string_get(init_data);
+		size_t len = ucv_string_length(init_data);
+
+		if (!grow_buffer(vm, &amp;buffer->resource.data, &amp;buffer->capacity, len)) {
+			free(buffer);
+
+			return NULL;
+		}
+
+		buffer->length = len;
+		memcpy((char *)buffer->resource.data + sizeof(uc_string_t), buf, len);
+	}
+
+	return &amp;buffer->resource.header;
+}
+
+static formatbuffer_t *
+formatbuffer_ctx(uc_vm_t *vm)
+{
+	uc_value_t *ctx = vm->callframes.entries[vm->callframes.count - 1].ctx;
+
+	if (ucv_type(ctx) != UC_RESOURCE)
+		return NULL;
+
+	uc_resource_t *res = (uc_resource_t *)ctx;
+
+	if (!res->type || strcmp(res->type->name, "struct.buffer") != 0)
+		return NULL;
+
+	return (formatbuffer_t *)res;
+}
+
+/**
+ * Get or set the current position in the buffer.
+ *
+ * If called without arguments, returns the current position.
+ * If called with a position argument, sets the current position to that value.
+ *
+ * @function module:struct.buffer#pos
+ *
+ * @param {number} [position]
+ * The position to set. If omitted, the current position is returned.
+ *
+ * @returns {number|module:struct.buffer}
+ * If called without arguments, returns the current position.
+ * If called with a position argument, returns the buffer instance for chaining.
+ *
+ * @example
+ * const currentPos = buf.pos();
+ * buf.pos(10);  // Set position to 10
+ */
+static uc_value_t *
+uc_fmtbuf_pos(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *new_pos = uc_fn_arg(0);
+
+	if (!buffer)
+		return NULL;
+
+	if (new_pos) {
+		long long pos;
+
+		if (!ucv_as_longlong(vm, new_pos, &amp;pos))
+			return NULL;
+
+		if (pos &lt; 0) pos += buffer->length;
+		if (pos &lt; 0) pos = 0;
+
+		if (!grow_buffer(vm, &amp;buffer->resource.data, &amp;buffer->capacity, pos))
+			return NULL;
+
+		buffer->position = pos;
+
+		if (buffer->position > buffer->length)
+			buffer->length = buffer->position;
+
+		return ucv_get(&amp;buffer->resource.header);
+	}
+
+	return ucv_uint64_new(buffer->position);
+}
+
+/**
+ * Get or set the current buffer length.
+ *
+ * If called without arguments, returns the current length of the buffer.
+ * If called with a length argument, sets the buffer length to that value,
+ * padding the data with trailing zero bytes or truncating it depending on
+ * whether the updated length is larger or smaller than the current length
+ * respectively.
+ *
+ * In case the updated length is smaller than the current buffer offset, the
+ * position is updated accordingly, so that it points to the new end of the
+ * truncated buffer data.
+ *
+ * @function module:struct.buffer#length
+ *
+ * @param {number} [length]
+ * The length to set. If omitted, the current length is returned.
+ *
+ * @returns {number|module:struct.buffer}
+ * If called without arguments, returns the current length.
+ * If called with a length argument, returns the buffer instance for chaining.
+ *
+ * @example
+ * const buf = struct.buffer("abc"); // Initialize buffer with three bytes
+ * const currentLen = buf.length();  // Returns 3
+ *
+ * buf.length(6);                    // Extend to 6 bytes
+ * buf.slice();                      // Trailing null bytes: "abc\x00\x00\x00"
+ *
+ * buf.length(2);                    // Truncate to 2 bytes
+ * buf.slice();                      // Truncated data: "ab"
+ */
+static uc_value_t *
+uc_fmtbuf_length(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *new_len = uc_fn_arg(0);
+
+	if (!buffer)
+		return NULL;
+
+	if (new_len) {
+		size_t len;
+
+		if (!ucv_as_size_t(vm, new_len, &amp;len))
+			return NULL;
+
+		if (len > buffer->length) {
+			if (!grow_buffer(vm, &amp;buffer->resource.data, &amp;buffer->capacity, len))
+				return NULL;
+
+			buffer->length = len;
+		}
+		else if (len &lt; buffer->length) {
+			memset((char *)buffer->resource.data + sizeof(uc_string_t) + len,
+				0, buffer->length - len);
+
+			buffer->length = len;
+
+			if (len &lt; buffer->position)
+				buffer->position = len;
+		}
+
+		return ucv_get(&amp;buffer->resource.header);
+	}
+
+	return ucv_uint64_new(buffer->length);
+}
+
+/**
+ * Set the buffer position to the start (0).
+ *
+ * @function module:struct.buffer#start
+ *
+ * @returns {module:struct.buffer}
+ * The buffer instance.
+ *
+ * @example
+ * buf.start();
+ */
+static uc_value_t *
+uc_fmtbuf_start(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+
+	if (!buffer)
+		return NULL;
+
+	buffer->position = 0;
+
+	return ucv_get(&amp;buffer->resource.header);
+}
+
+/**
+ * Set the buffer position to the end.
+ *
+ * @function module:struct.buffer#end
+ *
+ * @returns {module:struct.buffer}
+ * The buffer instance.
+ *
+ * @example
+ * buf.end();
+ */
+static uc_value_t *
+uc_fmtbuf_end(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+
+	if (!buffer)
+		return NULL;
+
+	buffer->position = buffer->length;
+
+	return ucv_get(&amp;buffer->resource.header);
+}
+
+/**
+ * Pack data into the buffer at the current position.
+ *
+ * The `put()` function packs the given values into the buffer according to
+ * the specified format string, starting at the current buffer position.
+ * The format string follows the same syntax as used in `struct.pack()`.
+ *
+ * For a detailed explanation of the format string syntax, refer to the
+ * ["Format Strings" section]{@link module:struct} in the module
+ * documentation.
+ *
+ * @function module:struct.buffer#put
+ *
+ * @param {string} format
+ * The format string specifying how to pack the data.
+ *
+ * @param {...*} values
+ * The values to pack into the buffer.
+ *
+ * @returns {module:struct.buffer}
+ * The buffer instance.
+ *
+ * @see {@link module:struct#pack|struct.pack()}
+ *
+ * @example
+ * buf.put('II', 1234, 5678);
+ */
+static uc_value_t *
+uc_fmtbuf_put(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *fmt = uc_fn_arg(0);
+	formatstate_t *state;
+	bool res;
+
+	if (!buffer)
+		return NULL;
+
+	state = parse_format(vm, fmt);
+
+	if (!state)
+		return NULL;
+
+	res = uc_pack_common(vm, nargs, state, 1,
+		&amp;buffer->resource.data, &amp;buffer->position, &amp;buffer->capacity);
+
+	free(state);
+
+	if (!res)
+		return NULL;
+
+	if (buffer->position > buffer->length)
+		buffer->length = buffer->position;
+
+	return ucv_get(&amp;buffer->resource.header);
+}
+
+static uc_value_t *
+fmtbuf_get_common(uc_vm_t *vm, size_t nargs, bool single)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *fmt = uc_fn_arg(0);
+	formatstate_t *state;
+	uc_value_t *result;
+	size_t rem;
+	char *buf;
+
+	if (!buffer)
+		return NULL;
+
+	if (single &amp;&amp; ucv_type(fmt) == UC_INTEGER) {
+		int64_t len = ucv_int64_get(fmt);
+
+		if (errno != 0)
+			goto ebounds;
+
+		size_t spos, epos;
+
+		if (len &lt; 0) {
+			if (len == INT64_MIN)
+				goto ebounds;
+
+			if ((uint64_t)-len > buffer->position)
+				return NULL;
+
+			spos = buffer->position + len;
+			epos = buffer->position;
+		}
+		else {
+			if ((uint64_t)len > (SIZE_MAX - buffer->position))
+				goto ebounds;
+
+			if (buffer->position + len > buffer->length)
+				return NULL;
+
+			spos = buffer->position;
+			epos = buffer->position + len;
+
+			buffer->position = epos;
+		}
+
+		return ucv_string_new_length(
+			(char *)buffer->resource.data + sizeof(uc_string_t) + spos,
+			epos - spos);
+
+ebounds:
+		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
+			"Length value out of bounds");
+
+		return NULL;
+	}
+
+	state = parse_format(vm, fmt);
+
+	if (!state)
+		return NULL;
+
+	if (single &amp;&amp; (state->ncodes != 1 || state->codes[0].repeat != 1)) {
+		free(state);
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+			"get() expects a format string for a single value. "
+			"Use read() for multiple values.");
+
+		return NULL;
+	}
+
+	rem = buffer->length;
+	buf = (char *)buffer->resource.data + sizeof(uc_string_t);
+
+	result = uc_unpack_common(vm, nargs, state,
+		buf, buffer->position, &amp;rem, single);
+
+	if (result)
+		buffer->position = buffer->length - rem;
+
+	free(state);
+
+	return result;
+}
+
+/**
+ * Unpack a single value from the buffer at the current position.
+ *
+ * The `get()` function unpacks a single value from the buffer according to the
+ * specified format string, starting at the current buffer position.
+ * The format string follows the same syntax as used in `struct.unpack()`.
+ *
+ * For a detailed explanation of the format string syntax, refer to the
+ * ["Format Strings" section]{@link module:struct} in the module documentation.
+ *
+ * Alternatively, `get()` accepts a postive or negative integer as format, which
+ * specifies the length of a string to unpack before or after the current
+ * position. Negative values extract that many bytes before the current offset
+ * while postive ones extracts that many bytes after.
+ *
+ * @function module:struct.buffer#get
+ *
+ * @param {string|number} format
+ * The format string specifying how to unpack the data.
+ *
+ * @returns {*}
+ * The unpacked value.
+ *
+ * @see {@link module:struct#unpack|struct.unpack()}
+ *
+ * @example
+ * const val = buf.get('I');
+ * const str = buf.get(5);    // equivalent to buf.get('5s')
+ * const str = buf.get(-3);   // equivalent to buf.pos(buf.pos() - 3).get('3s')
+ */
+static uc_value_t *
+uc_fmtbuf_get(uc_vm_t *vm, size_t nargs)
+{
+	return fmtbuf_get_common(vm, nargs, true);
+}
+
+/**
+ * Unpack multiple values from the buffer at the current position.
+ *
+ * The `read()` function unpacks multiple values from the buffer according to
+ * the specified format string, starting at the current buffer position.
+ * The format string follows the same syntax as used in `struct.unpack()`.
+ *
+ * For a detailed explanation of the format string syntax, refer to the
+ * ["Format Strings" section]{@link module:struct} in the module documentation.
+ *
+ * @function module:struct.buffer#get
+ *
+ * @param {string} format
+ * The format string specifying how to unpack the data.
+ *
+ * @returns {array}
+ * An array containing the unpacked values.
+ *
+ * @see {@link module:struct#unpack|struct.unpack()}
+ *
+ * @example
+ * const values = buf.get('II');
+ */
+static uc_value_t *
+uc_fmtbuf_read(uc_vm_t *vm, size_t nargs)
+{
+	return fmtbuf_get_common(vm, nargs, false);
+}
+
+/**
+ * Extract a slice of the buffer content.
+ *
+ * The `slice()` function returns a substring of the buffer content
+ * between the specified start and end positions.
+ *
+ * Both the start and end position values may be negative, in which case they're
+ * relative to the end of the buffer, e.g. `slice(-3)` will extract the last
+ * three bytes of data.
+ *
+ * @function module:struct.buffer#slice
+ *
+ * @param {number} [start=0]
+ * The starting position of the slice.
+ *
+ * @param {number} [end=buffer.length()]
+ * The ending position of the slice (exclusive).
+ *
+ * @returns {string}
+ * A string containing the specified slice of the buffer content.
+ *
+ * @example
+ * const slice = buf.slice(4, 8);
+ */
+static uc_value_t *
+uc_fmtbuf_slice(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *from = uc_fn_arg(0);
+	uc_value_t *to = uc_fn_arg(1);
+	long long spos, epos;
+	char *buf;
+
+	if (!buffer)
+		return NULL;
+
+	spos = 0;
+	epos = buffer->length;
+
+	if (from &amp;&amp; !ucv_as_longlong(vm, from, &amp;spos))
+		return NULL;
+
+	if (to &amp;&amp; !ucv_as_longlong(vm, to, &amp;epos))
+		return NULL;
+
+	if (spos &lt; 0) spos += buffer->length;
+	if (spos &lt; 0) spos = 0;
+	if ((unsigned long long)spos > buffer->length) spos = buffer->length;
+
+	if (epos &lt; 0) epos += buffer->length;
+	if (epos &lt; spos) epos = spos;
+	if ((unsigned long long)epos > buffer->length) epos = buffer->length;
+
+	buf = (char *)buffer->resource.data + sizeof(uc_string_t) + spos;
+
+	return ucv_string_new_length(buf, epos - spos);
+}
+
+/**
+ * Set a slice of the buffer content to given byte value.
+ *
+ * The `set()` function overwrites a substring of the buffer content with the
+ * given byte value, similar to the C `memset()` function, between the specified
+ * start and end positions.
+ *
+ * Both the start and end position values may be negative, in which case they're
+ * relative to the end of the buffer, e.g. `set(0, -2)` will overwrite the last
+ * two bytes of data with `\x00`.
+ *
+ * When the start or end positions are beyond the current buffer length, the
+ * buffer is grown accordingly.
+ *
+ * @function module:struct.buffer#set
+ *
+ * @param {number|string} [value=0]
+ * The byte value to use when overwriting buffer contents. When a string is
+ * given, the first character is used as value.
+ *
+ * @param {number} [start=0]
+ * The position to start overwriting from.
+ *
+ * @param {number} [end=buffer.length()]
+ * The position to end overwriting (exclusive).
+ *
+ * @returns {module:struct.buffer}
+ * The buffer instance.
+ *
+ * @example
+ * const buf = struct.buffer("abcde");
+ * buf.set("X", 2, 4).slice();  // Buffer content is now "abXXe"
+ * buf.set().slice();           // Buffer content is now "\x00\x00\x00\x00\x00"
+ */
+static uc_value_t *
+uc_fmtbuf_set(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_value_t *byte = uc_fn_arg(0);
+	uc_value_t *from = uc_fn_arg(1);
+	uc_value_t *to = uc_fn_arg(2);
+	long long spos, epos;
+	long bval;
+
+	if (!buffer)
+		return NULL;
+
+	bval = 0;
+	spos = 0;
+	epos = buffer->length;
+
+	if (ucv_type(byte) == UC_STRING)
+		bval = *ucv_string_get(byte);
+	else if (byte &amp;&amp; !ucv_as_long(vm, byte, &amp;bval))
+		return NULL;
+
+	if (from &amp;&amp; !ucv_as_longlong(vm, from, &amp;spos))
+		return NULL;
+
+	if (to &amp;&amp; !ucv_as_longlong(vm, to, &amp;epos))
+		return NULL;
+
+	if (spos &lt; 0) spos += buffer->length;
+	if (spos &lt; 0) spos = 0;
+
+	if (epos &lt; 0) epos += buffer->length;
+
+	if (epos > spos) {
+		if ((unsigned long long)epos > buffer->length) {
+			if (!grow_buffer(vm, &amp;buffer->resource.data, &amp;buffer->capacity, epos))
+				return NULL;
+
+			buffer->length = epos;
+		}
+
+		memset((char *)buffer->resource.data + sizeof(uc_string_t) + spos,
+			bval, epos - spos);
+	}
+
+	return ucv_get(&amp;buffer->resource.header);
+}
+
+/**
+ * Extract and remove all content from the buffer.
+ *
+ * The `pull()` function returns all content of the buffer as a string
+ * and resets the buffer to an empty state.
+ *
+ * @function module:struct.buffer#pull
+ *
+ * @returns {string}
+ * A string containing all the buffer content.
+ *
+ * @example
+ * const allData = buf.pull();
+ */
+static uc_value_t *
+uc_fmtbuf_pull(uc_vm_t *vm, size_t nargs)
+{
+	formatbuffer_t *buffer = formatbuffer_ctx(vm);
+	uc_string_t *us;
+
+	if (!buffer)
+		return NULL;
+
+	if (!buffer->resource.data)
+		return ucv_string_new_length("", 0);
+
+	us = buffer->resource.data;
+	us->header.type = UC_STRING;
+	us->header.refcount = 1;
+	us->length = buffer->length;
+
+	buffer->resource.data = NULL;
+	buffer->capacity = 0;
+	buffer->position = 0;
+	buffer->length = 0;
+
+	return ucv_get(&amp;us->header);
 }
 
 
@@ -2939,10 +3666,24 @@ static const uc_function_list_t struct_inst_fns[] = {
 	{ "unpack",	uc_struct_unpack }
 };
 
+static const uc_function_list_t buffer_inst_fns[] = {
+	{ "pos",	uc_fmtbuf_pos },
+	{ "length", uc_fmtbuf_length },
+	{ "start",	uc_fmtbuf_start },
+	{ "end",	uc_fmtbuf_end },
+	{ "set",	uc_fmtbuf_set },
+	{ "put",	uc_fmtbuf_put },
+	{ "get",	uc_fmtbuf_get },
+	{ "read",	uc_fmtbuf_read },
+	{ "slice",	uc_fmtbuf_slice },
+	{ "pull",	uc_fmtbuf_pull },
+};
+
 static const uc_function_list_t struct_fns[] = {
 	{ "pack",	uc_pack },
 	{ "unpack",	uc_unpack },
-	{ "new",	uc_struct_new }
+	{ "new",	uc_struct_new },
+	{ "buffer",	uc_fmtbuf_new }
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
@@ -2951,6 +3692,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 
 	uc_function_list_register(scope, struct_fns);
 
-	struct_type = uc_type_declare(vm, "struct", struct_inst_fns, uc_struct_gc);
+	uc_type_declare(vm, "struct.format", struct_inst_fns, free);
+	uc_type_declare(vm, "struct.buffer", buffer_inst_fns, free);
 }
-</code></pre></article></section></div></div></div><div class="search-container" id="PkfLWpAbet" style="display:none"><div class="wrapper" id="iCxFxjkHbP"><button class="icon-button search-close-button" id="VjLlGakifb" aria-label="close search"><svg><use xlink:href="#close-icon"></use></svg></button><div class="search-box-c"><svg><use xlink:href="#search-icon"></use></svg> <input type="text" id="vpcKVYIppa" class="search-input" placeholder="Search..." autofocus></div><div class="search-result-c" id="fWwVHRuDuN"><span class="search-result-c-text">Type anything to view search result</span></div></div></div><div class="mobile-menu-icon-container"><button class="icon-button" id="mobile-menu" data-isopen="false" aria-label="menu"><svg><use xlink:href="#menu-icon"></use></svg></button> <button class="icon-button" id="mobile-toc" data-isopen="false" aria-label="toc"><svg><use xlink:href="#toc-icon"></use></svg></button></div><div id="mobile-sidebar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="mobile-nav-links"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="mobile-sidebar-items-c"><div class="sidebar-section-title with-arrow" data-isopen="false" id="ejmbeef7TuJHxDCzIGB4D"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="eLeHQsHpnGCylMwK2Pwkf"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div><div class="mobile-navbar-actions"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div></div></div><div id="mobile-tocbar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><span class="sidebar-title">Table of Contents</span><div class="toc-contents"></div></div></div><script type="text/javascript" src="scripts/core.min.js"></script><script src="scripts/search.min.js" defer="defer"></script><script src="scripts/third-party/fuse.js" defer="defer"></script><script type="text/javascript">var tocbotInstance=tocbot.init({tocSelector:"#mobile-tocbar > .mobile-sidebar-wrapper > .toc-contents",contentSelector:".main-content",headingSelector:"h1, h2, h3",hasInnerContainers:!0,scrollContainer:".main-content",headingsOffset:130,onClick:(...e)=>{hideMobileMenu(),bringLinkToView(...e)},includeHtml:!0})</script></body></html>
+</code></pre></article></section></div></div></div><div class="search-container" id="PkfLWpAbet" style="display:none"><div class="wrapper" id="iCxFxjkHbP"><button class="icon-button search-close-button" id="VjLlGakifb" aria-label="close search"><svg><use xlink:href="#close-icon"></use></svg></button><div class="search-box-c"><svg><use xlink:href="#search-icon"></use></svg> <input type="text" id="vpcKVYIppa" class="search-input" placeholder="Search..." autofocus></div><div class="search-result-c" id="fWwVHRuDuN"><span class="search-result-c-text">Type anything to view search result</span></div></div></div><div class="mobile-menu-icon-container"><button class="icon-button" id="mobile-menu" data-isopen="false" aria-label="menu"><svg><use xlink:href="#menu-icon"></use></svg></button> <button class="icon-button" id="mobile-toc" data-isopen="false" aria-label="toc"><svg><use xlink:href="#toc-icon"></use></svg></button></div><div id="mobile-sidebar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="mobile-nav-links"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="mobile-sidebar-items-c"><div class="sidebar-section-title with-arrow" data-isopen="false" id="OxBQmoTqCfDoJBsa8F86y"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="F5Y8_JAftDv61cP9CP2qw"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div><div class="mobile-navbar-actions"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div></div></div><div id="mobile-tocbar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><span class="sidebar-title">Table of Contents</span><div class="toc-contents"></div></div></div><script type="text/javascript" src="scripts/core.min.js"></script><script src="scripts/search.min.js" defer="defer"></script><script src="scripts/third-party/fuse.js" defer="defer"></script><script type="text/javascript">var tocbotInstance=tocbot.init({tocSelector:"#mobile-tocbar > .mobile-sidebar-wrapper > .toc-contents",contentSelector:".main-content",headingSelector:"h1, h2, h3",hasInnerContainers:!0,scrollContainer:".main-content",headingsOffset:130,onClick:(...e)=>{hideMobileMenu(),bringLinkToView(...e)},includeHtml:!0})</script></body></html>
