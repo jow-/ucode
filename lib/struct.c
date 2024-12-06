@@ -371,9 +371,6 @@
 #include "ucode/module.h"
 #include "ucode/vallist.h"
 
-static uc_resource_type_t *struct_type;
-static uc_resource_type_t *fmtbuf_type;
-
 typedef struct formatdef {
 	char format;
 	ssize_t size;
@@ -2904,7 +2901,7 @@ uc_struct_new(uc_vm_t *vm, size_t nargs)
 	if (!state)
 		return NULL;
 
-	return uc_resource_new(struct_type, state);
+	return ucv_resource_create(vm, "struct.format", state);
 }
 
 /**
@@ -3074,7 +3071,7 @@ uc_fmtbuf_new(uc_vm_t *vm, size_t nargs)
 
 	buffer->resource.header.type = UC_RESOURCE;
 	buffer->resource.header.refcount = 1;
-	buffer->resource.type = fmtbuf_type;
+	buffer->resource.type = ucv_resource_type_lookup(vm, "struct.buffer");
 
 	if (ucv_type(init_data) == UC_STRING)  {
 		char *buf = ucv_string_get(init_data);
@@ -3103,7 +3100,7 @@ formatbuffer_ctx(uc_vm_t *vm)
 
 	uc_resource_t *res = (uc_resource_t *)ctx;
 
-	if (res->type != fmtbuf_type)
+	if (!res->type || strcmp(res->type->name, "struct.buffer") != 0)
 		return NULL;
 
 	return (formatbuffer_t *)res;
@@ -3693,6 +3690,6 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 
 	uc_function_list_register(scope, struct_fns);
 
-	struct_type = uc_type_declare(vm, "struct.format", struct_inst_fns, free);
-	fmtbuf_type = uc_type_declare(vm, "struct.buffer", buffer_inst_fns, free);
+	uc_type_declare(vm, "struct.format", struct_inst_fns, free);
+	uc_type_declare(vm, "struct.buffer", buffer_inst_fns, free);
 }
