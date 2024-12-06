@@ -145,11 +145,18 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *inter
 	switch (rc) {
 	case STATUS_OK:
 		if (print_result) {
-			uc_vm_stack_push(vm, res);
-			uc_vm_stack_push(vm, ucv_string_new("\n"));
-			uc_stdlib_function("print")(vm, 2);
-			uc_vm_stack_pop(vm);
-			uc_vm_stack_pop(vm);
+			if (ucv_type(res) == UC_STRING) {
+				fwrite(ucv_string_get(res), ucv_string_length(res), 1, stdout);
+			}
+			else {
+				uc_stringbuf_t *pb = xprintbuf_new();
+
+				ucv_to_stringbuf_formatted(vm, pb, res, 0, '\t', 1);
+				fwrite(pb->buf, pb->bpos, 1, stdout);
+				printbuf_free(pb);
+			}
+
+			ucv_put(res);
 		}
 
 		rc = 0;
