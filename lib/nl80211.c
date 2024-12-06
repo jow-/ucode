@@ -47,7 +47,7 @@ limitations under the License.
 
 #define DIV_ROUND_UP(n, d)      (((n) + (d) - 1) / (d))
 
-#define err_return(code, ...) do { set_error(code, __VA_ARGS__); return NULL; } while(0)
+#define err_return(code, ...) do { set_error(vm, code, __VA_ARGS__); return NULL; } while(0)
 
 /* Modified downstream nl80211.h headers may disable certain unsupported
  * attributes by setting the corresponding defines to 0x10000 without having
@@ -57,37 +57,41 @@ limitations under the License.
 
 #define NL80211_CMDS_BITMAP_SIZE	DIV_ROUND_UP(NL80211_CMD_MAX + 1, 32)
 
-static struct {
-	int code;
-	char *msg;
-} last_error;
-
-__attribute__((format(printf, 2, 3))) static void
-set_error(int errcode, const char *fmt, ...) {
+__attribute__((format(printf, 3, 4))) static void
+set_error(uc_vm_t *vm, int errcode, const char *fmt, ...)
+{
+	uc_value_t *last_error;
 	va_list ap;
+	char *s;
 
 	if (errcode == -(NLE_MAX + 1))
 		return;
 
-	free(last_error.msg);
+	last_error = uc_vm_registry_get(vm, "nl80211.error");
 
-	last_error.code = errcode;
-	last_error.msg = NULL;
+	if (!last_error) {
+		last_error = ucv_array_new_length(vm, 2);
+		uc_vm_registry_set(vm, "nl80211.error", last_error);
+	}
+
+	ucv_array_set(last_error, 0, ucv_int64_new(errcode));
 
 	if (fmt) {
 		va_start(ap, fmt);
-		xvasprintf(&last_error.msg, fmt, ap);
+		xvasprintf(&s, fmt, ap);
 		va_end(ap);
+
+		ucv_array_set(last_error, 1, ucv_string_new(s));
+		free(s);
+	}
+	else {
+		ucv_array_set(last_error, 1, NULL);
 	}
 }
 
-static uc_resource_type_t *listener_type;
-static uc_value_t *listener_registry;
-static uc_vm_t *listener_vm;
-
 typedef struct {
 	uint32_t cmds[NL80211_CMDS_BITMAP_SIZE];
-	size_t index;
+	uc_value_t *res;
 } uc_nl_listener_t;
 
 static bool
@@ -1083,7 +1087,7 @@ nla_parse_error(const uc_nl_attr_spec_t *spec, uc_vm_t *vm, uc_value_t *v, const
 
 	s = ucv_to_string(vm, v);
 
-	set_error(NLE_INVAL, "%s `%s` has invalid value `%s`: %s",
+	set_error(vm, NLE_INVAL, "%s `%s` has invalid value `%s`: %s",
 		spec->attr ? "attribute" : "field",
 		spec->key,
 		s,
@@ -2015,13 +2019,14 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 }
 
 
-static struct {
+typedef struct {
+	uc_resource_t resource;
 	struct nl_sock *sock;
 	struct nl_sock *evsock;
 	struct nl_cache *cache;
 	struct uloop_fd evsock_fd;
 	struct nl_cb *evsock_cb;
-} nl80211_conn;
+} nl80211_conn_t;
 
 typedef enum {
 	STATE_UNREPLIED,
@@ -2040,30 +2045,56 @@ typedef struct {
 } request_state_t;
 
 
+static nl80211_conn_t *
+uc_nl_conn_ctx(uc_vm_t *vm)
+{
+	nl80211_conn_t *conn = (void *)uc_vm_registry_get(vm, "nl80211.connection");
+
+	if (ucv_type((uc_value_t *)conn) != UC_RESOURCE) {
+		conn = xalloc(sizeof(*conn));
+		conn->resource.header.type = UC_RESOURCE;
+		conn->resource.header.refcount = 1;
+		conn->resource.data = conn;
+
+		uc_vm_registry_set(vm, "nl80211.connection", &conn->resource.header);
+	}
+
+	return conn;
+}
+
 static uc_value_t *
 uc_nl_error(uc_vm_t *vm, size_t nargs)
 {
+	uc_value_t *last_error, *msg;
 	uc_stringbuf_t *buf;
 	const char *s;
+	int code;
 
-	if (last_error.code == 0)
+	last_error = uc_vm_registry_get(vm, "nl80211.error");
+	code = last_error ? ucv_int64_get(ucv_array_get(last_error, 0)) : 0;
+	msg = ucv_array_get(last_error, 1);
+
+	if (code == 0)
 		return NULL;
 
 	buf = ucv_stringbuf_new();
 
-	if (last_error.code == NLE_FAILURE && last_error.msg) {
-		ucv_stringbuf_addstr(buf, last_error.msg, strlen(last_error.msg));
+	if (code == NLE_FAILURE && msg) {
+		ucv_stringbuf_addstr(buf, ucv_string_get(msg), ucv_string_length(msg));
 	}
 	else {
-		s = nl_geterror(last_error.code);
+		s = nl_geterror(code);
 
 		ucv_stringbuf_addstr(buf, s, strlen(s));
 
-		if (last_error.msg)
-			ucv_stringbuf_printf(buf, ": %s", last_error.msg);
+		if (msg) {
+			ucv_stringbuf_append(buf, ": ");
+			ucv_stringbuf_addstr(buf,
+				ucv_string_get(msg), ucv_string_length(msg));
+		}
 	}
 
-	set_error(0, NULL);
+	set_error(vm, 0, NULL);
 
 	return ucv_stringbuf_finish(buf);
 }
@@ -2192,7 +2223,7 @@ cb_reply(struct nl_msg *msg, void *arg)
 }
 
 static bool
-uc_nl_connect_sock(struct nl_sock **sk, bool nonblocking)
+uc_nl_connect_sock(uc_vm_t *vm, struct nl_sock **sk, bool nonblocking)
 {
 	int err, fd;
 
@@ -2202,21 +2233,21 @@ uc_nl_connect_sock(struct nl_sock **sk, bool nonblocking)
 	*sk = nl_socket_alloc();
 
 	if (!*sk) {
-		set_error(NLE_NOMEM, NULL);
+		set_error(vm, NLE_NOMEM, NULL);
 		goto err;
 	}
 
 	err = genl_connect(*sk);
 
 	if (err != 0) {
-		set_error(err, NULL);
+		set_error(vm, err, NULL);
 		goto err;
 	}
 
 	fd = nl_socket_get_fd(*sk);
 
 	if (fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC) < 0) {
-		set_error(NLE_FAILURE, "unable to set FD_CLOEXEC flag on socket: %s", strerror(errno));
+		set_error(vm, NLE_FAILURE, "unable to set FD_CLOEXEC flag on socket: %s", strerror(errno));
 		goto err;
 	}
 
@@ -2224,7 +2255,7 @@ uc_nl_connect_sock(struct nl_sock **sk, bool nonblocking)
 		err = nl_socket_set_nonblocking(*sk);
 
 		if (err != 0) {
-			set_error(err, NULL);
+			set_error(vm, err, NULL);
 			goto err;
 		}
 	}
@@ -2241,14 +2272,14 @@ err:
 }
 
 static int
-uc_nl_find_family_id(const char *name)
+uc_nl_find_family_id(nl80211_conn_t *conn, const char *name)
 {
 	struct genl_family *fam;
 
-	if (!nl80211_conn.cache && genl_ctrl_alloc_cache(nl80211_conn.sock, &nl80211_conn.cache))
+	if (!conn->cache && genl_ctrl_alloc_cache(conn->sock, &conn->cache))
 		return -NLE_NOMEM;
 
-	fam = genl_ctrl_search_by_name(nl80211_conn.cache, name);
+	fam = genl_ctrl_search_by_name(conn->cache, name);
 
 	if (!fam)
 		return -NLE_OBJ_NOTFOUND;
@@ -2261,15 +2292,7 @@ cb_errno(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg)
 {
 	int *ret = arg;
 
-	if (err->error > 0) {
-		set_error(NLE_RANGE,
-			"Illegal error code %d in netlink reply", err->error);
-
-		*ret = -(NLE_MAX + 1);
-	}
-	else {
-		*ret = -nl_syserr2nlerr(err->error);
-	}
+	*ret = err->error;
 
 	return NL_STOP;
 }
@@ -2316,14 +2339,15 @@ cb_subscribe(struct nl_msg *msg, void *arg)
 }
 
 static bool
-uc_nl_subscribe(struct nl_sock *sk, const char *family, const char *group)
+uc_nl_subscribe(uc_vm_t *vm, struct nl_sock *sk, const char *family, const char *group)
 {
 	struct { int id; const char *group; } grp = { -NLE_OBJ_NOTFOUND, group };
+	nl80211_conn_t *conn = uc_nl_conn_ctx(vm);
 	struct nl_msg *msg;
 	struct nl_cb *cb;
-	int id, ret;
+	int id, ret, err;
 
-	if (!uc_nl_connect_sock(&nl80211_conn.sock, false))
+	if (!uc_nl_connect_sock(vm, &conn->sock, false))
 		return NULL;
 
 	msg = nlmsg_alloc();
@@ -2331,7 +2355,7 @@ uc_nl_subscribe(struct nl_sock *sk, const char *family, const char *group)
 	if (!msg)
 		err_return(NLE_NOMEM, NULL);
 
-	id = uc_nl_find_family_id("nlctrl");
+	id = uc_nl_find_family_id(conn, "nlctrl");
 
 	if (id < 0)
 		err_return(-id, NULL);
@@ -2346,30 +2370,34 @@ uc_nl_subscribe(struct nl_sock *sk, const char *family, const char *group)
 		err_return(NLE_NOMEM, NULL);
 	}
 
-	nl_send_auto_complete(nl80211_conn.sock, msg);
+	nl_send_auto_complete(conn->sock, msg);
 
 	ret = 1;
+	err = 0;
 
 	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_ack, &ret);
-	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &ret);
+	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &err);
 	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_subscribe, &grp);
 
-	while (ret > 0)
-		nl_recvmsgs(nl80211_conn.sock, cb);
+	while (ret > 0 && err == 0)
+		nl_recvmsgs(conn->sock, cb);
 
 	nlmsg_free(msg);
 	nl_cb_put(cb);
 
-	if (ret < 0)
-		err_return(ret, NULL);
+	if (err > 0)
+		err_return(NLE_RANGE, "Illegal error code %d in netlink reply", err);
+
+	if (err < 0)
+		err_return(-nl_syserr2nlerr(err), NULL);
 
 	if (grp.id < 0)
 		err_return(grp.id, NULL);
 
-	ret = nl_socket_add_membership(sk, grp.id);
+	err = nl_socket_add_membership(sk, grp.id);
 
-	if (ret != 0)
-		err_return(ret, NULL);
+	if (err != 0)
+		err_return(err, NULL);
 
 	return true;
 }
@@ -2383,7 +2411,7 @@ struct waitfor_ctx {
 };
 
 static uc_value_t *
-uc_nl_prepare_event(uc_vm_t *vm, struct nl_msg *msg)
+uc_nl_prepare_event(nl80211_conn_t *conn, uc_vm_t *vm, struct nl_msg *msg)
 {
 	struct nlmsghdr *hdr = nlmsg_hdr(msg);
 	struct genlmsghdr *gnlh = nlmsg_data(hdr);
@@ -2391,7 +2419,7 @@ uc_nl_prepare_event(uc_vm_t *vm, struct nl_msg *msg)
 	const uc_nl_attr_spec_t *attrs;
 	size_t nattrs;
 
-	if (hdr->nlmsg_type == uc_nl_find_family_id("MAC80211_HWSIM")) {
+	if (hdr->nlmsg_type == uc_nl_find_family_id(conn, "MAC80211_HWSIM")) {
 		attrs = hwsim_msg.attrs;
 		nattrs = hwsim_msg.nattrs;
 	}
@@ -2409,43 +2437,53 @@ uc_nl_prepare_event(uc_vm_t *vm, struct nl_msg *msg)
 	return o;
 }
 
+#define uc_nl_listener_foreach(vm, r_, i_, l_) \
+	for (uc_value_t *r_ = uc_vm_registry_get(vm, "nl80211.registry"); \
+	     r_ != NULL; \
+	     r_ = NULL) \
+	for (size_t i_ = 0, i_##_length_ = ucv_array_length(r_); \
+	     i_##_length_ > 0; \
+	     i_##_length_ = 0) \
+	for (uc_nl_listener_t *l_ = ucv_resource_data(ucv_array_get(r_, 0), \
+	                                              "nl80211.listener"); \
+	     i_ < i_##_length_; \
+	     l_ = ucv_resource_data(ucv_array_get(r_, ++i_), "nl80211.listener"))
+
 static int
 cb_listener_event(struct nl_msg *msg, void *arg)
 {
 	struct nlmsghdr *hdr = nlmsg_hdr(msg);
 	struct genlmsghdr *gnlh = nlmsg_data(hdr);
-	uc_vm_t *vm = listener_vm;
+	uc_vm_t *vm = arg;
+	nl80211_conn_t *conn = uc_nl_conn_ctx(vm);
+	uc_value_t *callback;
 
-	if (!nl80211_conn.evsock_fd.registered || !vm)
+	if (!conn->evsock_fd.registered)
 		return NL_SKIP;
 
-	for (size_t i = 0; i < ucv_array_length(listener_registry); i += 2) {
-		uc_value_t *this = ucv_array_get(listener_registry, i);
-		uc_value_t *func = ucv_array_get(listener_registry, i + 1);
-		uc_nl_listener_t *l;
-		uc_value_t *o, *data;
-
-		l = ucv_resource_data(this, "nl80211.listener");
-		if (!l)
+	uc_nl_listener_foreach(vm, registry, i, listener) {
+		if (!listener)
 			continue;
 
 		if (gnlh->cmd > NL80211_CMD_MAX ||
-			!(l->cmds[gnlh->cmd / 32] & (1 << (gnlh->cmd % 32))))
+			!(listener->cmds[gnlh->cmd / 32] & (1 << (gnlh->cmd % 32))))
 			continue;
 
-		if (!ucv_is_callable(func))
+		callback = ucv_resource_value_get(listener->res, 0);
+
+		if (!ucv_is_callable(callback))
 			continue;
 
-		data = uc_nl_prepare_event(vm, msg);
+		uc_value_t *data = uc_nl_prepare_event(conn, vm, msg);
 		if (!data)
 			return NL_SKIP;
 
-		o = ucv_object_new(vm);
+		uc_value_t *o = ucv_object_new(vm);
 		ucv_object_add(o, "cmd", ucv_int64_new(gnlh->cmd));
 		ucv_object_add(o, "msg", data);
 
-		uc_vm_stack_push(vm, ucv_get(this));
-		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, ucv_get(listener->res));
+		uc_vm_stack_push(vm, ucv_get(callback));
 		uc_vm_stack_push(vm, o);
 
 		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE) {
@@ -2467,13 +2505,13 @@ cb_event(struct nl_msg *msg, void *arg)
 	struct waitfor_ctx *s = arg;
 	uc_value_t *o;
 
-	cb_listener_event(msg, arg);
+	cb_listener_event(msg, s->vm);
 
 	if (gnlh->cmd > NL80211_CMD_MAX ||
 	    !(s->cmds[gnlh->cmd / 32] & (1 << (gnlh->cmd % 32))))
 		return NL_SKIP;
 
-	o = uc_nl_prepare_event(s->vm, msg);
+	o = uc_nl_prepare_event(uc_nl_conn_ctx(s->vm), s->vm, msg);
 	if (o)
 		s->res = o;
 
@@ -2524,22 +2562,22 @@ uc_nl_fill_cmds(uint32_t *cmd_bits, uc_value_t *cmds)
 }
 
 static bool
-uc_nl_evsock_init(void)
+uc_nl_evsock_init(uc_vm_t *vm, nl80211_conn_t *conn)
 {
-	if (nl80211_conn.evsock)
+	if (conn->evsock)
 		return true;
 
-	if (!uc_nl_connect_sock(&nl80211_conn.evsock, true))
+	if (!uc_nl_connect_sock(vm, &conn->evsock, true))
 		return false;
 
-	if (!uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "config") ||
-	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "scan") ||
-	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "regulatory") ||
-	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "mlme") ||
-	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "vendor") ||
-	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "nan")) {
-		nl_socket_free(nl80211_conn.evsock);
-		nl80211_conn.evsock = NULL;
+	if (!uc_nl_subscribe(vm, conn->evsock, "nl80211", "config") ||
+	    !uc_nl_subscribe(vm, conn->evsock, "nl80211", "scan") ||
+	    !uc_nl_subscribe(vm, conn->evsock, "nl80211", "regulatory") ||
+	    !uc_nl_subscribe(vm, conn->evsock, "nl80211", "mlme") ||
+	    !uc_nl_subscribe(vm, conn->evsock, "nl80211", "vendor") ||
+	    !uc_nl_subscribe(vm, conn->evsock, "nl80211", "nan")) {
+		nl_socket_free(conn->evsock);
+		conn->evsock = NULL;
 		return false;
 	}
 
@@ -2549,6 +2587,7 @@ uc_nl_evsock_init(void)
 static uc_value_t *
 uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 {
+	nl80211_conn_t *conn = uc_nl_conn_ctx(vm);
 	struct pollfd pfd = { .events = POLLIN };
 	uc_value_t *cmds = uc_fn_arg(0);
 	uc_value_t *timeout = uc_fn_arg(1);
@@ -2569,7 +2608,7 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 	if (!uc_nl_fill_cmds(ctx.cmds, cmds))
 		err_return(NLE_INVAL, "Invalid command ID specified");
 
-	if (!uc_nl_evsock_init())
+	if (!uc_nl_evsock_init(vm, conn))
 		return NULL;
 
 	cb = nl_cb_alloc(NL_CB_DEFAULT);
@@ -2583,11 +2622,11 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_event, &ctx);
 	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &err);
 
-	pfd.fd = nl_socket_get_fd(nl80211_conn.evsock);
+	pfd.fd = nl_socket_get_fd(conn->evsock);
 
 	if (poll(&pfd, 1, ms) == 1) {
 		while (err == 0 && ctx.cmd == 0)
-			nl_recvmsgs(nl80211_conn.evsock, cb);
+			nl_recvmsgs(conn->evsock, cb);
 	}
 
 	nl_cb_put(cb);
@@ -2600,8 +2639,11 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 
 		return rv;
 	}
-	else if (err) {
-		err_return(err, NULL);
+	else if (err > 0) {
+		err_return(NLE_RANGE, "Illegal error code %d in netlink reply", err);
+	}
+	else if (err < 0) {
+		err_return(-nl_syserr2nlerr(err), NULL);
 	}
 	else {
 		err_return(NLE_FAILURE, "No event received");
@@ -2611,6 +2653,7 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 {
+	nl80211_conn_t *conn = uc_nl_conn_ctx(vm);
 	request_state_t st = { .vm = vm };
 	uc_value_t *cmd = uc_fn_arg(0);
 	uc_value_t *flags = uc_fn_arg(1);
@@ -2618,7 +2661,7 @@ uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 	uint16_t flagval = 0;
 	struct nl_msg *msg;
 	struct nl_cb *cb;
-	int ret, id, cid;
+	int id, cid, err;
 
 	if (ucv_type(cmd) != UC_INTEGER || ucv_int64_get(cmd) < 0 ||
 	    (flags != NULL && ucv_type(flags) != UC_INTEGER) ||
@@ -2640,12 +2683,12 @@ uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 	cid = ucv_int64_get(cmd);
 
 	if (cid >= HWSIM_CMD_OFFSET) {
-		id = uc_nl_find_family_id("MAC80211_HWSIM");
+		id = uc_nl_find_family_id(conn, "MAC80211_HWSIM");
 		cid -= HWSIM_CMD_OFFSET;
 		st.spec = &hwsim_msg;
 	}
 	else if (cid == NL80211_CMD_GET_WIPHY) {
-		id = uc_nl_find_family_id("nl80211");
+		id = uc_nl_find_family_id(conn, "nl80211");
 		st.spec = &nl80211_msg;
 		st.merge_phy_info = true;
 
@@ -2656,7 +2699,7 @@ uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 			flagval |= NLM_F_DUMP;
 	}
 	else {
-		id = uc_nl_find_family_id("nl80211");
+		id = uc_nl_find_family_id(conn, "nl80211");
 		st.spec = &nl80211_msg;
 	}
 
@@ -2678,23 +2721,26 @@ uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 		err_return(NLE_NOMEM, NULL);
 	}
 
-	ret = 1;
+	err = 0;
 
 	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_reply, &st);
 	nl_cb_set(cb, NL_CB_FINISH, NL_CB_CUSTOM, cb_done, &st);
 	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_done, &st);
-	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &ret);
+	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &err);
 
 	nl_send_auto_complete(sock, msg);
 
-	while (ret > 0 && st.state < STATE_REPLIED)
+	while (err == 0 && st.state < STATE_REPLIED)
 		nl_recvmsgs(sock, cb);
 
 	nlmsg_free(msg);
 	nl_cb_put(cb);
 
-	if (ret < 0)
-		err_return(ret, NULL);
+	if (err > 0)
+		err_return(NLE_RANGE, "Illegal error code %d in netlink reply", err);
+
+	if (err < 0)
+		err_return(-nl_syserr2nlerr(err), NULL);
 
 	switch (st.state) {
 	case STATE_REPLIED:
@@ -2704,7 +2750,7 @@ uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 		return ucv_boolean_new(true);
 
 	default:
-		set_error(NLE_FAILURE, "Interrupted reply");
+		set_error(vm, NLE_FAILURE, "Interrupted reply");
 
 		return ucv_boolean_new(false);
 	}
@@ -2713,95 +2759,95 @@ uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_nl_request(uc_vm_t *vm, size_t nargs)
 {
-	if (!uc_nl_connect_sock(&nl80211_conn.sock, false))
+	nl80211_conn_t *conn = uc_nl_conn_ctx(vm);
+
+	if (!uc_nl_connect_sock(vm, &conn->sock, false))
 		return NULL;
 
-	return uc_nl_request_common(nl80211_conn.sock, vm, nargs);
+	return uc_nl_request_common(conn->sock, vm, nargs);
 }
 
 static void
 uc_nl_listener_cb(struct uloop_fd *fd, unsigned int events)
 {
-	nl_recvmsgs(nl80211_conn.evsock, nl80211_conn.evsock_cb);
+	nl80211_conn_t *conn = container_of(fd, nl80211_conn_t, evsock_fd);
+
+	nl_recvmsgs(conn->evsock, conn->evsock_cb);
 }
 
 static uc_value_t *
 uc_nl_listener(uc_vm_t *vm, size_t nargs)
 {
-	struct uloop_fd *fd = &nl80211_conn.evsock_fd;
-	uc_nl_listener_t *l;
+	nl80211_conn_t *conn = uc_nl_conn_ctx(vm);
+	struct uloop_fd *fd = &conn->evsock_fd;
 	uc_value_t *cb_func = uc_fn_arg(0);
 	uc_value_t *cmds = uc_fn_arg(1);
-	uc_value_t *rv;
-	size_t i;
+	uc_nl_listener_t *listener;
+	uc_value_t *res;
 
 	if (!ucv_is_callable(cb_func)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid callback");
 		return NULL;
 	}
 
-	if (!uc_nl_evsock_init())
+	if (!uc_nl_evsock_init(vm, conn))
 		return NULL;
 
 	if (!fd->registered) {
-		fd->fd = nl_socket_get_fd(nl80211_conn.evsock);
+		fd->fd = nl_socket_get_fd(conn->evsock);
 		fd->cb = uc_nl_listener_cb;
 		uloop_fd_add(fd, ULOOP_READ);
 	}
 
-	if (!nl80211_conn.evsock_cb) {
+	if (!conn->evsock_cb) {
 		struct nl_cb *cb = nl_cb_alloc(NL_CB_DEFAULT);
 
 		if (!cb)
 			err_return(NLE_NOMEM, NULL);
 
 		nl_cb_set(cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, cb_seq, NULL);
-		nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_listener_event, NULL);
-		nl80211_conn.evsock_cb = cb;
+		nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_listener_event, vm);
+		conn->evsock_cb = cb;
 	}
 
-	for (i = 0; i < ucv_array_length(listener_registry); i += 2) {
-		if (!ucv_array_get(listener_registry, i))
-			break;
-	}
+	res = ucv_resource_create_ex(vm, "nl80211.listener",
+	                             (void **)&listener, 1, sizeof(*listener));
 
-	ucv_array_set(listener_registry, i + 1, ucv_get(cb_func));
-	l = xalloc(sizeof(*l));
-	l->index = i;
-	if (!uc_nl_fill_cmds(l->cmds, cmds)) {
+	listener->res = res;
+
+	ucv_resource_value_set(res, 0, ucv_get(cb_func));
+
+	if (!uc_nl_fill_cmds(listener->cmds, cmds)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid command ID");
-		free(l);
+		ucv_put(res);
+
 		return NULL;
 	}
 
-	rv = uc_resource_new(listener_type, l);
-	ucv_array_set(listener_registry, i, ucv_get(rv));
-	listener_vm = vm;
+	uc_nl_listener_foreach(vm, registry, i, listener) {
+		if (listener == NULL) {
+			ucv_array_set(registry, i, ucv_get(res));
+			goto out;
+		}
+	}
 
-	return rv;
-}
+	ucv_array_push(uc_vm_registry_get(vm, "nl80211.registry"), ucv_get(res));
 
-static void
-uc_nl_listener_free(void *arg)
-{
-	uc_nl_listener_t *l = arg;
-
-	ucv_array_set(listener_registry, l->index, NULL);
-	ucv_array_set(listener_registry, l->index + 1, NULL);
-	free(l);
+out:
+	return res;
 }
 
 static uc_value_t *
 uc_nl_listener_set_commands(uc_vm_t *vm, size_t nargs)
 {
-	uc_nl_listener_t *l = uc_fn_thisval("nl80211.listener");
+	uc_nl_listener_t *listener = uc_fn_thisval("nl80211.listener");
 	uc_value_t *cmds = uc_fn_arg(0);
 
-	if (!l)
+	if (!listener)
 		return NULL;
 
-	memset(l->cmds, 0, sizeof(l->cmds));
-	if (!uc_nl_fill_cmds(l->cmds, cmds))
+	memset(listener->cmds, 0, sizeof(listener->cmds));
+	if (!uc_nl_fill_cmds(listener->cmds, cmds))
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid command ID");
 
 	return NULL;
@@ -2810,24 +2856,25 @@ uc_nl_listener_set_commands(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_nl_listener_request(uc_vm_t *vm, size_t nargs)
 {
-	return uc_nl_request_common(nl80211_conn.evsock, vm, nargs);
+	nl80211_conn_t *conn = uc_nl_conn_ctx(vm);
+
+	return uc_nl_request_common(conn->evsock, vm, nargs);
 }
 
 static uc_value_t *
 uc_nl_listener_close(uc_vm_t *vm, size_t nargs)
 {
-	uc_nl_listener_t **lptr = uc_fn_this("nl80211.listener");
-	uc_nl_listener_t *l;
+	uc_nl_listener_t *lptr = uc_fn_thisval("nl80211.listener");
 
 	if (!lptr)
 		return NULL;
 
-	l = *lptr;
-	if (!l)
-		return NULL;
-
-	*lptr = NULL;
-	uc_nl_listener_free(l);
+	uc_nl_listener_foreach(vm, registry, i, listener) {
+		if (listener == lptr) {
+			ucv_array_set(registry, i, NULL);
+			break;
+		}
+	}
 
 	return NULL;
 }
@@ -3020,10 +3067,8 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
 
-	listener_type = uc_type_declare(vm, "nl80211.listener", listener_fns, uc_nl_listener_free);
-	listener_registry = ucv_array_new(vm);
-
-	uc_vm_registry_set(vm, "nl80211.registry", listener_registry);
+	uc_type_declare(vm, "nl80211.listener", listener_fns, NULL);
+	uc_vm_registry_set(vm, "nl80211.registry", ucv_array_new(vm));
 
 	register_constants(vm, scope);
 }
