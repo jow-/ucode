@@ -1176,8 +1176,10 @@ uc_lexer_next_token(uc_lexer_t *lex)
 
 	rv = lex_step(lex);
 
-	lex->no_keyword = false;
-	lex->no_regexp = false;
+	if (rv && rv->type != TK_COMMENT) {
+		lex->no_keyword = false;
+		lex->no_regexp = false;
+	}
 
 	return rv;
 }

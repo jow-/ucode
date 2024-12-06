@@ -1,0 +1,20 @@
+Ensure keyword and regexp flags are preserved across comments when lexing
+object literals and division operators.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		{ /* comment */ default: true },
+		4 /* comment */ /2/1
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	{
+		"default": true
+	},
+	2
+]
+-- End --
