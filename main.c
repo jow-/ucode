@@ -155,8 +155,6 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *inter
 				fwrite(pb->buf, pb->bpos, 1, stdout);
 				printbuf_free(pb);
 			}
-
-			ucv_put(res);
 		}
 
 		rc = 0;
