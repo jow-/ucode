@@ -53,11 +53,15 @@
 
 #include "ucode/module.h"
 
-#define ok_return(expr) do { last_error = 0; return (expr); } while(0)
-#define err_return(err) do { last_error = err; return NULL; } while(0)
+#define ok_return(expr) do { \
+	uc_vm_registry_delete(vm, "uci.error"); \
+	return (expr); \
+} while(0)
 
-static int last_error = 0;
-static uc_resource_type_t *cursor_type;
+#define err_return(err) do { \
+	uc_vm_registry_set(vm, "uci.error", ucv_int64_new(err)); \
+	return NULL; \
+} while(0)
 
 enum pkg_cmd {
 	CMD_SAVE,
@@ -86,6 +90,7 @@ enum pkg_cmd {
 static uc_value_t *
 uc_uci_error(uc_vm_t *vm, size_t nargs)
 {
+	int last_error = ucv_int64_get(uc_vm_registry_get(vm, "uci.error"));
 	char buf[sizeof("Unknown error: -9223372036854775808")];
 	uc_value_t *errmsg;
 
@@ -110,7 +115,7 @@ uc_uci_error(uc_vm_t *vm, size_t nargs)
 		errmsg = ucv_string_new(buf);
 	}
 
-	last_error = 0;
+	uc_vm_registry_delete(vm, "uci.error");
 
 	return errmsg;
 }
@@ -179,7 +184,7 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 			err_return(rv);
 	}
 
-	ok_return(uc_resource_new(cursor_type, c));
+	ok_return(ucv_resource_create(vm, "uci.cursor", c));
 }
 
 
@@ -1868,5 +1873,5 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
 
-	cursor_type = uc_type_declare(vm, "uci.cursor", cursor_fns, close_uci);
+	uc_type_declare(vm, "uci.cursor", cursor_fns, close_uci);
 }
