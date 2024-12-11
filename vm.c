@@ -190,7 +190,7 @@ uc_vm_signal_handlers_reset(uc_vm_t *vm)
 {
 	uc_thread_context_t *tctx = uc_thread_context_get();
 	struct sigaction sa = { 0 };
-	size_t signo;
+	size_t i, signo;
 
 	if (vm != tctx->signal_handler_vm)
 		return;
@@ -201,6 +201,13 @@ uc_vm_signal_handlers_reset(uc_vm_t *vm)
 	for (signo = 0; signo < ucv_array_length(vm->signal.handler); signo++)
 		if (ucv_is_callable(ucv_array_get(vm->signal.handler, signo)))
 			sigaction(signo, &sa, NULL);
+
+	for (i = 0; i < ARRAY_SIZE(vm->signal.sigpipe); i++) {
+		if (vm->signal.sigpipe[i] > STDERR_FILENO)
+			close(vm->signal.sigpipe[i]);
+
+		vm->signal.sigpipe[i] = -1;
+	}
 
 	tctx->signal_handler_vm = NULL;
 }
