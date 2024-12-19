@@ -102,7 +102,6 @@ typedef struct {
 	uc_lexer_t lex;
 	uc_token_t prev, curr;
 	uc_stringbuf_t *error;
-	size_t prev_endpos, curr_endpos;
 	bool synchronizing;
 } uc_parser_t;
 

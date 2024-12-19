@@ -240,7 +240,6 @@ uc_compiler_parse_advance(uc_compiler_t *compiler)
 {
 	ucv_put(compiler->parser->prev.uv);
 	compiler->parser->prev = compiler->parser->curr;
-	compiler->parser->prev_endpos = compiler->parser->curr_endpos;
 
 	while (true) {
 		uc_token_t *tok = uc_lexer_next_token(&compiler->parser->lex);
@@ -254,7 +253,6 @@ uc_compiler_parse_advance(uc_compiler_t *compiler)
 		}
 
 		compiler->parser->curr = *tok;
-		compiler->parser->curr_endpos = compiler->parser->lex.source->off;
 
 		if (compiler->parser->curr.type != TK_ERROR)
 			break;
@@ -480,7 +478,7 @@ uc_compiler_emit_stmt_end(uc_compiler_t *compiler)
 {
 	uc_chunk_stmt_end(
 		uc_compiler_current_chunk(compiler),
-		uc_compiler_set_srcpos(compiler, compiler->parser->prev_endpos));
+		uc_compiler_set_srcpos(compiler, compiler->parser->prev.end));
 }
 
 static size_t
