@@ -5676,11 +5676,19 @@ cmd_lines(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 		if (*e != '\0')
 			return term_print("Invalid offset\n");
 
-		if (argv[1].sv[0] == '+') {
-			loc.line += n;
-		}
-		else if (argv[1].sv[0] == '-') {
-			loc.line = (n < loc.line) ? loc.line - n : 1;
+		if (argv[1].sv[0] == '+' || argv[1].sv[0] == '-') {
+			if (find_statement_boundaries(fn, frame->ip, 0, &stmt))
+				loc.offset = stmt.pos_start;
+
+			loc.column = loc.offset;
+			loc.line = uc_source_get_line(loc.source, &loc.column);
+
+			if (argv[1].sv[0] == '+')
+				loc.line += n;
+			else if (n < loc.line)
+				loc.line -= n;
+			else
+				loc.line = 1;
 		}
 		else {
 			loc.offset = uc_program_function_srcpos(fn, n);
