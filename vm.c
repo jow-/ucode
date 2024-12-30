@@ -37,7 +37,7 @@ static const char *insn_names[__I_MAX] = {
 	__insns
 };
 
-static const int8_t insn_operand_bytes[__I_MAX] = {
+const int8_t uc_vm_insn_format[__I_MAX] = {
 	[I_LOAD] = 4,
 	[I_LOAD8] = 1,
 	[I_LOAD16] = 2,
@@ -271,6 +271,11 @@ void uc_vm_free(uc_vm_t *vm)
 		free(vm->restypes.entries[i]);
 
 	uc_vector_clear(&vm->restypes);
+
+	for (i = 0; i < vm->breakpoints.count; i++)
+		free(vm->breakpoints.entries[i]);
+
+	uc_vector_clear(&vm->breakpoints);
 }
 
 static uc_chunk_t *
@@ -312,6 +317,7 @@ uc_vm_is_strict(uc_vm_t *vm)
 static uc_vm_insn_t
 uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 {
+	uc_breakpoints_t *bks = &vm->breakpoints;
 	uc_vm_insn_t insn;
 
 #ifndef NDEBUG
@@ -320,12 +326,19 @@ uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 
 	assert(frame->ip < end);
 
+	for (size_t i = 0; i < bks->count; i++) {
+		uc_breakpoint_t *bk = bks->entries[i];
+
+		if (bk != NULL && (bk->ip == NULL || bk->ip == frame->ip))
+			bk->cb(vm, bk);
+	}
+
 	insn = frame->ip[0];
 	frame->ip++;
 
-	assert(frame->ip + abs(insn_operand_bytes[insn]) <= end);
+	assert(frame->ip + abs(uc_vm_insn_format[insn]) <= end);
 
-	switch (insn_operand_bytes[insn]) {
+	switch (uc_vm_insn_format[insn]) {
 	case 0:
 		break;
 
@@ -363,7 +376,7 @@ uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 		break;
 
 	default:
-		fprintf(stderr, "Unhandled operand format: %" PRId8 "\n", insn_operand_bytes[insn]);
+		fprintf(stderr, "Unhandled operand format: %" PRId8 "\n", uc_vm_insn_format[insn]);
 		abort();
 	}
 
@@ -717,7 +730,7 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 
 	fprintf(stderr, "%08zx  %s", pos - chunk->entries, insn_names[insn]);
 
-	switch (insn_operand_bytes[insn]) {
+	switch (uc_vm_insn_format[insn]) {
 	case 0:
 		break;
 
@@ -750,7 +763,7 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 		break;
 
 	default:
-		fprintf(stderr, " (unknown operand format: %" PRId8 ")", insn_operand_bytes[insn]);
+		fprintf(stderr, " (unknown operand format: %" PRId8 ")", uc_vm_insn_format[insn]);
 		break;
 	}
 
@@ -2769,6 +2782,17 @@ uc_vm_signal_dispatch(uc_vm_t *vm)
 }
 
 static uc_vm_status_t
+uc_vm_exception_type_to_status(uc_vm_t *vm)
+{
+	switch (vm->exception.type) {
+	case EXCEPTION_NONE:   return STATUS_OK;
+	case EXCEPTION_EXIT:   return STATUS_EXIT;
+	case EXCEPTION_SYNTAX: return ERROR_COMPILE;
+	default:               return ERROR_RUNTIME;
+	}
+}
+
+static uc_vm_status_t
 uc_vm_execute_chunk(uc_vm_t *vm)
 {
 	uc_callframe_t *frame = uc_vm_current_frame(vm);
@@ -2968,6 +2992,10 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 		case I_CALL:
 		case I_QCALL:
 			uc_vm_insn_call(vm, insn);
+
+			if (vm->callframes.count == 0)
+				return uc_vm_exception_type_to_status(vm);
+
 			frame = uc_vm_current_frame(vm);
 			chunk = frame->closure ? uc_vm_frame_chunk(frame) : NULL;
 			break;
@@ -2975,6 +3003,10 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 		case I_MCALL:
 		case I_QMCALL:
 			uc_vm_insn_mcall(vm, insn);
+
+			if (vm->callframes.count == 0)
+				return uc_vm_exception_type_to_status(vm);
+
 			frame = uc_vm_current_frame(vm);
 			chunk = frame->closure ? uc_vm_frame_chunk(frame) : NULL;
 			break;
