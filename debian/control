@@ -2,8 +2,13 @@ Source: ucode
 Maintainer: Paul Spooren <mail@aparcar.org>
 Section: interpreters
 Priority: optional
-Standards-Version: 0.0.20220322-1
+Standards-Version: 4.5.0
+Rules-Requires-Root: no
 Build-Depends: debhelper-compat (= 12), cmake, pkg-config, libjson-c-dev
+Homepage: https://github.com/jow-/ucode
+Vcs-Browser: https://github.com/jow-/ucode
+Vcs-Git: https://github.com/jow-/ucode.git
+Bugs: https://github.com/jow-/ucode/issues
 
 Package: ucode
 Architecture: any
