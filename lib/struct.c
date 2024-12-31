@@ -2514,7 +2514,10 @@ grow_buffer(uc_vm_t *vm, void **buf, size_t *bufsz, size_t length)
 			return false;
 		}
 
-		memset(tmp + overhead + old_size - 1, 0, new_size - old_size + 1);
+		if (*buf)
+			memset(tmp + overhead + old_size - 1, 0, new_size - old_size + 1);
+		else
+			memset(tmp, 0, new_size + overhead);
 
 		*buf = tmp;
 		*bufsz = new_size;
@@ -3655,7 +3658,7 @@ uc_fmtbuf_pull(uc_vm_t *vm, size_t nargs)
 	buffer->position = 0;
 	buffer->length = 0;
 
-	return ucv_get(&us->header);
+	return &us->header;
 }
 
 
