@@ -23,6 +23,10 @@
 #define ok_return(expr) do { set_error(0, NULL); return (expr); } while(0)
 #define err_return(err, ...) do { set_error(err, __VA_ARGS__); return NULL; } while(0)
 
+#define REQUIRED	0
+#define OPTIONAL	1
+#define NAMED		2
+
 static struct {
 	enum ubus_msg_status code;
 	char *msg;
@@ -62,14 +66,20 @@ _arg_type(uc_type_t type)
 }
 
 static bool
-_args_get(uc_vm_t *vm, size_t nargs, ...)
+_args_get(uc_vm_t *vm, bool named, size_t nargs, ...)
 {
-	uc_value_t **ptr, *arg;
+	uc_value_t **ptr, *arg, *obj;
 	uc_type_t type, t;
 	const char *name;
 	size_t index = 0;
 	va_list ap;
-	bool opt;
+	int opt;
+
+	if (named) {
+		obj = uc_fn_arg(0);
+		if (nargs != 1 || ucv_type(obj) != UC_OBJECT)
+			named = false;
+	}
 
 	va_start(ap, nargs);
 
@@ -79,13 +89,18 @@ _args_get(uc_vm_t *vm, size_t nargs, ...)
 		if (!name)
 			break;
 
-		arg = uc_fn_arg(index++);
-
 		type = va_arg(ap, uc_type_t);
 		opt = va_arg(ap, int);
 		ptr = va_arg(ap, uc_value_t **);
 
-		if (!opt && !arg)
+		if (named)
+			arg = ucv_object_get(obj, name, NULL);
+		else if (opt != NAMED)
+			arg = uc_fn_arg(index++);
+		else
+			arg = NULL;
+
+		if (opt == REQUIRED && !arg)
 			err_return(UBUS_STATUS_INVALID_ARGUMENT, "Argument %s is required", name);
 
 		t = ucv_type(arg);
@@ -104,7 +119,8 @@ _args_get(uc_vm_t *vm, size_t nargs, ...)
 	ok_return(true);
 }
 
-#define args_get(vm, nargs, ...) do { if (!_args_get(vm, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
+#define args_get_named(vm, nargs, ...) do { if (!_args_get(vm, true, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
+#define args_get(vm, nargs, ...) do { if (!_args_get(vm, false, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
 
 static uc_resource_type_t *subscriber_type;
 static uc_resource_type_t *listener_type;
@@ -275,14 +291,14 @@ _uc_reg_clear(uc_vm_t *vm, const char *key, size_t idx, size_t nptrs)
 }
 
 
-#define request_reg_add(vm, request, cb, conn) \
-	_uc_reg_add(vm, "ubus.requests", 3, request, cb, conn)
+#define request_reg_add(vm, request, cb, fdcb, conn) \
+	_uc_reg_add(vm, "ubus.requests", 4, request, cb, fdcb, conn)
 
-#define request_reg_get(vm, idx, request, cb) \
-	_uc_reg_get(vm, "ubus.requests", idx, 2, request, cb)
+#define request_reg_get(vm, idx, request, cb, fdcb) \
+	_uc_reg_get(vm, "ubus.requests", idx, 3, request, cb, fdcb)
 
 #define request_reg_clear(vm, idx) \
-	_uc_reg_clear(vm, "ubus.requests", idx, 3)
+	_uc_reg_clear(vm, "ubus.requests", idx, 4)
 
 
 #define object_reg_add(vm, obj, msg, cb) \
@@ -602,7 +618,7 @@ uc_ubus_call_user_cb(uc_ubus_deferred_t *defer, int ret, uc_value_t *reply)
 {
 	uc_value_t *this, *func;
 
-	request_reg_get(defer->vm, defer->registry_index, &this, &func);
+	request_reg_get(defer->vm, defer->registry_index, &this, &func, NULL);
 
 	if (ucv_is_callable(func)) {
 		uc_vm_stack_push(defer->vm, ucv_get(this));
@@ -629,6 +645,26 @@ uc_ubus_call_data_cb(struct ubus_request *req, int type, struct blob_attr *msg)
 
 	if (defer->response == NULL)
 		defer->response = blob_array_to_ucv(defer->vm, blob_data(msg), blob_len(msg), true);
+}
+
+static void
+uc_ubus_call_fd_cb(struct ubus_request *req, int fd)
+{
+	uc_ubus_deferred_t *defer = container_of(req, uc_ubus_deferred_t, request);
+	uc_value_t *this, *func;
+
+	if (defer->complete)
+		return;
+
+	request_reg_get(defer->vm, defer->registry_index, &this, NULL, &func);
+	if (ucv_is_callable(func)) {
+		uc_vm_stack_push(defer->vm, ucv_get(this));
+		uc_vm_stack_push(defer->vm, ucv_get(func));
+		uc_vm_stack_push(defer->vm, ucv_int64_new(fd));
+
+		if (uc_vm_call(defer->vm, true, 1) == EXCEPTION_NONE)
+			ucv_put(uc_vm_stack_pop(defer->vm));
+	}
 }
 
 static void
@@ -680,24 +716,30 @@ uc_ubus_have_uloop(void)
 static uc_value_t *
 uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *objname, *funname, *funargs, *mret = NULL;
+	uc_value_t *objname, *funname, *funargs, *fd, *fdcb, *mret = NULL;
 	uc_ubus_call_res_t res = { 0 };
+	uc_ubus_deferred_t defer = {};
 	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
+	int fd_val = -1;
 	uint32_t id;
 
 	conn_get(vm, &c);
 
-	args_get(vm, nargs,
-	         "object name", UC_STRING, false, &objname,
-	         "function name", UC_STRING, false, &funname,
-	         "function arguments", UC_OBJECT, true, &funargs,
-	         "multiple return", UC_BOOLEAN, true, &mret);
+	args_get_named(vm, nargs,
+	               "object", UC_STRING, REQUIRED, &objname,
+	               "method", UC_STRING, REQUIRED, &funname,
+	               "data", UC_OBJECT, OPTIONAL, &funargs,
+	               "multiple_return", UC_BOOLEAN, OPTIONAL, &mret,
+	               "fd", UC_INTEGER, NAMED, &fd,
+	               "fd_cb", UC_CLOSURE, NAMED, &fdcb);
 
 	blob_buf_init(&c->buf, 0);
 
 	if (funargs)
 		ucv_object_to_blob(funargs, &c->buf);
+	if (fd)
+		fd_val = ucv_int64_get(fd);
 
 	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
 
@@ -707,8 +749,22 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 
 	res.mret = ucv_is_truish(mret);
 
-	rv = ubus_invoke(&c->ctx, id, ucv_string_get(funname), c->buf.head,
-	                 uc_ubus_call_cb, &res, c->timeout * 1000);
+	rv = ubus_invoke_async_fd(&c->ctx, id, ucv_string_get(funname),
+	                          c->buf.head, &defer.request, fd_val);
+	defer.vm = vm;
+	defer.ctx = &c->ctx;
+	defer.request.data_cb = uc_ubus_call_cb;
+	defer.request.priv = &res;
+	if (ucv_is_callable(fdcb)) {
+		defer.request.fd_cb = uc_ubus_call_fd_cb;
+		defer.registry_index = request_reg_add(vm, NULL, NULL, ucv_get(fdcb), NULL);
+	}
+
+	if (rv == UBUS_STATUS_OK)
+		rv = ubus_complete_request(&c->ctx, &defer.request, c->timeout * 1000);
+
+	if (defer.request.fd_cb)
+		request_reg_clear(vm, defer.registry_index);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to invoke function '%s' on object '%s'",
@@ -720,25 +776,31 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *objname, *funname, *funargs, *replycb, *conn, *res = NULL;
+	uc_value_t *objname, *funname, *funargs, *replycb, *fd, *fdcb, *conn, *res = NULL;
 	uc_ubus_deferred_t *defer;
 	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
 	uc_callframe_t *frame;
 	uint32_t id;
+	int fd_val = -1;
 
 	conn_get(vm, &c);
 
-	args_get(vm, nargs,
-	         "object name", UC_STRING, false, &objname,
-	         "function name", UC_STRING, false, &funname,
-	         "function arguments", UC_OBJECT, true, &funargs,
-	         "reply callback", UC_CLOSURE, true, &replycb);
+	args_get_named(vm, nargs,
+	               "object", UC_STRING, REQUIRED, &objname,
+	               "method", UC_STRING, REQUIRED, &funname,
+	               "data", UC_OBJECT, OPTIONAL, &funargs,
+	               "cb", UC_CLOSURE, OPTIONAL, &replycb,
+	               "fd", UC_INTEGER, NAMED, &fd,
+	               "fd_cb", UC_CLOSURE, NAMED, &fdcb);
 
 	blob_buf_init(&c->buf, 0);
 
 	if (funargs)
 		ucv_object_to_blob(funargs, &c->buf);
+
+	if (fd)
+		fd_val = ucv_int64_get(fd);
 
 	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
 
@@ -748,15 +810,18 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 
 	defer = xalloc(sizeof(*defer));
 
-	rv = ubus_invoke_async(&c->ctx, id, ucv_string_get(funname),
-	                       c->buf.head, &defer->request);
+	rv = ubus_invoke_async_fd(&c->ctx, id, ucv_string_get(funname),
+	                          c->buf.head, &defer->request, fd_val);
 
 	if (rv == UBUS_STATUS_OK) {
 		defer->vm = vm;
 		defer->ctx = &c->ctx;
 
 		defer->request.data_cb = uc_ubus_call_data_cb;
+		if (ucv_is_callable(fdcb))
+			defer->request.fd_cb = uc_ubus_call_fd_cb;
 		defer->request.complete_cb = uc_ubus_call_done_cb;
+
 		ubus_complete_request_async(&c->ctx, &defer->request);
 
 		defer->timeout.cb = uc_ubus_call_timeout_cb;
@@ -766,7 +831,7 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 		frame = uc_vector_last(&vm->callframes);
 		conn = frame ? frame->ctx : NULL;
 
-		defer->registry_index = request_reg_add(vm, ucv_get(res), ucv_get(replycb), ucv_get(conn));
+		defer->registry_index = request_reg_add(vm, ucv_get(res), ucv_get(replycb), ucv_get(fdcb), ucv_get(conn));
 
 		if (!uc_ubus_have_uloop()) {
 			have_own_uloop = true;
@@ -799,6 +864,19 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
  */
 
 static void
+__uc_ubus_request_finish(uc_ubus_request_t *callctx, int code)
+{
+	int fd;
+
+	fd = ubus_request_get_caller_fd(&callctx->req);
+	if (fd >= 0)
+		close(fd);
+
+	callctx->replied = true;
+	ubus_complete_deferred_request(callctx->ctx, &callctx->req, code);
+}
+
+static void
 uc_ubus_request_finish(uc_ubus_request_t *callctx, int code, uc_value_t *reply)
 {
 	if (callctx->replied)
@@ -810,9 +888,7 @@ uc_ubus_request_finish(uc_ubus_request_t *callctx, int code, uc_value_t *reply)
 		ubus_send_reply(callctx->ctx, &callctx->req, buf.head);
 	}
 
-	callctx->replied = true;
-
-	ubus_complete_deferred_request(callctx->ctx, &callctx->req, code);
+	__uc_ubus_request_finish(callctx, code);
 	request_reg_clear(callctx->vm, callctx->registry_index);
 }
 
@@ -862,6 +938,33 @@ uc_ubus_request_defer(uc_vm_t *vm, size_t nargs)
 		return NULL;
 
 	callctx->deferred = true;
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_ubus_request_get_fd(uc_vm_t *vm, size_t nargs)
+{
+	uc_ubus_request_t *callctx = uc_fn_thisval("ubus.request");
+
+	if (!callctx)
+		return NULL;
+
+	return ucv_int64_new(ubus_request_get_caller_fd(&callctx->req));
+}
+
+static uc_value_t *
+uc_ubus_request_set_fd(uc_vm_t *vm, size_t nargs)
+{
+	uc_ubus_request_t *callctx = uc_fn_thisval("ubus.request");
+	uc_value_t *fd;
+
+	if (!callctx)
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid call context");
+
+	args_get(vm, nargs,
+	         "fd", UC_INTEGER, false, &fd);
+
+	ubus_request_set_fd(callctx->ctx, &callctx->req, ucv_int64_get(fd));
 	return ucv_boolean_new(true);
 }
 
@@ -1005,13 +1108,13 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 	if (!uuobj || !*uuobj)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid object context");
 
-	args_get(vm, nargs,
-	         "typename", UC_STRING, false, &typename,
-	         "message", UC_OBJECT, true, &message,
-	         "data callback", UC_CLOSURE, true, &data_cb,
-	         "status callback", UC_CLOSURE, true, &status_cb,
-	         "completion callback", UC_CLOSURE, true, &complete_cb,
-	         "timeout", UC_INTEGER, true, &timeout);
+	args_get_named(vm, nargs,
+	              "type", UC_STRING, REQUIRED, &typename,
+	              "data", UC_OBJECT, OPTIONAL, &message,
+	              "data_cb", UC_CLOSURE, OPTIONAL, &data_cb,
+	              "status_cb", UC_CLOSURE, OPTIONAL, &status_cb,
+	              "cb", UC_CLOSURE, OPTIONAL, &complete_cb,
+	              "timeout", UC_INTEGER, OPTIONAL, &timeout);
 
 	t = timeout ? ucv_int64_get(timeout) : -1;
 
@@ -1235,6 +1338,9 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 
 	ubus_defer_request(ctx, req, &callctx->req);
 
+	/* fd is copied to deferred request. ensure it does not get closed early */
+	ubus_request_get_caller_fd(req);
+
 	/* create ucode request type object and set properties */
 	reqobj = uc_resource_new(request_type, callctx);
 
@@ -1259,7 +1365,7 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 
 			/* Add wrapped request context into registry to prevent GC'ing
 			 * until reply or timeout occurred */
-			callctx->registry_index = request_reg_add(vm, ucv_get(reqobj), NULL, NULL);
+			callctx->registry_index = request_reg_add(vm, ucv_get(reqobj), NULL, NULL, NULL);
 		}
 
 		/* Otherwise, when the function returned an object, treat it as
@@ -1269,8 +1375,7 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 			ucv_object_to_blob(res, &buf);
 			ubus_send_reply(ctx, &callctx->req, buf.head);
 
-			ubus_complete_deferred_request(ctx, &callctx->req, UBUS_STATUS_OK);
-			callctx->replied = true;
+			__uc_ubus_request_finish(callctx, UBUS_STATUS_OK);
 		}
 
 		/* If neither a deferred ubus request, nor a plain object were
@@ -1286,8 +1391,7 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 					rv = UBUS_STATUS_UNKNOWN_ERROR;
 			}
 
-			ubus_complete_deferred_request(ctx, &callctx->req, rv);
-			callctx->replied = true;
+			__uc_ubus_request_finish(callctx, rv);
 		}
 
 		ucv_put(res);
@@ -1301,15 +1405,13 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 		if (rv < UBUS_STATUS_OK || rv >= __UBUS_STATUS_LAST)
 			rv = UBUS_STATUS_UNKNOWN_ERROR;
 
-		ubus_complete_deferred_request(ctx, &callctx->req, rv);
-		callctx->replied = true;
+		__uc_ubus_request_finish(callctx, rv);
 		break;
 
 	/* treat other exceptions as fatal and halt uloop */
 	default:
-		ubus_complete_deferred_request(ctx, &callctx->req, UBUS_STATUS_UNKNOWN_ERROR);
+		__uc_ubus_request_finish(callctx, UBUS_STATUS_UNKNOWN_ERROR);
 		uloop_end();
-		callctx->replied = true;
 		break;
 	}
 
@@ -1965,6 +2067,29 @@ uc_ubus_defer_completed(uc_vm_t *vm, size_t nargs)
 }
 
 static uc_value_t *
+uc_ubus_defer_complete(uc_vm_t *vm, size_t nargs)
+{
+	uc_ubus_deferred_t *d = uc_fn_thisval("ubus.deferred");
+	int64_t remaining;
+
+	if (!d)
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid deferred context");
+
+	if (d->complete)
+		ok_return(ucv_boolean_new(false));
+
+#ifdef HAVE_ULOOP_TIMEOUT_REMAINING64
+	remaining = uloop_timeout_remaining64(&d->timeout);
+#else
+	remaining = uloop_timeout_remaining(&d->timeout);
+#endif
+
+	ubus_complete_request(d->ctx, &d->request, remaining);
+
+	ok_return(ucv_boolean_new(true));
+}
+
+static uc_value_t *
 uc_ubus_defer_abort(uc_vm_t *vm, size_t nargs)
 {
 	uc_ubus_deferred_t **d = uc_fn_this("ubus.deferred");
@@ -2010,6 +2135,7 @@ static const uc_function_list_t conn_fns[] = {
 };
 
 static const uc_function_list_t defer_fns[] = {
+	{ "complete",		uc_ubus_defer_complete },
 	{ "completed",		uc_ubus_defer_completed },
 	{ "abort",			uc_ubus_defer_abort },
 };
@@ -2024,6 +2150,8 @@ static const uc_function_list_t request_fns[] = {
 	{ "reply",			uc_ubus_request_reply },
 	{ "error",			uc_ubus_request_error },
 	{ "defer",			uc_ubus_request_defer },
+	{ "get_fd",			uc_ubus_request_get_fd },
+	{ "set_fd",			uc_ubus_request_set_fd },
 };
 
 static const uc_function_list_t notify_fns[] = {
