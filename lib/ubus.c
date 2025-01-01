@@ -1981,6 +1981,29 @@ uc_ubus_defer_completed(uc_vm_t *vm, size_t nargs)
 }
 
 static uc_value_t *
+uc_ubus_defer_await(uc_vm_t *vm, size_t nargs)
+{
+	uc_ubus_deferred_t *d = uc_fn_thisval("ubus.deferred");
+	int64_t remaining;
+
+	if (!d)
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid deferred context");
+
+	if (d->complete)
+		ok_return(ucv_boolean_new(false));
+
+#ifdef HAVE_ULOOP_TIMEOUT_REMAINING64
+	remaining = uloop_timeout_remaining64(&d->timeout);
+#else
+	remaining = uloop_timeout_remaining(&d->timeout);
+#endif
+
+	ubus_complete_request(d->ctx, &d->request, remaining);
+
+	ok_return(ucv_boolean_new(true));
+}
+
+static uc_value_t *
 uc_ubus_defer_abort(uc_vm_t *vm, size_t nargs)
 {
 	uc_ubus_deferred_t **d = uc_fn_this("ubus.deferred");
@@ -2026,6 +2049,7 @@ static const uc_function_list_t conn_fns[] = {
 };
 
 static const uc_function_list_t defer_fns[] = {
+	{ "await",			uc_ubus_defer_await },
 	{ "completed",		uc_ubus_defer_completed },
 	{ "abort",			uc_ubus_defer_abort },
 };
