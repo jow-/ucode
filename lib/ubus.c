@@ -23,6 +23,10 @@
 #define ok_return(expr) do { set_error(0, NULL); return (expr); } while(0)
 #define err_return(err, ...) do { set_error(err, __VA_ARGS__); return NULL; } while(0)
 
+#define REQUIRED	0
+#define OPTIONAL	1
+#define NAMED		2
+
 static struct {
 	enum ubus_msg_status code;
 	char *msg;
@@ -62,14 +66,20 @@ _arg_type(uc_type_t type)
 }
 
 static bool
-_args_get(uc_vm_t *vm, size_t nargs, ...)
+_args_get(uc_vm_t *vm, bool named, size_t nargs, ...)
 {
-	uc_value_t **ptr, *arg;
+	uc_value_t **ptr, *arg, *obj;
 	uc_type_t type, t;
 	const char *name;
 	size_t index = 0;
 	va_list ap;
-	bool opt;
+	int opt;
+
+	if (named) {
+		obj = uc_fn_arg(0);
+		if (nargs != 1 || ucv_type(obj) != UC_OBJECT)
+			named = false;
+	}
 
 	va_start(ap, nargs);
 
@@ -79,13 +89,18 @@ _args_get(uc_vm_t *vm, size_t nargs, ...)
 		if (!name)
 			break;
 
-		arg = uc_fn_arg(index++);
-
 		type = va_arg(ap, uc_type_t);
 		opt = va_arg(ap, int);
 		ptr = va_arg(ap, uc_value_t **);
 
-		if (!opt && !arg)
+		if (named)
+			arg = ucv_object_get(obj, name, NULL);
+		else if (opt != NAMED)
+			arg = uc_fn_arg(index++);
+		else
+			arg = NULL;
+
+		if (opt == REQUIRED && !arg)
 			err_return(UBUS_STATUS_INVALID_ARGUMENT, "Argument %s is required", name);
 
 		t = ucv_type(arg);
@@ -104,7 +119,8 @@ _args_get(uc_vm_t *vm, size_t nargs, ...)
 	ok_return(true);
 }
 
-#define args_get(vm, nargs, ...) do { if (!_args_get(vm, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
+#define args_get_named(vm, nargs, ...) do { if (!_args_get(vm, true, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
+#define args_get(vm, nargs, ...) do { if (!_args_get(vm, false, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
 
 static uc_resource_type_t *subscriber_type;
 static uc_resource_type_t *listener_type;
@@ -688,11 +704,11 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 
 	conn_get(vm, &c);
 
-	args_get(vm, nargs,
-	         "object name", UC_STRING, false, &objname,
-	         "function name", UC_STRING, false, &funname,
-	         "function arguments", UC_OBJECT, true, &funargs,
-	         "multiple return", UC_BOOLEAN, true, &mret);
+	args_get_named(vm, nargs,
+	               "object", UC_STRING, REQUIRED, &objname,
+	               "method", UC_STRING, REQUIRED, &funname,
+	               "data", UC_OBJECT, OPTIONAL, &funargs,
+	               "multiple_return", UC_BOOLEAN, OPTIONAL, &mret);
 
 	blob_buf_init(&c->buf, 0);
 
@@ -729,11 +745,11 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 
 	conn_get(vm, &c);
 
-	args_get(vm, nargs,
-	         "object name", UC_STRING, false, &objname,
-	         "function name", UC_STRING, false, &funname,
-	         "function arguments", UC_OBJECT, true, &funargs,
-	         "reply callback", UC_CLOSURE, true, &replycb);
+	args_get_named(vm, nargs,
+	               "object", UC_STRING, REQUIRED, &objname,
+	               "method", UC_STRING, REQUIRED, &funname,
+	               "data", UC_OBJECT, OPTIONAL, &funargs,
+	               "cb", UC_CLOSURE, OPTIONAL, &replycb);
 
 	blob_buf_init(&c->buf, 0);
 
@@ -1005,13 +1021,13 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 	if (!uuobj || !*uuobj)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid object context");
 
-	args_get(vm, nargs,
-	         "typename", UC_STRING, false, &typename,
-	         "message", UC_OBJECT, true, &message,
-	         "data callback", UC_CLOSURE, true, &data_cb,
-	         "status callback", UC_CLOSURE, true, &status_cb,
-	         "completion callback", UC_CLOSURE, true, &complete_cb,
-	         "timeout", UC_INTEGER, true, &timeout);
+	args_get_named(vm, nargs,
+	              "type", UC_STRING, REQUIRED, &typename,
+	              "data", UC_OBJECT, OPTIONAL, &message,
+	              "data_cb", UC_CLOSURE, OPTIONAL, &data_cb,
+	              "status_cb", UC_CLOSURE, OPTIONAL, &status_cb,
+	              "cb", UC_CLOSURE, OPTIONAL, &complete_cb,
+	              "timeout", UC_INTEGER, OPTIONAL, &timeout);
 
 	t = timeout ? ucv_int64_get(timeout) : -1;
 
