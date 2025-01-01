@@ -696,10 +696,11 @@ uc_ubus_have_uloop(void)
 static uc_value_t *
 uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *objname, *funname, *funargs, *mret = NULL;
+	uc_value_t *objname, *funname, *funargs, *fd, *mret = NULL;
 	uc_ubus_call_res_t res = { 0 };
 	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
+	int fd_val = -1;
 	uint32_t id;
 
 	conn_get(vm, &c);
@@ -708,12 +709,15 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 	               "object", UC_STRING, REQUIRED, &objname,
 	               "method", UC_STRING, REQUIRED, &funname,
 	               "data", UC_OBJECT, OPTIONAL, &funargs,
-	               "multiple_return", UC_BOOLEAN, OPTIONAL, &mret);
+	               "multiple_return", UC_BOOLEAN, OPTIONAL, &mret,
+	               "fd", UC_INTEGER, NAMED, &fd);
 
 	blob_buf_init(&c->buf, 0);
 
 	if (funargs)
 		ucv_object_to_blob(funargs, &c->buf);
+	if (fd)
+		fd_val = ucv_int64_get(fd);
 
 	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
 
@@ -723,8 +727,8 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 
 	res.mret = ucv_is_truish(mret);
 
-	rv = ubus_invoke(&c->ctx, id, ucv_string_get(funname), c->buf.head,
-	                 uc_ubus_call_cb, &res, c->timeout * 1000);
+	rv = ubus_invoke_fd(&c->ctx, id, ucv_string_get(funname), c->buf.head,
+	                    uc_ubus_call_cb, &res, c->timeout * 1000, fd_val);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to invoke function '%s' on object '%s'",
@@ -736,12 +740,13 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *objname, *funname, *funargs, *replycb, *conn, *res = NULL;
+	uc_value_t *objname, *funname, *funargs, *replycb, *fd, *conn, *res = NULL;
 	uc_ubus_deferred_t *defer;
 	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
 	uc_callframe_t *frame;
 	uint32_t id;
+	int fd_val = -1;
 
 	conn_get(vm, &c);
 
@@ -749,12 +754,16 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 	               "object", UC_STRING, REQUIRED, &objname,
 	               "method", UC_STRING, REQUIRED, &funname,
 	               "data", UC_OBJECT, OPTIONAL, &funargs,
-	               "cb", UC_CLOSURE, OPTIONAL, &replycb);
+	               "cb", UC_CLOSURE, OPTIONAL, &replycb,
+	               "fd", UC_INTEGER, NAMED, &fd);
 
 	blob_buf_init(&c->buf, 0);
 
 	if (funargs)
 		ucv_object_to_blob(funargs, &c->buf);
+
+	if (fd)
+		fd_val = ucv_int64_get(fd);
 
 	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
 
@@ -764,8 +773,8 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 
 	defer = xalloc(sizeof(*defer));
 
-	rv = ubus_invoke_async(&c->ctx, id, ucv_string_get(funname),
-	                       c->buf.head, &defer->request);
+	rv = ubus_invoke_async_fd(&c->ctx, id, ucv_string_get(funname),
+	                          c->buf.head, &defer->request, fd_val);
 
 	if (rv == UBUS_STATUS_OK) {
 		defer->vm = vm;
