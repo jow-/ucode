@@ -949,7 +949,7 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 					name = "[anonymous function]";
 			}
 			else {
-				name = frame->cfunction->name;
+				name = (char *)uvc_cfunction_get_name( frame->cfunction );
 			}
 
 			ucv_object_add(entry, "function", ucv_string_new(name));

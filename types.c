@@ -288,6 +288,15 @@ ucv_free(uc_value_t *uv, bool retain)
 		ucv_put_value(upval->value, retain);
 		break;
 
+	case UC_CFUNCTION:
+		if( ucv_is_cfunction_ex( uv ) )
+		{
+			uc_cfunction_ex_t *cfn = (uc_cfunction_ex_t *)uv;
+			if( cfn->feedback )
+				cfn->feedback( uv );
+		}
+		break;
+
 	case UC_PROGRAM:
 		program = (uc_program_t *)uv;
 
@@ -1150,6 +1159,54 @@ ucv_cfunction_new(const char *name, uc_cfn_ptr_t fptr)
 	return &cfn->header;
 }
 
+bool 
+ucv_cfunction_ex_helper( int cmd, void *args )
+{
+	static const char *strmagic = 
+#if INTPTR_MAX == INT64_MAX
+		"\xFF" "FEEDBA"; // 8 bytes, including closing zero
+#else 
+		"\xFF" "FB"; // 4 bytes, including closing zero
+#endif
+
+	if( 0 == cmd ) // ucv_cfunction_ex_new()
+	{
+		void **pargs = args;
+		uc_cfunction_ex_t *cfn;
+
+		size_t namelen = 0;
+		const char *name = (const char *)pargs[ 0 ];
+
+		if (name)
+			namelen = strlen(name);
+
+		cfn = xalloc(sizeof(*cfn) + ALIGN( namelen + 1 ) + (size_t)pargs[3] );
+		cfn->header.header.type = UC_CFUNCTION;
+		cfn->header.header.refcount = 1;
+		cfn->header.cfn = pargs[ 1 ];
+		cfn->magic = *(intptr_t *)strmagic;
+		cfn->feedback = pargs[ 2 ];
+
+		if( name )
+			strcpy( cfn->name, name );
+
+		pargs[ 0 ] = cfn;
+		return true;
+	}
+	if( 1 == cmd ) // ucv_cfunction_ex_get_magic()
+	{
+		intptr_t *ret = args;
+		*ret = *(intptr_t *)strmagic;
+		return true;
+	}
+	if( 2 == cmd ) // ucv_cfunction_ex_get_magic string
+	{
+		const char **ret = args;
+		*ret = strmagic;
+		return true;
+	}
+	return false;
+}
 
 uc_value_t *
 ucv_closure_new(uc_vm_t *vm, uc_function_t *function, bool arrow_fn)
@@ -1851,15 +1908,18 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		break;
 
 	case UC_CFUNCTION:
+	{
 		cfunction = (uc_cfunction_t *)uv;
+		const char *name = uvc_cfunction_get_name( cfunction );
 
 		ucv_stringbuf_printf(pb, "%sfunction%s%s(...) { [native code] }%s",
 			json ? "\"" : "",
-			cfunction->name[0] ? " " : "",
-			cfunction->name[0] ? cfunction->name : "",
+			name[0] ? " " : "",
+			name[0] ? name : "",
 			json ? "\"" : "");
 
 		break;
+	}
 
 	case UC_RESOURCE:
 		resource = (uc_resource_t *)uv;
