@@ -37,7 +37,7 @@ typedef struct async_alien
     // to know if an alien call should interrupt the sleep
     int todo_seq;
 	
-	uint32_t the_futex;
+	_Atomic uint32_t the_futex;
     uint32_t refcount;
 
     // zero if vm ended

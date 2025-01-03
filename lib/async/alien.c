@@ -38,7 +38,7 @@ This file is part of the async plugin for ucode
 #ifdef ASYNC_HAS_ALIENS
 
 static int
-async_futex(uint32_t *uaddr, int futex_op, uint32_t val,
+async_futex( _Atomic uint32_t *uaddr, int futex_op, uint32_t val,
     const struct timespec *timeout, uint32_t *uaddr2, uint32_t val3)
 {
     return syscall(SYS_futex, uaddr, futex_op, val,
@@ -46,7 +46,7 @@ async_futex(uint32_t *uaddr, int futex_op, uint32_t val,
 }
 
 static void 
-async_alien_enter_futex( uint32_t *futex_addr )
+async_alien_enter_futex( _Atomic uint32_t *futex_addr )
 {
     while (1) 
     {
@@ -76,7 +76,7 @@ async_alien_enter( async_manager_t *manager )
 }
 
 static void
-async_alien_release_futex( uint32_t *futex_addr )
+async_alien_release_futex( _Atomic uint32_t *futex_addr )
 {
     const uint32_t zero = 0;
     atomic_store( futex_addr, zero );
