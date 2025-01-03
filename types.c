@@ -2541,13 +2541,26 @@ uc_search_path_init(uc_search_path_t *search_path)
 static __thread uc_thread_context_t *tls_ctx;
 
 uc_thread_context_t *
-uc_thread_context_get(void)
+uc_thread_context_helper( int cmd, void *args )
 {
-	if (tls_ctx == NULL) {
-		tls_ctx = xalloc(sizeof(*tls_ctx));
-		tls_ctx->object_iterators.prev = &tls_ctx->object_iterators;
-		tls_ctx->object_iterators.next = &tls_ctx->object_iterators;
+	if( 0 == cmd ) // uc_thread_context_get()
+	{
+		if (tls_ctx == NULL) {
+			tls_ctx = xalloc(sizeof(*tls_ctx));
+			tls_ctx->object_iterators.prev = &tls_ctx->object_iterators;
+			tls_ctx->object_iterators.next = &tls_ctx->object_iterators;
+		}
+		return tls_ctx;
 	}
-
-	return tls_ctx;
+	if( 1 == cmd )	// uc_thread_context_peek()
+	{
+		return tls_ctx;
+	}
+	if( 2 == cmd ) // uc_thread_context_exchange()
+	{
+		uc_thread_context_t *cur = tls_ctx;
+		tls_ctx = args;
+		return cur;
+	}
+	return 0;
 }

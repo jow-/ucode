@@ -285,7 +285,26 @@ typedef struct {
 	uc_list_t object_iterators;
 } uc_thread_context_t;
 
-__hidden uc_thread_context_t *uc_thread_context_get(void);
+/* Do not call uc_thread_context_helper() directly, use one of the helper functions below */
+uc_thread_context_t *uc_thread_context_helper( int cmd, void * );
+
+static inline uc_thread_context_t *
+uc_thread_context_get(void)
+{
+	return uc_thread_context_helper( 0, 0 );
+}
+
+static inline uc_thread_context_t *
+uc_thread_context_peek(void)
+{
+	return uc_thread_context_helper( 1, 0 );
+}
+
+static inline uc_thread_context_t *
+uc_thread_context_exchange( uc_thread_context_t *tc )
+{
+	return uc_thread_context_helper( 2, tc );
+}
 
 
 /* VM definitions */
