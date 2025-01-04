@@ -65,10 +65,7 @@ async_callback_queuer_wakeup( const async_callback_queuer_t *queuer )
 
 	DEBUG_PRINTF( "%-1.3lf Wakeup script vm=%p\n", async_manager_uptime( queuer->manager ), queuer->manager->vm );
 	// send a signal to the script thread;
-	union sigval info = {0};
-	info.sival_ptr = (void *)queuer->thread;
-
-	pthread_sigqueue(queuer->thread, SIGNEWCALLBACK, info);
+	pthread_kill( queuer->thread, SIGNEWCALLBACK );
 }
 
 void async_sleep( async_manager_t *manager, int64_t msec )
