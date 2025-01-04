@@ -662,7 +662,10 @@ async_promise_resolver_unlink( async_manager_t *manager, async_promise_resolver_
 static uc_value_t *
 async_resolver_resolve_or_reject( uc_vm_t *vm, size_t nargs, int type )
 {
-	uc_cfunction_t *callee = uc_vector_last(&vm->callframes)->cfunction;
+	uc_callframe_t *lastframe = uc_vector_last(&vm->callframes);
+	if( !lastframe )
+		return 0;
+	uc_cfunction_t *callee = lastframe->cfunction;
 	async_promise_resolver_t **presolver = (async_promise_resolver_t**)ucv_cfunction_ex_get_user( (uc_value_t *)callee );
 	if( presolver )
 	{

@@ -477,11 +477,13 @@ ucv_cfunction_ex_get_magic()
 static inline bool
 ucv_is_cfunction_ex( uc_value_t *uv )
 {
+	if( NULL == uv )
+		return false;
 	if( ucv_type(uv) != UC_CFUNCTION )
 		return false;
-	const char *magic;
-	if( !ucv_cfunction_ex_helper( 2, &magic ) )
-		return false;		
+	const char *magic = 0;
+	if( !ucv_cfunction_ex_helper( 2, &magic ) || NULL == magic )
+		return false;
 	return 0 == strcmp( ((uc_cfunction_t *)uv)->name, magic );
 }
 
