@@ -210,7 +210,7 @@ async_alien_free( async_manager_t *manager, struct async_alien *alien )
 #else  // defined ASYNC_HAS_ALIENS
 
 static const uc_async_alient_t *
-_uc_async_new_alien( struct uc_async_manager * )
+_uc_async_new_alien( struct uc_async_manager *manager )
 {
     return 0;
 }
