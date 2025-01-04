@@ -50,7 +50,7 @@ async_alien_enter_futex( _Atomic uint32_t *futex_addr )
 {
     while (1) 
     {
-        const uint32_t zero = 0;
+        uint32_t zero = 0;
         if( atomic_compare_exchange_strong( futex_addr, &zero, 1 ) )
             return;
 

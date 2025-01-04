@@ -363,7 +363,7 @@ async_event_pump( struct uc_async_manager *_man, unsigned max_wait, int flags)
 			{
 				if (EXCEPTION_EXIT == ex)
                 {
-                    manager->silent = 1;
+                    manager->silent = -1;
 					return STATUS_EXIT;
                 }
 				return ERROR_RUNTIME;
@@ -374,7 +374,7 @@ async_event_pump( struct uc_async_manager *_man, unsigned max_wait, int flags)
 			{
 				if (EXCEPTION_EXIT == ex)
                 {
-                    manager->silent = 1;
+                    manager->silent = -1;
 					return STATUS_EXIT;
                 }
 				return ERROR_RUNTIME;
