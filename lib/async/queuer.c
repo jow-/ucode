@@ -139,11 +139,13 @@ struct async_callback_queuer_chain
 	struct async_callback callback;
 };
 
+/*
 static inline async_callback_queuer_t *
 async_callback_queuer_cast(struct uc_async_callback_queuer *handler)
 {
 	return (async_callback_queuer_t *)handler;
 }
+*/
 
 static inline async_callback_queuer_t const *
 async_callback_queuer_cast_const(struct uc_async_callback_queuer const *handler)

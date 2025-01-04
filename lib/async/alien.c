@@ -17,9 +17,6 @@
 /*
 This file is part of the async plugin for ucode
 */
-#include <linux/futex.h>
-#include <stdatomic.h>
-#include <sys/syscall.h>
 #include <unistd.h>
 #include <err.h>
 #include <errno.h>
@@ -36,6 +33,9 @@ This file is part of the async plugin for ucode
 #include "queuer.h"
 
 #ifdef ASYNC_HAS_ALIENS
+#include <linux/futex.h>
+#include <stdatomic.h>
+#include <sys/syscall.h>
 
 static int
 async_futex( _Atomic uint32_t *uaddr, int futex_op, uint32_t val,
