@@ -186,7 +186,10 @@ async_vm_raise_exception_caused_by( uc_vm_t *vm, uc_value_t *caused_by, int type
 	if( vm->callframes.count )
 	{
 		// No exceptions without framestack. It will crash
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
 		uc_vm_raise_exception(vm, type, err, arg );
+#pragma GCC diagnostic pop
 		ret = true;
 	}
 	if( frame )
@@ -254,7 +257,7 @@ async_promise_destroy( async_manager_t *manager, async_todo_t *todo)
 	{
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
-//#pragma GCC diagnostic ignored "-Wuse-after-free"
+
 		static const char *err = "Rejected promise %p without catch handler\n";
 		if (vm_is_active )
 		{

@@ -28,6 +28,11 @@ This file is part of the async plugin for ucode
 #define ASYNC_HAS_UPTIME
 #define ASYNC_HAS_ALIENS
 
+#ifdef __APPLE__
+// For now. Aliens needs Linux futex, which isn't available on MacOS.
+#	undef ASYNC_HAS_ALIENS
+#endif
+
 #ifdef DEBUG_PRINT
 #   define DEBUG_PRINTF(...) printf(__VA_ARGS__)
 #   define ASYNC_HAS_UPTIME
