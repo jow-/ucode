@@ -196,7 +196,8 @@ typedef struct {
 typedef void (*uc_cfn_feedback_t)( uc_value_t * );
 
 typedef struct {
-	uc_cfunction_t header;
+	uc_value_t header;
+	uc_cfn_ptr_t cfn;
 	intptr_t magic;
 	uc_cfn_feedback_t feedback;
 	char name[];

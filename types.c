@@ -1162,6 +1162,9 @@ ucv_cfunction_new(const char *name, uc_cfn_ptr_t fptr)
 bool 
 ucv_cfunction_ex_helper( int cmd, void *args )
 {
+	_Static_assert( offsetof(uc_cfunction_t,name) == offsetof(uc_cfunction_ex_t,magic),
+		"Problem with alignment of uc_cfunction_ex_t" );
+
 	static const char *strmagic = 
 #if INTPTR_MAX == INT64_MAX
 		"\xFF" "FEEDBA"; // 8 bytes, including closing zero
@@ -1181,9 +1184,9 @@ ucv_cfunction_ex_helper( int cmd, void *args )
 			namelen = strlen(name);
 
 		cfn = xalloc(sizeof(*cfn) + ALIGN( namelen + 1 ) + (size_t)pargs[3] );
-		cfn->header.header.type = UC_CFUNCTION;
-		cfn->header.header.refcount = 1;
-		cfn->header.cfn = pargs[ 1 ];
+		cfn->header.type = UC_CFUNCTION;
+		cfn->header.refcount = 1;
+		cfn->cfn = pargs[ 1 ];
 		cfn->magic = *(intptr_t *)strmagic;
 		cfn->feedback = pargs[ 2 ];
 
