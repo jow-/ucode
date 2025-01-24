@@ -506,6 +506,7 @@ main(int argc, char **argv)
 	FILE *precompile = NULL;
 	char *outfile = NULL;
 	uc_vm_t vm = { 0 };
+	const char *argv0;
 	int opt, rv = 0;
 	const char *app;
 	uc_value_t *o;
@@ -558,6 +559,7 @@ main(int argc, char **argv)
 
 	uc_search_path_init(&config.module_search_path);
 
+	argv0 = argv[optind];
 	optind = 1;
 
 	uc_vm_init(&vm, &config);
@@ -569,6 +571,8 @@ main(int argc, char **argv)
 	o = ucv_array_new(&vm);
 
 	ucv_object_add(uc_vm_scope_get(&vm), "ARGV", ucv_get(o));
+	if (argv0)
+		ucv_object_add(uc_vm_scope_get(&vm), "SCRIPT_NAME", ucv_string_new(argv0));
 
 	/* parse options iteration 2: process remaining options */
 	while ((opt = getopt(argc, argv, optspec)) != -1)
