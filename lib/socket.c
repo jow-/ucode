@@ -306,13 +306,16 @@ hwaddr_to_uv(uint8_t *addr, size_t alen)
 	char buf[sizeof("FF:FF:FF:FF:FF:FF:FF:FF")], *p = buf;
 	const char *hex = "0123456789ABCDEF";
 
-	for (size_t i = 0; i < alen && i < 8; i++) {
+	if (alen > 8)
+		alen = 8;
+
+	for (size_t i = 0; i < alen; i++) {
 		if (i) *p++ = ':';
 		*p++ = hex[addr[i] / 16];
 		*p++ = hex[addr[i] % 16];
 	}
 
-	return ucv_string_new(buf);
+	return ucv_string_new_length(buf, alen);
 }
 
 static bool
@@ -3919,10 +3922,6 @@ uc_socket_inst_recvmsg(uc_vm_t *vm, size_t nargs)
 		"flags", UC_INTEGER, true, &flags);
 
 	flagval = flags ? ucv_int64_get(flags) : 0;
-
-#if defined(__linux__)
-	flagval |= MSG_CMSG_CLOEXEC;
-#endif
 
 	/* prepare ancillary data buffer */
 	if (anclength) {
