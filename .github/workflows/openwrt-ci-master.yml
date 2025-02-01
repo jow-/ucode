@@ -24,7 +24,7 @@ jobs:
       - uses: ynezz/gh-actions-openwrt-ci-native@v0.0.2
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: native-build-artifacts

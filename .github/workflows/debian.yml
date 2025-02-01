@@ -29,7 +29,7 @@ jobs:
           dpkg-buildpackage -b -us -uc
 
       - name: Archive code coverage results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: deb
           path: '*ucode*.deb'
