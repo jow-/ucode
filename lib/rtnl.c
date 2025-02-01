@@ -3612,6 +3612,10 @@ cb_listener_event(struct nl_msg *msg, void *arg)
 
 		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE) {
 			uloop_end();
+			set_error(NLE_FAILURE, "Runtime exception in callback");
+
+			errno = EINVAL;
+
 			return NL_STOP;
 		}
 
@@ -3631,12 +3635,8 @@ uc_nl_listener_cb(struct uloop_fd *fd, unsigned int events)
 
 		nl_recvmsgs_default(nl_conn.evsock);
 
-		if (errno != 0) {
-			if (errno != EAGAIN && errno != EWOULDBLOCK)
-				set_error(errno, NULL);
-
+		if (errno != 0)
 			break;
-		}
 	}
 }
 
