@@ -78,6 +78,7 @@
 
 #if defined(__linux__)
 # include <linux/if_packet.h>
+# include <linux/filter.h>
 
 # ifndef SO_TIMESTAMP_OLD
 #  define SO_TIMESTAMP_OLD SO_TIMESTAMP
@@ -969,6 +970,90 @@ static struct_t st_timeval = {
 };
 
 #if defined(__linux__)
+static bool
+filter_to_c(void *st, uc_value_t *uv)
+{
+	struct sock_fprog **fpp = st;
+	struct sock_fprog *fp = *fpp;
+	size_t i, len;
+
+	if (ucv_type(uv) == UC_STRING) {
+		size_t len = ucv_string_length(uv);
+
+		if (len == 0 || (len % sizeof(struct sock_filter)) != 0)
+			err_return(EINVAL, "Filter program length not a multiple of %zu",
+				sizeof(struct sock_filter));
+
+		fp = *fpp = xrealloc(fp, sizeof(struct sock_fprog) + len);
+		fp->filter = memcpy((char *)fp + sizeof(struct sock_fprog), ucv_string_get(uv), len);
+
+		if (fp->len == 0)
+			fp->len = len / sizeof(struct sock_filter);
+	}
+	else if (ucv_type(uv) == UC_ARRAY) {
+		/* Opcode array of array. Each sub-array is a 4 element tuple */
+		if (ucv_type(ucv_array_get(uv, 0)) == UC_ARRAY) {
+			len = ucv_array_length(uv);
+
+			fp = *fpp = xrealloc(fp, sizeof(struct sock_fprog)
+				+ (len * sizeof(struct sock_filter)));
+
+			fp->filter = (struct sock_filter *)((char *)fp + sizeof(struct sock_fprog));
+
+			for (i = 0; i < len; i++) {
+				uc_value_t *op = ucv_array_get(uv, i);
+
+				if (ucv_type(op) != UC_ARRAY)
+					continue;
+
+				fp->filter[i].code = ucv_to_unsigned(ucv_array_get(op, 0));
+				fp->filter[i].jt = ucv_to_unsigned(ucv_array_get(op, 1));
+				fp->filter[i].jf = ucv_to_unsigned(ucv_array_get(op, 2));
+				fp->filter[i].k = ucv_to_unsigned(ucv_array_get(op, 3));
+			}
+		}
+
+		/* Flat opcode array, must be a multiple of 4 */
+		else {
+			len = ucv_array_length(uv);
+
+			if (len % 4)
+				err_return(EINVAL, "Opcode array length not a multiple of 4");
+
+			len /= 4;
+
+			fp = *fpp = xrealloc(fp, sizeof(struct sock_fprog)
+				+ (len * sizeof(struct sock_filter)));
+
+			fp->filter = (struct sock_filter *)((char *)fp + sizeof(struct sock_fprog));
+
+			for (i = 0; i < len; i++) {
+				fp->filter[i].code = ucv_to_unsigned(ucv_array_get(uv, i * 4 + 0));
+				fp->filter[i].jt = ucv_to_unsigned(ucv_array_get(uv, i * 4 + 1));
+				fp->filter[i].jf = ucv_to_unsigned(ucv_array_get(uv, i * 4 + 2));
+				fp->filter[i].k = ucv_to_unsigned(ucv_array_get(uv, i * 4 + 3));
+			}
+		}
+
+		if (fp->len == 0)
+			fp->len = i;
+	}
+	else {
+		err_return(EINVAL, "Expecting either BPF bytecode string or array of opcodes");
+	}
+
+	return true;
+}
+
+static struct_t st_sock_fprog = {
+	.size = sizeof(struct sock_fprog),
+	.members = (member_t []){
+		STRUCT_MEMBER_NP(sock_fprog, len, DT_UNSIGNED),
+		STRUCT_MEMBER_CB(filter, filter_to_c, NULL),
+		{ 0 }
+	}
+};
+
 static struct_t st_ucred = {
 	.size = sizeof(struct ucred),
 	.members = (member_t []){
@@ -1051,7 +1136,7 @@ in6_ifindex_to_uv(void *st)
 static bool
 in6_ifindex_to_c(void *st, uc_value_t *uv)
 {
-	struct ipv6_mreq *mr = st;
+	struct ipv6_mreq *mr = *(struct ipv6_mreq **)st;
 
 	if (ucv_type(uv) == UC_STRING) {
 		mr->ipv6mr_interface = if_nametoindex(ucv_string_get(uv));
@@ -1189,7 +1274,9 @@ rcv_wscale_to_uv(void *st)
 static bool
 snd_wscale_to_c(void *st, uc_value_t *uv)
 {
-	((struct tcp_info *)st)->tcpi_snd_wscale = ucv_to_unsigned(uv);
+	struct tcp_info *ti = *(struct tcp_info **)st;
+
+	ti->tcpi_snd_wscale = ucv_to_unsigned(uv);
 
 	if (errno)
 		err_return(errno, "Unable to convert field snd_wscale to unsigned");
@@ -1200,7 +1287,9 @@ snd_wscale_to_c(void *st, uc_value_t *uv)
 static bool
 rcv_wscale_to_c(void *st, uc_value_t *uv)
 {
-	((struct tcp_info *)st)->tcpi_rcv_wscale = ucv_to_unsigned(uv);
+	struct tcp_info *ti = *(struct tcp_info **)st;
+
+	ti->tcpi_rcv_wscale = ucv_to_unsigned(uv);
 
 	if (errno)
 		err_return(errno, "Unable to convert field rcv_wscale to unsigned");
@@ -1314,7 +1403,7 @@ mr_ifindex_to_uv(void *st)
 static bool
 mr_ifindex_to_c(void *st, uc_value_t *uv)
 {
-	struct packet_mreq *mr = st;
+	struct packet_mreq *mr = *(struct packet_mreq **)st;
 
 	if (ucv_type(uv) == UC_STRING) {
 		mr->mr_ifindex = if_nametoindex(ucv_string_get(uv));
@@ -1344,7 +1433,7 @@ mr_address_to_uv(void *st)
 static bool
 mr_address_to_c(void *st, uc_value_t *uv)
 {
-	struct packet_mreq *mr = st;
+	struct packet_mreq *mr = *(struct packet_mreq **)st;
 	size_t len;
 
 	if (!uv_to_hwaddr(uv, mr->mr_address, &len))
@@ -1507,7 +1596,7 @@ static sockopt_t sockopts[] = {
     { SOL_SOCKET, SO_TIMESTAMP, SV_BOOL },
     { SOL_SOCKET, SO_TYPE, SV_INT },
 #if defined(__linux__)
-    { SOL_SOCKET, SO_ATTACH_FILTER, SV_STRING },
+    { SOL_SOCKET, SO_ATTACH_FILTER, &st_sock_fprog },
     { SOL_SOCKET, SO_ATTACH_BPF, SV_INT },
     { SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF, SV_STRING },
     { SOL_SOCKET, SO_ATTACH_REUSEPORT_EBPF, SV_INT },
@@ -1792,7 +1881,7 @@ uv_to_struct(uc_value_t *uv, struct_t *spec)
 			break;
 
 		case DT_CALLBACK:
-			if (m->u1.to_c && !m->u1.to_c(st, fv)) {
+			if (m->u1.to_c && !m->u1.to_c(&st, fv)) {
 				free(st);
 				return NULL;
 			}
