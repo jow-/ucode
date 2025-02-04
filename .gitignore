@@ -21,3 +21,15 @@ examples/
 !/docs/ucode.css
 !/docs/.nojekyll
 !/docs/tutorials/
+/obj-*/
+/debian/.debhelper/
+/debian/tmp/
+/debian/ucode/
+/debian/libucode/
+/debian/libucode-dev/
+/debian/ucode-modules/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.debhelper
+/debian/*.debhelper.log
+/debian/*.substvars
