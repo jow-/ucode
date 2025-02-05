@@ -428,11 +428,11 @@ uc_uloop_timeout_clear(uc_uloop_timer_t **timer)
 static uc_value_t *
 uc_uloop_timer_set(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_timer_t **timer = uc_fn_this("uloop.timer");
+	uc_uloop_timer_t *timer = uc_fn_thisval("uloop.timer");
 	uc_value_t *timeout = uc_fn_arg(0);
 	int t, rv;
 
-	if (!timer || !*timer)
+	if (!timer)
 		err_return(EINVAL);
 
 	errno = 0;
@@ -441,7 +441,7 @@ uc_uloop_timer_set(uc_vm_t *vm, size_t nargs)
 	if (errno)
 		err_return(errno);
 
-	rv = uloop_timeout_set(&(*timer)->timeout, t);
+	rv = uloop_timeout_set(&timer->timeout, t);
 
 	ok_return(ucv_boolean_new(rv == 0));
 }
@@ -468,16 +468,16 @@ uc_uloop_timer_set(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_timer_remaining(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_timer_t **timer = uc_fn_this("uloop.timer");
+	uc_uloop_timer_t *timer = uc_fn_thisval("uloop.timer");
 	int64_t rem;
 
-	if (!timer || !*timer)
+	if (!timer)
 		err_return(EINVAL);
 
 #ifdef HAVE_ULOOP_TIMEOUT_REMAINING64
-	rem = uloop_timeout_remaining64(&(*timer)->timeout);
+	rem = uloop_timeout_remaining64(&timer->timeout);
 #else
-	rem = (int64_t)uloop_timeout_remaining(&(*timer)->timeout);
+	rem = (int64_t)uloop_timeout_remaining(&timer->timeout);
 #endif
 
 	ok_return(ucv_int64_new(rem));
@@ -641,12 +641,12 @@ uc_uloop_handle_clear(uc_uloop_handle_t **handle)
 static uc_value_t *
 uc_uloop_handle_fileno(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_handle_t **handle = uc_fn_this("uloop.handle");
+	uc_uloop_handle_t *handle = uc_fn_thisval("uloop.handle");
 
-	if (!handle || !*handle)
+	if (!handle)
 		err_return(EINVAL);
 
-	ok_return(ucv_int64_new((*handle)->fd.fd));
+	ok_return(ucv_int64_new(handle->fd.fd));
 }
 
 /**
@@ -668,12 +668,12 @@ uc_uloop_handle_fileno(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_handle_handle(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_handle_t **handle = uc_fn_this("uloop.handle");
+	uc_uloop_handle_t *handle = uc_fn_thisval("uloop.handle");
 
-	if (!handle || !*handle)
+	if (!handle)
 		err_return(EINVAL);
 
-	ok_return(ucv_get((*handle)->handle));
+	ok_return(ucv_get(handle->handle));
 }
 
 /**
@@ -901,12 +901,12 @@ uc_uloop_process_clear(uc_uloop_process_t **process)
 static uc_value_t *
 uc_uloop_process_pid(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_process_t **process = uc_fn_this("uloop.process");
+	uc_uloop_process_t *process = uc_fn_thisval("uloop.process");
 
-	if (!process || !*process)
+	if (!process)
 		err_return(EINVAL);
 
-	ok_return(ucv_int64_new((*process)->process.pid));
+	ok_return(ucv_int64_new(process->process.pid));
 }
 
 /**
@@ -1192,16 +1192,16 @@ uc_uloop_pipe_send_common(uc_vm_t *vm, uc_value_t *msg, int fd)
 static uc_value_t *
 uc_uloop_pipe_send(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_pipe_t **pipe = uc_fn_this("uloop.pipe");
+	uc_uloop_pipe_t *pipe = uc_fn_thisval("uloop.pipe");
 	uc_value_t *msg = uc_fn_arg(0);
 
-	if (!pipe || !*pipe)
+	if (!pipe)
 		err_return(EINVAL);
 
-	if (!(*pipe)->has_receiver)
+	if (!pipe->has_receiver)
 		err_return(EPIPE);
 
-	ok_return(uc_uloop_pipe_send_common(vm, msg, (*pipe)->output));
+	ok_return(uc_uloop_pipe_send_common(vm, msg, pipe->output));
 }
 
 static bool
@@ -1311,21 +1311,21 @@ read_fail:
 static uc_value_t *
 uc_uloop_pipe_receive(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_pipe_t **pipe = uc_fn_this("uloop.pipe");
+	uc_uloop_pipe_t *pipe = uc_fn_thisval("uloop.pipe");
 	uc_value_t *rv;
 	size_t len = 0;
 
-	if (!pipe || !*pipe)
+	if (!pipe)
 		err_return(EINVAL);
 
-	if (!(*pipe)->has_sender)
+	if (!pipe->has_sender)
 		err_return(EPIPE);
 
 	/* send zero-length message to signal input request */
-	writeall((*pipe)->output, &len, sizeof(len));
+	writeall(pipe->output, &len, sizeof(len));
 
 	/* receive input message */
-	uc_uloop_pipe_receive_common(vm, (*pipe)->input, &rv, false);
+	uc_uloop_pipe_receive_common(vm, pipe->input, &rv, false);
 
 	return rv;
 }
@@ -1354,12 +1354,12 @@ uc_uloop_pipe_receive(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_pipe_sending(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_pipe_t **pipe = uc_fn_this("uloop.pipe");
+	uc_uloop_pipe_t *pipe = uc_fn_thisval("uloop.pipe");
 
-	if (!pipe || !*pipe)
+	if (!pipe)
 		err_return(EINVAL);
 
-	ok_return(ucv_boolean_new((*pipe)->has_sender));
+	ok_return(ucv_boolean_new(pipe->has_sender));
 }
 
 /**
@@ -1386,12 +1386,12 @@ uc_uloop_pipe_sending(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_pipe_receiving(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_pipe_t **pipe = uc_fn_this("uloop.pipe");
+	uc_uloop_pipe_t *pipe = uc_fn_thisval("uloop.pipe");
 
-	if (!pipe || !*pipe)
+	if (!pipe)
 		err_return(EINVAL);
 
-	ok_return(ucv_boolean_new((*pipe)->has_receiver));
+	ok_return(ucv_boolean_new(pipe->has_receiver));
 }
 
 
@@ -1473,15 +1473,15 @@ uc_uloop_task_clear(uc_uloop_task_t **task)
 static uc_value_t *
 uc_uloop_task_pid(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_task_t **task = uc_fn_this("uloop.task");
+	uc_uloop_task_t *task = uc_fn_thisval("uloop.task");
 
-	if (!task || !*task)
+	if (!task)
 		err_return(EINVAL);
 
-	if ((*task)->finished)
+	if (task->finished)
 		err_return(ESRCH);
 
-	ok_return(ucv_int64_new((*task)->process.pid));
+	ok_return(ucv_int64_new(task->process.pid));
 }
 
 /**
@@ -1510,16 +1510,16 @@ uc_uloop_task_pid(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_task_kill(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_task_t **task = uc_fn_this("uloop.task");
+	uc_uloop_task_t *task = uc_fn_thisval("uloop.task");
 	int rv;
 
-	if (!task || !*task)
+	if (!task)
 		err_return(EINVAL);
 
-	if ((*task)->finished)
+	if (task->finished)
 		err_return(ESRCH);
 
-	rv = kill((*task)->process.pid, SIGTERM);
+	rv = kill(task->process.pid, SIGTERM);
 
 	if (rv == -1)
 		err_return(errno);
@@ -1552,12 +1552,12 @@ uc_uloop_task_kill(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_task_finished(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_task_t **task = uc_fn_this("uloop.task");
+	uc_uloop_task_t *task = uc_fn_thisval("uloop.task");
 
-	if (!task || !*task)
+	if (!task)
 		err_return(EINVAL);
 
-	ok_return(ucv_boolean_new((*task)->finished));
+	ok_return(ucv_boolean_new(task->finished));
 }
 
 static void
@@ -1855,11 +1855,11 @@ uc_uloop_interval_clear(uc_uloop_interval_t **interval)
 static uc_value_t *
 uc_uloop_interval_set(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_interval_t **interval = uc_fn_this("uloop.interval");
+	uc_uloop_interval_t *interval = uc_fn_thisval("uloop.interval");
 	uc_value_t *timeout = uc_fn_arg(0);
 	int t, rv;
 
-	if (!interval || !*interval)
+	if (!interval)
 		err_return(EINVAL);
 
 	errno = 0;
@@ -1868,7 +1868,7 @@ uc_uloop_interval_set(uc_vm_t *vm, size_t nargs)
 	if (errno)
 		err_return(errno);
 
-	rv = uloop_interval_set(&(*interval)->interval, t);
+	rv = uloop_interval_set(&interval->interval, t);
 
 	ok_return(ucv_boolean_new(rv == 0));
 }
@@ -1898,12 +1898,12 @@ uc_uloop_interval_set(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_interval_remaining(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_interval_t **interval = uc_fn_this("uloop.interval");
+	uc_uloop_interval_t *interval = uc_fn_thisval("uloop.interval");
 
-	if (!interval || !*interval)
+	if (!interval)
 		err_return(EINVAL);
 
-	ok_return(ucv_int64_new(uloop_interval_remaining(&(*interval)->interval)));
+	ok_return(ucv_int64_new(uloop_interval_remaining(&interval->interval)));
 }
 
 /**
@@ -1925,12 +1925,12 @@ uc_uloop_interval_remaining(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_interval_expirations(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_interval_t **interval = uc_fn_this("uloop.interval");
+	uc_uloop_interval_t *interval = uc_fn_thisval("uloop.interval");
 
-	if (!interval || !*interval)
+	if (!interval)
 		err_return(EINVAL);
 
-	ok_return(ucv_int64_new((*interval)->interval.expirations));
+	ok_return(ucv_int64_new(interval->interval.expirations));
 }
 
 /**
@@ -1954,7 +1954,7 @@ uc_uloop_interval_cancel(uc_vm_t *vm, size_t nargs)
 	uc_uloop_interval_t **interval = uc_fn_this("uloop.interval");
 	int rv;
 
-	if (!interval || !*interval)
+	if (!interval)
 		err_return(EINVAL);
 
 	rv = uloop_interval_cancel(&(*interval)->interval);
@@ -2088,12 +2088,12 @@ uc_uloop_signal_clear(uc_uloop_signal_t **signal)
 static uc_value_t *
 uc_uloop_signal_signo(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_signal_t **signal = uc_fn_this("uloop.signal");
+	uc_uloop_signal_t *signal = uc_fn_thisval("uloop.signal");
 
-	if (!signal || !*signal)
+	if (!signal)
 		err_return(EINVAL);
 
-	ok_return(ucv_int64_new((*signal)->signal.signo));
+	ok_return(ucv_int64_new(signal->signal.signo));
 }
 
 /**
