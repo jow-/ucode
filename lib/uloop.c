@@ -516,7 +516,7 @@ uc_uloop_timer_cancel(uc_vm_t *vm, size_t nargs)
 static void
 uc_uloop_timer_cb(struct uloop_timeout *timeout)
 {
-	uc_uloop_timer_t *timer = (uc_uloop_timer_t *)timeout;
+	uc_uloop_timer_t *timer = container_of(timeout, uc_uloop_timer_t, timeout);
 
 	uc_uloop_reg_invoke(timer->vm, timer->registry_index, NULL);
 }
@@ -715,7 +715,7 @@ uc_uloop_handle_delete(uc_vm_t *vm, size_t nargs)
 static void
 uc_uloop_handle_cb(struct uloop_fd *fd, unsigned int flags)
 {
-	uc_uloop_handle_t *handle = (uc_uloop_handle_t *)fd;
+	uc_uloop_handle_t *handle = container_of(fd, uc_uloop_handle_t, fd);
 	uc_value_t *f = ucv_uint64_new(flags);
 
 	uc_uloop_reg_invoke(handle->vm, handle->registry_index, f);
@@ -948,7 +948,7 @@ uc_uloop_process_delete(uc_vm_t *vm, size_t nargs)
 static void
 uc_uloop_process_cb(struct uloop_process *proc, int exitcode)
 {
-	uc_uloop_process_t *process = (uc_uloop_process_t *)proc;
+	uc_uloop_process_t *process = container_of(proc, uc_uloop_process_t, process);
 	uc_value_t *e = ucv_int64_new(exitcode >> 8);
 
 	uc_uloop_reg_invoke(process->vm, process->registry_index, e);
@@ -1967,7 +1967,7 @@ uc_uloop_interval_cancel(uc_vm_t *vm, size_t nargs)
 static void
 uc_uloop_interval_cb(struct uloop_interval *uintv)
 {
-	uc_uloop_interval_t *interval = (uc_uloop_interval_t *)uintv;
+	uc_uloop_interval_t *interval = container_of(uintv, uc_uloop_interval_t, interval);
 
 	uc_uloop_reg_invoke(interval->vm, interval->registry_index, NULL);
 }
@@ -2134,7 +2134,7 @@ uc_uloop_signal_delete(uc_vm_t *vm, size_t nargs)
 static void
 uc_uloop_signal_cb(struct uloop_signal *usig)
 {
-	uc_uloop_signal_t *signal = (uc_uloop_signal_t *)usig;
+	uc_uloop_signal_t *signal = container_of(usig, uc_uloop_signal_t, signal);
 
 	uc_uloop_reg_invoke(signal->vm, signal->registry_index, NULL);
 }
