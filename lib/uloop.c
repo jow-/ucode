@@ -77,57 +77,53 @@
 #define ok_return(expr) do { last_error = 0; return (expr); } while(0)
 #define err_return(err) do { last_error = err; return NULL; } while(0)
 
-static uc_resource_type_t *timer_type, *handle_type, *process_type, *task_type, *pipe_type;
-
-#ifdef HAVE_ULOOP_INTERVAL
-static uc_resource_type_t *interval_type;
-#endif
-
-#ifdef HAVE_ULOOP_SIGNAL
-static uc_resource_type_t *signal_type;
-#endif
-
-static uc_value_t *object_registry;
-
 static int last_error = 0;
 
-static size_t
-uc_uloop_reg_add(uc_value_t *obj, uc_value_t *cb)
+typedef struct {
+	uc_vm_t *vm;
+	uc_value_t *obj;
+} uc_uloop_cb_t;
+
+static void *
+uc_uloop_alloc(uc_vm_t *vm, const char *type, size_t size, uc_value_t *func)
 {
-	size_t i = 0;
+	uc_uloop_cb_t *cb;
+	uc_value_t *obj;
 
-	while (ucv_array_get(object_registry, i))
-		i += 2;
+	obj = ucv_resource_create_ex(vm, type, (void **)&cb, 2, size);
+	if (!obj)
+		return NULL;
 
-	ucv_array_set(object_registry, i + 0, ucv_get(obj));
-	ucv_array_set(object_registry, i + 1, ucv_get(cb));
+	cb->vm = vm;
+	cb->obj = ucv_get(obj);
+	ucv_resource_set_no_gc(obj, true);
+	ucv_resource_value_set(obj, 0, ucv_get(func));
 
-	return i;
+	return cb;
+}
+
+static void
+uc_uloop_cb_free(uc_uloop_cb_t *cb)
+{
+	if (!cb->obj)
+		return;
+
+	ucv_resource_set_no_gc(cb->obj, false);
+	ucv_put(cb->obj);
+	cb->obj = NULL;
 }
 
 static bool
-uc_uloop_reg_remove(size_t i)
+uc_uloop_cb_invoke(uc_uloop_cb_t *cb, uc_value_t *arg)
 {
-	if (i + 1 >= ucv_array_length(object_registry))
+	uc_vm_t *vm = cb->vm;
+	uc_value_t *func = ucv_resource_value_get(cb->obj, 0);
+
+	if (!ucv_is_callable(func))
 		return false;
 
-	ucv_array_set(object_registry, i + 0, NULL);
-	ucv_array_set(object_registry, i + 1, NULL);
-
-	return true;
-}
-
-static bool
-uc_uloop_reg_invoke(uc_vm_t *vm, size_t i, uc_value_t *arg)
-{
-	uc_value_t *obj = ucv_array_get(object_registry, i + 0);
-	uc_value_t *cb = ucv_array_get(object_registry, i + 1);
-
-	if (!ucv_is_callable(cb))
-		return false;
-
-	uc_vm_stack_push(vm, ucv_get(obj));
-	uc_vm_stack_push(vm, ucv_get(cb));
+	uc_vm_stack_push(vm, ucv_get(cb->obj));
+	uc_vm_stack_push(vm, ucv_get(func));
 	uc_vm_stack_push(vm, ucv_get(arg));
 
 	if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE) {
@@ -385,18 +381,18 @@ uc_uloop_done(uc_vm_t *vm, size_t nargs)
  * timeout.cancel();
  */
 typedef struct {
+	uc_uloop_cb_t cb;
 	struct uloop_timeout timeout;
-	size_t registry_index;
-	uc_vm_t *vm;
 } uc_uloop_timer_t;
 
-static void
-uc_uloop_timeout_clear(uc_uloop_timer_t **timer)
+static int
+uc_uloop_timeout_clear(uc_uloop_timer_t *timer)
 {
-	/* drop registry entries and clear data to prevent reuse */
-	uc_uloop_reg_remove((*timer)->registry_index);
-	free(*timer);
-	*timer = NULL;
+	int rv = uloop_timeout_cancel(&timer->timeout);
+
+	uc_uloop_cb_free(&timer->cb);
+
+	return rv;
 }
 
 /**
@@ -500,15 +496,13 @@ uc_uloop_timer_remaining(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_timer_cancel(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_timer_t **timer = uc_fn_this("uloop.timer");
+	uc_uloop_timer_t *timer = uc_fn_thisval("uloop.timer");
 	int rv;
 
-	if (!timer || !*timer)
+	if (!timer)
 		err_return(EINVAL);
 
-	rv = uloop_timeout_cancel(&(*timer)->timeout);
-
-	uc_uloop_timeout_clear(timer);
+	rv = uc_uloop_timeout_clear(timer);
 
 	ok_return(ucv_boolean_new(rv == 0));
 }
@@ -518,7 +512,7 @@ uc_uloop_timer_cb(struct uloop_timeout *timeout)
 {
 	uc_uloop_timer_t *timer = container_of(timeout, uc_uloop_timer_t, timeout);
 
-	uc_uloop_reg_invoke(timer->vm, timer->registry_index, NULL);
+	uc_uloop_cb_invoke(&timer->cb, NULL);
 }
 
 /**
@@ -560,7 +554,6 @@ uc_uloop_timer(uc_vm_t *vm, size_t nargs)
 	uc_value_t *timeout = uc_fn_arg(0);
 	uc_value_t *callback = uc_fn_arg(1);
 	uc_uloop_timer_t *timer;
-	uc_value_t *res;
 	int t;
 
 	errno = 0;
@@ -572,18 +565,13 @@ uc_uloop_timer(uc_vm_t *vm, size_t nargs)
 	if (!ucv_is_callable(callback))
 		err_return(EINVAL);
 
-	timer = xalloc(sizeof(*timer));
+	timer = uc_uloop_alloc(vm, "uloop.timer", sizeof(*timer), callback);
 	timer->timeout.cb = uc_uloop_timer_cb;
-	timer->vm = vm;
 
 	if (t >= 0)
 		uloop_timeout_set(&timer->timeout, t);
 
-	res = uc_resource_new(timer_type, timer);
-
-	timer->registry_index = uc_uloop_reg_add(res, callback);
-
-	ok_return(res);
+	ok_return(timer->cb.obj);
 }
 
 
@@ -606,20 +594,18 @@ uc_uloop_timer(uc_vm_t *vm, size_t nargs)
  * handle.delete();
  */
 typedef struct {
+	uc_uloop_cb_t cb;
 	struct uloop_fd fd;
-	size_t registry_index;
-	uc_value_t *handle;
-	uc_vm_t *vm;
 } uc_uloop_handle_t;
 
-static void
-uc_uloop_handle_clear(uc_uloop_handle_t **handle)
+static int
+uc_uloop_handle_clear(uc_uloop_handle_t *handle)
 {
-	/* drop registry entries and clear data to prevent reuse */
-	uc_uloop_reg_remove((*handle)->registry_index);
-	ucv_put((*handle)->handle);
-	free(*handle);
-	*handle = NULL;
+	int rv = uloop_fd_delete(&handle->fd);
+
+	uc_uloop_cb_free(&handle->cb);
+
+	return rv;
 }
 
 /**
@@ -673,7 +659,7 @@ uc_uloop_handle_handle(uc_vm_t *vm, size_t nargs)
 	if (!handle)
 		err_return(EINVAL);
 
-	ok_return(ucv_get(handle->handle));
+	ok_return(ucv_get(ucv_resource_value_get(handle->cb.obj, 1)));
 }
 
 /**
@@ -696,15 +682,13 @@ uc_uloop_handle_handle(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_handle_delete(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_handle_t **handle = uc_fn_this("uloop.handle");
+	uc_uloop_handle_t *handle = uc_fn_thisval("uloop.handle");
 	int rv;
 
-	if (!handle || !*handle)
+	if (!handle)
 		err_return(EINVAL);
 
-	rv = uloop_fd_delete(&(*handle)->fd);
-
-	uc_uloop_handle_clear(handle);
+	rv = uc_uloop_handle_clear(handle);
 
 	if (rv != 0)
 		err_return(errno);
@@ -718,7 +702,7 @@ uc_uloop_handle_cb(struct uloop_fd *fd, unsigned int flags)
 	uc_uloop_handle_t *handle = container_of(fd, uc_uloop_handle_t, fd);
 	uc_value_t *f = ucv_uint64_new(flags);
 
-	uc_uloop_reg_invoke(handle->vm, handle->registry_index, f);
+	uc_uloop_cb_invoke(&handle->cb, f);
 	ucv_put(f);
 }
 
@@ -810,7 +794,6 @@ uc_uloop_handle(uc_vm_t *vm, size_t nargs)
 	uc_value_t *callback = uc_fn_arg(1);
 	uc_value_t *flags = uc_fn_arg(2);
 	uc_uloop_handle_t *handle;
-	uc_value_t *res;
 	int fd, ret;
 	uint64_t f;
 
@@ -830,24 +813,18 @@ uc_uloop_handle(uc_vm_t *vm, size_t nargs)
 	if (!ucv_is_callable(callback))
 		err_return(EINVAL);
 
-	handle = xalloc(sizeof(*handle));
+	handle = uc_uloop_alloc(vm, "uloop.handle", sizeof(*handle), callback);
 	handle->fd.fd = fd;
 	handle->fd.cb = uc_uloop_handle_cb;
-	handle->handle = ucv_get(fileno);
-	handle->vm = vm;
 
 	ret = uloop_fd_add(&handle->fd, (unsigned int)f);
-
 	if (ret != 0) {
-		free(handle);
+		ucv_put(handle->cb.obj);
 		err_return(errno);
 	}
 
-	res = uc_resource_new(handle_type, handle);
-
-	handle->registry_index = uc_uloop_reg_add(res, callback);
-
-	ok_return(res);
+	ucv_resource_value_set(handle->cb.obj, 1, ucv_get(fileno));
+	ok_return(handle->cb.obj);
 }
 
 
@@ -869,17 +846,18 @@ uc_uloop_handle(uc_vm_t *vm, size_t nargs)
  * proc.delete();
  */
 typedef struct {
+	uc_uloop_cb_t cb;
 	struct uloop_process process;
-	size_t registry_index;
-	uc_vm_t *vm;
 } uc_uloop_process_t;
 
-static void
-uc_uloop_process_clear(uc_uloop_process_t **process)
+static int
+uc_uloop_process_clear(uc_uloop_process_t *process)
 {
-	/* drop registry entries and clear data to prevent reuse */
-	uc_uloop_reg_remove((*process)->registry_index);
-	*process = NULL;
+	int rv = uloop_process_delete(&process->process);
+
+	uc_uloop_cb_free(&process->cb);
+
+	return rv;
 }
 
 /**
@@ -929,15 +907,13 @@ uc_uloop_process_pid(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_process_delete(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_process_t **process = uc_fn_this("uloop.process");
+	uc_uloop_process_t *process = uc_fn_thisval("uloop.process");
 	int rv;
 
-	if (!process || !*process)
+	if (!process)
 		err_return(EINVAL);
 
-	rv = uloop_process_delete(&(*process)->process);
-
-	uc_uloop_process_clear(process);
+	rv = uc_uloop_process_clear(process);
 
 	if (rv != 0)
 		err_return(EINVAL);
@@ -951,8 +927,8 @@ uc_uloop_process_cb(struct uloop_process *proc, int exitcode)
 	uc_uloop_process_t *process = container_of(proc, uc_uloop_process_t, process);
 	uc_value_t *e = ucv_int64_new(exitcode >> 8);
 
-	uc_uloop_reg_invoke(process->vm, process->registry_index, e);
-	uc_uloop_process_clear(&process);
+	uc_uloop_cb_invoke(&process->cb, e);
+	uc_uloop_process_clear(process);
 	ucv_put(e);
 }
 
@@ -999,7 +975,6 @@ uc_uloop_process(uc_vm_t *vm, size_t nargs)
 	uc_uloop_process_t *process;
 	uc_stringbuf_t *buf;
 	char **argp, **envp;
-	uc_value_t *res;
 	pid_t pid;
 	size_t i;
 
@@ -1046,18 +1021,12 @@ uc_uloop_process(uc_vm_t *vm, size_t nargs)
 		_exit(-1);
 	}
 
-	process = xalloc(sizeof(*process));
+	process = uc_uloop_alloc(vm, "uloop.process", sizeof(*process), callback);
 	process->process.pid = pid;
 	process->process.cb = uc_uloop_process_cb;
-	process->vm = vm;
-
 	uloop_process_add(&process->process);
 
-	res = uc_resource_new(process_type, process);
-
-	process->registry_index = uc_uloop_reg_add(res, callback);
-
-	ok_return(res);
+	ok_return(process->cb.obj);
 }
 
 
@@ -1414,12 +1383,11 @@ uc_uloop_pipe_receiving(uc_vm_t *vm, size_t nargs)
  * task.kill();
  */
 typedef struct {
+	uc_uloop_cb_t cb;
 	struct uloop_process process;
 	struct uloop_fd output;
-	size_t registry_index;
 	bool finished;
 	int input_fd;
-	uc_vm_t *vm;
 	uc_value_t *input_cb;
 	uc_value_t *output_cb;
 } uc_uloop_task_t;
@@ -1447,11 +1415,17 @@ uloop_fd_close(struct uloop_fd *fd) {
 }
 
 static void
-uc_uloop_task_clear(uc_uloop_task_t **task)
+uc_uloop_task_clear(uc_uloop_task_t *task)
 {
-	/* drop registry entries and clear data to prevent reuse */
-	uc_uloop_reg_remove((*task)->registry_index);
-	*task = NULL;
+	if (task->input_fd >= 0) {
+		close(task->input_fd);
+		task->input_fd = -1;
+
+		uloop_fd_close(&task->output);
+		uloop_process_delete(&task->process);
+	}
+
+	uc_uloop_cb_free(&task->cb);
 }
 
 /**
@@ -1564,25 +1538,26 @@ static void
 uc_uloop_task_output_cb(struct uloop_fd *fd, unsigned int flags)
 {
 	uc_uloop_task_t *task = container_of(fd, uc_uloop_task_t, output);
-	uc_value_t *obj = ucv_array_get(object_registry, task->registry_index);
+	uc_value_t *obj = task->cb.obj;
+	uc_vm_t *vm = task->cb.vm;
 	uc_value_t *msg = NULL;
 
 	if (flags & ULOOP_READ) {
 		while (true) {
-			if (!uc_uloop_pipe_receive_common(task->vm, fd->fd, &msg, !task->output_cb)) {
+			if (!uc_uloop_pipe_receive_common(vm, fd->fd, &msg, !task->output_cb)) {
 				/* input requested */
 				if (last_error == ENODATA) {
-					uc_vm_stack_push(task->vm, ucv_get(obj));
-					uc_vm_stack_push(task->vm, ucv_get(task->input_cb));
+					uc_vm_stack_push(vm, ucv_get(obj));
+					uc_vm_stack_push(vm, ucv_get(task->input_cb));
 
-					if (uc_vm_call(task->vm, true, 0) != EXCEPTION_NONE) {
+					if (uc_vm_call(vm, true, 0) != EXCEPTION_NONE) {
 						uloop_end();
 
 						return;
 					}
 
-					msg = uc_vm_stack_pop(task->vm);
-					uc_uloop_pipe_send_common(task->vm, msg, task->input_fd);
+					msg = uc_vm_stack_pop(vm);
+					uc_uloop_pipe_send_common(vm, msg, task->input_fd);
 					ucv_put(msg);
 
 					continue;
@@ -1593,12 +1568,12 @@ uc_uloop_task_output_cb(struct uloop_fd *fd, unsigned int flags)
 			}
 
 			if (task->output_cb) {
-				uc_vm_stack_push(task->vm, ucv_get(obj));
-				uc_vm_stack_push(task->vm, ucv_get(task->output_cb));
-				uc_vm_stack_push(task->vm, msg);
+				uc_vm_stack_push(vm, ucv_get(obj));
+				uc_vm_stack_push(vm, ucv_get(task->output_cb));
+				uc_vm_stack_push(vm, msg);
 
-				if (uc_vm_call(task->vm, true, 1) == EXCEPTION_NONE) {
-					ucv_put(uc_vm_stack_pop(task->vm));
+				if (uc_vm_call(vm, true, 1) == EXCEPTION_NONE) {
+					ucv_put(uc_vm_stack_pop(vm));
 				}
 				else {
 					uloop_end();
@@ -1612,15 +1587,8 @@ uc_uloop_task_output_cb(struct uloop_fd *fd, unsigned int flags)
 		}
 	}
 
-	if (!fd->registered && task->finished) {
-		close(task->input_fd);
-		task->input_fd = -1;
-
-		uloop_fd_close(&task->output);
-		uloop_process_delete(&task->process);
-
-		uc_uloop_task_clear(&task);
-	}
+	if (!fd->registered && task->finished)
+		uc_uloop_task_clear(task);
 }
 
 static void
@@ -1730,7 +1698,7 @@ uc_uloop_task(uc_vm_t *vm, size_t nargs)
 		tpipe->has_sender = input_cb;
 		tpipe->has_receiver = output_cb;
 
-		p = uc_resource_new(pipe_type, tpipe);
+		p = ucv_resource_create(vm, "uloop.pipe", tpipe);
 
 		uc_vm_stack_push(vm, func);
 		uc_vm_stack_push(vm, ucv_get(p));
@@ -1749,11 +1717,9 @@ uc_uloop_task(uc_vm_t *vm, size_t nargs)
 	close(inpipe[0]);
 	close(outpipe[1]);
 
-	task = xalloc(sizeof(*task));
+	task = uc_uloop_alloc(vm, "uloop.task", sizeof(*task), func);
 	task->process.pid = pid;
 	task->process.cb = uc_uloop_task_process_cb;
-
-	task->vm = vm;
 
 	task->output.fd = outpipe[0];
 	task->output.cb = uc_uloop_task_output_cb;
@@ -1771,15 +1737,12 @@ uc_uloop_task(uc_vm_t *vm, size_t nargs)
 
 	uloop_process_add(&task->process);
 
-	res = uc_resource_new(task_type, task);
-
 	cbs = ucv_array_new(NULL);
 	ucv_array_set(cbs, 0, ucv_get(output_cb));
 	ucv_array_set(cbs, 1, ucv_get(input_cb));
+	ucv_resource_value_set(task->cb.obj, 1, ucv_get(cbs));
 
-	task->registry_index = uc_uloop_reg_add(res, cbs);
-
-	ok_return(res);
+	ok_return(task->cb.obj);
 }
 
 
@@ -1803,18 +1766,18 @@ uc_uloop_task(uc_vm_t *vm, size_t nargs)
  */
 #ifdef HAVE_ULOOP_INTERVAL
 typedef struct {
+	uc_uloop_cb_t cb;
 	struct uloop_interval interval;
-	size_t registry_index;
-	uc_vm_t *vm;
 } uc_uloop_interval_t;
 
-static void
-uc_uloop_interval_clear(uc_uloop_interval_t **interval)
+static int
+uc_uloop_interval_clear(uc_uloop_interval_t *interval)
 {
-	/* drop registry entries and clear data to prevent reuse */
-	uc_uloop_reg_remove((*interval)->registry_index);
-	free(*interval);
-	*interval = NULL;
+	int rv = uloop_interval_cancel(&interval->interval);
+
+	uc_uloop_cb_free(&interval->cb);
+
+	return rv;
 }
 
 /**
@@ -1951,15 +1914,13 @@ uc_uloop_interval_expirations(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_interval_cancel(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_interval_t **interval = uc_fn_this("uloop.interval");
+	uc_uloop_interval_t *interval = uc_fn_thisval("uloop.interval");
 	int rv;
 
 	if (!interval)
 		err_return(EINVAL);
 
-	rv = uloop_interval_cancel(&(*interval)->interval);
-
-	uc_uloop_interval_clear(interval);
+	rv = uc_uloop_interval_clear(interval);
 
 	ok_return(ucv_boolean_new(rv == 0));
 }
@@ -1969,7 +1930,7 @@ uc_uloop_interval_cb(struct uloop_interval *uintv)
 {
 	uc_uloop_interval_t *interval = container_of(uintv, uc_uloop_interval_t, interval);
 
-	uc_uloop_reg_invoke(interval->vm, interval->registry_index, NULL);
+	uc_uloop_cb_invoke(&interval->cb, NULL);
 }
 
 /**
@@ -2009,7 +1970,6 @@ uc_uloop_interval(uc_vm_t *vm, size_t nargs)
 	uc_value_t *timeout = uc_fn_arg(0);
 	uc_value_t *callback = uc_fn_arg(1);
 	uc_uloop_interval_t *interval;
-	uc_value_t *res;
 	int t;
 
 	errno = 0;
@@ -2021,18 +1981,12 @@ uc_uloop_interval(uc_vm_t *vm, size_t nargs)
 	if (!ucv_is_callable(callback))
 		err_return(EINVAL);
 
-	interval = xalloc(sizeof(*interval));
+	interval = uc_uloop_alloc(vm, "uloop.interval", sizeof(*interval), callback);
 	interval->interval.cb = uc_uloop_interval_cb;
-	interval->vm = vm;
-
 	if (t >= 0)
 		uloop_interval_set(&interval->interval, t);
 
-	res = uc_resource_new(interval_type, interval);
-
-	interval->registry_index = uc_uloop_reg_add(res, callback);
-
-	ok_return(res);
+	ok_return(interval->cb.obj);
 }
 #endif
 
@@ -2055,18 +2009,18 @@ uc_uloop_interval(uc_vm_t *vm, size_t nargs)
  */
 #ifdef HAVE_ULOOP_SIGNAL
 typedef struct {
+	uc_uloop_cb_t cb;
 	struct uloop_signal signal;
-	size_t registry_index;
-	uc_vm_t *vm;
 } uc_uloop_signal_t;
 
-static void
-uc_uloop_signal_clear(uc_uloop_signal_t **signal)
+static int
+uc_uloop_signal_clear(uc_uloop_signal_t *signal)
 {
-	/* drop registry entries and clear data to prevent reuse */
-	uc_uloop_reg_remove((*signal)->registry_index);
-	free(*signal);
-	*signal = NULL;
+	int rv = uloop_signal_delete(&signal->signal);
+
+	uc_uloop_cb_free(&signal->cb);
+
+	return rv;
 }
 
 /**
@@ -2115,15 +2069,13 @@ uc_uloop_signal_signo(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uloop_signal_delete(uc_vm_t *vm, size_t nargs)
 {
-	uc_uloop_signal_t **signal = uc_fn_this("uloop.signal");
+	uc_uloop_signal_t *signal = uc_fn_thisval("uloop.signal");
 	int rv;
 
-	if (!signal || !*signal)
+	if (!signal)
 		err_return(EINVAL);
 
-	rv = uloop_signal_delete(&(*signal)->signal);
-
-	uc_uloop_signal_clear(signal);
+	rv = uc_uloop_signal_clear(signal);
 
 	if (rv != 0)
 		err_return(EINVAL);
@@ -2136,7 +2088,7 @@ uc_uloop_signal_cb(struct uloop_signal *usig)
 {
 	uc_uloop_signal_t *signal = container_of(usig, uc_uloop_signal_t, signal);
 
-	uc_uloop_reg_invoke(signal->vm, signal->registry_index, NULL);
+	uc_uloop_cb_invoke(&signal->cb, NULL);
 }
 
 static int
@@ -2201,23 +2153,17 @@ uc_uloop_signal(uc_vm_t *vm, size_t nargs)
 	int signo = parse_signo(uc_fn_arg(0));
 	uc_value_t *callback = uc_fn_arg(1);
 	uc_uloop_signal_t *signal;
-	uc_value_t *res;
 
 	if (signo == -1 || !ucv_is_callable(callback))
 		err_return(EINVAL);
 
-	signal = xalloc(sizeof(*signal));
+	signal = uc_uloop_alloc(vm, "uloop.signal", sizeof(*signal), callback);
 	signal->signal.signo = signo;
 	signal->signal.cb = uc_uloop_signal_cb;
-	signal->vm = vm;
 
 	uloop_signal_add(&signal->signal);
 
-	res = uc_resource_new(signal_type, signal);
-
-	signal->registry_index = uc_uloop_reg_add(res, callback);
-
-	ok_return(res);
+	ok_return(signal->cb.obj);
 }
 #endif
 
@@ -2292,52 +2238,22 @@ static const uc_function_list_t global_fns[] = {
 
 static void close_timer(void *ud)
 {
-	uc_uloop_timer_t *timer = ud;
-
-	if (!timer)
-		return;
-
-	uloop_timeout_cancel(&timer->timeout);
-	free(timer);
+	uc_uloop_timeout_clear(ud);
 }
 
 static void close_handle(void *ud)
 {
-	uc_uloop_handle_t *handle = ud;
-
-	if (!handle)
-		return;
-
-	uloop_fd_delete(&handle->fd);
-	ucv_put(handle->handle);
-	free(handle);
+	uc_uloop_handle_clear(ud);
 }
 
 static void close_process(void *ud)
 {
-	uc_uloop_process_t *process = ud;
-
-	if (!process)
-		return;
-
-	uloop_process_delete(&process->process);
-	free(process);
+	uc_uloop_process_clear(ud);
 }
 
 static void close_task(void *ud)
 {
-	uc_uloop_task_t *task = ud;
-
-	if (!task)
-		return;
-
-	uloop_process_delete(&task->process);
-	uloop_fd_close(&task->output);
-
-	if (task->input_fd != -1)
-		close(task->input_fd);
-
-	free(task);
+	uc_uloop_task_clear(ud);
 }
 
 static void close_pipe(void *ud)
@@ -2356,26 +2272,14 @@ static void close_pipe(void *ud)
 #ifdef HAVE_ULOOP_INTERVAL
 static void close_interval(void *ud)
 {
-	uc_uloop_interval_t *interval = ud;
-
-	if (!interval)
-		return;
-
-	uloop_interval_cancel(&interval->interval);
-	free(interval);
+	uc_uloop_interval_clear(ud);
 }
 #endif
 
 #ifdef HAVE_ULOOP_SIGNAL
 static void close_signal(void *ud)
 {
-	uc_uloop_signal_t *signal = ud;
-
-	if (!signal)
-		return;
-
-	uloop_signal_delete(&signal->signal);
-	free(signal);
+	uc_uloop_signal_clear(ud);
 }
 #endif
 
@@ -2417,23 +2321,19 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(ULOOP_EDGE_TRIGGER);
 	ADD_CONST(ULOOP_BLOCKING);
 
-	timer_type = uc_type_declare(vm, "uloop.timer", timer_fns, close_timer);
-	handle_type = uc_type_declare(vm, "uloop.handle", handle_fns, close_handle);
-	process_type = uc_type_declare(vm, "uloop.process", process_fns, close_process);
-	task_type = uc_type_declare(vm, "uloop.task", task_fns, close_task);
-	pipe_type = uc_type_declare(vm, "uloop.pipe", pipe_fns, close_pipe);
+	uc_type_declare(vm, "uloop.timer", timer_fns, close_timer);
+	uc_type_declare(vm, "uloop.handle", handle_fns, close_handle);
+	uc_type_declare(vm, "uloop.process", process_fns, close_process);
+	uc_type_declare(vm, "uloop.task", task_fns, close_task);
+	uc_type_declare(vm, "uloop.pipe", pipe_fns, close_pipe);
 
 #ifdef HAVE_ULOOP_INTERVAL
-	interval_type = uc_type_declare(vm, "uloop.interval", interval_fns, close_interval);
+	uc_type_declare(vm, "uloop.interval", interval_fns, close_interval);
 #endif
 
 #ifdef HAVE_ULOOP_SIGNAL
-	signal_type = uc_type_declare(vm, "uloop.signal", signal_fns, close_signal);
+	uc_type_declare(vm, "uloop.signal", signal_fns, close_signal);
 #endif
-
-	object_registry = ucv_array_new(vm);
-
-	uc_vm_registry_set(vm, "uloop.registry", object_registry);
 
 	signal_fd = uc_vm_signal_notifyfd(vm);
 
