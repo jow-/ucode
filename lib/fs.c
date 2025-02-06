@@ -62,7 +62,17 @@
 #include <fcntl.h>
 
 #if defined(__linux__)
+#define HAS_IOCTL
+#endif
+
+#ifdef HAS_IOCTL
 #include <sys/ioctl.h>
+
+#define IOC_DIR_NONE	(_IOC_NONE)
+#define IOC_DIR_READ	(_IOC_READ)
+#define IOC_DIR_WRITE	(_IOC_WRITE)
+#define IOC_DIR_RW		(_IOC_READ | _IOC_WRITE)
+
 #endif
 
 #include "ucode/module.h"
@@ -935,50 +945,46 @@ uc_fs_fileno(uc_vm_t *vm, size_t nargs)
 	return uc_fs_fileno_common(vm, nargs, "fs.file");
 }
 
-#if defined(__linux__)
+#ifdef HAS_IOCTL
 
 /**
  * Performs an ioctl operation on the file.
- * 
+ *
  * The direction parameter specifies who is reading and writing,
  * from the user's point of view. It can be one of the following values:
- * 
- * | Direction | Description                                                                             |
- * |-----------|-----------------------------------------------------------------------------------------|
- * | 0         | NONE - neither userspace nor kernel is writing, ioctl is executed without passing data. |
- * | 1         | WRITE - userspace is writing and kernel is reading.                                     |
- * | 2         | READ - kernel is writing and userspace is reading.                                      |
- * | 3         | READ+WRITE - userspace is writing and kernel is writing back into the data structure.   |
- * 
- * The size parameter has a different purpose depending on the direction parameter:
- * - direction = 0 -> the size parameter is not used
- * - direction = 1 -> size must be the length (in bytes) of argp
- * - direction = 2 -> expected length (in bytes) of the data returned by kernel
- * - direction = 3 -> size is the length (in bytes) of argp, and the length of the data returned by kernel.
- * 
- * The argp parameter should be the data to be written for direction '1' and '3', otherwise null.
- * 
- * Returns the result of the ioctl operation; for direction '2' and '3' this is a string containing
- * the data, otherwise a number as return code.
- * In case of an error, null is returned and the error code is available via last_error.
- * 
+ *
+ * | Direction      | Description                                                                       |
+ * |----------------|-----------------------------------------------------------------------------------|
+ * | IOC_DIR_NONE   | neither userspace nor kernel is writing, ioctl is executed without passing data.  |
+ * | IOC_DIR_WRITE  | userspace is writing and kernel is reading.                                       |
+ * | IOC_DIR_READ   | kernel is writing and userspace is reading.                                       |
+ * | IOC_DIR_RW     | userspace is writing and kernel is writing back into the data structure.          |
+ *
+ * Returns the result of the ioctl operation; for `IOC_DIR_READ` and
+ * `IOC_DIR_RW` this is a string containing the data, otherwise a number as
+ * return code.
+ *
+ * In case of an error, null is returned and error details are available via
+ * {@link module:fs#error|error()}.
+ *
  * @function module:fs.file#ioctl
- * 
+ *
  * @param {number} direction
- * The direction of the ioctl operation.
- * 
+ * The direction of the ioctl operation. Use constants IOC_DIR_*.
+ *
  * @param {number} type
- * ioctl type (see https://www.kernel.org/doc/html/latest/userspace-api/ioctl/ioctl-number.html)
- * 
+ * The ioctl type (see https://www.kernel.org/doc/html/latest/userspace-api/ioctl/ioctl-number.html)
+ *
  * @param {number} num
- * ioctl sequence number.
- * 
- * @param {number} size
- * The size of the ioctl operation payload.
- * 
- * @param {?string} payload
- * The ioctl payload.
- * 
+ * The ioctl sequence number.
+ *
+ * @param {number|string} [value]
+ * The value to pass to the ioctl system call. For `IOC_DIR_NONE`, this argument
+ * is ignored. With `IOC_DIR_READ`, the value should be a positive integer
+ * specifying the number of bytes to expect from the kernel. For the other
+ * directions, `IOC_DIR_WRITE` and `IOC_DIR_RW`, that value parameter must be a
+ * string, serving as buffer for the data to send.
+ *
  * @returns {?number|?string}
  */
 static uc_value_t *
@@ -988,14 +994,13 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 	uc_value_t *direction = uc_fn_arg(0);
 	uc_value_t *type = uc_fn_arg(1);
 	uc_value_t *num = uc_fn_arg(2);
-	uc_value_t *size = uc_fn_arg(3);
-	uc_value_t *payload = uc_fn_arg(4);
+	uc_value_t *value = uc_fn_arg(3);
+	uc_value_t *mem = NULL;
 	char *buf = NULL;
 	unsigned long req = 0;
 	unsigned int dir, ty, nr;
-	size_t sz;
+	size_t sz = 0;
 	int fd, ret;
-	bool freebuf = false;
 
 	if (!fp)
 		err_return(EBADF);
@@ -1005,57 +1010,63 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 		err_return(EBADF);
 
 	if (ucv_type(direction) != UC_INTEGER || ucv_type(type) != UC_INTEGER ||
-	    ucv_type(num) != UC_INTEGER || ucv_type(size) != UC_INTEGER)
+	    ucv_type(num) != UC_INTEGER)
 		err_return(EINVAL);
 
 	dir = ucv_uint64_get(direction);
-	sz = ucv_uint64_get(size);
 	ty = ucv_uint64_get(type);
 	nr = ucv_uint64_get(num);
 
 	switch (dir) {
-	case 0: /* ioctl w/o read and write */
-		req = _IOC(_IOC_NONE, ty, nr, 0);
+	case IOC_DIR_NONE:
 		break;
-	case 1: /* ioctl write */
-		if (ucv_type(payload) != UC_STRING)
+
+	case IOC_DIR_WRITE:
+		if (ucv_type(value) != UC_STRING)
 			err_return(EINVAL);
 
-		req = _IOC(_IOC_WRITE, ty, nr, sz);
-		buf = ucv_string_get(payload);
+		sz = ucv_string_length(value);
+		buf = ucv_string_get(value);
 		break;
-	case 2: /* ioctl read */
-		req = _IOC(_IOC_READ, ty, nr, sz);
-		buf = xalloc(sz);
-		if (!buf)
-			err_return(ENOMEM);
 
-		freebuf = true;
+	case IOC_DIR_READ:
+		if (ucv_type(value) != UC_INTEGER)
+			err_return(EINVAL);
+
+		sz = ucv_to_unsigned(value);
+
+		if (errno != 0)
+			err_return(errno);
+
+		mem = xalloc(sizeof(uc_string_t) + sz + 1);
+		mem->type = UC_STRING;
+		mem->refcount = 1;
+		buf = ucv_string_get(mem);
+		((uc_string_t *)mem)->length = sz;
 		break;
-	case 3: /* ioctl read+write */
-		req = _IOC((_IOC_READ|_IOC_WRITE), ty, nr, sz);
-		buf = ucv_string_get(payload);
+
+	case IOC_DIR_RW:
+		if (ucv_type(value) != UC_STRING)
+			err_return(EINVAL);
+
+		sz = ucv_string_length(value);
+		mem = ucv_string_new_length(ucv_string_get(value), sz);
+		buf = ucv_string_get(mem);
 		break;
-	default: err_return(EINVAL);
+
+	default:
+		err_return(EINVAL);
 	}
 
+	req = _IOC(dir, ty, nr, sz);
 	ret = ioctl(fd, req, buf);
-	if (ret < 0) {
-		if (freebuf)
-			free(buf);
 
+	if (ret < 0) {
+		ucv_put(mem);
 		err_return(errno);
 	}
 
-	if (dir >= 2) {
-		payload = ucv_string_new_length(buf, sz);
-		if (freebuf)
-			free(buf);
-	} else {
-		payload = ucv_uint64_new(ret);
-	}
-
-	return payload;
+	return mem ? mem : ucv_uint64_new(ret);
 }
 
 #endif
@@ -2879,4 +2890,12 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ucv_object_add(scope, "stdin", uc_resource_new(file_type, stdin));
 	ucv_object_add(scope, "stdout", uc_resource_new(file_type, stdout));
 	ucv_object_add(scope, "stderr", uc_resource_new(file_type, stderr));
+
+#ifdef HAS_IOCTL
+#define ADD_CONST(x) ucv_object_add(scope, #x, ucv_int64_new(x))
+	ADD_CONST(IOC_DIR_NONE);
+	ADD_CONST(IOC_DIR_READ);
+	ADD_CONST(IOC_DIR_WRITE);
+	ADD_CONST(IOC_DIR_RW);
+#endif
 }
