@@ -2771,14 +2771,20 @@ uc_vm_signal_dispatch(uc_vm_t *vm)
 static uc_vm_status_t
 uc_vm_execute_chunk(uc_vm_t *vm)
 {
-	uc_callframe_t *frame = uc_vm_current_frame(vm);
-	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
+	uc_callframe_t *frame = NULL;
+	uc_chunk_t *chunk = NULL;
 	size_t caller = vm->callframes.count - 1;
 	uc_value_t *retval;
 	uc_vm_insn_t insn;
 	uint8_t *ip;
 
-	while (chunk && vm->callframes.count > caller) {
+	while (vm->callframes.count > caller) {
+		frame = &vm->callframes.entries[vm->callframes.count - 1];
+		chunk = uc_vm_frame_chunk(frame);
+
+		if (!chunk)
+			break;
+
 		if (vm->trace) {
 			ip = frame->ip;
 			insn = uc_vm_decode_insn(vm, frame, chunk);
@@ -2968,15 +2974,11 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 		case I_CALL:
 		case I_QCALL:
 			uc_vm_insn_call(vm, insn);
-			frame = uc_vm_current_frame(vm);
-			chunk = frame->closure ? uc_vm_frame_chunk(frame) : NULL;
 			break;
 
 		case I_MCALL:
 		case I_QMCALL:
 			uc_vm_insn_mcall(vm, insn);
-			frame = uc_vm_current_frame(vm);
-			chunk = frame->closure ? uc_vm_frame_chunk(frame) : NULL;
 			break;
 
 		case I_RETURN:
@@ -2986,9 +2988,6 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 
 			if (vm->callframes.count == 0)
 				return STATUS_OK;
-
-			frame = uc_vector_last(&vm->callframes);
-			chunk = uc_vm_frame_chunk(frame);
 			break;
 
 		case I_PRINT:
@@ -3028,21 +3027,20 @@ exception:
 
 			/* walk up callframes until something handles the exception or the original caller is reached */
 			while (!uc_vm_handle_exception(vm)) {
+				/* no further callframe, report unhandled exception and terminate */
+				if (vm->callframes.count == 0)
+					return ERROR_RUNTIME;
+
 				/* if VM returned into native function, don't bubble up */
-				if (!chunk)
+				if (!vm->callframes.entries[vm->callframes.count - 1].closure)
 					return ERROR_RUNTIME;
 
 				/* no exception handler in current function, pop callframe */
-				if (vm->callframes.count > 0)
-					ucv_put(uc_vm_callframe_pop(vm));
+				ucv_put(uc_vm_callframe_pop(vm));
 
-				/* no further callframe, report unhandled exception and terminate */
-				if (vm->callframes.count == 0 || vm->callframes.count <= caller)
+				/* do not bubble past original call depth */
+				if (vm->callframes.count <= caller)
 					return ERROR_RUNTIME;
-
-				/* resume execution in next remaining callframe */
-				frame = uc_vector_last(&vm->callframes);
-				chunk = uc_vm_frame_chunk(frame);
 			}
 		}
 
