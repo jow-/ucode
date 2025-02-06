@@ -458,6 +458,25 @@ ucv_resource_create_values(uc_vm_t *vm, const char *type, void *value, size_t uv
     return ucv_resource_new_values(t, value, uvcount, uvdata);
 }
 
+static inline bool
+ucv_resource_is_external(uc_value_t *uv)
+{
+	return (((uintptr_t)uv & 3) == 0 && uv != NULL &&
+	        uv->u64_or_constant == true && uv->type == UC_RESOURCE);
+}
+
+static inline bool
+ucv_resource_set_external(uc_value_t *uv, bool external)
+{
+	if (((uintptr_t)uv & 3) == 0 && uv != NULL &&
+	    uv->u64_or_constant != external && uv->type == UC_RESOURCE) {
+		uv->u64_or_constant = external;
+		return true;
+	}
+
+	return false;
+}
+
 uc_value_t *ucv_regexp_new(const char *, bool, bool, bool, char **);
 
 uc_value_t *ucv_upvalref_new(size_t);
