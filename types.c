@@ -2537,7 +2537,7 @@ ucv_gc_common(uc_vm_t *vm, bool final)
 
 		if (ucv_is_marked(val))
 			ucv_clear_mark(val);
-		else
+		else if (!ucv_resource_get_no_gc(val))
 			ucv_free(val, true);
 	}
 
