@@ -209,7 +209,8 @@ typedef struct {
 	uc_weakref_t ref;
 	uc_resource_type_t *type;
 
-	uint32_t reserved:4;
+	uint32_t reserved:3;
+	uint32_t no_gc:1;
 	uint32_t uvcount:8;
 	uint32_t datasize:20;
 } uc_resource_ext_t;
@@ -487,6 +488,26 @@ ucv_resource_is_extended(uc_value_t *uv)
 {
 	return (((uintptr_t)uv & 3) == 0 && uv != NULL &&
 	        uv->ext_flag == true && uv->type == UC_RESOURCE);
+}
+
+static inline bool
+ucv_resource_get_no_gc(uc_value_t *uv)
+{
+	uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
+	return ucv_resource_is_extended(uv) && res->no_gc;
+}
+
+static inline bool
+ucv_resource_set_no_gc(uc_value_t *uv, bool no_gc)
+{
+	uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
+
+	if (!ucv_resource_is_extended(uv) || res->no_gc == no_gc)
+		return false;
+
+	res->no_gc = no_gc;
+
+	return true;
 }
 
 uc_value_t *ucv_regexp_new(const char *, bool, bool, bool, char **);

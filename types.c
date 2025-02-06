@@ -2552,6 +2552,16 @@ ucv_gc_common(uc_vm_t *vm, bool final)
 
 		for (i = 0; i < vm->restypes.count; i++)
 			ucv_gc_mark(vm->restypes.entries[i]->proto);
+
+		/* mark no-gc resources with embedded values */
+		for (ref = vm->values.prev; ref != &vm->values; ref = ref->prev) {
+			val = (uc_value_t *)((uintptr_t)ref - offsetof(uc_array_t, ref));
+			if (ucv_type(val) != UC_RESOURCE)
+				break;
+
+			if (ucv_resource_get_no_gc(val))
+				ucv_gc_mark(val);
+		}
 	}
 
 	/* unref unreachable objects */
