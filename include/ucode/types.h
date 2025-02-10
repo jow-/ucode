@@ -202,6 +202,7 @@ typedef struct {
 	uc_value_t header;
 	uc_resource_type_t *type;
 	void *data;
+	size_t uvcount;
 } uc_resource_t;
 
 uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
@@ -429,8 +430,11 @@ uc_resource_type_t *ucv_resource_type_add(uc_vm_t *, const char *, uc_value_t *,
 uc_resource_type_t *ucv_resource_type_lookup(uc_vm_t *, const char *);
 
 uc_value_t *ucv_resource_new(uc_resource_type_t *, void *);
+uc_value_t *ucv_resource_new_values(uc_resource_type_t *, void *, size_t, uc_value_t **);
 void *ucv_resource_data(uc_value_t *uv, const char *);
 void **ucv_resource_dataptr(uc_value_t *, const char *);
+uc_value_t *ucv_resource_value_get(uc_value_t *, size_t);
+bool ucv_resource_value_set(uc_value_t *, size_t, uc_value_t *);
 
 static inline uc_value_t *
 ucv_resource_create(uc_vm_t *vm, const char *type, void *value)
@@ -441,6 +445,36 @@ ucv_resource_create(uc_vm_t *vm, const char *type, void *value)
         return NULL;
 
     return ucv_resource_new(t, value);
+}
+
+static inline uc_value_t *
+ucv_resource_create_values(uc_vm_t *vm, const char *type, void *value, size_t uvcount, uc_value_t **uvdata)
+{
+    uc_resource_type_t *t = NULL;
+
+    if (type && (t = ucv_resource_type_lookup(vm, type)) == NULL)
+        return NULL;
+
+    return ucv_resource_new_values(t, value, uvcount, uvdata);
+}
+
+static inline bool
+ucv_resource_is_external(uc_value_t *uv)
+{
+	return (((uintptr_t)uv & 3) == 0 && uv != NULL &&
+	        uv->u64_or_constant == true && uv->type == UC_RESOURCE);
+}
+
+static inline bool
+ucv_resource_set_external(uc_value_t *uv, bool external)
+{
+	if (((uintptr_t)uv & 3) == 0 && uv != NULL &&
+	    uv->u64_or_constant != external && uv->type == UC_RESOURCE) {
+		uv->u64_or_constant = external;
+		return true;
+	}
+
+	return false;
 }
 
 uc_value_t *ucv_regexp_new(const char *, bool, bool, bool, char **);
