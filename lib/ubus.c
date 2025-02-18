@@ -808,26 +808,34 @@ uc_ubus_call_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *re
 static uc_value_t *
 uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *objname, *funname, *funargs, *fd, *fdcb, *mret = NULL;
+	uc_value_t *oid, *objname, *funname, *funargs, *fd, *fdcb, *mret = NULL;
 	uc_ubus_call_res_t res = { 0 };
 	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
 	uint32_t id;
 
 	args_get_named(vm, nargs,
-	               "object", UC_STRING, REQUIRED, &objname,
+	               "object", UC_STRING, OPTIONAL, &objname,
 	               "method", UC_STRING, REQUIRED, &funname,
 	               "data", UC_OBJECT, OPTIONAL, &funargs,
 	               "multiple_return", UC_BOOLEAN, OPTIONAL, &mret,
+	               "object_id", UC_INTEGER, NAMED, &oid,
 	               "fd", 0, NAMED, &fd,
 	               "fd_cb", UC_CLOSURE, NAMED, &fdcb);
 
 	conn_get(vm, &c);
 
-	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
-	if (rv != UBUS_STATUS_OK)
-		err_return(rv, "Failed to resolve object name '%s'",
-		           ucv_string_get(objname));
+	if (oid) {
+		id = ucv_int64_get(oid);
+	} else if (objname) {
+		rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
+		if (rv != UBUS_STATUS_OK)
+			err_return(rv, "Failed to resolve object name '%s'",
+					   ucv_string_get(objname));
+	} else {
+		err_return(UBUS_STATUS_INVALID_ARGUMENT,
+		           "Argument object or object_id is required");
+	}
 
 	rv = uc_ubus_call_common(vm, c, &res, id, funname, funargs, fd, fdcb, mret);
 	if (rv != UBUS_STATUS_OK)
@@ -2493,6 +2501,8 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(STATUS_PARSE_ERROR);
 	ADD_CONST(STATUS_SYSTEM_ERROR);
 #endif
+
+	ADD_CONST(SYSTEM_OBJECT_ACL);
 
 	conn_type = uc_type_declare(vm, "ubus.connection", conn_fns, free_connection);
 	chan_type = uc_type_declare(vm, "ubus.channel", chan_fns, free_connection);
