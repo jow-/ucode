@@ -808,14 +808,14 @@ uc_ubus_call_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *re
 static uc_value_t *
 uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *objname, *funname, *funargs, *fd, *fdcb, *mret = NULL;
+	uc_value_t *obj, *funname, *funargs, *fd, *fdcb, *mret = NULL;
 	uc_ubus_call_res_t res = { 0 };
 	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
 	uint32_t id;
 
 	args_get_named(vm, nargs,
-	               "object", UC_STRING, REQUIRED, &objname,
+	               "object", 0, REQUIRED, &obj,
 	               "method", UC_STRING, REQUIRED, &funname,
 	               "data", UC_OBJECT, OPTIONAL, &funargs,
 	               "multiple_return", UC_BOOLEAN, OPTIONAL, &mret,
@@ -824,15 +824,31 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 
 	conn_get(vm, &c);
 
-	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
-	if (rv != UBUS_STATUS_OK)
-		err_return(rv, "Failed to resolve object name '%s'",
-		           ucv_string_get(objname));
+	if (ucv_type(obj) == UC_INTEGER) {
+		id = ucv_int64_get(obj);
+	}
+	else if (ucv_type(obj) == UC_STRING) {
+		rv = ubus_lookup_id(&c->ctx, ucv_string_get(obj), &id);
+
+		if (rv != UBUS_STATUS_OK)
+			err_return(rv, "Failed to resolve object name '%s'",
+			           ucv_string_get(obj));
+	}
+	else {
+		err_return(UBUS_STATUS_INVALID_ARGUMENT,
+		           "Argument object is not string or integer");
+	}
 
 	rv = uc_ubus_call_common(vm, c, &res, id, funname, funargs, fd, fdcb, mret);
-	if (rv != UBUS_STATUS_OK)
-		err_return(rv, "Failed to invoke function '%s' on object '%s'",
-		           ucv_string_get(funname), ucv_string_get(objname));
+
+	if (rv != UBUS_STATUS_OK) {
+		if (ucv_type(obj) == UC_STRING)
+			err_return(rv, "Failed to invoke function '%s' on object '%s'",
+			           ucv_string_get(funname), ucv_string_get(obj));
+		else
+			err_return(rv, "Failed to invoke function '%s' on system object %d",
+			           ucv_string_get(funname), (int)ucv_int64_get(obj));
+	}
 
 	ok_return(res.res);
 }
@@ -2493,6 +2509,8 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(STATUS_PARSE_ERROR);
 	ADD_CONST(STATUS_SYSTEM_ERROR);
 #endif
+
+	ADD_CONST(SYSTEM_OBJECT_ACL);
 
 	conn_type = uc_type_declare(vm, "ubus.connection", conn_fns, free_connection);
 	chan_type = uc_type_declare(vm, "ubus.channel", chan_fns, free_connection);
