@@ -1128,6 +1128,143 @@ uc_uci_delete(uc_vm_t *vm, size_t nargs)
 	ok_return(ucv_boolean_new(true));
 }
 
+static uc_value_t *
+uc_uci_list_modify(uc_vm_t *vm, size_t nargs,
+                   int (*op)(struct uci_context *, struct uci_ptr *))
+{
+	struct uci_context **c = uc_fn_this("uci.cursor");
+	uc_value_t *conf = uc_fn_arg(0);
+	uc_value_t *sect = uc_fn_arg(1);
+	uc_value_t *opt = uc_fn_arg(2);
+	uc_value_t *val = uc_fn_arg(3);
+	struct uci_ptr ptr = { 0 };
+	bool is_list;
+	int rv;
+
+	if (ucv_type(conf) != UC_STRING ||
+	    ucv_type(sect) != UC_STRING ||
+	    ucv_type(opt) != UC_STRING)
+		err_return(UCI_ERR_INVAL);
+
+	ptr.package = ucv_string_get(conf);
+	ptr.section = ucv_string_get(sect);
+	ptr.option = ucv_string_get(opt);
+
+	rv = lookup_ptr(*c, &ptr, true);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	if (!ptr.s)
+		err_return(UCI_ERR_NOTFOUND);
+
+	if (uval_to_uci(vm, val, &ptr.value, &is_list) && !is_list)
+		rv = op(*c, &ptr);
+	else
+		rv = UCI_ERR_INVAL;
+
+	free((char *)ptr.value);
+
+	if (rv != UCI_OK)
+		err_return(rv);
+
+	ok_return(ucv_boolean_new(true));
+}
+
+/**
+ * Add an item to a list option in given configuration.
+ *
+ * Adds a single value to an existing list option within the specified section
+ * of the given configuration. The configuration is implicitly loaded into the
+ * cursor if not already present.
+ *
+ * The new value is appended to the end of the list, maintaining the existing order.
+ * No attempt is made to check for or remove duplicate values.
+ *
+ * Returns `true` if the item was successfully added to the list.
+ *
+ * Returns `null` on error, e.g. if the targeted option was not found or
+ * if an invalid value was passed.
+ *
+ * @function module:uci.cursor#list_append
+ *
+ * @param {string} config
+ * The name of the configuration file to modify, e.g. `"firewall"` to
+ * modify `/etc/config/firewall`.
+ *
+ * @param {string} section
+ * The section name containing the list option to modify.
+ *
+ * @param {string} option
+ * The list option name to add a value to.
+ *
+ * @param {string|boolean|number} value
+ * The value to add to the list option.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Add '192.168.1.1' to the 'dns' list in the 'lan' interface
+ * ctx.add_list('network', 'lan', 'dns', '192.168.1.1');
+ *
+ * // Add a port to the first redirect section
+ * ctx.add_list('firewall', '@redirect[0]', 'src_dport', '8080');
+ */
+static uc_value_t *
+uc_uci_list_append(uc_vm_t *vm, size_t nargs)
+{
+	return uc_uci_list_modify(vm, nargs, uci_add_list);
+}
+
+/**
+ * Remove an item from a list option in given configuration.
+ *
+ * Removes a single value from an existing list option within the specified section
+ * of the given configuration. The configuration is implicitly loaded into the
+ * cursor if not already present.
+ *
+ * If the specified value appears multiple times in the list, all matching occurrences
+ * will be removed.
+ *
+ * Returns `true` if the item was successfully removed from the list.
+ *
+ * Returns `null` on error, e.g. if the targeted option was not found,
+ * the specified value didn't exist in the list, or if an invalid value was passed.
+ *
+ * @function module:uci.cursor#list_remove
+ *
+ * @param {string} config
+ * The name of the configuration file to modify, e.g. `"firewall"` to
+ * modify `/etc/config/firewall`.
+ *
+ * @param {string} section
+ * The section name containing the list option to modify.
+ *
+ * @param {string} option
+ * The list option name to remove a value from.
+ *
+ * @param {string|boolean|number} value
+ * The value to remove from the list option.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Remove '8.8.8.8' from the 'dns' list in the 'lan' interface
+ * ctx.delete_list('network', 'lan', 'dns', '8.8.8.8');
+ *
+ * // Remove a port from the first redirect section
+ * ctx.delete_list('firewall', '@redirect[0]', 'src_dport', '8080');
+ */
+static uc_value_t *
+uc_uci_list_remove(uc_vm_t *vm, size_t nargs)
+{
+	return uc_uci_list_modify(vm, nargs, uci_del_list);
+}
+
 /**
  * Rename an option or section in given configuration.
  *
@@ -1840,23 +1977,25 @@ uc_uci_configs(uc_vm_t *vm, size_t nargs)
 
 
 static const uc_function_list_t cursor_fns[] = {
-	{ "load",		uc_uci_load },
-	{ "unload",		uc_uci_unload },
-	{ "get",		uc_uci_get },
-	{ "get_all",	uc_uci_get_all },
-	{ "get_first",	uc_uci_get_first },
-	{ "add",		uc_uci_add },
-	{ "set",		uc_uci_set },
-	{ "rename",		uc_uci_rename },
-	{ "save",		uc_uci_save },
-	{ "delete",		uc_uci_delete },
-	{ "commit",		uc_uci_commit },
-	{ "revert",		uc_uci_revert },
-	{ "reorder",	uc_uci_reorder },
-	{ "changes",	uc_uci_changes },
-	{ "foreach",	uc_uci_foreach },
-	{ "configs",	uc_uci_configs },
-	{ "error",		uc_uci_error },
+	{ "load",			uc_uci_load },
+	{ "unload",			uc_uci_unload },
+	{ "get",			uc_uci_get },
+	{ "get_all",		uc_uci_get_all },
+	{ "get_first",		uc_uci_get_first },
+	{ "add",			uc_uci_add },
+	{ "set",			uc_uci_set },
+	{ "rename",			uc_uci_rename },
+	{ "save",			uc_uci_save },
+	{ "delete",			uc_uci_delete },
+	{ "list_append",	uc_uci_list_append },
+	{ "list_remove", 	uc_uci_list_remove },
+	{ "commit",			uc_uci_commit },
+	{ "revert",			uc_uci_revert },
+	{ "reorder",		uc_uci_reorder },
+	{ "changes",		uc_uci_changes },
+	{ "foreach",		uc_uci_foreach },
+	{ "configs",		uc_uci_configs },
+	{ "error",			uc_uci_error },
 };
 
 static const uc_function_list_t global_fns[] = {
