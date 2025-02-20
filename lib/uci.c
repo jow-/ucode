@@ -196,7 +196,8 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
  *
  * Any changes made to configuration values are local to the cursor object and
  * held in memory only until they're written out to the filesystem using the
- * `save()` and `commit()` methods.
+ * {@link module:uci.cursor#save|save()} and
+ * {@link module:uci.cursor#commit|commit()} methods.
  *
  * Changes performed in one cursor instance are not reflected in another, unless
  * the first instance writes those changes to the filesystem and the other
@@ -1230,8 +1231,8 @@ uc_uci_list_append(uc_vm_t *vm, size_t nargs)
  *
  * Returns `true` if the item was successfully removed from the list.
  *
- * Returns `null` on error, e.g. if the targeted option was not found,
- * the specified value didn't exist in the list, or if an invalid value was passed.
+ * Returns `null` on error, e.g. if the targeted option was not foundor if an
+ * invalid value was passed.
  *
  * @function module:uci.cursor#list_remove
  *
