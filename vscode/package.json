@@ -1,0 +1,136 @@
+{
+	"name": "ucode-language",
+	"displayName": "ucode Language Support",
+	"description": "Language support for ucode",
+	"version": "0.0.20240924",
+	"engines": {
+		"vscode": "^1.63.0"
+	},
+	"categories": [
+		"Programming Languages"
+	],
+	"activationEvents": [
+		"onLanguage:ucode"
+	],
+	"pricing": "Free",
+	"publisher": "jow",
+	"homepage": "https://ucode.mein.io/",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jow-/ucode/"
+	},
+	"license": "ISC",
+	"main": "./client/out/extension",
+	"contributes": {
+		"configuration": {
+			"type": "object",
+			"title": "ucode",
+			"properties": {
+				"ucodeLanguageServer.valgrindDebugging": {
+					"scope": "resource",
+					"type": "boolean",
+					"description": "Run the language server process in valgrind.",
+					"default": false
+				},
+				"ucodeLanguageServer.interpreterPath": {
+					"scope": "resource",
+					"type": "string",
+					"description": "Override the path to the ucode interpreter executable.",
+					"default": "ucode"
+				},
+				"ucodeLanguageServer.moduleSearchPath": {
+					"scope": "resource",
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "List of module search path patterns for the ucode runtime.",
+					"default": [ "${workspaceFolder}/*.uc", "${workspaceFolder}/*.so" ]
+				}
+			}
+		},
+		"configurationDefaults": {
+			"[ucode]": {
+				"editor.semanticHighlighting.enabled": true,
+				"editor.wordBasedSuggestions": "off"
+			}
+		},
+		"languages": [
+			{
+				"id": "ucode",
+				"aliases": [
+					"ucode",
+					"uc"
+				],
+				"extensions": [
+					".uc",
+					".ut"
+				],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"semanticTokenTypes": [
+			{
+				"id": "ucode-template-tag",
+				"description": "ucode template tag"
+			},
+			{
+				"id": "ucode-template-text",
+				"description": "ucode template text"
+			},
+			{
+				"id": "ucode-punctuation",
+				"description": "ucode punctuation"
+			},
+			{
+				"id": "keyword.control",
+				"description": "ucode if/else/elsif keywords"
+			},
+			{
+				"id": "ucode-boolean",
+				"description": "ucode true/false literals"
+			},
+			{
+				"id": "ucode-null",
+				"description": "ucode null literal"
+			},
+			{
+				"id": "ucode-this",
+				"description": "ucode this literal"
+			},
+			{
+				"id": "ucode-operator",
+				"description": "ucode operator keyword"
+			}
+		],
+		"semanticTokenScopes": [
+			{
+				"scopes": {
+					"ucode-boolean": ["variable.other.constant"],
+					"ucode-null": ["variable.other.constant"],
+					"ucode-this": ["variable.other.constant"],
+					"ucode-operator": ["keyword.other.operator"],
+					"ucode-template-tag": ["keyword.other.operator"],
+					"ucode-template-text": ["constant.character"]
+				}
+			}
+		]
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -b",
+		"watch": "tsc -b -w"
+	},
+	"devDependencies": {
+		"@types/node": "^16.11.7",
+		"@types/vscode": "^1.63.0",
+		"typescript": "^4.5.5"
+	},
+	"dependencies": {
+		"vscode-languageclient": "^9.0.0"
+	},
+	"files": [
+		"client/out",
+		"server/launcher.uc",
+		"server/server.uc",
+		"server/types.json"
+	]
+}
