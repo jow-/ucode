@@ -106,14 +106,6 @@ p {
     margin: .75rem 0;
 }
 
-article ul {
-    list-style: none;
-}
-
-article .description > ul {
-    list-style: initial;
-}
-
 article ul li,
 article ol li {
     padding: .25rem 0;
