@@ -111,7 +111,7 @@ uc_debug_discover_ucv(uc_value_t *uv, struct lh_table *seen)
 	uc_upvalref_t *upval;
 	uc_object_t *object;
 	uc_array_t *array;
-	uc_resource_t *resource;
+	uc_resource_type_t *restype;
 	uc_program_t *program;
 	struct lh_entry *entry;
 	unsigned long hash;
@@ -165,10 +165,10 @@ uc_debug_discover_ucv(uc_value_t *uv, struct lh_table *seen)
 		break;
 
 	case UC_RESOURCE:
-		resource = (uc_resource_t *)uv;
+		restype = ucv_resource_type(uv);
 
-		if (resource->type)
-			uc_debug_discover_ucv(resource->type->proto, seen);
+		if (restype)
+			uc_debug_discover_ucv(restype->proto, seen);
 
 		break;
 
@@ -196,7 +196,7 @@ static void
 print_value(FILE *out, size_t pad, struct lh_table *seen,
             uc_vm_t *vm, uc_value_t *uv)
 {
-	uc_resource_t *resource;
+	uc_resource_type_t *restype;
 	uc_closure_t *closure;
 	uc_object_t *object;
 	uc_array_t *array;
@@ -271,20 +271,20 @@ print_value(FILE *out, size_t pad, struct lh_table *seen,
 		}
 	}
 	else if (ucv_type(uv) == UC_RESOURCE) {
-		resource = (uc_resource_t *)uv;
+		restype = ucv_resource_type(uv);
 
-		if (resource->type) {
+		if (restype) {
 			for (j = 0; j < pad + 1; j++)
 				fprintf(out, "  ");
 
-			fprintf(out, "#type %s\n", resource->type->name);
+			fprintf(out, "#type %s\n", restype->name);
 
-			if (resource->type->proto) {
+			if (restype->proto) {
 				for (j = 0; j < pad + 2; j++)
 					fprintf(out, "  ");
 
 				fprintf(out, "#prototype = ");
-				print_value(out, pad + 2, seen, vm, resource->type->proto);
+				print_value(out, pad + 2, seen, vm, restype->proto);
 			}
 		}
 	}
