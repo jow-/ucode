@@ -10,5 +10,8 @@
 	},
 	"04-arrays": {
 		"title": "Working with Arrays"
+	},
+	"05-dictionaries": {
+		"title": "Working with Dictionaries"
 	}
 }
