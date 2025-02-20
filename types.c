@@ -88,6 +88,20 @@ ucv_ref(uc_weakref_t *head, uc_weakref_t *item)
 	head->next = item;
 }
 
+static uc_value_t **
+ucv_resource_values(uc_resource_t *res)
+{
+	void *data;
+
+	if (!ucv_resource_is_extended((uc_value_t *)res) || !res->uvcount)
+		return NULL;
+
+	data = res + 1;
+	data += res->datasize * 8;
+
+	return data;
+}
+
 #if 0
 static uc_weakref_t *
 ucv_get_weakref(uc_value_t *uv)
@@ -136,6 +150,7 @@ ucv_gc_mark(uc_value_t *uv)
 	uc_array_t *array;
 	uc_resource_t *resource;
 	uc_program_t *program;
+	uc_value_t **values;
 	struct lh_entry *entry;
 	size_t i;
 
@@ -194,6 +209,13 @@ ucv_gc_mark(uc_value_t *uv)
 		if (resource->type)
 			ucv_gc_mark(resource->type->proto);
 
+		values = ucv_resource_values(resource);
+		if (!values)
+			break;
+
+		for (i = 0; i < resource->uvcount; i++)
+			ucv_gc_mark(values[i]);
+
 		break;
 
 	case UC_PROGRAM:
@@ -226,6 +248,7 @@ ucv_free(uc_value_t *uv, bool retain)
 	uc_object_t *object;
 	uc_array_t *array;
 	uc_weakref_t *ref;
+	uc_value_t **values;
 	size_t i;
 
 	if (uv == NULL || (uintptr_t)uv & 3)
@@ -278,8 +301,20 @@ ucv_free(uc_value_t *uv, bool retain)
 		resource = (uc_resource_t *)uv;
 		restype = resource->type;
 
-		if (restype && restype->free)
-			restype->free(resource->data);
+		values = ucv_resource_values(resource);
+		if (values) {
+			for (i = 0; i < resource->uvcount; i++)
+				ucv_put_value(values[i], retain);
+		}
+
+		if (restype && restype->free) {
+			void *data = resource + 1;
+
+			if (!resource->header.ext_flag)
+				data = resource->data;
+
+			restype->free(data);
+		}
 
 		break;
 
@@ -1224,6 +1259,32 @@ ucv_resource_new(uc_resource_type_t *type, void *data)
 	return &res->header;
 }
 
+uc_value_t *
+ucv_resource_new_ex(uc_resource_type_t *type, void **data, size_t uvcount, size_t datasize)
+{
+	uc_resource_t *res;
+	size_t size;
+
+	assert(uvcount < (1 << 8));
+	assert(datasize < (8 << 20));
+
+	size = sizeof(*res);
+	size += uvcount * sizeof(uc_value_t *);
+	size += datasize = (datasize + 7) & ~7;
+
+	res = xalloc(size);
+	res->header.type = UC_RESOURCE;
+	res->header.refcount = 1;
+	res->header.ext_flag = 1;
+	res->type = type;
+	res->uvcount = uvcount;
+	res->datasize = datasize / 8;
+	if (data)
+		*data = res + 1;
+
+	return &res->header;
+}
+
 static uc_resource_t *
 ucv_resource_check(uc_value_t *uv, const char *name)
 {
@@ -1245,7 +1306,13 @@ ucv_resource_data(uc_value_t *uv, const char *name)
 {
 	uc_resource_t *res = ucv_resource_check(uv, name);
 
-	return res ? res->data : NULL;
+	if (!res)
+		return NULL;
+
+	if (res->header.ext_flag)
+		return res + 1;
+	else
+		return res->data;
 }
 
 void **
@@ -1253,9 +1320,38 @@ ucv_resource_dataptr(uc_value_t *uv, const char *name)
 {
 	uc_resource_t *res = ucv_resource_check(uv, name);
 
-	return res ? &res->data : NULL;
+	if (!res || res->header.ext_flag)
+		return NULL;
+
+	return &res->data;
 }
 
+uc_value_t *
+ucv_resource_value_get(uc_value_t *uv, size_t idx)
+{
+	uc_resource_t *res = (uc_resource_t *)uv;
+	uc_value_t **uvdata = ucv_resource_values(res);
+
+	if (!uvdata || idx >= res->uvcount)
+		return NULL;
+
+	return uvdata[idx];
+}
+
+bool
+ucv_resource_value_set(uc_value_t *uv, size_t idx, uc_value_t *val)
+{
+	uc_resource_t *res = (uc_resource_t *)uv;
+	uc_value_t **uvdata = ucv_resource_values(res);
+
+	if (!uvdata || idx >= res->uvcount)
+		return NULL;
+
+	ucv_put(uvdata[idx]);
+	uvdata[idx] = val;
+
+	return true;
+}
 
 uc_value_t *
 ucv_regexp_new(const char *pattern, bool icase, bool newline, bool global, char **error)
