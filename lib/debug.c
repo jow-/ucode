@@ -1113,7 +1113,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 	switch (ucv_type(uv)) {
 	case UC_INTEGER:
 		ucv_object_add(rv, "unsigned",
-			ucv_boolean_new(!(pv & 3) && uv->u64_or_constant));
+			ucv_boolean_new(!(pv & 3) && uv->ext_flag));
 
 		break;
 
@@ -1136,7 +1136,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 			ucv_uint64_new((uintptr_t)uvarr->entries));
 
 		ucv_object_add(rv, "count", ucv_uint64_new(uvarr->count));
-		ucv_object_add(rv, "constant", ucv_boolean_new(uv->u64_or_constant));
+		ucv_object_add(rv, "constant", ucv_boolean_new(uv->ext_flag));
 		ucv_object_add(rv, "prototype", ucv_get(uvarr->proto));
 
 		break;
@@ -1150,7 +1150,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 		ucv_object_add(rv, "count",
 			ucv_uint64_new(lh_table_length(uvobj->table)));
 
-		ucv_object_add(rv, "constant", ucv_boolean_new(uv->u64_or_constant));
+		ucv_object_add(rv, "constant", ucv_boolean_new(uv->ext_flag));
 		ucv_object_add(rv, "prototype", ucv_get(uvobj->proto));
 
 		break;
