@@ -284,7 +284,56 @@ a counting `for` loop that is a variation of the `while` loop.
 %}
 ```
 
-#### 3.3. Alternative syntax
+#### 3.3. Switch statement
+
+The `switch` statement selects code blocks to execute based on an expression's
+value. Unlike other control statements, it doesn't support alternative syntax
+with colons and end keywords.
+
+Switch statements use strict equality (`===`) for comparison. Case values can be
+arbitrary expressions evaluated at runtime. Without a `break` statement,
+execution continues through subsequent cases.
+
+The optional `default` case executes when no case matches. It's typically placed
+last but will only execute if no previous matching case was found.
+
+The entire switch statement shares one block scope. Variables declared in any
+case are visible in all cases. Curly braces may be used within cases to create
+case-specific variable scopes.
+
+```javascript
+{%
+  day = 3;
+  specialDay = 1;
+
+  switch (day) {
+    case specialDay + 2:
+      print("Wednesday\n");
+      break;
+
+    case 1:
+      let message = "Start of week";
+      print(message + "\n");
+      break;
+
+    case 2: {
+      let message = "Tuesday";
+      print(message + "\n");
+      break;
+    }
+
+    case 4:
+    case 5:
+      print("Thursday or Friday\n");
+      break;
+
+    default:
+      print("Weekend\n");
+  }
+%}
+```
+
+#### 3.4. Alternative syntax
 
 Since conditional statements and loops are often used for template formatting
 purposes, e.g. to repeat a specific markup for each item of a list, ucode
@@ -312,7 +361,8 @@ Printing a list:
 {% endfor %}
 ```
 
-For each control statement type, a corresponding alternative end keyword is defined:
+For each control statement type except switch statements, a corresponding
+alternative end keyword is defined:
 
   - `if (...): ... endif`
   - `for (...): ... endfor`
