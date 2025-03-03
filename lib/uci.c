@@ -158,11 +158,13 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *cdir = uc_fn_arg(0);
 	uc_value_t *sdir = uc_fn_arg(1);
+	uc_value_t *c2dir = uc_fn_arg(2);
 	struct uci_context *c;
 	int rv;
 
 	if ((cdir && ucv_type(cdir) != UC_STRING) ||
-	    (sdir && ucv_type(sdir) != UC_STRING))
+	    (sdir && ucv_type(sdir) != UC_STRING) ||
+	    (c2dir && ucv_type(c2dir) != UC_STRING))
 		err_return(UCI_ERR_INVAL);
 
 	c = uci_alloc_context();
@@ -183,6 +185,15 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 		if (rv)
 			err_return(rv);
 	}
+
+#ifdef HAVE_UCI_CONF2DIR
+	if (c2dir) {
+		rv = uci_set_conf2dir(c, ucv_string_get(c2dir));
+
+		if (rv)
+			err_return(rv);
+	}
+#endif
 
 	ok_return(ucv_resource_create(vm, "uci.cursor", c));
 }
