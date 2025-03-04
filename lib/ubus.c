@@ -878,43 +878,29 @@ uc_ubus_chan_request(uc_vm_t *vm, size_t nargs)
 	ok_return(res.res);
 }
 
-static uc_value_t *
-uc_ubus_defer(uc_vm_t *vm, size_t nargs)
+static int
+uc_ubus_defer_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *res,
+                     uint32_t id, uc_value_t *funname, uc_value_t *funargs,
+                     uc_value_t *fd, uc_value_t *fdcb, uc_value_t *replycb)
 {
-	uc_value_t *objname, *funname, *funargs, *replycb, *fd, *fdcb, *conn, *res = NULL;
 	uc_ubus_deferred_t *defer;
-	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
 	uc_callframe_t *frame;
-	uint32_t id;
+	uc_value_t *conn;
 	int fd_val = -1;
-
-	conn_get(vm, &c);
-
-	args_get_named(vm, nargs,
-	               "object", UC_STRING, REQUIRED, &objname,
-	               "method", UC_STRING, REQUIRED, &funname,
-	               "data", UC_OBJECT, OPTIONAL, &funargs,
-	               "cb", UC_CLOSURE, OPTIONAL, &replycb,
-	               "fd", 0, NAMED, &fd,
-	               "fd_cb", UC_CLOSURE, NAMED, &fdcb);
 
 	blob_buf_init(&c->buf, 0);
 
 	if (funargs)
 		ucv_object_to_blob(funargs, &c->buf);
-
 	if (fd) {
 		fd_val = get_fd(vm, fd);
-		if (fd_val < 0)
-			err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid file descriptor argument");
+		if (fd_val < 0) {
+			rv = UBUS_STATUS_INVALID_ARGUMENT;
+			set_error(rv, "Invalid file descriptor argument");
+			return rv;
+		}
 	}
-
-	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
-
-	if (rv != UBUS_STATUS_OK)
-		err_return(rv, "Failed to resolve object name '%s'",
-		           ucv_string_get(objname));
 
 	defer = xalloc(sizeof(*defer));
 
@@ -935,11 +921,11 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 		defer->timeout.cb = uc_ubus_call_timeout_cb;
 		uloop_timeout_set(&defer->timeout, c->timeout * 1000);
 
-		res = uc_resource_new(defer_type, defer);
+		res->res = uc_resource_new(defer_type, defer);
 		frame = uc_vector_last(&vm->callframes);
 		conn = frame ? frame->ctx : NULL;
 
-		defer->registry_index = request_reg_add(vm, ucv_get(res), ucv_get(replycb), ucv_get(fdcb), ucv_get(conn), ucv_get(fd));
+		defer->registry_index = request_reg_add(vm, ucv_get(res->res), ucv_get(replycb), ucv_get(fdcb), ucv_get(conn), ucv_get(fd));
 
 		if (!uc_ubus_have_uloop()) {
 			have_own_uloop = true;
@@ -958,11 +944,64 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 		free(defer);
 	}
 
+	return rv;
+}
+
+static uc_value_t *
+uc_ubus_defer(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *objname, *funname, *funargs, *replycb, *fd, *fdcb = NULL;
+	uc_ubus_call_res_t res = { 0 };
+	uc_ubus_connection_t *c;
+	uint32_t id;
+	int rv;
+
+	conn_get(vm, &c);
+
+	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
+	if (rv != UBUS_STATUS_OK)
+		err_return(rv, "Failed to resolve object name '%s'",
+		           ucv_string_get(objname));
+
+	args_get_named(vm, nargs,
+	               "object", UC_STRING, REQUIRED, &objname,
+	               "method", UC_STRING, REQUIRED, &funname,
+	               "data", UC_OBJECT, OPTIONAL, &funargs,
+	               "cb", UC_CLOSURE, OPTIONAL, &replycb,
+	               "fd", 0, NAMED, &fd,
+	               "fd_cb", UC_CLOSURE, NAMED, &fdcb);
+
+	rv = uc_ubus_defer_common(vm, c, &res, id, funname, funargs, fd, fdcb, replycb);
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to invoke function '%s' on object '%s'",
 		           ucv_string_get(funname), ucv_string_get(objname));
 
-	ok_return(res);
+	ok_return(res.res);
+}
+
+static uc_value_t *
+uc_ubus_chan_defer(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *funname, *funargs, *replycb, *fd, *fdcb = NULL;
+	uc_ubus_call_res_t res = { 0 };
+	uc_ubus_connection_t *c;
+	int rv;
+
+	conn_get(vm, &c);
+
+	args_get_named(vm, nargs,
+	               "method", UC_STRING, REQUIRED, &funname,
+	               "data", UC_OBJECT, OPTIONAL, &funargs,
+	               "cb", UC_CLOSURE, OPTIONAL, &replycb,
+	               "fd", 0, NAMED, &fd,
+	               "fd_cb", UC_CLOSURE, NAMED, &fdcb);
+
+	rv = uc_ubus_defer_common(vm, c, &res, 0, funname, funargs, fd, fdcb, replycb);
+	if (rv != UBUS_STATUS_OK)
+		err_return(rv, "Failed to invoke function '%s' on channel",
+		           ucv_string_get(funname));
+
+	ok_return(res.res);
 }
 
 
@@ -2384,6 +2423,7 @@ static const uc_function_list_t conn_fns[] = {
 
 static const uc_function_list_t chan_fns[] = {
 	{ "request",		uc_ubus_chan_request },
+	{ "defer",			uc_ubus_chan_defer },
 	{ "error",			uc_ubus_error },
 	{ "disconnect",		uc_ubus_disconnect },
 };
