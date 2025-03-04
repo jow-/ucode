@@ -1104,16 +1104,21 @@ uc_ubus_request_finish_common(uc_ubus_request_t *callctx, int code)
 }
 
 static void
-uc_ubus_request_finish(uc_ubus_request_t *callctx, int code, uc_value_t *reply)
+uc_ubus_request_send_reply(uc_ubus_request_t *callctx, uc_value_t *reply)
+{
+	if (!reply)
+		return;
+
+	blob_buf_init(&buf, 0);
+	ucv_object_to_blob(reply, &buf);
+	ubus_send_reply(callctx->ctx, &callctx->req, buf.head);
+}
+
+static void
+uc_ubus_request_finish(uc_ubus_request_t *callctx, int code)
 {
 	if (callctx->replied)
 		return;
-
-	if (reply) {
-		blob_buf_init(&buf, 0);
-		ucv_object_to_blob(reply, &buf);
-		ubus_send_reply(callctx->ctx, &callctx->req, buf.head);
-	}
 
 	uc_ubus_request_finish_common(callctx, code);
 	request_reg_clear(callctx->vm, callctx->registry_index);
@@ -1124,7 +1129,7 @@ uc_ubus_request_timeout(struct uloop_timeout *timeout)
 {
 	uc_ubus_request_t *callctx = container_of(timeout, uc_ubus_request_t, timeout);
 
-	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT, NULL);
+	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT);
 }
 
 static uc_value_t *
@@ -1133,6 +1138,7 @@ uc_ubus_request_reply(uc_vm_t *vm, size_t nargs)
 	uc_ubus_request_t **callctx = uc_fn_this("ubus.request");
 	int64_t code = UBUS_STATUS_OK;
 	uc_value_t *reply, *rcode;
+	bool more = false;
 
 	if (!callctx || !*callctx)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid call context");
@@ -1147,11 +1153,17 @@ uc_ubus_request_reply(uc_vm_t *vm, size_t nargs)
 	if (rcode) {
 		code = ucv_int64_get(rcode);
 
-		if (errno == ERANGE || code < 0 || code > __UBUS_STATUS_LAST)
+		if (errno == ERANGE || code < -1 || code > __UBUS_STATUS_LAST)
 			code = UBUS_STATUS_UNKNOWN_ERROR;
+
+		if (code < 0)
+			more = true;
 	}
 
-	uc_ubus_request_finish(*callctx, code, reply);
+	uc_ubus_request_send_reply(*callctx, reply);
+
+	if (!more)
+		uc_ubus_request_finish(*callctx, code);
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -1219,7 +1231,7 @@ uc_ubus_request_error(uc_vm_t *vm, size_t nargs)
 	if (errno == ERANGE || code < 0 || code > __UBUS_STATUS_LAST)
 		code = UBUS_STATUS_UNKNOWN_ERROR;
 
-	uc_ubus_request_finish(*callctx, code, NULL);
+	uc_ubus_request_finish(*callctx, code);
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -2394,13 +2406,13 @@ uc_ubus_channel_disconnect_cb(struct ubus_context *ctx)
 
 	blob_buf_free(&c->buf);
 
-	if (c->registry_index >= 0)
-		connection_reg_clear(c->vm, c->registry_index);
-
 	if (c->ctx.sock.fd >= 0) {
 		ubus_shutdown(&c->ctx);
 		c->ctx.sock.fd = -1;
 	}
+
+	if (c->registry_index >= 0)
+		connection_reg_clear(c->vm, c->registry_index);
 }
 
 static uc_value_t *
@@ -2593,7 +2605,7 @@ static void free_object(void *ud) {
 static void free_request(void *ud) {
 	uc_ubus_request_t *callctx = ud;
 
-	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT, NULL);
+	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT);
 	uloop_timeout_cancel(&callctx->timeout);
 	free(callctx);
 }
@@ -2638,6 +2650,10 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(STATUS_PARSE_ERROR);
 	ADD_CONST(STATUS_SYSTEM_ERROR);
 #endif
+
+	/* virtual status code for reply */
+#define UBUS_STATUS_CONTINUE -1
+	ADD_CONST(STATUS_CONTINUE);
 
 	ADD_CONST(SYSTEM_OBJECT_ACL);
 
