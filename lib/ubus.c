@@ -764,7 +764,8 @@ get_fd(uc_vm_t *vm, uc_value_t *val)
 static int
 uc_ubus_call_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *res,
                     uint32_t id, uc_value_t *funname, uc_value_t *funargs,
-                    uc_value_t *fd, uc_value_t *fdcb, uc_value_t *mret)
+                    uc_value_t *fd, uc_value_t *fdcb, uc_value_t *noret,
+                    uc_value_t *mret)
 {
 	uc_ubus_deferred_t defer = {};
 	enum ubus_msg_status rv;
@@ -796,8 +797,12 @@ uc_ubus_call_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *re
 		defer.registry_index = request_reg_add(vm, NULL, NULL, ucv_get(fdcb), NULL, NULL);
 	}
 
-	if (rv == UBUS_STATUS_OK)
-		rv = ubus_complete_request(&c->ctx, &defer.request, c->timeout * 1000);
+	if (rv == UBUS_STATUS_OK) {
+		if (ucv_is_truish(noret))
+			ubus_abort_request(&c->ctx, &defer.request);
+		else
+			rv = ubus_complete_request(&c->ctx, &defer.request, c->timeout * 1000);
+	}
 
 	if (defer.request.fd_cb)
 		request_reg_clear(vm, defer.registry_index);
@@ -808,7 +813,7 @@ uc_ubus_call_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *re
 static uc_value_t *
 uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *obj, *funname, *funargs, *fd, *fdcb, *mret = NULL;
+	uc_value_t *obj, *funname, *funargs, *fd, *fdcb, *noret, *mret = NULL;
 	uc_ubus_call_res_t res = { 0 };
 	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
@@ -819,6 +824,7 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 	               "method", UC_STRING, REQUIRED, &funname,
 	               "data", UC_OBJECT, OPTIONAL, &funargs,
 	               "multiple_return", UC_BOOLEAN, OPTIONAL, &mret,
+	               "no_return", UC_BOOLEAN, NAMED, &noret,
 	               "fd", 0, NAMED, &fd,
 	               "fd_cb", UC_CLOSURE, NAMED, &fdcb);
 
@@ -839,7 +845,7 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 		           "Argument object is not string or integer");
 	}
 
-	rv = uc_ubus_call_common(vm, c, &res, id, funname, funargs, fd, fdcb, mret);
+	rv = uc_ubus_call_common(vm, c, &res, id, funname, funargs, fd, fdcb, noret, mret);
 
 	if (rv != UBUS_STATUS_OK) {
 		if (ucv_type(obj) == UC_STRING)
@@ -856,7 +862,7 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_chan_request(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *funname, *funargs, *fd, *fdcb, *mret = NULL;
+	uc_value_t *funname, *funargs, *fd, *fdcb, *noret, *mret = NULL;
 	uc_ubus_call_res_t res = { 0 };
 	uc_ubus_connection_t *c;
 	enum ubus_msg_status rv;
@@ -865,12 +871,13 @@ uc_ubus_chan_request(uc_vm_t *vm, size_t nargs)
 	               "method", UC_STRING, REQUIRED, &funname,
 	               "data", UC_OBJECT, OPTIONAL, &funargs,
 	               "multiple_return", UC_BOOLEAN, OPTIONAL, &mret,
+	               "no_return", UC_BOOLEAN, NAMED, &noret,
 	               "fd", 0, NAMED, &fd,
 	               "fd_cb", UC_CLOSURE, NAMED, &fdcb);
 
 	conn_get(vm, &c);
 
-	rv = uc_ubus_call_common(vm, c, &res, 0, funname, funargs, fd, fdcb, mret);
+	rv = uc_ubus_call_common(vm, c, &res, 0, funname, funargs, fd, fdcb, noret, mret);
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to send request '%s' on channel",
 		           ucv_string_get(funname));
