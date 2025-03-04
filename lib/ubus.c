@@ -1058,16 +1058,21 @@ uc_ubus_request_finish_common(uc_ubus_request_t *callctx, int code)
 }
 
 static void
-uc_ubus_request_finish(uc_ubus_request_t *callctx, int code, uc_value_t *reply)
+uc_ubus_request_send_reply(uc_ubus_request_t *callctx, uc_value_t *reply)
+{
+	if (!reply)
+		return;
+
+	blob_buf_init(&buf, 0);
+	ucv_object_to_blob(reply, &buf);
+	ubus_send_reply(callctx->ctx, &callctx->req, buf.head);
+}
+
+static void
+uc_ubus_request_finish(uc_ubus_request_t *callctx, int code)
 {
 	if (callctx->replied)
 		return;
-
-	if (reply) {
-		blob_buf_init(&buf, 0);
-		ucv_object_to_blob(reply, &buf);
-		ubus_send_reply(callctx->ctx, &callctx->req, buf.head);
-	}
 
 	uc_ubus_request_finish_common(callctx, code);
 	request_reg_clear(callctx->vm, callctx->registry_index);
@@ -1078,7 +1083,7 @@ uc_ubus_request_timeout(struct uloop_timeout *timeout)
 {
 	uc_ubus_request_t *callctx = container_of(timeout, uc_ubus_request_t, timeout);
 
-	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT, NULL);
+	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT);
 }
 
 static uc_value_t *
@@ -1087,25 +1092,36 @@ uc_ubus_request_reply(uc_vm_t *vm, size_t nargs)
 	uc_ubus_request_t **callctx = uc_fn_this("ubus.request");
 	int64_t code = UBUS_STATUS_OK;
 	uc_value_t *reply, *rcode;
+	bool more = false;
 
 	if (!callctx || !*callctx)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid call context");
 
 	args_get(vm, nargs,
-	         "reply", UC_OBJECT, true, &reply,
-	         "rcode", UC_INTEGER, true, &rcode);
+	         "reply", UC_OBJECT, OPTIONAL, &reply,
+	         "rcode", 0, OPTIONAL, &rcode);
 
 	if ((*callctx)->replied)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Reply has already been sent");
 
-	if (rcode) {
+	switch (ucv_type(rcode)) {
+	case UC_INTEGER:
 		code = ucv_int64_get(rcode);
 
 		if (errno == ERANGE || code < 0 || code > __UBUS_STATUS_LAST)
 			code = UBUS_STATUS_UNKNOWN_ERROR;
+		break;
+	case UC_BOOLEAN:
+	case UC_NULL:
+		more = ucv_is_truish(rcode);
+		break;
+	default:
+		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Argument is not integer or bool");
 	}
 
-	uc_ubus_request_finish(*callctx, code, reply);
+	uc_ubus_request_send_reply(*callctx, reply);
+	if (!more)
+		uc_ubus_request_finish(*callctx, code);
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -1171,7 +1187,7 @@ uc_ubus_request_error(uc_vm_t *vm, size_t nargs)
 	if (errno == ERANGE || code < 0 || code > __UBUS_STATUS_LAST)
 		code = UBUS_STATUS_UNKNOWN_ERROR;
 
-	uc_ubus_request_finish(*callctx, code, NULL);
+	uc_ubus_request_finish(*callctx, code);
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -2538,7 +2554,7 @@ static void free_object(void *ud) {
 static void free_request(void *ud) {
 	uc_ubus_request_t *callctx = ud;
 
-	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT, NULL);
+	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT);
 	uloop_timeout_cancel(&callctx->timeout);
 	free(callctx);
 }
