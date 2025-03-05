@@ -2966,7 +2966,7 @@ uc_socket_listen(uc_vm_t *vm, size_t nargs)
 {
 	int ret, fd, curr_weight, prev_weight, socktype = 0, protocol = 0;
 	struct addrinfo *ai_results, *ai_hints, *ai;
-	uc_value_t *host, *serv, *hints, *backlog;
+	uc_value_t *host, *serv, *hints, *backlog, *reuseaddr;
 	struct sockaddr_storage ss = { 0 };
 	bool v6, lo, ll;
 	socklen_t slen;
@@ -2975,7 +2975,8 @@ uc_socket_listen(uc_vm_t *vm, size_t nargs)
 		"host", UC_NULL, true, &host,
 		"service", UC_NULL, true, &serv,
 		"hints", UC_OBJECT, true, &hints,
-		"backlog", UC_INTEGER, true, &backlog);
+		"backlog", UC_INTEGER, true, &backlog,
+		"reuseaddr", UC_BOOLEAN, true, &reuseaddr);
 
 	ai_hints = hints
 		? (struct addrinfo *)uv_to_struct(hints, &st_addrinfo) : NULL;
@@ -3062,6 +3063,13 @@ uc_socket_listen(uc_vm_t *vm, size_t nargs)
 
 	if (fd == -1)
 		err_return(errno, "socket()");
+
+	if (ucv_is_truish(reuseaddr)) {
+		ret = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+
+		if (ret == -1)
+			err_return(errno, "setsockopt()");
+	}
 
 	ret = bind(fd, (struct sockaddr *)&ss, slen);
 
