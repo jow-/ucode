@@ -2949,6 +2949,9 @@ out:
  * @param {number} [backlog=128]
  * The maximum length of the queue of pending connections.
  *
+ * @param {boolean} [reuseaddr]
+ * Whether to set the SO_REUSEADDR option before calling bind().
+ *
  * @returns {module:socket.socket}
  *
  * @example
