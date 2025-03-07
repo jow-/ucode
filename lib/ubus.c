@@ -134,9 +134,6 @@ static uc_resource_type_t *defer_type;
 static uc_resource_type_t *conn_type;
 static uc_resource_type_t *chan_type;
 
-static uint64_t n_cb_active;
-static bool have_own_uloop;
-
 static struct blob_buf buf;
 
 typedef struct {
@@ -651,11 +648,6 @@ uc_ubus_call_user_cb(uc_ubus_deferred_t *defer, int ret, uc_value_t *reply)
 	}
 
 	request_reg_clear(defer->vm, defer->registry_index);
-
-	n_cb_active--;
-
-	if (have_own_uloop && n_cb_active == 0)
-		uloop_end();
 }
 
 static void
@@ -738,24 +730,6 @@ uc_ubus_call_timeout_cb(struct uloop_timeout *timeout)
 	ubus_abort_request(defer->ctx, &defer->request);
 
 	uc_ubus_call_user_cb(defer, UBUS_STATUS_TIMEOUT, NULL);
-}
-
-static bool
-uc_ubus_have_uloop(void)
-{
-	bool prev = uloop_cancelled;
-	bool active;
-
-#ifdef HAVE_ULOOP_FD_SET_CB
-	if (uloop_fd_set_cb)
-		return true;
-#endif
-
-	uloop_cancelled = true;
-	active = uloop_cancelling();
-	uloop_cancelled = prev;
-
-	return active;
 }
 
 static int
@@ -1000,11 +974,6 @@ uc_ubus_defer_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *r
 
 		defer->registry_index = request_reg_add(vm, ucv_get(res->res), ucv_get(replycb), ucv_get(datacb),
 		                                        ucv_get(fdcb), ucv_get(conn), ucv_get(fd));
-
-		if (!uc_ubus_have_uloop()) {
-			have_own_uloop = true;
-			uloop_run();
-		}
 	}
 	else {
 		uc_vm_stack_push(vm, ucv_get(replycb));
@@ -2346,11 +2315,6 @@ uc_ubus_defer_abort(uc_vm_t *vm, size_t nargs)
 	uloop_timeout_cancel(&(*d)->timeout);
 
 	request_reg_clear((*d)->vm, (*d)->registry_index);
-
-	n_cb_active--;
-
-	if (have_own_uloop && n_cb_active == 0)
-		uloop_end();
 
 	(*d)->complete = true;
 
