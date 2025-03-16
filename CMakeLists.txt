@@ -180,7 +180,6 @@ if(UBUS_SUPPORT)
   try_compile(HAVE_NEW_UBUS_STATUS_CODES
     ${CMAKE_BINARY_DIR}
     "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/test.c")
-  check_symbol_exists(uloop_fd_set_cb "libubox/uloop.h" FD_SET_CB_EXISTS)
   check_function_exists(uloop_timeout_remaining64 REMAINING64_FUNCTION_EXISTS)
   check_function_exists(ubus_channel_connect HAVE_CHANNEL_SUPPORT)
   if(REMAINING64_FUNCTION_EXISTS)
