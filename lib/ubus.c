@@ -70,7 +70,7 @@ _arg_type(uc_type_t type)
 static bool
 _args_get(uc_vm_t *vm, bool named, size_t nargs, ...)
 {
-	uc_value_t **ptr, *arg, *obj;
+	uc_value_t **ptr, *arg, *obj = NULL;
 	uc_type_t type, t;
 	const char *name;
 	size_t index = 0;
