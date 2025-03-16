@@ -23,6 +23,7 @@
 
 #define ok_return(expr) do { set_error(0, NULL); return (expr); } while(0)
 #define err_return(err, ...) do { set_error(err, __VA_ARGS__); return NULL; } while(0)
+#define errval_return(err, ...) do { set_error(err, __VA_ARGS__); return err; } while(0)
 
 #define REQUIRED	0
 #define OPTIONAL	1
@@ -78,6 +79,7 @@ _args_get(uc_vm_t *vm, bool named, size_t nargs, ...)
 
 	if (named) {
 		obj = uc_fn_arg(0);
+
 		if (nargs != 1 || ucv_type(obj) != UC_OBJECT)
 			named = false;
 	}
@@ -675,6 +677,7 @@ uc_ubus_call_fd_cb(struct ubus_request *req, int fd)
 		return;
 
 	request_reg_get(defer->vm, defer->registry_index, &this, NULL, &func);
+
 	if (ucv_is_callable(func)) {
 		uc_vm_stack_push(defer->vm, ucv_get(this));
 		uc_vm_stack_push(defer->vm, ucv_get(func));
@@ -740,6 +743,7 @@ get_fd(uc_vm_t *vm, uc_value_t *val)
 	int64_t n;
 
 	fn = ucv_property_get(val, "fileno");
+
 	if (ucv_is_callable(fn)) {
 		uc_vm_stack_push(vm, ucv_get(val));
 		uc_vm_stack_push(vm, ucv_get(fn));
@@ -774,23 +778,25 @@ uc_ubus_call_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *re
 
 	if (funargs)
 		ucv_object_to_blob(funargs, &c->buf);
+
 	if (fd) {
 		fd_val = get_fd(vm, fd);
-		if (fd_val < 0) {
-			rv = UBUS_STATUS_INVALID_ARGUMENT;
-			set_error(rv, "Invalid file descriptor argument");
-			return rv;
-		}
+
+		if (fd_val < 0)
+			errval_return(UBUS_STATUS_INVALID_ARGUMENT,
+			              "Invalid file descriptor argument");
 	}
 
 	res->mret = ucv_is_truish(mret);
 
 	rv = ubus_invoke_async_fd(&c->ctx, id, ucv_string_get(funname),
 	                          c->buf.head, &defer.request, fd_val);
+
 	defer.vm = vm;
 	defer.ctx = &c->ctx;
 	defer.request.data_cb = uc_ubus_call_cb;
 	defer.request.priv = res;
+
 	if (ucv_is_callable(fdcb)) {
 		defer.request.fd_cb = uc_ubus_call_fd_cb;
 		defer.registry_index = request_reg_add(vm, NULL, NULL, ucv_get(fdcb), NULL, NULL);
@@ -871,6 +877,7 @@ uc_ubus_chan_request(uc_vm_t *vm, size_t nargs)
 	conn_get(vm, &c);
 
 	rv = uc_ubus_call_common(vm, c, &res, 0, funname, funargs, fd, fdcb, mret);
+
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to send request '%s' on channel",
 		           ucv_string_get(funname));
@@ -906,6 +913,7 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 
 	if (fd) {
 		fd_val = get_fd(vm, fd);
+
 		if (fd_val < 0)
 			err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid file descriptor argument");
 	}
@@ -926,8 +934,7 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 		defer->ctx = &c->ctx;
 
 		defer->request.data_cb = uc_ubus_call_data_cb;
-		if (ucv_is_callable(fdcb))
-			defer->request.fd_cb = uc_ubus_call_fd_cb;
+		defer->request.fd_cb = ucv_is_callable(fdcb) ? uc_ubus_call_fd_cb : NULL;
 		defer->request.complete_cb = uc_ubus_call_done_cb;
 
 		ubus_complete_request_async(&c->ctx, &defer->request);
@@ -977,6 +984,7 @@ uc_ubus_request_finish_common(uc_ubus_request_t *callctx, int code)
 	int fd;
 
 	fd = ubus_request_get_caller_fd(&callctx->req);
+
 	if (fd >= 0)
 		close(fd);
 
@@ -1070,10 +1078,12 @@ uc_ubus_request_set_fd(uc_vm_t *vm, size_t nargs)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid call context");
 
 	fd = get_fd(vm, uc_fn_arg(0));
+
 	if (fd < 0)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid file descriptor");
 
 	ubus_request_set_fd(callctx->ctx, &callctx->req, fd);
+
 	return ucv_boolean_new(true);
 }
 
@@ -2239,12 +2249,14 @@ uc_ubus_channel_req_cb(struct ubus_context *ctx, struct ubus_object *obj,
 	uc_value_t *this, *func, *args, *reqproto;
 
 	connection_reg_get(c->vm, c->registry_index, &this, &func, NULL);
+
 	if (!ucv_is_callable(func))
 		return UBUS_STATUS_METHOD_NOT_FOUND;
 
 	args = blob_array_to_ucv(c->vm, blob_data(msg), blob_len(msg), true);
 	reqproto = ucv_object_new(c->vm);
 	ucv_object_add(reqproto, "args", ucv_get(args));
+
 	if (method)
 		ucv_object_add(reqproto, "type", ucv_get(ucv_string_new(method)));
 
@@ -2258,6 +2270,7 @@ uc_ubus_channel_disconnect_cb(struct ubus_context *ctx)
 	uc_value_t *this, *func;
 
 	connection_reg_get(c->vm, c->registry_index, &this, NULL, &func);
+
 	if (ucv_is_callable(func)) {
 		uc_vm_stack_push(c->vm, ucv_get(this));
 		uc_vm_stack_push(c->vm, ucv_get(func));
@@ -2269,8 +2282,10 @@ uc_ubus_channel_disconnect_cb(struct ubus_context *ctx)
 	}
 
 	blob_buf_free(&c->buf);
+
 	if (c->registry_index >= 0)
 		connection_reg_clear(c->vm, c->registry_index);
+
 	if (c->ctx.sock.fd >= 0) {
 		ubus_shutdown(&c->ctx);
 		c->ctx.sock.fd = -1;
@@ -2284,6 +2299,7 @@ uc_ubus_channel_add(uc_vm_t *vm, uc_ubus_connection_t *c, uc_value_t *cb,
 	uc_value_t *chan;
 
 	c->vm = vm;
+
 	if (c->timeout < 0)
 		c->timeout = 30;
 
@@ -2345,6 +2361,7 @@ uc_ubus_channel_connect(uc_vm_t *vm, size_t nargs)
 	         "timeout", UC_INTEGER, true, &timeout);
 
 	fd_val = get_fd(vm, fd);
+
 	if (fd_val < 0)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid file descriptor argument");
 
