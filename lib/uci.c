@@ -122,6 +122,16 @@ uc_uci_error(uc_vm_t *vm, size_t nargs)
 
 
 /**
+ * @typedef {Object} module:uci.cursor.ParserFlags
+ * @property {boolean} strict
+ * Strict parsing mode (enabled by default). Aborts parsing when encountering
+ * a parser error.
+ *
+ * @property {boolean} print_errors
+ * Print parser errors to stderr.
+ */
+
+/**
  * Instantiate uci cursor.
  *
  * A uci cursor is a context for interacting with uci configuration files. It's
@@ -158,6 +168,9 @@ uc_uci_error(uc_vm_t *vm, size_t nargs)
  * set to a different path for special purpose applications, or even disabled
  * by setting this parameter to an empty string.
  *
+ * @param {module:uci.cursor.ParserFlags}
+ * Parser flags to change.
+ *
  * @returns {?module:uci.cursor}
  */
 static uc_value_t *
@@ -166,12 +179,14 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 	uc_value_t *cdir = uc_fn_arg(0);
 	uc_value_t *sdir = uc_fn_arg(1);
 	uc_value_t *c2dir = uc_fn_arg(2);
+	uc_value_t *flags = uc_fn_arg(3);
 	struct uci_context *c;
 	int rv;
 
 	if ((cdir && ucv_type(cdir) != UC_STRING) ||
 	    (sdir && ucv_type(sdir) != UC_STRING) ||
-	    (c2dir && ucv_type(c2dir) != UC_STRING))
+	    (c2dir && ucv_type(c2dir) != UC_STRING) ||
+	    (flags && ucv_type(flags) != UC_OBJECT))
 		err_return(UCI_ERR_INVAL);
 
 	c = uci_alloc_context();
@@ -201,6 +216,34 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 			goto error;
 	}
 #endif
+
+	if (flags) {
+		unsigned int i, set = 0, clear = 0;
+		static const struct {
+			const char *name;
+			unsigned int mask;
+		} flag_spec[] = {
+			{ "strict", UCI_FLAG_STRICT },
+			{ "print_errors", UCI_FLAG_PERROR },
+		};
+
+		ucv_object_foreach(flags, key, value) {
+			for (i = 0; i < ARRAY_SIZE(flag_spec); i++)
+				if (!strcmp(flag_spec[i].name, key))
+					break;
+			if (i == ARRAY_SIZE(flag_spec)) {
+				rv = UCI_ERR_INVAL;
+				goto error;
+			}
+
+			if (ucv_is_truish(value))
+				set |= flag_spec[i].mask;
+			else
+				clear |= flag_spec[i].mask;
+		}
+
+		c->flags = (c->flags & ~clear) | set;
+	}
 
 	ok_return(ucv_resource_create(vm, "uci.cursor", c));
 
