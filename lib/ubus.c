@@ -1001,12 +1001,6 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 
 	conn_get(vm, &c);
 
-	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
-
-	if (rv != UBUS_STATUS_OK)
-		err_return(rv, "Failed to resolve object name '%s'",
-		           ucv_string_get(objname));
-
 	args_get_named(vm, nargs,
 	               "object", UC_STRING, REQUIRED, &objname,
 	               "method", UC_STRING, REQUIRED, &funname,
@@ -1015,6 +1009,12 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 	               "data_cb", UC_CLOSURE, OPTIONAL, &datacb,
 	               "fd", 0, NAMED, &fd,
 	               "fd_cb", UC_CLOSURE, NAMED, &fdcb);
+
+	rv = ubus_lookup_id(&c->ctx, ucv_string_get(objname), &id);
+
+	if (rv != UBUS_STATUS_OK)
+		err_return(rv, "Failed to resolve object name '%s'",
+		           ucv_string_get(objname));
 
 	rv = uc_ubus_defer_common(vm, c, &res, id, funname, funargs, fd, fdcb, replycb, datacb);
 
