@@ -83,6 +83,35 @@
 	return NULL; \
 } while(0)
 
+static int
+get_fd(uc_vm_t *vm, uc_value_t *val)
+{
+	uc_value_t *fn;
+	int64_t n;
+
+	fn = ucv_property_get(val, "fileno");
+
+	if (ucv_is_callable(fn)) {
+		uc_vm_stack_push(vm, ucv_get(val));
+		uc_vm_stack_push(vm, ucv_get(fn));
+
+		if (uc_vm_call(vm, true, 0) != EXCEPTION_NONE)
+			return -1;
+
+		val = uc_vm_stack_pop(vm);
+		n = ucv_int64_get(val);
+		ucv_put(val);
+	}
+	else {
+		n = ucv_int64_get(val);
+	}
+
+	if (errno || n < 0 || n > (int64_t)INT_MAX)
+		return -1;
+
+	return (int)n;
+}
+
 
 /**
  * Query error information.
@@ -1911,11 +1940,19 @@ uc_fs_chdir(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *path = uc_fn_arg(0);
 
-	if (ucv_type(path) != UC_STRING)
-		err_return(EINVAL);
+	if (ucv_type(path) == UC_STRING) {
+		if (chdir(ucv_string_get(path)) == -1)
+			err_return(errno);
+	}
+	else {
+		int fd = get_fd(vm, path);
 
-	if (chdir(ucv_string_get(path)) == -1)
-		err_return(errno);
+		if (fd < 0)
+			err_return(EINVAL);
+
+		if (fchdir(fd) == -1)
+			err_return(errno);
+	}
 
 	return ucv_boolean_new(true);
 }
