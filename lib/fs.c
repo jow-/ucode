@@ -1275,6 +1275,34 @@ uc_fs_fdopen(uc_vm_t *vm, size_t nargs)
  */
 
 /**
+ * Obtains the number of the handle's underlying file descriptor.
+ *
+ * Returns the descriptor number.
+ *
+ * Returns `null` on error.
+ *
+ * @function module:fs.dir#fileno
+ *
+ * @returns {?number}
+ */
+static uc_value_t *
+uc_fs_dfileno(uc_vm_t *vm, size_t nargs)
+{
+	DIR *dp = uc_fn_thisval("fs.dir");
+	int fd;
+
+	if (!dp)
+		err_return(EBADF);
+
+	fd = dirfd(dp);
+
+	if (fd == -1)
+		err_return(errno);
+
+	return ucv_int64_new(fd);
+}
+
+/**
  * Read the next entry from the open directory.
  *
  * Returns a string containing the entry name.
@@ -2813,6 +2841,7 @@ static const uc_function_list_t file_fns[] = {
 };
 
 static const uc_function_list_t dir_fns[] = {
+	{ "fileno",		uc_fs_dfileno },
 	{ "read",		uc_fs_readdir },
 	{ "seek",		uc_fs_seekdir },
 	{ "tell",		uc_fs_telldir },
