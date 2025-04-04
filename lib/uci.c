@@ -1994,6 +1994,70 @@ uc_uci_configs(uc_vm_t *vm, size_t nargs)
 	ok_return(a);
 }
 
+/**
+ * @typedef {Object} module:uci.cursor.ParserFlags
+ * @property {boolean} strict
+ * Strict parsing mode (enabled by default). Aborts parsing when encountering
+ * a parser error.
+ *
+ * @property {boolean} print_errors
+ * Print parser errors to stderr.
+ */
+
+/**
+ * Enumerate existing configurations.
+ *
+ * The `set_flags()` function changes uci parser flags.
+ *
+ * Returns `null` on error, e.g. due to invalid flags.
+ *
+ * @function module:uci.cursor#set_flags
+ *
+ * @param {module:uci.cursor.ParserFlags}
+ * Parser flags to change.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const ctx = cursor(…);
+ *
+ * // Disable strict parsing mode
+ * ctx.set_flags({ strict: false });
+ */
+static uc_value_t *
+uc_uci_set_flags(uc_vm_t *vm, size_t nargs)
+{
+	struct uci_context *c = uc_fn_thisval("uci.cursor");
+	static const struct {
+		const char *name;
+		unsigned int mask;
+	} flags[] = {
+		{ "strict", UCI_FLAG_STRICT },
+		{ "print_errors", UCI_FLAG_PERROR },
+	};
+	uc_value_t *arg = uc_fn_arg(0);
+	unsigned int i, set = 0, clear = 0;
+
+	if (!c || ucv_type(arg) != UC_OBJECT)
+		return NULL;
+
+	ucv_object_foreach(arg, key, value) {
+		for (i = 0; i < ARRAY_SIZE(flags); i++)
+			if (!strcmp(flags[i].name, key))
+				break;
+		if (i == ARRAY_SIZE(flags))
+			return NULL;
+
+		if (ucv_is_truish(value))
+			set |= flags[i].mask;
+		else
+			clear |= flags[i].mask;
+	}
+
+	c->flags = (c->flags & ~clear) | set;
+
+	return ucv_boolean_new(true);
+}
 
 static const uc_function_list_t cursor_fns[] = {
 	{ "load",			uc_uci_load },
@@ -2014,6 +2078,7 @@ static const uc_function_list_t cursor_fns[] = {
 	{ "changes",		uc_uci_changes },
 	{ "foreach",		uc_uci_foreach },
 	{ "configs",		uc_uci_configs },
+	{ "set_flags",		uc_uci_set_flags },
 	{ "error",			uc_uci_error },
 };
 
