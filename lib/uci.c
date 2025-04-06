@@ -183,14 +183,14 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 		rv = uci_set_confdir(c, ucv_string_get(cdir));
 
 		if (rv)
-			err_return(rv);
+			goto error;
 	}
 
 	if (sdir) {
 		rv = uci_set_savedir(c, ucv_string_get(sdir));
 
 		if (rv)
-			err_return(rv);
+			goto error;
 	}
 
 #ifdef HAVE_UCI_CONF2DIR
@@ -198,11 +198,15 @@ uc_uci_cursor(uc_vm_t *vm, size_t nargs)
 		rv = uci_set_conf2dir(c, ucv_string_get(c2dir));
 
 		if (rv)
-			err_return(rv);
+			goto error;
 	}
 #endif
 
 	ok_return(ucv_resource_create(vm, "uci.cursor", c));
+
+error:
+	uci_free_context(c);
+	err_return(rv);
 }
 
 
