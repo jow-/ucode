@@ -723,6 +723,7 @@ send_queries(resolve_ctx_t *ctx, uc_vm_t *vm, uc_value_t *res_obj)
 
 out:
 	free(reply_buf.buf);
+	close(fd);
 
 	return n_replies;
 }
