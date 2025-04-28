@@ -1154,29 +1154,6 @@ uc_lc(uc_vm_t *vm, size_t nargs)
 	return rv;
 }
 
-static bool
-uc_map_cb(uc_vm_t *vm, uc_value_t *cb, uc_value_t *out,
-                       uc_value_t *item,  uc_value_t *index, uc_value_t *obj)
-{
-	uc_vm_ctx_push(vm);
-	uc_vm_stack_push(vm, ucv_get(cb));
-	uc_vm_stack_push(vm, ucv_get(item));
-	uc_vm_stack_push(vm, index);
-	uc_vm_stack_push(vm, ucv_get(obj));
-
-	if (uc_vm_call(vm, true, 3)) {
-		ucv_put(out);
-
-		return false;
-	}
-
-	uc_value_t *rv = uc_vm_stack_pop(vm);
-
-	ucv_array_push(out, rv);
-
-	return true;
-}
-
 /**
  * Transform the array passed as the first argument by invoking the function
  * specified in the second argument for each array item.
@@ -1240,33 +1217,30 @@ uc_map(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *obj = uc_fn_arg(0);
 	uc_value_t *func = uc_fn_arg(1);
-	uc_value_t *arr = NULL;
+	uc_value_t *arr, *rv;
 	size_t arridx, arrlen;
 
-	switch (ucv_type(obj)) {
-	case UC_ARRAY:
-		arr = ucv_array_new(vm);
+	if (ucv_type(obj) != UC_ARRAY)
+		return NULL;
 
-		for (arrlen = ucv_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
-			if (!uc_map_cb(vm, func, arr, ucv_array_get(obj, arridx),
-			               ucv_uint64_new(arridx), obj))
-				return NULL;
+	arr = ucv_array_new(vm);
+
+	for (arrlen = ucv_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
+		uc_vm_ctx_push(vm);
+		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, ucv_get(ucv_array_get(obj, arridx)));
+		uc_vm_stack_push(vm, ucv_int64_new(arridx));
+		uc_vm_stack_push(vm, ucv_get(obj));
+
+		if (uc_vm_call(vm, true, 3)) {
+			ucv_put(arr);
+
+			return NULL;
 		}
 
-		break;
+		rv = uc_vm_stack_pop(vm);
 
-	case UC_OBJECT:
-		arr = ucv_array_new(vm);
-
-		ucv_object_foreach(obj, k, v) {
-			if (!uc_map_cb(vm, func, arr, v, ucv_string_new(k), obj))
-				return NULL;
-		}
-
-		break;
-
-	default:
-		break;
+		ucv_array_push(arr, rv);
 	}
 
 	return arr;
