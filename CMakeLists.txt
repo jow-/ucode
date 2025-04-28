@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 include(CheckFunctionExists)
 include(CheckSymbolExists)
+include(CheckCSourceCompiles)
 
 project(ucode C)
 add_definitions(-Os -Wall -Werror --std=gnu99 -ffunction-sections -fwrapv -D_GNU_SOURCE)
@@ -10,7 +11,16 @@ if(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
 	add_definitions(-Wformat -Werror=format-security -Werror=format-nonliteral)
 endif()
 
-if(NOT CMAKE_C_FLAGS MATCHES -D_FORTIFY_SOURCE=)
+check_c_source_compiles("
+int main() {
+#ifndef _FORTIFY_SOURCE
+#error No fortification
+#endif
+  return 0;
+}
+" DEFAULT_FORTIFY_SOURCE)
+
+if(NOT DEFAULT_FORTIFY_SOURCE)
 	add_definitions(-D_FORTIFY_SOURCE=2)
 endif()
 
