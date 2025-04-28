@@ -263,6 +263,7 @@ uc_zlib_deflate(uc_vm_t * const vm, const size_t nargs)
 	default:
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				      "Passed value is neither a string nor an object");
+		printbuf_free(zstrm.outbuf);
 		goto out;
 	}
 
@@ -449,6 +450,7 @@ uc_zlib_inflate(uc_vm_t * const vm, const size_t nargs)
 	default:
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				      "Passed value is neither a string nor an object");
+		printbuf_free(zstrm.outbuf);
 		goto out;
 	}
 
@@ -467,16 +469,16 @@ out:
 }
 
 /**
- * Represents a handle for interacting with a deflate stream initiated by defnew().
+ * Represents a handle for interacting with a deflate stream initiated by deflater().
  *
- * @class module:zlib.zstrmd
+ * @class module:zlib.deflate
  * @hideconstructor
  *
- * @see {@link module:zlib#defnew()}
+ * @see {@link module:zlib#deflater()}
  *
  * @example
  *
- * const zstrmd = defnew(…);
+ * const zstrmd = deflater(…);
  *
  * for (let data = ...; data; data = ...) {
  * 	zstrmd.write(data, Z_PARTIAL_FLUSH);	// write uncompressed data to stream
@@ -484,8 +486,8 @@ out:
 	* 	let defl = zstrmd.read();	// read back compressed stream content
  * }
  *
- * // terminate the stream if needed (for e.g. file output)
- * zstrmd.write('', Z_FINISH);
+ * // terminate the stream at the end of data input to complete a valid archive
+ * zstrmd.write(last_data, Z_FINISH);
  * defl = ztrmd.read();
  *
  * zstrmd.error();
@@ -498,7 +500,7 @@ out:
  *
  * Returns `null` if an error occurred.
  *
- * @function module:zlib#defnew
+ * @function module:zlib#deflater
  *
  * @param {?boolean} [gzip=false]
  * Add a gzip header if true (creates a gzip-compliant output, otherwise defaults to Zlib)
@@ -506,17 +508,17 @@ out:
  * @param {?number} [level=Z_DEFAULT_COMPRESSION]
  * The compression level (0-9).
  *
- * @returns {?module:zlib.zstrmd}
+ * @returns {?module:zlib.deflate}
  *
  * @example
  * // initialize a Zlib deflate stream using default compression
- * const zstrmd = defnew();
+ * const zstrmd = deflater();
  *
  * // initialize a gzip deflate stream using fastest compression
- * const zstrmd = defnew(true, Z_BEST_SPEED);
+ * const zstrmd = deflater(true, Z_BEST_SPEED);
  */
  static uc_value_t *
-uc_zlib_defnew(uc_vm_t *vm, size_t nargs)
+uc_zlib_deflater(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *gzip = uc_fn_arg(0);
 	uc_value_t *level = uc_fn_arg(1);
@@ -570,22 +572,25 @@ fail:
 /**
  * Writes a chunk of data to the deflate stream.
  *
- * Input data must be a string, it is internally compressed by the zlib deflate() routine,
- * the end is buffered according to the requested `flush` mode until read via
- * @see {@link module:zlib.zstrmd#read}.
- * If `flush` is `Z_FINISH` (the default) then no more data can be written to the stream.
- * Valid `flush`values are `Z_NO_FLUSH, Z_SYNC_FLUSH, Z_PARTIAL_FLUSH, Z_FULL_FLUSH, Z_FINISH`
+ * Input data must be a string, it is internally compressed by the zlib `deflate()` routine,
+ * the end result is buffered according to the requested `flush` mode until read via
+ * {@link module:zlib.zstrmd#read}.
+ * Valid `flush`values are `Z_NO_FLUSH` (the default),
+ * `Z_SYNC_FLUSH, Z_PARTIAL_FLUSH, Z_FULL_FLUSH, Z_FINISH`.
+ * If `flush` is `Z_FINISH` then no more data can be written to the stream.
+ * Refer to the {@link https://zlib.net/manual.html Zlib manual} for details
+ * on each flush mode.
  *
  * Returns `true` on success.
  *
  * Returns `null` if an error occurred.
  *
- * @function module:zlib.zstrmd#write
+ * @function module:zlib.deflate#write
  *
  * @param {string} src
  * The string of data to deflate.
  *
- * @param {?number} [flush=Z_FINISH]
+ * @param {?number} [flush=Z_NO_FLUSH]
  * The zlib flush mode.
  *
  * @returns {?boolean}
@@ -595,7 +600,7 @@ uc_zlib_defwrite(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *src = uc_fn_arg(0);
 	uc_value_t *flush = uc_fn_arg(1);
-	zstrm_t **z = uc_fn_this("zlib.strmd");
+	zstrm_t **z = uc_fn_this("zlib.deflate");
 	zstrm_t *zstrm;
 
 	if (!z || !*z)
@@ -623,7 +628,7 @@ uc_zlib_defwrite(uc_vm_t *vm, size_t nargs)
 		}
 	}
 	else
-		zstrm->flush = Z_FINISH;
+		zstrm->flush = Z_NO_FLUSH;
 
 	/* we only accept strings */
 	if (!src || ucv_type(src) != UC_STRING)
@@ -639,20 +644,20 @@ uc_zlib_defwrite(uc_vm_t *vm, size_t nargs)
  * Reads a chunk of compressed data from the deflate stream.
  *
  * Returns the current content of the deflate buffer, fed through
- * @see {@link module:zlib.zstrmd#write}.
+ * {@link module:zlib.deflate#write}.
  *
  * Returns compressed chunk on success.
  *
  * Returns `null` if an error occurred.
  *
- * @function module:zlib.zstrmd#read
+ * @function module:zlib.deflate#read
  *
  * @returns {?string}
  */
 static uc_value_t *
 uc_zlib_defread(uc_vm_t *vm, size_t nargs)
 {
-	zstrm_t **z = uc_fn_this("zlib.strmd");
+	zstrm_t **z = uc_fn_this("zlib.deflate");
 	zstrm_t *zstrm;
 	uc_value_t *rv;
 
@@ -673,26 +678,24 @@ uc_zlib_defread(uc_vm_t *vm, size_t nargs)
 }
 
 /**
- * Represents a handle for interacting with an inflate stream initiated by infnew().
+ * Represents a handle for interacting with an inflate stream initiated by inflater().
  *
- * @class module:zlib.zstrmi
+ * @class module:zlib.inflate
  * @hideconstructor
  *
- * @see {@link module:zlib#infnew()}
+ * @borrows module:zlib.deflate#error as module:fs.inflate#error
+ *
+ * @see {@link module:zlib#inflater()}
  *
  * @example
  *
- * const zstrmi = infnew();
+ * const zstrmi = inflater();
  *
  * for (let data = ...; data; data = ...) {
  * 	zstrmi.write(data, Z_SYNC_FLUSH);	// write compressed data to stream
  * 	if (foo)
 	* 	let defl = zstrmi.read();	// read back decompressed stream content
  * }
- *
- * // terminate the stream if needed (for e.g. file output)
- * zstrmi.write('', Z_FINISH);
- * defl = ztrmi.read();
  *
  * zstrmi.error();
  */
@@ -704,16 +707,16 @@ uc_zlib_defread(uc_vm_t *vm, size_t nargs)
  *
  * Returns `null` if an error occurred.
  *
- * @function module:zlib#infnew
+ * @function module:zlib#inflater
  *
- * @returns {?module:zlib.zstrmi}
+ * @returns {?module:zlib.inflate}
  *
  * @example
  * // initialize an inflate stream
- * const zstrmi = infnew();
+ * const zstrmi = inflater();
  */
  static uc_value_t *
-uc_zlib_infnew(uc_vm_t *vm, size_t nargs)
+uc_zlib_inflater(uc_vm_t *vm, size_t nargs)
 {
 	int ret;
 	zstrm_t *zstrm;
@@ -745,22 +748,24 @@ fail:
 /**
  * Writes a chunk of data to the inflate stream.
  *
- * Input data must be a string, it is internally decompressed by the zlib deflate() routine,
- * the end is buffered according to the requested `flush` mode until read via
- * @see {@link module:zlib.zstrmd#read}.
- * If `flush` is `Z_FINISH` (the default) then no more data can be written to the stream.
- * Valid `flush` values are `Z_NO_FLUSH, Z_SYNC_FLUSH, Z_FINISH`
+ * Input data must be a string, it is internally decompressed by the zlib `inflate()` routine,
+ * the end result is buffered according to the requested `flush` mode until read via
+ * {@link module:zlib.inflate#read}.
+ * Valid `flush` values are `Z_NO_FLUSH` (the default), `Z_SYNC_FLUSH, Z_FINISH`.
+ * If `flush` is `Z_FINISH` then no more data can be written to the stream.
+ * Refer to the {@link https://zlib.net/manual.html Zlib manual} for details
+ * on each flush mode.
  *
  * Returns `true` on success.
  *
  * Returns `null` if an error occurred.
  *
- * @function module:zlib.zstrmi#write
+ * @function module:zlib.inflate#write
  *
  * @param {string} src
- * The string of data to deflate.
+ * The string of data to inflate.
  *
- * @param {?number} [flush=Z_FINISH]
+ * @param {?number} [flush=Z_NO_FLUSH]
  * The zlib flush mode.
  *
  * @returns {?boolean}
@@ -770,7 +775,7 @@ uc_zlib_infwrite(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *src = uc_fn_arg(0);
 	uc_value_t *flush = uc_fn_arg(1);
-	zstrm_t **z = uc_fn_this("zlib.strmi");
+	zstrm_t **z = uc_fn_this("zlib.inflate");
 	zstrm_t *zstrm;
 
 	if (!z || !*z)
@@ -796,7 +801,7 @@ uc_zlib_infwrite(uc_vm_t *vm, size_t nargs)
 		}
 	}
 	else
-		zstrm->flush = Z_FINISH;
+		zstrm->flush = Z_NO_FLUSH;
 
 	/* we only accept strings */
 	if (!src || ucv_type(src) != UC_STRING)
@@ -812,20 +817,20 @@ uc_zlib_infwrite(uc_vm_t *vm, size_t nargs)
  * Reads a chunk of decompressed data from the inflate stream.
  *
  * Returns the current content of the inflate buffer, fed through
- * @see {@link module:zlib.zstrmi#write}.
+ * {@link module:zlib.inflate#write}.
  *
- * Returns compressed chunk on success.
+ * Returns decompressed chunk on success.
  *
  * Returns `null` if an error occurred.
  *
- * @function module:zlib.zstrmd#read
+ * @function module:zlib.inflate#read
  *
  * @returns {?string}
  */
 static uc_value_t *
 uc_zlib_infread(uc_vm_t *vm, size_t nargs)
 {
-	zstrm_t **z = uc_fn_this("zlib.strmi");
+	zstrm_t **z = uc_fn_this("zlib.inflate");
 	zstrm_t *zstrm;
 	uc_value_t *rv;
 
@@ -846,12 +851,12 @@ uc_zlib_infread(uc_vm_t *vm, size_t nargs)
 }
 
 /**
- * Query error information.
+ * Queries error information.
  *
  * Returns a string containing a description of the last occurred error or
  * `null` if there is no error information.
  *
- * @function module:zlib.zstrmd#error
+ * @function module:zlib.deflate#error
  *
  *
  * @returns {?string}
@@ -885,8 +890,8 @@ static const uc_function_list_t strmi_fns[] = {
 static const uc_function_list_t global_fns[] = {
 	{ "deflate",	uc_zlib_deflate },
 	{ "inflate",	uc_zlib_inflate },
-	{ "defnew",	uc_zlib_defnew },
-	{ "infnew",	uc_zlib_infnew },
+	{ "deflater",	uc_zlib_deflater },
+	{ "inflater",	uc_zlib_inflater },
 };
 
 static void destroy_zstrmd(void *z)
@@ -915,8 +920,8 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
 
-	zstrmd_type = uc_type_declare(vm, "zlib.strmd", strmd_fns, destroy_zstrmd);
-	zstrmi_type = uc_type_declare(vm, "zlib.strmi", strmi_fns, destroy_zstrmi);
+	zstrmd_type = uc_type_declare(vm, "zlib.deflate", strmd_fns, destroy_zstrmd);
+	zstrmi_type = uc_type_declare(vm, "zlib.inflate", strmi_fns, destroy_zstrmi);
 
 #define ADD_CONST(x) ucv_object_add(scope, #x, ucv_int64_new(x))
 
