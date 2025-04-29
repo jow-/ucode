@@ -2320,6 +2320,45 @@ uc_socket_error(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Returns a string containing a description of the positive (`errno`) or
+ * negative (`EAI_*` constant) error code number given by the *code* argument.
+ *
+ * Returns `null` if the error code number is unknown.
+ *
+ * @function module:socket#strerror
+ *
+ * @param {number} code
+ * The error code.
+ *
+ * @returns {?string}
+ *
+ * @example
+ * // Should output 'Name or service not known'.
+ * print(socket.strerror(-2), '\n');
+ *
+ * // Should output 'No route to host'.
+ * print(socket.strerror(113), '\n');
+ */
+static uc_value_t *
+uc_socket_strerror(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *codearg, *rv;
+	int code;
+
+	args_get(vm, nargs, NULL,
+		"code", UC_INTEGER, false, &codearg);
+
+	code = ucv_to_integer(codearg);
+
+	if (code < 0)
+		rv = ucv_string_new( gai_strerror(code) );
+	else
+		rv = ucv_string_new( strerror(code) );
+
+	ok_return(rv);
+}
+
+/**
  * @typedef {Object} module:socket.socket.SocketAddress
  * @property {number} family
  * Address family, one of AF_INET, AF_INET6, AF_UNIX or AF_PACKET.
@@ -4722,6 +4761,7 @@ static const uc_function_list_t global_fns[] = {
 	{ "connect",	uc_socket_connect },
 	{ "listen",		uc_socket_listen },
 	{ "error",		uc_socket_error },
+	{ "strerror",	uc_socket_strerror },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
