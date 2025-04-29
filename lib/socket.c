@@ -2316,7 +2316,7 @@ uc_socket_error(uc_vm_t *vm, size_t nargs)
 		rv = ucv_stringbuf_finish(buf);
 	}
 
-	ok_return(rv);
+	return rv;
 }
 
 /**
