@@ -4556,7 +4556,7 @@ uc_socket_inst_peercred(uc_vm_t *vm, size_t nargs)
 	err_return(ENOSYS, "Operation not supported on this system");
 #endif
 
-	return rv;
+	ok_return(rv);
 }
 
 /**
