@@ -2375,8 +2375,11 @@ uc_ubus_channel_disconnect_cb(struct ubus_context *ctx)
 		c->ctx.sock.fd = -1;
 	}
 
-	if (c->registry_index >= 0)
-		connection_reg_clear(c->vm, c->registry_index);
+	if (c->registry_index >= 0) {
+		int idx = c->registry_index;
+		c->registry_index = -1;
+		connection_reg_clear(c->vm, idx);
+	}
 }
 
 static uc_value_t *
