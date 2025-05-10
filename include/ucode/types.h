@@ -49,7 +49,7 @@ typedef enum uc_type {
 typedef struct uc_value {
 	uint32_t type:4;
 	uint32_t mark:1;
-	uint32_t u64_or_constant:1;
+	uint32_t ext_flag:1;
 	uint32_t refcount:26;
 } uc_value_t;
 
@@ -203,6 +203,17 @@ typedef struct {
 	uc_resource_type_t *type;
 	void *data;
 } uc_resource_t;
+
+typedef struct {
+	uc_value_t header;
+	uc_weakref_t ref;
+	uc_resource_type_t *type;
+
+	uint32_t reserved:3;
+	uint32_t no_gc:1;
+	uint32_t uvcount:8;
+	uint32_t datasize:20;
+} uc_resource_ext_t;
 
 uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
 
@@ -429,8 +440,26 @@ uc_resource_type_t *ucv_resource_type_add(uc_vm_t *, const char *, uc_value_t *,
 uc_resource_type_t *ucv_resource_type_lookup(uc_vm_t *, const char *);
 
 uc_value_t *ucv_resource_new(uc_resource_type_t *, void *);
+uc_value_t *ucv_resource_new_ex(uc_vm_t *, uc_resource_type_t *, void **, size_t, size_t);
 void *ucv_resource_data(uc_value_t *uv, const char *);
 void **ucv_resource_dataptr(uc_value_t *, const char *);
+uc_value_t *ucv_resource_value_get(uc_value_t *, size_t);
+bool ucv_resource_value_set(uc_value_t *, size_t, uc_value_t *);
+
+static inline uc_resource_type_t *
+ucv_resource_type(uc_value_t *uv)
+{
+		if (uv->ext_flag) {
+			uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
+
+			return res->type;
+		}
+		else {
+			uc_resource_t *res = (uc_resource_t *)uv;
+
+			return res->type;
+		}
+}
 
 static inline uc_value_t *
 ucv_resource_create(uc_vm_t *vm, const char *type, void *value)
@@ -441,6 +470,44 @@ ucv_resource_create(uc_vm_t *vm, const char *type, void *value)
         return NULL;
 
     return ucv_resource_new(t, value);
+}
+
+static inline uc_value_t *
+ucv_resource_create_ex(uc_vm_t *vm, const char *type, void **data, size_t uvcount, size_t datasize)
+{
+    uc_resource_type_t *t = NULL;
+
+    if (type && (t = ucv_resource_type_lookup(vm, type)) == NULL)
+        return NULL;
+
+    return ucv_resource_new_ex(vm, t, data, uvcount, datasize);
+}
+
+static inline bool
+ucv_resource_is_extended(uc_value_t *uv)
+{
+	return (((uintptr_t)uv & 3) == 0 && uv != NULL &&
+	        uv->ext_flag == true && uv->type == UC_RESOURCE);
+}
+
+static inline bool
+ucv_resource_get_no_gc(uc_value_t *uv)
+{
+	uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
+	return ucv_resource_is_extended(uv) && res->no_gc;
+}
+
+static inline bool
+ucv_resource_set_no_gc(uc_value_t *uv, bool no_gc)
+{
+	uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
+
+	if (!ucv_resource_is_extended(uv) || res->no_gc == no_gc)
+		return false;
+
+	res->no_gc = no_gc;
+
+	return true;
 }
 
 uc_value_t *ucv_regexp_new(const char *, bool, bool, bool, char **);
@@ -529,23 +596,23 @@ ucv_is_arrowfn(uc_value_t *uv)
 static inline bool
 ucv_is_u64(uc_value_t *uv)
 {
-	return (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64_or_constant == true &&
+	return (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->ext_flag == true &&
 		    uv->type == UC_INTEGER);
 }
 
 static inline bool
 ucv_is_constant(uc_value_t *uv)
 {
-	return (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64_or_constant == true &&
+	return (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->ext_flag == true &&
 	        (uv->type == UC_ARRAY || uv->type == UC_OBJECT));
 }
 
 static inline bool
 ucv_set_constant(uc_value_t *uv, bool constant)
 {
-	if (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->u64_or_constant != constant &&
+	if (((uintptr_t)uv & 3) == 0 && uv != NULL && uv->ext_flag != constant &&
 	    (uv->type == UC_ARRAY || uv->type == UC_OBJECT)) {
-		uv->u64_or_constant = constant;
+		uv->ext_flag = constant;
 
 		return true;
 	}
