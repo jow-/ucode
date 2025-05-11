@@ -128,7 +128,6 @@ _args_get(uc_vm_t *vm, bool named, size_t nargs, ...)
 static uc_resource_type_t *subscriber_type;
 static uc_resource_type_t *listener_type;
 static uc_resource_type_t *notify_type;
-static uc_resource_type_t *object_type;
 
 static struct blob_buf buf;
 
@@ -154,9 +153,11 @@ typedef struct {
 
 typedef struct {
 	struct ubus_object obj;
+	struct ubus_object_type type;
 	struct ubus_context *ctx;
-	size_t registry_index;
 	uc_vm_t *vm;
+	uc_value_t *res;
+	struct ubus_method methods[];
 } uc_ubus_object_t;
 
 typedef struct {
@@ -317,15 +318,12 @@ enum {
 	__DEFER_RES_MAX
 };
 
-#define object_reg_add(vm, obj, msg, cb) \
-	_uc_reg_add(vm, "ubus.objects", 3, obj, msg, cb)
-
-#define object_reg_get(vm, idx, obj, msg, cb) \
-	_uc_reg_get(vm, "ubus.objects", idx, 3, obj, msg, cb)
-
-#define object_reg_clear(vm, idx) \
-	_uc_reg_clear(vm, "ubus.objects", idx, 3)
-
+enum {
+	OBJ_RES_CONN,
+	OBJ_RES_METHODS,
+	OBJ_RES_SUB_CB,
+	__OBJ_RES_MAX
+};
 
 #define notify_reg_add(vm, notify, dcb, scb, ccb) \
 	_uc_reg_add(vm, "ubus.notifications", 4, notify, dcb, scb, ccb)
@@ -1339,13 +1337,13 @@ static uc_value_t *
 uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *typename, *message, *data_cb, *status_cb, *complete_cb, *timeout;
-	uc_ubus_object_t **uuobj = uc_fn_this("ubus.object");
+	uc_ubus_object_t *uuobj = uc_fn_thisval("ubus.object");
 	uc_ubus_notify_t *notifyctx;
 	uc_value_t *res;
 	int64_t t;
 	int rv;
 
-	if (!uuobj || !*uuobj)
+	if (!uuobj)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid object context");
 
 	args_get_named(vm, nargs,
@@ -1364,14 +1362,14 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 
 	notifyctx = xalloc(sizeof(*notifyctx));
 	notifyctx->vm = vm;
-	notifyctx->ctx = (*uuobj)->ctx;
+	notifyctx->ctx = uuobj->ctx;
 
 	blob_buf_init(&buf, 0);
 
 	if (message)
 		ucv_object_to_blob(message, &buf);
 
-	rv = ubus_notify_async((*uuobj)->ctx, &(*uuobj)->obj,
+	rv = ubus_notify_async(uuobj->ctx, &uuobj->obj,
 	                       ucv_string_get(typename), buf.head,
 	                       &notifyctx->req);
 
@@ -1390,7 +1388,7 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 		ucv_get(res), ucv_get(data_cb), ucv_get(status_cb), ucv_get(complete_cb));
 
 	if (t >= 0) {
-		rv = ubus_complete_request((*uuobj)->ctx, &notifyctx->req.req, t);
+		rv = ubus_complete_request(uuobj->ctx, &notifyctx->req.req, t);
 
 		notify_reg_clear(vm, notifyctx->registry_index);
 
@@ -1399,7 +1397,7 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 		ok_return(ucv_int64_new(rv));
 	}
 
-	ubus_complete_request_async((*uuobj)->ctx, &notifyctx->req.req);
+	ubus_complete_request_async(uuobj->ctx, &notifyctx->req.req);
 
 	ok_return(res);
 }
@@ -1415,8 +1413,10 @@ uc_ubus_object_remove_common(uc_ubus_object_t *uuobj)
 {
 	int rv = ubus_remove_object(uuobj->ctx, &uuobj->obj);
 
-	if (rv == UBUS_STATUS_OK)
-		object_reg_clear(uuobj->vm, uuobj->registry_index);
+	if (rv != UBUS_STATUS_OK)
+		return rv;
+
+	uc_ubus_put_res(&uuobj->res);
 
 	return rv;
 }
@@ -1424,13 +1424,13 @@ uc_ubus_object_remove_common(uc_ubus_object_t *uuobj)
 static uc_value_t *
 uc_ubus_object_remove(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_object_t **uuobj = uc_fn_this("ubus.object");
+	uc_ubus_object_t *uuobj = uc_fn_thisval("ubus.object");
 	int rv;
 
-	if (!uuobj || !*uuobj)
+	if (!uuobj)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid object context");
 
-	rv = uc_ubus_object_remove_common(*uuobj);
+	rv = uc_ubus_object_remove_common(uuobj);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to remove object");
@@ -1446,12 +1446,12 @@ uc_ubus_object_remove(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_object_subscribed(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_object_t **uuobj = uc_fn_this("ubus.object");
+	uc_ubus_object_t *uuobj = uc_fn_thisval("ubus.object");
 
-	if (!uuobj || !*uuobj)
+	if (!uuobj)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid object context");
 
-	ok_return(ucv_boolean_new((*uuobj)->obj.has_subscribers));
+	ok_return(ucv_boolean_new(uuobj->obj.has_subscribers));
 }
 
 
@@ -1670,12 +1670,11 @@ uc_ubus_object_call_cb(struct ubus_context *ctx, struct ubus_object *obj,
                        struct ubus_request_data *req, const char *ubus_method_name,
                        struct blob_attr *msg)
 {
-	uc_value_t *this, *func, *args = NULL, *reqproto, *methods;
+	uc_value_t *func, *args = NULL, *reqproto, *methods;
 	uc_ubus_object_t *uuobj = (uc_ubus_object_t *)obj;
 	int rv;
 
-	object_reg_get(uuobj->vm, uuobj->registry_index, &this, &methods, NULL);
-
+	methods = ucv_resource_value_get(uuobj->res, OBJ_RES_METHODS);
 	func = ucv_object_get(ucv_object_get(methods, ubus_method_name, NULL), "call", NULL);
 
 	if (!ucv_is_callable(func))
@@ -1692,7 +1691,7 @@ uc_ubus_object_call_cb(struct ubus_context *ctx, struct ubus_object *obj,
 	ucv_object_add(reqproto, "info",
 		uc_ubus_object_call_info(uuobj->vm, ctx, req, obj, ubus_method_name));
 
-	return uc_ubus_handle_reply_common(ctx, req, uuobj->vm, this, func, reqproto);
+	return uc_ubus_handle_reply_common(ctx, req, uuobj->vm, uuobj->res, func, reqproto);
 }
 
 
@@ -1705,11 +1704,11 @@ static void
 uc_ubus_object_subscribe_cb(struct ubus_context *ctx, struct ubus_object *obj)
 {
 	uc_ubus_object_t *uuobj = (uc_ubus_object_t *)obj;
-	uc_value_t *this, *func;
+	uc_value_t *func;
 
-	object_reg_get(uuobj->vm, uuobj->registry_index, &this, NULL, &func);
+	func = ucv_resource_value_get(uuobj->res, OBJ_RES_SUB_CB);
 
-	uc_vm_stack_push(uuobj->vm, ucv_get(this));
+	uc_vm_stack_push(uuobj->vm, ucv_get(uuobj->res));
 	uc_vm_stack_push(uuobj->vm, ucv_get(func));
 
 	if (uc_vm_call(uuobj->vm, true, 0) == EXCEPTION_NONE)
@@ -1835,36 +1834,32 @@ uc_ubus_object_method_register(struct ubus_method *method, const char *ubus_meth
 }
 
 static uc_ubus_object_t *
-uc_ubus_object_register(struct ubus_context *ctx, const char *ubus_object_name,
+uc_ubus_object_register(uc_vm_t *vm, uc_ubus_connection_t *c, const char *ubus_object_name,
                         uc_value_t *ubus_object_methods)
 {
+	struct ubus_context *ctx = &c->ctx;
 	const struct blobmsg_policy *policy;
 	uc_ubus_object_t *uuobj = NULL;
 	int rv = UBUS_STATUS_UNKNOWN_ERROR;
-	char *tptr, *tnptr, *onptr, *mptr;
+	char *tnptr, *onptr;
 	struct ubus_method *method;
 	struct ubus_object *obj;
-	size_t typelen, namelen;
-	uc_value_t *args;
+	size_t len, typelen, namelen, methodlen;
+	uc_value_t *args, *res;
 
 	namelen = strlen(ubus_object_name);
 	typelen = strlen("ucode-ubus-") + namelen;
+	methodlen = ucv_object_length(ubus_object_methods) * sizeof(struct ubus_method);
+	len = sizeof(*uuobj) + methodlen + namelen + 1 + typelen + 1;
 
-	uuobj = calloc_a(sizeof(*uuobj),
-	                 &onptr, namelen + 1,
-	                 &mptr, ucv_object_length(ubus_object_methods) * sizeof(struct ubus_method),
-	                 &tptr, sizeof(struct ubus_object_type),
-	                 &tnptr, typelen + 1);
+	res = ucv_resource_create_ex(vm, "ubus.object", (void **)&uuobj, __OBJ_RES_MAX, len);
 
 	if (!uuobj)
 		err_return(rv, "Out of memory");
 
-	snprintf(tnptr, typelen, "ucode-ubus-%s", ubus_object_name);
-
-	method = (struct ubus_method *)mptr;
+	method = uuobj->methods;
 
 	obj = &uuobj->obj;
-	obj->name = memcpy(onptr, ubus_object_name, namelen);
 	obj->methods = method;
 
 	if (ubus_object_methods) {
@@ -1876,15 +1871,30 @@ uc_ubus_object_register(struct ubus_context *ctx, const char *ubus_object_name,
 		}
 	}
 
-	obj->type = (struct ubus_object_type *)tptr;
+	onptr = (char *)&uuobj->methods[obj->n_methods];
+	tnptr = onptr + namelen + 1;
+
+	snprintf(tnptr, typelen, "ucode-ubus-%s", ubus_object_name);
+	obj->name = memcpy(onptr, ubus_object_name, namelen);
+
+	obj->type = (struct ubus_object_type *)&uuobj->type;
 	obj->type->name = tnptr;
 	obj->type->methods = obj->methods;
 	obj->type->n_methods = obj->n_methods;
 
 	rv = ubus_add_object(ctx, obj);
 
-	if (rv == UBUS_STATUS_OK)
-		return uuobj;
+	if (rv != UBUS_STATUS_OK)
+		goto out;
+
+	uuobj->vm = vm;
+	uuobj->ctx = ctx;
+	uuobj->res = ucv_get(res);
+	ucv_resource_persistent_set(res, true);
+	ucv_resource_value_set(res, OBJ_RES_CONN, ucv_get(c->res));
+	ucv_resource_value_set(res, OBJ_RES_METHODS, ucv_get(ubus_object_methods));
+
+	return uuobj;
 
 out:
 	for (; obj->n_methods > 0; method++, obj->n_methods--) {
@@ -1895,7 +1905,7 @@ out:
 		free((char *)method->policy);
 	}
 
-	free(uuobj);
+	ucv_put(res);
 
 	err_return(rv, "Unable to add ubus object");
 }
@@ -1906,7 +1916,6 @@ uc_ubus_publish(uc_vm_t *vm, size_t nargs)
 	uc_value_t *objname, *methods, *subscribecb;
 	uc_ubus_connection_t *c;
 	uc_ubus_object_t *uuobj;
-	uc_value_t *res;
 
 	conn_get(vm, &c);
 
@@ -1921,21 +1930,17 @@ uc_ubus_publish(uc_vm_t *vm, size_t nargs)
 	if (methods && !uc_ubus_object_methods_validate(methods))
 		return NULL;
 
-	uuobj = uc_ubus_object_register(&c->ctx, ucv_string_get(objname), methods);
+	uuobj = uc_ubus_object_register(vm, c, ucv_string_get(objname), methods);
 
 	if (!uuobj)
 		return NULL;
 
-	if (subscribecb)
+	if (subscribecb) {
 		uuobj->obj.subscribe_cb = uc_ubus_object_subscribe_cb;
+		ucv_resource_value_set(uuobj->res, OBJ_RES_SUB_CB, ucv_get(subscribecb));
+	}
 
-	res = uc_resource_new(object_type, uuobj);
-
-	uuobj->vm = vm;
-	uuobj->ctx = &c->ctx;
-	uuobj->registry_index = object_reg_add(vm, ucv_get(res), ucv_get(methods), ucv_get(subscribecb));
-
-	ok_return(res);
+	ok_return(uuobj->res);
 }
 
 
@@ -2235,14 +2240,14 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 {
 	uc_ubus_subscriber_t **uusub;
 	uc_ubus_connection_t *c;
-	uc_ubus_object_t **uuobj;
+	uc_ubus_object_t *uuobj;
 	uc_ubus_listener_t **uul;
 	int rv;
 
 	conn_get(vm, &c);
 
 	uusub = (uc_ubus_subscriber_t **)ucv_resource_dataptr(uc_fn_arg(0), "ubus.subscriber");
-	uuobj = (uc_ubus_object_t **)ucv_resource_dataptr(uc_fn_arg(0), "ubus.object");
+	uuobj = (uc_ubus_object_t *)ucv_resource_data(uc_fn_arg(0), "ubus.object");
 	uul = (uc_ubus_listener_t **)ucv_resource_dataptr(uc_fn_arg(0), "ubus.listener");
 
 	if (uusub && *uusub) {
@@ -2255,12 +2260,12 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 		if (rv != UBUS_STATUS_OK)
 			err_return(rv, "Unable to remove subscriber");
 	}
-	else if (uuobj && *uuobj) {
-		if ((*uuobj)->ctx != &c->ctx)
+	else if (uuobj) {
+		if (uuobj->ctx != &c->ctx)
 			err_return(UBUS_STATUS_INVALID_ARGUMENT,
 			           "Object belongs to different connection");
 
-		rv = uc_ubus_object_remove_common(*uuobj);
+		rv = uc_ubus_object_remove_common(uuobj);
 
 		if (rv != UBUS_STATUS_OK)
 			err_return(rv, "Unable to remove object");
@@ -2585,8 +2590,6 @@ static void free_object(void *ud) {
 		free((char *)obj->methods[i].name);
 		free((char *)obj->methods[i].policy);
 	}
-
-	free(uuobj);
 }
 
 static void free_request(void *ud) {
@@ -2645,7 +2648,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	uc_type_declare(vm, "ubus.connection", conn_fns, free_connection);
 	uc_type_declare(vm, "ubus.channel", chan_fns, free_connection);
 	uc_type_declare(vm, "ubus.deferred", defer_fns, free_deferred);
-	object_type = uc_type_declare(vm, "ubus.object", object_fns, free_object);
+	uc_type_declare(vm, "ubus.object", object_fns, free_object);
 	notify_type = uc_type_declare(vm, "ubus.notify", notify_fns, free_notify);
 	uc_type_declare(vm, "ubus.request", request_fns, free_request);
 	listener_type = uc_type_declare(vm, "ubus.listener", listener_fns, free_listener);
