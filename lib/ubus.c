@@ -127,7 +127,6 @@ _args_get(uc_vm_t *vm, bool named, size_t nargs, ...)
 
 static uc_resource_type_t *subscriber_type;
 static uc_resource_type_t *listener_type;
-static uc_resource_type_t *request_type;
 static uc_resource_type_t *notify_type;
 static uc_resource_type_t *object_type;
 static uc_resource_type_t *defer_type;
@@ -165,10 +164,10 @@ typedef struct {
 	struct ubus_request_data req;
 	struct uloop_timeout timeout;
 	struct ubus_context *ctx;
-	size_t registry_index;
+	uc_value_t *res;
+	uc_vm_t *vm;
 	bool deferred;
 	bool replied;
-	uc_vm_t *vm;
 } uc_ubus_request_t;
 
 typedef struct {
@@ -1095,6 +1094,7 @@ uc_ubus_request_finish_common(uc_ubus_request_t *callctx, int code)
 		close(fd);
 
 	callctx->replied = true;
+	uloop_timeout_cancel(&callctx->timeout);
 	ubus_complete_deferred_request(callctx->ctx, &callctx->req, code);
 }
 
@@ -1116,7 +1116,7 @@ uc_ubus_request_finish(uc_ubus_request_t *callctx, int code)
 		return;
 
 	uc_ubus_request_finish_common(callctx, code);
-	request_reg_clear(callctx->vm, callctx->registry_index);
+	uc_ubus_put_res(&callctx->res);
 }
 
 static void
@@ -1130,19 +1130,19 @@ uc_ubus_request_timeout(struct uloop_timeout *timeout)
 static uc_value_t *
 uc_ubus_request_reply(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_request_t **callctx = uc_fn_this("ubus.request");
+	uc_ubus_request_t *callctx = uc_fn_thisval("ubus.request");
 	int64_t code = UBUS_STATUS_OK;
 	uc_value_t *reply, *rcode;
 	bool more = false;
 
-	if (!callctx || !*callctx)
+	if (!callctx)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid call context");
 
 	args_get(vm, nargs,
 	         "reply", UC_OBJECT, true, &reply,
 	         "rcode", UC_INTEGER, true, &rcode);
 
-	if ((*callctx)->replied)
+	if (callctx->replied)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Reply has already been sent");
 
 	if (rcode) {
@@ -1155,10 +1155,10 @@ uc_ubus_request_reply(uc_vm_t *vm, size_t nargs)
 			more = true;
 	}
 
-	uc_ubus_request_send_reply(*callctx, reply);
+	uc_ubus_request_send_reply(callctx, reply);
 
 	if (!more)
-		uc_ubus_request_finish(*callctx, code);
+		uc_ubus_request_finish(callctx, code);
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -1208,17 +1208,17 @@ uc_ubus_request_set_fd(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_request_error(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_request_t **callctx = uc_fn_this("ubus.request");
+	uc_ubus_request_t *callctx = uc_fn_thisval("ubus.request");
 	uc_value_t *rcode = uc_fn_arg(0);
 	int64_t code;
 
-	if (!callctx || !*callctx)
+	if (!callctx)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid call context");
 
 	args_get(vm, nargs,
 	         "rcode", UC_INTEGER, false, &rcode);
 
-	if ((*callctx)->replied)
+	if (callctx->replied)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Reply has already been sent");
 
 	code = ucv_int64_get(rcode);
@@ -1226,7 +1226,7 @@ uc_ubus_request_error(uc_vm_t *vm, size_t nargs)
 	if (errno == ERANGE || code < 0 || code > __UBUS_STATUS_LAST)
 		code = UBUS_STATUS_UNKNOWN_ERROR;
 
-	uc_ubus_request_finish(*callctx, code);
+	uc_ubus_request_finish(callctx, code);
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -1564,22 +1564,25 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
                               uc_vm_t *vm, uc_value_t *this, uc_value_t *func,
                               uc_value_t *reqproto)
 {
-	uc_ubus_request_t *callctx;
+	uc_ubus_connection_t *conn = container_of(ctx, uc_ubus_connection_t, ctx);
+	uc_ubus_request_t *callctx = NULL;
 	uc_value_t *reqobj, *res;
 	int rv;
 
 	/* allocate deferred method call context */
-	callctx = xalloc(sizeof(*callctx));
+	reqobj = ucv_resource_create_ex(vm, "ubus.request", (void **)&callctx, 1, sizeof(*callctx));
+
+	if (!callctx)
+		return UBUS_STATUS_UNKNOWN_ERROR;
+
 	callctx->ctx = ctx;
 	callctx->vm = vm;
+	ucv_resource_value_set(reqobj, 0, ucv_get(conn->res));
 
 	ubus_defer_request(ctx, req, &callctx->req);
 
 	/* fd is copied to deferred request. ensure it does not get closed early */
 	ubus_request_get_caller_fd(req);
-
-	/* create ucode request type object and set properties */
-	reqobj = uc_resource_new(request_type, callctx);
 
 	if (reqproto)
 		ucv_prototype_set(ucv_prototype_get(reqobj), reqproto);
@@ -1599,10 +1602,8 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 			/* Install guard timer in case the reply callback is never called */
 			callctx->timeout.cb = uc_ubus_request_timeout;
 			uloop_timeout_set(&callctx->timeout, 10000 /* FIXME */);
-
-			/* Add wrapped request context into registry to prevent GC'ing
-			 * until reply or timeout occurred */
-			callctx->registry_index = request_reg_add(vm, ucv_get(reqobj), NULL, NULL, NULL, NULL, NULL);
+			callctx->res = ucv_get(reqobj);
+			ucv_resource_persistent_set(callctx->res, true);
 		}
 
 		/* Otherwise, when the function returned an object, treat it as
@@ -2592,8 +2593,6 @@ static void free_request(void *ud) {
 	uc_ubus_request_t *callctx = ud;
 
 	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT);
-	uloop_timeout_cancel(&callctx->timeout);
-	free(callctx);
 }
 
 static void free_notify(void *ud) {
@@ -2648,7 +2647,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	defer_type = uc_type_declare(vm, "ubus.deferred", defer_fns, free_deferred);
 	object_type = uc_type_declare(vm, "ubus.object", object_fns, free_object);
 	notify_type = uc_type_declare(vm, "ubus.notify", notify_fns, free_notify);
-	request_type = uc_type_declare(vm, "ubus.request", request_fns, free_request);
+	uc_type_declare(vm, "ubus.request", request_fns, free_request);
 	listener_type = uc_type_declare(vm, "ubus.listener", listener_fns, free_listener);
 	subscriber_type = uc_type_declare(vm, "ubus.subscriber", subscriber_fns, free_subscriber);
 }
