@@ -636,6 +636,7 @@ uc_ubus_call_user_cb(uc_ubus_deferred_t *defer, int ret, uc_value_t *reply)
 	uc_value_t *this, *func;
 
 	request_reg_get(defer->vm, defer->registry_index, &this, &func, NULL, NULL);
+	ucv_get(this);
 
 	if (ucv_is_callable(func)) {
 		uc_vm_stack_push(defer->vm, ucv_get(this));
@@ -648,6 +649,7 @@ uc_ubus_call_user_cb(uc_ubus_deferred_t *defer, int ret, uc_value_t *reply)
 	}
 
 	request_reg_clear(defer->vm, defer->registry_index);
+	ucv_put(this);
 }
 
 static void
