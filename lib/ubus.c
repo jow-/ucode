@@ -131,8 +131,6 @@ static uc_resource_type_t *request_type;
 static uc_resource_type_t *notify_type;
 static uc_resource_type_t *object_type;
 static uc_resource_type_t *defer_type;
-static uc_resource_type_t *conn_type;
-static uc_resource_type_t *chan_type;
 
 static struct blob_buf buf;
 
@@ -142,7 +140,7 @@ typedef struct {
 	int timeout;
 
 	uc_vm_t *vm;
-	int registry_index;
+	uc_value_t *res;
 } uc_ubus_connection_t;
 
 typedef struct {
@@ -237,6 +235,16 @@ uc_ubus_error(uc_vm_t *vm, size_t nargs)
 }
 
 static void
+uc_ubus_put_res(uc_value_t **rp)
+{
+	uc_value_t *res = *rp;
+
+	*rp = NULL;
+	ucv_resource_persistent_set(res, false);
+	ucv_put(res);
+}
+
+static void
 _uc_reg_get(uc_vm_t *vm, const char *key, size_t idx, size_t nptrs, ...)
 {
 	uc_value_t *reg = uc_vm_registry_get(vm, key), **val;
@@ -294,16 +302,12 @@ _uc_reg_clear(uc_vm_t *vm, const char *key, size_t idx, size_t nptrs)
 	}
 }
 
-
-#define connection_reg_add(vm, conn, cb, disconnect_cb, fd) \
-	_uc_reg_add(vm, "ubus.connections", 4, conn, cb, disconnect_cb, fd)
-
-#define connection_reg_get(vm, idx, conn, cb, disconnect_cb) \
-	_uc_reg_get(vm, "ubus.connections", idx, 3, conn, cb, disconnect_cb)
-
-#define connection_reg_clear(vm, idx) \
-	_uc_reg_clear(vm, "ubus.connections", idx, 4)
-
+enum {
+	CONN_RES_FD,
+	CONN_RES_CB,
+	CONN_RES_DISCONNECT_CB,
+	__CONN_RES_MAX
+};
 
 #define request_reg_add(vm, request, cb, datacb, fdcb, conn, fd) \
 	_uc_reg_add(vm, "ubus.requests", 6, request, cb, datacb, fdcb, conn, fd)
@@ -514,6 +518,25 @@ ucv_object_to_blob(uc_value_t *val, struct blob_buf *blob)
 }
 
 
+static uc_ubus_connection_t *
+uc_ubus_conn_alloc(uc_vm_t *vm, uc_value_t *timeout, const char *type)
+{
+	uc_ubus_connection_t *c = NULL;
+	uc_value_t *res;
+
+	res = ucv_resource_create_ex(vm, type, (void **)&c, __CONN_RES_MAX, sizeof(*c));
+	if (!c)
+		err_return(UBUS_STATUS_UNKNOWN_ERROR, "Out of memory");
+
+	c->vm = vm;
+	c->res = res;
+	c->timeout = timeout ? ucv_int64_get(timeout) : 30;
+	if (c->timeout < 0)
+		c->timeout = 30;
+
+	return c;
+}
+
 static uc_value_t *
 uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 {
@@ -524,12 +547,13 @@ uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 	         "socket", UC_STRING, true, &socket,
 	         "timeout", UC_INTEGER, true, &timeout);
 
-	c = xalloc(sizeof(*c));
-	c->registry_index = -1;
-	c->timeout = timeout ? ucv_int64_get(timeout) : 30;
+	c = uc_ubus_conn_alloc(vm, timeout, "ubus.connection");
+
+	if (!c)
+		return NULL;
 
 	if (ubus_connect_ctx(&c->ctx, socket ? ucv_string_get(socket) : NULL)) {
-		free(c);
+		ucv_put(c->res);
 		err_return(UBUS_STATUS_UNKNOWN_ERROR, "Unable to connect to ubus socket");
 	}
 
@@ -538,7 +562,7 @@ uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 
 	ubus_add_uloop(&c->ctx);
 
-	ok_return(uc_resource_new(conn_type, c));
+	ok_return(ucv_get(c->res));
 }
 
 static void
@@ -2264,6 +2288,7 @@ uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
 
 	ubus_shutdown(&c->ctx);
 	c->ctx.sock.fd = -1;
+	uc_ubus_put_res(&c->res);
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -2335,9 +2360,9 @@ uc_ubus_channel_req_cb(struct ubus_context *ctx, struct ubus_object *obj,
                        struct blob_attr *msg)
 {
 	uc_ubus_connection_t *c = container_of(ctx, uc_ubus_connection_t, ctx);
-	uc_value_t *this, *func, *args, *reqproto;
+	uc_value_t *func, *args, *reqproto;
 
-	connection_reg_get(c->vm, c->registry_index, &this, &func, NULL);
+	func = ucv_resource_value_get(c->res, CONN_RES_CB);
 
 	if (!ucv_is_callable(func))
 		return UBUS_STATUS_METHOD_NOT_FOUND;
@@ -2349,19 +2374,19 @@ uc_ubus_channel_req_cb(struct ubus_context *ctx, struct ubus_object *obj,
 	if (method)
 		ucv_object_add(reqproto, "type", ucv_get(ucv_string_new(method)));
 
-	return uc_ubus_handle_reply_common(ctx, req, c->vm, this, func, reqproto);
+	return uc_ubus_handle_reply_common(ctx, req, c->vm, c->res, func, reqproto);
 }
 
 static void
 uc_ubus_channel_disconnect_cb(struct ubus_context *ctx)
 {
 	uc_ubus_connection_t *c = container_of(ctx, uc_ubus_connection_t, ctx);
-	uc_value_t *this, *func;
+	uc_value_t *func;
 
-	connection_reg_get(c->vm, c->registry_index, &this, NULL, &func);
+	func = ucv_resource_value_get(c->res, CONN_RES_DISCONNECT_CB);
 
 	if (ucv_is_callable(func)) {
-		uc_vm_stack_push(c->vm, ucv_get(this));
+		uc_vm_stack_push(c->vm, ucv_get(c->res));
 		uc_vm_stack_push(c->vm, ucv_get(func));
 
 		if (uc_vm_call(c->vm, true, 0) == EXCEPTION_NONE)
@@ -2377,31 +2402,23 @@ uc_ubus_channel_disconnect_cb(struct ubus_context *ctx)
 		c->ctx.sock.fd = -1;
 	}
 
-	if (c->registry_index >= 0) {
-		int idx = c->registry_index;
-		c->registry_index = -1;
-		connection_reg_clear(c->vm, idx);
-	}
+	uc_ubus_put_res(&c->res);
 }
 
 static uc_value_t *
-uc_ubus_channel_add(uc_vm_t *vm, uc_ubus_connection_t *c, uc_value_t *cb,
+uc_ubus_channel_add(uc_ubus_connection_t *c, uc_value_t *cb,
                     uc_value_t *disconnect_cb, uc_value_t *fd)
 {
-	uc_value_t *chan;
-
-	c->vm = vm;
-
-	if (c->timeout < 0)
-		c->timeout = 30;
-
-	chan = uc_resource_new(chan_type, c);
-	c->registry_index = connection_reg_add(vm, ucv_get(chan), ucv_get(cb), ucv_get(disconnect_cb), ucv_get(fd));
+	ucv_resource_persistent_set(c->res, true);
+	ucv_resource_value_set(c->res, CONN_RES_FD, ucv_get(fd));
+	ucv_resource_value_set(c->res, CONN_RES_CB, ucv_get(cb));
+	ucv_resource_value_set(c->res, CONN_RES_DISCONNECT_CB, ucv_get(disconnect_cb));
 	c->ctx.connection_lost = uc_ubus_channel_disconnect_cb;
 	ubus_add_uloop(&c->ctx);
 
-	ok_return(chan);
+	ok_return(ucv_get(c->res));
 }
+
 #endif
 
 static uc_value_t *
@@ -2421,17 +2438,19 @@ uc_ubus_request_new_channel(uc_vm_t *vm, size_t nargs)
 	         "disconnect_cb", UC_CLOSURE, true, &disconnect_cb,
 	         "timeout", UC_INTEGER, true, &timeout);
 
-	c = xalloc(sizeof(*c));
-	c->timeout = timeout ? ucv_int64_get(timeout) : 30;
+	c = uc_ubus_conn_alloc(vm, timeout, "ubus.channel");
+
+	if (!c)
+		return NULL;
 
 	if (ubus_channel_create(&c->ctx, &fd, cb ? uc_ubus_channel_req_cb : NULL)) {
-		free(c);
+		ucv_put(c->res);
 		err_return(UBUS_STATUS_UNKNOWN_ERROR, "Unable to create ubus channel");
 	}
 
 	ubus_request_set_fd(callctx->ctx, &callctx->req, fd);
 
-	return uc_ubus_channel_add(vm, c, cb, disconnect_cb, NULL);
+	return uc_ubus_channel_add(c, cb, disconnect_cb, NULL);
 #else
 	err_return(UBUS_STATUS_NOT_SUPPORTED, "No ubus channel support");
 #endif
@@ -2457,15 +2476,17 @@ uc_ubus_channel_connect(uc_vm_t *vm, size_t nargs)
 	if (fd_val < 0)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid file descriptor argument");
 
-	c = xalloc(sizeof(*c));
-	c->timeout = timeout ? ucv_int64_get(timeout) : 30;
+	c = uc_ubus_conn_alloc(vm, timeout, "ubus.channel");
+
+	if (!c)
+		return NULL;
 
 	if (ubus_channel_connect(&c->ctx, fd_val, cb ? uc_ubus_channel_req_cb : NULL)) {
-		free(c);
+		ucv_put(c->res);
 		err_return(UBUS_STATUS_UNKNOWN_ERROR, "Unable to create ubus channel");
 	}
 
-	return uc_ubus_channel_add(vm, c, cb, disconnect_cb, fd);
+	return uc_ubus_channel_add(c, cb, disconnect_cb, fd);
 #else
 	err_return(UBUS_STATUS_NOT_SUPPORTED, "No ubus channel support");
 #endif
@@ -2541,10 +2562,6 @@ static void free_connection(void *ud) {
 
 	if (conn->ctx.sock.fd >= 0)
 		ubus_shutdown(&conn->ctx);
-	if (conn->registry_index >= 0)
-		connection_reg_clear(conn->vm, conn->registry_index);
-
-	free(conn);
 }
 
 static void free_deferred(void *ud) {
@@ -2626,8 +2643,8 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 
 	ADD_CONST(SYSTEM_OBJECT_ACL);
 
-	conn_type = uc_type_declare(vm, "ubus.connection", conn_fns, free_connection);
-	chan_type = uc_type_declare(vm, "ubus.channel", chan_fns, free_connection);
+	uc_type_declare(vm, "ubus.connection", conn_fns, free_connection);
+	uc_type_declare(vm, "ubus.channel", chan_fns, free_connection);
 	defer_type = uc_type_declare(vm, "ubus.deferred", defer_fns, free_deferred);
 	object_type = uc_type_declare(vm, "ubus.object", object_fns, free_object);
 	notify_type = uc_type_declare(vm, "ubus.notify", notify_fns, free_notify);
