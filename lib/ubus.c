@@ -127,7 +127,6 @@ _args_get(uc_vm_t *vm, bool named, size_t nargs, ...)
 
 static uc_resource_type_t *subscriber_type;
 static uc_resource_type_t *listener_type;
-static uc_resource_type_t *notify_type;
 
 static struct blob_buf buf;
 
@@ -173,9 +172,9 @@ typedef struct {
 typedef struct {
 	struct ubus_notify_request req;
 	struct ubus_context *ctx;
-	size_t registry_index;
-	bool complete;
 	uc_vm_t *vm;
+	uc_value_t *res;
+	bool complete;
 } uc_ubus_notify_t;
 
 typedef struct {
@@ -325,15 +324,13 @@ enum {
 	__OBJ_RES_MAX
 };
 
-#define notify_reg_add(vm, notify, dcb, scb, ccb) \
-	_uc_reg_add(vm, "ubus.notifications", 4, notify, dcb, scb, ccb)
-
-#define notify_reg_get(vm, idx, notify, dcb, scb, ccb) \
-	_uc_reg_get(vm, "ubus.notifications", idx, 4, notify, dcb, scb, ccb)
-
-#define notify_reg_clear(vm, idx) \
-	_uc_reg_clear(vm, "ubus.notifications", idx, 4)
-
+enum {
+	NOTIFY_RES_CONN,
+	NOTIFY_RES_CB,
+	NOTIFY_RES_DATA_CB,
+	NOTIFY_RES_STATUS_CB,
+	__NOTIFY_RES_MAX,
+};
 
 #define listener_reg_add(vm, listener, cb) \
 	_uc_reg_add(vm, "ubus.listeners", 2, listener, cb)
@@ -1241,27 +1238,22 @@ uc_ubus_request_error(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_notify_completed(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_notify_t **notifyctx = uc_fn_this("ubus.notify");
+	uc_ubus_notify_t *notifyctx = uc_fn_thisval("ubus.notify");
 
-	if (!notifyctx || !*notifyctx)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid notify context");
-
-	ok_return(ucv_boolean_new((*notifyctx)->complete));
+	ok_return(ucv_boolean_new(notifyctx->complete));
 }
 
 static uc_value_t *
 uc_ubus_notify_abort(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_notify_t **notifyctx = uc_fn_this("ubus.notify");
+	uc_ubus_notify_t *notifyctx = uc_fn_thisval("ubus.notify");
 
-	if (!notifyctx || !*notifyctx)
-		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid notify context");
-
-	if ((*notifyctx)->complete)
+	if (notifyctx->complete)
 		ok_return(ucv_boolean_new(false));
 
-	ubus_abort_request((*notifyctx)->ctx, &(*notifyctx)->req.req);
-	(*notifyctx)->complete = true;
+	ubus_abort_request(notifyctx->ctx, &notifyctx->req.req);
+	notifyctx->complete = true;
+	uc_ubus_put_res(&notifyctx->res);
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -1270,18 +1262,20 @@ static void
 uc_ubus_object_notify_data_cb(struct ubus_notify_request *req, int type, struct blob_attr *msg)
 {
 	uc_ubus_notify_t *notifyctx = (uc_ubus_notify_t *)req;
+	uc_vm_t *vm = notifyctx->vm;
 	uc_value_t *this, *func;
 
-	notify_reg_get(notifyctx->vm, notifyctx->registry_index, &this, &func, NULL, NULL);
+	this = notifyctx->res;
+	func = ucv_resource_value_get(this, NOTIFY_RES_DATA_CB);
 
 	if (ucv_is_callable(func)) {
-		uc_vm_stack_push(notifyctx->vm, ucv_get(this));
-		uc_vm_stack_push(notifyctx->vm, ucv_get(func));
-		uc_vm_stack_push(notifyctx->vm, ucv_int64_new(type));
-		uc_vm_stack_push(notifyctx->vm, blob_array_to_ucv(notifyctx->vm, blob_data(msg), blob_len(msg), true));
+		uc_vm_stack_push(vm, ucv_get(this));
+		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, ucv_int64_new(type));
+		uc_vm_stack_push(vm, blob_array_to_ucv(vm, blob_data(msg), blob_len(msg), true));
 
-		if (uc_vm_call(notifyctx->vm, true, 2) == EXCEPTION_NONE)
-			ucv_put(uc_vm_stack_pop(notifyctx->vm));
+		if (uc_vm_call(vm, true, 2) == EXCEPTION_NONE)
+			ucv_put(uc_vm_stack_pop(vm));
 		else
 			uloop_end();
 	}
@@ -1291,18 +1285,20 @@ static void
 uc_ubus_object_notify_status_cb(struct ubus_notify_request *req, int idx, int ret)
 {
 	uc_ubus_notify_t *notifyctx = (uc_ubus_notify_t *)req;
+	uc_vm_t *vm = notifyctx->vm;
 	uc_value_t *this, *func;
 
-	notify_reg_get(notifyctx->vm, notifyctx->registry_index, &this, NULL, &func, NULL);
+	this = notifyctx->res;
+	func = ucv_resource_value_get(this, NOTIFY_RES_STATUS_CB);
 
 	if (ucv_is_callable(func)) {
-		uc_vm_stack_push(notifyctx->vm, ucv_get(this));
-		uc_vm_stack_push(notifyctx->vm, ucv_get(func));
-		uc_vm_stack_push(notifyctx->vm, ucv_int64_new(idx));
-		uc_vm_stack_push(notifyctx->vm, ucv_int64_new(ret));
+		uc_vm_stack_push(vm, ucv_get(this));
+		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, ucv_int64_new(idx));
+		uc_vm_stack_push(vm, ucv_int64_new(ret));
 
-		if (uc_vm_call(notifyctx->vm, true, 2) == EXCEPTION_NONE)
-			ucv_put(uc_vm_stack_pop(notifyctx->vm));
+		if (uc_vm_call(vm, true, 2) == EXCEPTION_NONE)
+			ucv_put(uc_vm_stack_pop(vm));
 		else
 			uloop_end();
 	}
@@ -1312,25 +1308,27 @@ static void
 uc_ubus_object_notify_complete_cb(struct ubus_notify_request *req, int idx, int ret)
 {
 	uc_ubus_notify_t *notifyctx = (uc_ubus_notify_t *)req;
+	uc_vm_t *vm = notifyctx->vm;
 	uc_value_t *this, *func;
 
-	notify_reg_get(notifyctx->vm, notifyctx->registry_index, &this, NULL, NULL, &func);
+	this = ucv_get(notifyctx->res);
+	func = ucv_resource_value_get(this, NOTIFY_RES_CB);
 
 	if (ucv_is_callable(func)) {
-		uc_vm_stack_push(notifyctx->vm, ucv_get(this));
-		uc_vm_stack_push(notifyctx->vm, ucv_get(func));
-		uc_vm_stack_push(notifyctx->vm, ucv_int64_new(idx));
-		uc_vm_stack_push(notifyctx->vm, ucv_int64_new(ret));
+		uc_vm_stack_push(vm, ucv_get(this));
+		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, ucv_int64_new(idx));
+		uc_vm_stack_push(vm, ucv_int64_new(ret));
 
-		if (uc_vm_call(notifyctx->vm, true, 2) == EXCEPTION_NONE)
-			ucv_put(uc_vm_stack_pop(notifyctx->vm));
+		if (uc_vm_call(vm, true, 2) == EXCEPTION_NONE)
+			ucv_put(uc_vm_stack_pop(vm));
 		else
 			uloop_end();
 	}
 
 	notifyctx->complete = true;
-
-	notify_reg_clear(notifyctx->vm, notifyctx->registry_index);
+	uc_ubus_put_res(&notifyctx->res);
+	ucv_put(this);
 }
 
 static uc_value_t *
@@ -1338,10 +1336,10 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *typename, *message, *data_cb, *status_cb, *complete_cb, *timeout;
 	uc_ubus_object_t *uuobj = uc_fn_thisval("ubus.object");
-	uc_ubus_notify_t *notifyctx;
+	uc_ubus_notify_t *notifyctx = NULL;
 	uc_value_t *res;
 	int64_t t;
-	int rv;
+	int rv = UBUS_STATUS_UNKNOWN_ERROR;
 
 	if (!uuobj)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid object context");
@@ -1360,9 +1358,14 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT,
 		           "Invalid timeout value: %s", strerror(errno));
 
-	notifyctx = xalloc(sizeof(*notifyctx));
+	res = ucv_resource_create_ex(vm, "ubus.notify", (void **)&notifyctx, __NOTIFY_RES_MAX, sizeof(*notifyctx));
+
+	if (!notifyctx)
+		err_return(rv, "Out of memory");
+
 	notifyctx->vm = vm;
 	notifyctx->ctx = uuobj->ctx;
+	notifyctx->res = res;
 
 	blob_buf_init(&buf, 0);
 
@@ -1374,7 +1377,7 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 	                       &notifyctx->req);
 
 	if (rv != UBUS_STATUS_OK) {
-		free(notifyctx);
+		ucv_put(res);
 		err_return(rv, "Failed to send notification");
 	}
 
@@ -1382,24 +1385,23 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 	notifyctx->req.status_cb = uc_ubus_object_notify_status_cb;
 	notifyctx->req.complete_cb = uc_ubus_object_notify_complete_cb;
 
-	res = uc_resource_new(notify_type, notifyctx);
-
-	notifyctx->registry_index = notify_reg_add(vm,
-		ucv_get(res), ucv_get(data_cb), ucv_get(status_cb), ucv_get(complete_cb));
+	ucv_resource_value_set(res, NOTIFY_RES_CONN, ucv_get(uuobj->res));
+	ucv_resource_value_set(res, NOTIFY_RES_CB, ucv_get(complete_cb));
+	ucv_resource_value_set(res, NOTIFY_RES_DATA_CB, ucv_get(data_cb));
+	ucv_resource_value_set(res, NOTIFY_RES_STATUS_CB, ucv_get(status_cb));
 
 	if (t >= 0) {
 		rv = ubus_complete_request(uuobj->ctx, &notifyctx->req.req, t);
-
-		notify_reg_clear(vm, notifyctx->registry_index);
 
 		ucv_put(res);
 
 		ok_return(ucv_int64_new(rv));
 	}
 
+	ucv_resource_persistent_set(res, true);
 	ubus_complete_request_async(uuobj->ctx, &notifyctx->req.req);
 
-	ok_return(res);
+	ok_return(ucv_get(res));
 }
 
 
@@ -2598,12 +2600,6 @@ static void free_request(void *ud) {
 	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT);
 }
 
-static void free_notify(void *ud) {
-	uc_ubus_notify_t *notifyctx = ud;
-
-	free(notifyctx);
-}
-
 static void free_listener(void *ud) {
 	uc_ubus_listener_t *listener = ud;
 
@@ -2649,7 +2645,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	uc_type_declare(vm, "ubus.channel", chan_fns, free_connection);
 	uc_type_declare(vm, "ubus.deferred", defer_fns, free_deferred);
 	uc_type_declare(vm, "ubus.object", object_fns, free_object);
-	notify_type = uc_type_declare(vm, "ubus.notify", notify_fns, free_notify);
+	uc_type_declare(vm, "ubus.notify", notify_fns, NULL);
 	uc_type_declare(vm, "ubus.request", request_fns, free_request);
 	listener_type = uc_type_declare(vm, "ubus.listener", listener_fns, free_listener);
 	subscriber_type = uc_type_declare(vm, "ubus.subscriber", subscriber_fns, free_subscriber);
