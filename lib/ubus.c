@@ -125,8 +125,6 @@ _args_get(uc_vm_t *vm, bool named, size_t nargs, ...)
 #define args_get_named(vm, nargs, ...) do { if (!_args_get(vm, true, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
 #define args_get(vm, nargs, ...) do { if (!_args_get(vm, false, nargs, __VA_ARGS__, NULL)) return NULL; } while(0)
 
-static uc_resource_type_t *subscriber_type;
-
 static struct blob_buf buf;
 
 typedef struct {
@@ -186,8 +184,8 @@ typedef struct {
 typedef struct {
 	struct ubus_subscriber sub;
 	struct ubus_context *ctx;
-	size_t registry_index;
 	uc_vm_t *vm;
+	uc_value_t *res;
 } uc_ubus_subscriber_t;
 
 typedef struct {
@@ -241,64 +239,6 @@ uc_ubus_put_res(uc_value_t **rp)
 	ucv_put(res);
 }
 
-static void
-_uc_reg_get(uc_vm_t *vm, const char *key, size_t idx, size_t nptrs, ...)
-{
-	uc_value_t *reg = uc_vm_registry_get(vm, key), **val;
-	va_list ap;
-	size_t i;
-
-	va_start(ap, nptrs);
-
-	for (i = 0; i < nptrs; i++) {
-		val = va_arg(ap, uc_value_t **);
-
-		if (val)
-			*val = ucv_array_get(reg, idx + i);
-	}
-
-	va_end(ap);
-}
-
-static size_t
-_uc_reg_add(uc_vm_t *vm, const char *key, size_t nptrs, ...)
-{
-	uc_value_t *reg = uc_vm_registry_get(vm, key);
-	size_t idx, i;
-	va_list ap;
-
-	if (!reg) {
-		reg = ucv_array_new(vm);
-		uc_vm_registry_set(vm, key, reg);
-	}
-
-	va_start(ap, nptrs);
-
-	for (idx = 0;; idx += nptrs) {
-		if (ucv_array_get(reg, idx) == NULL) {
-			for (i = 0; i < nptrs; i++)
-				ucv_array_set(reg, idx + i, va_arg(ap, uc_value_t *));
-
-			break;
-		}
-	}
-
-	va_end(ap);
-
-	return idx;
-}
-
-static void
-_uc_reg_clear(uc_vm_t *vm, const char *key, size_t idx, size_t nptrs)
-{
-	uc_value_t *reg = uc_vm_registry_get(vm, key);
-
-	while (nptrs > 0) {
-		nptrs--;
-		ucv_array_set(reg, idx + nptrs, NULL);
-	}
-}
-
 enum {
 	CONN_RES_FD,
 	CONN_RES_CB,
@@ -331,16 +271,11 @@ enum {
 	__NOTIFY_RES_MAX,
 };
 
-
-#define subscriber_reg_add(vm, subscriber, ncb, rcb) \
-	_uc_reg_add(vm, "ubus.subscribers", 3, subscriber, ncb, rcb)
-
-#define subscriber_reg_get(vm, idx, subscriber, ncb, rcb) \
-	_uc_reg_get(vm, "ubus.subscribers", idx, 3, subscriber, ncb, rcb)
-
-#define subscriber_reg_clear(vm, idx) \
-	_uc_reg_clear(vm, "ubus.subscribers", idx, 3)
-
+enum {
+	SUB_RES_NOTIFY_CB,
+	SUB_RES_REMOVE_CB,
+	__SUB_RES_MAX,
+};
 
 static uc_value_t *
 blob_to_ucv(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **name);
@@ -2068,7 +2003,8 @@ uc_ubus_subscriber_notify_cb(struct ubus_context *ctx, struct ubus_object *obj,
 	uc_ubus_subscriber_t *uusub = container_of(sub, uc_ubus_subscriber_t, sub);
 	uc_value_t *this, *func, *reqproto;
 
-	subscriber_reg_get(uusub->vm, uusub->registry_index, &this, &func, NULL);
+	this = uusub->res;
+	func = ucv_resource_value_get(this, SUB_RES_NOTIFY_CB);
 
 	if (!ucv_is_callable(func))
 		return UBUS_STATUS_METHOD_NOT_FOUND;
@@ -2092,18 +2028,20 @@ uc_ubus_subscriber_remove_cb(struct ubus_context *ctx,
 {
 	uc_ubus_subscriber_t *uusub = container_of(sub, uc_ubus_subscriber_t, sub);
 	uc_value_t *this, *func;
+	uc_vm_t *vm = uusub->vm;
 
-	subscriber_reg_get(uusub->vm, uusub->registry_index, &this, NULL, &func);
+	this = uusub->res;
+	func = ucv_resource_value_get(this, SUB_RES_REMOVE_CB);
 
 	if (!ucv_is_callable(func))
 		return;
 
-	uc_vm_stack_push(uusub->vm, ucv_get(this));
-	uc_vm_stack_push(uusub->vm, ucv_get(func));
-	uc_vm_stack_push(uusub->vm, ucv_uint64_new(id));
+	uc_vm_stack_push(vm, ucv_get(this));
+	uc_vm_stack_push(vm, ucv_get(func));
+	uc_vm_stack_push(vm, ucv_uint64_new(id));
 
-	if (uc_vm_call(uusub->vm, true, 1) == EXCEPTION_NONE)
-		ucv_put(uc_vm_stack_pop(uusub->vm));
+	if (uc_vm_call(vm, true, 1) == EXCEPTION_NONE)
+		ucv_put(uc_vm_stack_pop(vm));
 	else
 		uloop_end();
 }
@@ -2111,27 +2049,27 @@ uc_ubus_subscriber_remove_cb(struct ubus_context *ctx,
 static uc_value_t *
 uc_ubus_subscriber_subunsub_common(uc_vm_t *vm, size_t nargs, bool subscribe)
 {
-	uc_ubus_subscriber_t **uusub = uc_fn_this("ubus.subscriber");
+	uc_ubus_subscriber_t *uusub = uc_fn_thisval("ubus.subscriber");
 	uc_value_t *objname;
 	uint32_t id;
 	int rv;
 
-	if (!uusub || !*uusub)
+	if (!uusub)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid subscriber context");
 
 	args_get(vm, nargs,
 	         "object name", UC_STRING, false, &objname);
 
-	rv = ubus_lookup_id((*uusub)->ctx, ucv_string_get(objname), &id);
+	rv = ubus_lookup_id(uusub->ctx, ucv_string_get(objname), &id);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to resolve object name '%s'",
 		           ucv_string_get(objname));
 
 	if (subscribe)
-		rv = ubus_subscribe((*uusub)->ctx, &(*uusub)->sub, id);
+		rv = ubus_subscribe(uusub->ctx, &uusub->sub, id);
 	else
-		rv = ubus_unsubscribe((*uusub)->ctx, &(*uusub)->sub, id);
+		rv = ubus_unsubscribe(uusub->ctx, &uusub->sub, id);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to %s object '%s'",
@@ -2159,7 +2097,7 @@ uc_ubus_subscriber_remove_common(uc_ubus_subscriber_t *uusub)
 	int rv = ubus_unregister_subscriber(uusub->ctx, &uusub->sub);
 
 	if (rv == UBUS_STATUS_OK)
-		subscriber_reg_clear(uusub->vm, uusub->registry_index);
+		uc_ubus_put_res(&uusub->res);
 
 	return rv;
 }
@@ -2167,13 +2105,13 @@ uc_ubus_subscriber_remove_common(uc_ubus_subscriber_t *uusub)
 static uc_value_t *
 uc_ubus_subscriber_remove(uc_vm_t *vm, size_t nargs)
 {
-	uc_ubus_subscriber_t **uusub = uc_fn_this("ubus.subscriber");
+	uc_ubus_subscriber_t *uusub = uc_fn_thisval("ubus.subscriber");
 	int rv;
 
-	if (!uusub || !*uusub)
+	if (!uusub)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Invalid subscriber context");
 
-	rv = uc_ubus_subscriber_remove_common(*uusub);
+	rv = uc_ubus_subscriber_remove_common(uusub);
 
 	if (rv != UBUS_STATUS_OK)
 		err_return(rv, "Failed to remove subscriber object");
@@ -2185,7 +2123,7 @@ static uc_value_t *
 uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *notify_cb, *remove_cb;
-	uc_ubus_subscriber_t *uusub;
+	uc_ubus_subscriber_t *uusub = NULL;
 	uc_ubus_connection_t *c;
 	uc_value_t *res;
 	int rv;
@@ -2199,14 +2137,18 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 	if (!notify_cb && !remove_cb)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Either notify or remove callback required");
 
-	uusub = xalloc(sizeof(*uusub));
+	res = ucv_resource_create_ex(vm, "ubus.subscriber", (void **)&uusub, __SUB_RES_MAX, sizeof(*uusub));
+
+	if (!uusub)
+		err_return(UBUS_STATUS_UNKNOWN_ERROR, "Out of memory");
+
 	uusub->vm = vm;
 	uusub->ctx = &c->ctx;
 
 	rv = ubus_register_subscriber(&c->ctx, &uusub->sub);
 
 	if (rv != UBUS_STATUS_OK) {
-		free(uusub);
+		ucv_put(res);
 		err_return(rv, "Failed to register subscriber object");
 	}
 
@@ -2216,10 +2158,10 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 	if (remove_cb)
 		uusub->sub.remove_cb = uc_ubus_subscriber_remove_cb;
 
-	res = uc_resource_new(subscriber_type, uusub);
-
-	uusub->registry_index = subscriber_reg_add(vm,
-		ucv_get(res), ucv_get(notify_cb), ucv_get(remove_cb));
+	uusub->res = ucv_get(res);
+	ucv_resource_persistent_set(res, true);
+	ucv_resource_value_set(res, SUB_RES_NOTIFY_CB, ucv_get(notify_cb));
+	ucv_resource_value_set(res, SUB_RES_REMOVE_CB, ucv_get(remove_cb));
 
 	ok_return(res);
 }
@@ -2593,12 +2535,6 @@ static void free_request(void *ud) {
 	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT);
 }
 
-static void free_subscriber(void *ud) {
-	uc_ubus_subscriber_t *subscriber = ud;
-
-	free(subscriber);
-}
-
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
@@ -2635,5 +2571,5 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	uc_type_declare(vm, "ubus.notify", notify_fns, NULL);
 	uc_type_declare(vm, "ubus.request", request_fns, free_request);
 	uc_type_declare(vm, "ubus.listener", listener_fns, NULL);
-	subscriber_type = uc_type_declare(vm, "ubus.subscriber", subscriber_fns, free_subscriber);
+	uc_type_declare(vm, "ubus.subscriber", subscriber_fns, NULL);
 }
