@@ -1118,7 +1118,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 		break;
 
 	case UC_STRING:
-		if (pv & 3) {
+		if ( !(pv & 3) ) {
 			uvstr = (uc_string_t *)uv;
 
 			ucv_object_add(rv, "address",
