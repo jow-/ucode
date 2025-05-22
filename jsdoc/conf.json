@@ -5,8 +5,8 @@
 	},
 	"source": {
 		"include": ["."],
-		"exclude": ["CMakeFiles"],
-		"includePattern": ".+\\.c$"
+		"exclude": ["CMakeFiles", "tests"],
+		"includePattern": ".+\\.(c|uc)$"
 	},
 	"plugins": [
 		"plugins/markdown",
