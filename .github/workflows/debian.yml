@@ -16,7 +16,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install devscripts build-essential lintian libjson-c-dev debhelper-compat debhelper
+          sudo apt install devscripts build-essential lintian libjson-c-dev debhelper-compat debhelper cmake
 
       - name: Build package
         run: |
