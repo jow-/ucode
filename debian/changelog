@@ -1,3 +1,9 @@
+ucode (0.0.20250529) UNRELEASED; urgency=medium
+
+  * See changelog https://github.com/jow-/ucode/releases/tag/v0.0.20250529
+
+ -- Jo-Philipp Wich <jo@mein.io>  Thu, 29 May 2025 00:45:45 +0200
+
 ucode (0.0.20220322) UNRELEASED; urgency=medium
 
   * Initial release.
