@@ -3322,8 +3322,11 @@ uc_socket_inst_connect(uc_vm_t *vm, size_t nargs)
 
 		n = ucv_to_unsigned(port);
 
-		if (errno != 0 || n > 65535)
-			err_return(EINVAL, "Invalid port number");
+		if (n > 65535)
+			errno = ERANGE;
+
+		if (errno != 0)
+			err_return(errno, "Invalid port number");
 
 		((struct sockaddr_in6 *)&ss)->sin6_port = htons(n);
 	}
