@@ -2916,8 +2916,24 @@ uc_socket_connect(uc_vm_t *vm, size_t nargs)
 		goto out;
 	}
 
+	err = 0;
+	errmsg = NULL;
+
 	for (slot = 0, ap = NULL, pp = NULL; slot < pollfds.count; slot++) {
 		if (pollfds.entries[slot].revents & (POLLIN|POLLOUT)) {
+			ret = getsockopt(pollfds.entries[slot].fd, SOL_SOCKET, SO_ERROR,
+			                 &err, &(socklen_t){ sizeof(err) });
+
+			if (ret == -1) {
+				err = errno;
+				errmsg = "getsockopt()";
+				continue;
+			}
+			else if (err != 0) {
+				errmsg = "connect()";
+				continue;
+			}
+
 			ap = &addresses.entries[slot];
 			pp = &pollfds.entries[slot];
 			break;
@@ -2925,8 +2941,11 @@ uc_socket_connect(uc_vm_t *vm, size_t nargs)
 	}
 
 	if (!ap) {
-		err = ETIMEDOUT;
-		errmsg = "Connection timed out";
+		if (!errmsg) {
+			err = ETIMEDOUT;
+			errmsg = "Connection timed out";
+		}
+
 		goto out;
 	}
 
