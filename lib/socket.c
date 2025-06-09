@@ -3285,15 +3285,29 @@ static uc_value_t *
 uc_socket_inst_connect(uc_vm_t *vm, size_t nargs)
 {
 	struct sockaddr_storage ss;
-	uc_value_t *addr;
+	uc_value_t *addr, *port;
+	unsigned long n;
 	int ret, sockfd;
 	socklen_t slen;
 
 	args_get(vm, nargs, &sockfd,
-		"address", UC_NULL, false, &addr);
+		"address", UC_NULL, false, &addr,
+		"port", UC_INTEGER, true, &port);
 
 	if (!uv_to_sockaddr(addr, &ss, &slen))
 		return NULL;
+
+	if (port) {
+		 if (ss.ss_family != AF_INET && ss.ss_family != AF_INET6)
+			err_return(EINVAL, "Port argument is only valid for IPv4 and IPv6 addresses");
+
+		n = ucv_to_unsigned(port);
+
+		if (errno != 0 || n > 65535)
+			err_return(EINVAL, "Invalid port number");
+
+		((struct sockaddr_in6 *)&ss)->sin6_port = htons(n);
+	}
 
 	ret = connect(sockfd, (struct sockaddr *)&ss, slen);
 
