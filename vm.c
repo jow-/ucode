@@ -814,9 +814,12 @@ uc_vm_exception_tostring(uc_vm_t *vm, size_t nargs)
 	return message ? ucv_get(message) : ucv_string_new("Exception");
 }
 
-static uc_value_t *
-uc_vm_exception_new(uc_vm_t *vm, uc_exception_type_t type, const char *message, uc_value_t *stacktrace)
+uc_value_t *
+uc_vm_exception_value(uc_vm_t *vm)
 {
+	uc_exception_type_t type = vm->exception.type;
+	const char *message = vm->exception.message;
+	uc_value_t *stacktrace = vm->exception.stacktrace;
 	uc_value_t *exception_prototype = uc_vm_registry_get(vm, "vm.exception.proto");
 	uc_value_t *exo;
 
@@ -881,7 +884,7 @@ uc_vm_handle_exception(uc_vm_t *vm)
 			ucv_put(uc_vm_stack_pop(vm));
 
 		/* prepare exception object and expose it to user handler code */
-		exo = uc_vm_exception_new(vm, vm->exception.type, vm->exception.message, vm->exception.stacktrace);
+		exo = uc_vm_exception_value(vm);
 
 		uc_vm_stack_push(vm, exo);
 
