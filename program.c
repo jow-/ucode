@@ -21,6 +21,7 @@
 #include "ucode/source.h"
 #include "ucode/vallist.h"
 #include "ucode/chunk.h"
+#include "ucode/vm.h"
 #include "ucode/platform.h"
 
 
@@ -320,7 +321,7 @@ write_function(uc_function_t *func, FILE *file, bool debug)
 void
 uc_program_write(uc_program_t *prog, FILE *file, bool debug)
 {
-	uint32_t flags = 0;
+	uint32_t flags = (UCODE_BYTECODE_VERSION & 0xff) << 24;
 	size_t i = 0;
 
 	if (debug)
@@ -822,6 +823,13 @@ uc_program_load(uc_source_t *input, char **errp)
 
 	if (!read_u32(input->fp, &flags, "program flags", errp))
 		goto out;
+
+	if ((flags >> 24) != UCODE_BYTECODE_VERSION) {
+		xasprintf(errp, 
+			"Bytecode version mismatch, got 0x%02x, expected 0x%02x\n",
+			flags >> 24, UCODE_BYTECODE_VERSION);
+		goto out;
+	}
 
 	program = uc_program_new();
 
