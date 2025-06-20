@@ -1290,7 +1290,6 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 
 	notifyctx->vm = vm;
 	notifyctx->ctx = uuobj->ctx;
-	notifyctx->res = res;
 
 	blob_buf_init(&buf, 0);
 
@@ -1306,6 +1305,7 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 		err_return(rv, "Failed to send notification");
 	}
 
+	notifyctx->res = ucv_get(res);
 	notifyctx->req.data_cb = uc_ubus_object_notify_data_cb;
 	notifyctx->req.status_cb = uc_ubus_object_notify_status_cb;
 	notifyctx->req.complete_cb = uc_ubus_object_notify_complete_cb;
@@ -1326,7 +1326,7 @@ uc_ubus_object_notify(uc_vm_t *vm, size_t nargs)
 	ucv_resource_persistent_set(res, true);
 	ubus_complete_request_async(uuobj->ctx, &notifyctx->req.req);
 
-	ok_return(ucv_get(res));
+	ok_return(res);
 }
 
 
