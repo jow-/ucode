@@ -100,7 +100,8 @@ __insn(NEXTKV) \
 __insn(DELETE) \
 __insn(IMPORT) \
 __insn(EXPORT) \
-__insn(DYNLOAD)
+__insn(DYNLOAD) \
+__insn(PVAL)
 
 
 #undef __insn

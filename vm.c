@@ -1190,6 +1190,30 @@ uc_vm_insn_load_val(uc_vm_t *vm, uc_vm_insn_t insn)
 }
 
 static void
+uc_vm_insn_peek_val(uc_vm_t *vm, uc_vm_insn_t insn)
+{
+	uc_value_t *k = uc_vm_stack_pop(vm);
+	uc_value_t *v = uc_vm_stack_peek(vm, 0);
+
+	switch (ucv_type(v)) {
+	case UC_RESOURCE:
+	case UC_OBJECT:
+	case UC_ARRAY:
+		uc_vm_stack_push(vm, ucv_key_get(vm, v, k));
+		break;
+
+	default:
+		uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
+								"left-hand side expression is %s",
+								v ? "not an array or object" : "null");
+
+		break;
+	}
+
+	ucv_put(k);
+}
+
+static void
 uc_vm_insn_load_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_callframe_t *frame = uc_vm_current_frame(vm);
@@ -2826,6 +2850,10 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 		case I_LVAL:
 		case I_QLVAL:
 			uc_vm_insn_load_val(vm, insn);
+			break;
+
+		case I_PVAL:
+			uc_vm_insn_peek_val(vm, insn);
 			break;
 
 		case I_LUPV:
