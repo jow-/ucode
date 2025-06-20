@@ -1638,12 +1638,12 @@ uc_compiler_compile_call(uc_compiler_t *compiler)
 	else
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, optional_chaining ? I_QCALL : I_CALL);
 
-	if (nargs > 0xffff || spreads.count > 0xffff)
+	if (nargs > 0xffff || spreads.count > 0x7fff)
 		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 			"Too many function call arguments");
 
 	/* encode ordinary (low 16 bit) and spread argument (high 16 bit) count */
-	uc_compiler_emit_u32(compiler, 0, ((spreads.count & 0xffff) << 16) | nargs);
+	uc_compiler_emit_u32(compiler, 0, ((spreads.count & 0x7fff) << 16) | nargs);
 
 	/* encode spread arg positions */
 	for (i = 0; i < spreads.count; i++)

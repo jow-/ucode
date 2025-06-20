@@ -548,7 +548,8 @@ uc_vm_call_native(uc_vm_t *vm, uc_value_t *ctx, uc_cfunction_t *fptr, bool mcall
 static bool
 uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, size_t argspec)
 {
-	size_t i, j, stackoff, nargs = argspec & 0xffff, nspreads = argspec >> 16;
+	size_t i, j, stackoff, nargs = argspec & 0xffff;
+	size_t nspreads = (argspec >> 16) & 0x7fff;
 	uc_callframe_t *frame = NULL;
 	uc_value_t *ellip, *arg;
 	uc_function_t *function;
@@ -2417,18 +2418,20 @@ uc_vm_skip_call(uc_vm_t *vm, bool mcall)
 static void
 uc_vm_insn_call(uc_vm_t *vm, uc_vm_insn_t insn)
 {
-	uc_value_t *fno = ucv_get(uc_vm_stack_peek(vm, vm->arg.u32 & 0xffff));
+	bool mcall = (vm->arg.u32 & 0x80000000);
+	size_t nargs = (vm->arg.u32 & 0xffff);
+	uc_value_t *fno = uc_vm_stack_peek(vm, nargs);
 	uc_value_t *ctx = NULL;
 
 	if (!ucv_is_callable(fno) && insn == I_QCALL)
 		return uc_vm_skip_call(vm, false);
 
 	if (!ucv_is_arrowfn(fno))
-		ctx = NULL;
+		ctx = mcall ? uc_vm_stack_peek(vm, nargs + 1) : NULL;
 	else if (vm->callframes.count > 0)
 		ctx = uc_vm_current_frame(vm)->ctx;
 
-	uc_vm_call_function(vm, ucv_get(ctx), fno, false, vm->arg.u32);
+	uc_vm_call_function(vm, ucv_get(ctx), ucv_get(fno), mcall, vm->arg.u32);
 }
 
 static void
