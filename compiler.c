@@ -1609,10 +1609,6 @@ uc_compiler_compile_call(uc_compiler_t *compiler)
 	/* determine the kind of the lhs */
 	type = chunk->entries[compiler->last_insn];
 
-	/* if lhs is a dot or bracket expression, pop the LVAL instruction */
-	if (type == I_LVAL || type == I_QLVAL)
-		uc_chunk_pop(chunk);
-
 	/* compile arguments */
 	if (!uc_compiler_parse_check(compiler, TK_RPAREN)) {
 		do {
@@ -1632,18 +1628,18 @@ uc_compiler_compile_call(uc_compiler_t *compiler)
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 
 	/* if lhs is a dot or bracket expression, emit a method call */
-	if (type == I_LVAL || type == I_QLVAL)
-		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, optional_chaining ? I_QMCALL : I_MCALL);
-	/* else ordinary call */
-	else
-		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, optional_chaining ? I_QCALL : I_CALL);
+	uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, optional_chaining ? I_QCALL : I_CALL);
 
 	if (nargs > 0xffff || spreads.count > 0x7fff)
 		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 			"Too many function call arguments");
 
-	/* encode ordinary (low 16 bit) and spread argument (high 16 bit) count */
-	uc_compiler_emit_u32(compiler, 0, ((spreads.count & 0x7fff) << 16) | nargs);
+	/* encode ordinary (bits 0..15) and spread argument (bits 16..30) count
+	   as well as method call indication (bit 31) */
+	uc_compiler_emit_u32(compiler, 0,
+		((type == I_LVAL || type == I_QLVAL) ? 0x80000000 : 0) |
+		((spreads.count & 0x7fff) << 16) |
+		(nargs & 0xffff));
 
 	/* encode spread arg positions */
 	for (i = 0; i < spreads.count; i++)
