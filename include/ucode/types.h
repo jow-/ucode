@@ -638,9 +638,11 @@ ucv_is_scalar(uc_value_t *uv)
 }
 
 bool ucv_is_equal(uc_value_t *, uc_value_t *);
+bool ucv_is_strictly_equal(uc_value_t *, uc_value_t *, bool);
 bool ucv_is_truish(uc_value_t *);
 
 bool ucv_compare(int, uc_value_t *, uc_value_t *, int *);
+bool ucv_contains(uc_value_t *, uc_value_t *);
 
 uc_value_t *ucv_key_get(uc_vm_t *, uc_value_t *, uc_value_t *);
 uc_value_t *ucv_key_set(uc_vm_t *, uc_value_t *, uc_value_t *, uc_value_t *);

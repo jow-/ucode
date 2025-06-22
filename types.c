@@ -2152,6 +2152,37 @@ ucv_is_equal(uc_value_t *uv1, uc_value_t *uv2)
 }
 
 bool
+ucv_is_strictly_equal(uc_value_t *v1, uc_value_t *v2, bool nan_equal)
+{
+	uc_type_t t1 = ucv_type(v1);
+	uc_type_t t2 = ucv_type(v2);
+	double d1, d2;
+
+	if (t1 != t2)
+		return false;
+
+	switch (t1) {
+	case UC_DOUBLE:
+		d1 = ((uc_double_t *)v1)->dbl;
+		d2 = ((uc_double_t *)v2)->dbl;
+
+		if (isnan(d1) && isnan(d2))
+			return nan_equal;
+
+		return (d1 == d2);
+
+	case UC_NULL:
+	case UC_BOOLEAN:
+	case UC_INTEGER:
+	case UC_STRING:
+		return ucv_is_equal(v1, v2);
+
+	default:
+		return (v1 == v2);
+	}
+}
+
+bool
 ucv_is_truish(uc_value_t *val)
 {
 	double d;
@@ -2364,6 +2395,29 @@ ucv_compare(int how, uc_value_t *v1, uc_value_t *v2, int *deltap)
 	default:
 		return false;
 	}
+}
+
+bool
+ucv_contains(uc_value_t *haystack, uc_value_t *needle)
+{
+	uc_type_t t = ucv_type(haystack);
+	bool found = false;
+
+	if (t == UC_ARRAY) {
+		for (size_t i = 0, len = ucv_array_length(haystack); i < len; i++) {
+			uc_value_t *elem = ucv_array_get(haystack, i);
+
+			if (ucv_is_strictly_equal(elem, needle, true)) {
+				found = true;
+				break;
+			}
+		}
+	}
+	else if (t == UC_OBJECT && ucv_type(needle) == UC_STRING) {
+		ucv_object_get(haystack, ucv_string_get(needle), &found);
+	}
+
+	return found;
 }
 
 
