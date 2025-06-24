@@ -392,6 +392,9 @@ uc_compiler_parse_at_assignment_op(uc_compiler_t *compiler)
 }
 
 static void
+uc_compiler_backpatch(uc_compiler_t *compiler, size_t break_addr, size_t next_addr);
+
+static void
 uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence)
 {
 	uc_parse_rule_t *rule;
@@ -420,6 +423,11 @@ uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence
 	    rule->prefix != uc_compiler_compile_array)
 		compiler->parser->lex.no_regexp = true;
 
+	compiler->patchlist = &(uc_patchlist_t){
+		.parent = compiler->patchlist,
+		.token = TK_EXP,
+	};
+
 	uc_compiler_parse_advance(compiler);
 
 	rule->prefix(compiler);
@@ -445,6 +453,8 @@ uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence
 		rule->infix(compiler);
 	}
 
+	uc_compiler_backpatch(compiler, compiler->patchlist->depth, 0);
+
 	if (uc_compiler_exprstack_is(compiler, F_ASSIGNABLE) && uc_compiler_parse_at_assignment_op(compiler))
 		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos, "Invalid left-hand side expression for assignment");
 
@@ -452,7 +462,7 @@ uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence
 }
 
 static size_t
-uc_compiler_reladdr(uc_compiler_t *compiler, size_t from, size_t to)
+uc_compiler_reladdr32(uc_compiler_t *compiler, size_t from, size_t to)
 {
 	ssize_t delta = to - from;
 
@@ -463,6 +473,20 @@ uc_compiler_reladdr(uc_compiler_t *compiler, size_t from, size_t to)
 	}
 
 	return (size_t)(delta + 0x7fffffff);
+}
+
+static size_t
+uc_compiler_reladdr16(uc_compiler_t *compiler, size_t from, size_t to)
+{
+	ssize_t delta = to - from;
+
+	if (delta < -0x7fff || delta > 0x7fff) {
+		uc_compiler_syntax_error(compiler, 0, "Jump address too far");
+
+		return 0;
+	}
+
+	return (size_t)(delta + 0x7fff);
 }
 
 static size_t
@@ -614,7 +638,23 @@ uc_compiler_emit_jmp_dest(uc_compiler_t *compiler, size_t srcpos, uint32_t dest)
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 
 	uc_compiler_emit_insn(compiler, srcpos, I_JMP);
-	uc_compiler_emit_u32(compiler, 0, uc_compiler_reladdr(compiler, chunk->count - 1, dest));
+	uc_compiler_emit_u32(compiler, 0, uc_compiler_reladdr32(compiler, chunk->count - 1, dest));
+
+	return chunk->count - 5;
+}
+
+static size_t
+uc_compiler_emit_jmpnt(uc_compiler_t *compiler, size_t srcpos, uint16_t types, uint8_t depth)
+{
+	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+
+	uc_vector_push(compiler->patchlist,
+		uc_compiler_emit_insn(compiler, srcpos, I_JMPNT));
+
+	uc_compiler_emit_u32(compiler, 0,
+		uc_compiler_reladdr16(compiler, 0, TK_BREAK)
+			| ((types & 0x1fff) << 16)
+			| ((depth & 0x7) << 29));
 
 	return chunk->count - 5;
 }
@@ -634,31 +674,47 @@ static ssize_t
 uc_compiler_get_jmpaddr(uc_compiler_t *compiler, size_t off)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
+	size_t width = (chunk->entries[off] == I_JMPNT) ? 2 : 4;
 
-	assert(chunk->entries[off] == I_JMP || chunk->entries[off] == I_JMPZ);
+	assert(chunk->entries[off] == I_JMP || chunk->entries[off] == I_JMPZ || chunk->entries[off] == I_JMPNT);
 	assert(off + 4 < chunk->count);
 
-	return (
-		chunk->entries[off + 1] * 0x1000000UL +
-		chunk->entries[off + 2] * 0x10000UL +
-		chunk->entries[off + 3] * 0x100UL +
-		chunk->entries[off + 4]
-	) - 0x7fffffff;
+	if (width == 2)
+		return (
+			chunk->entries[off + 3] * 0x100UL +
+			chunk->entries[off + 4]
+		) - 0x7fff;
+	else
+		return (
+			chunk->entries[off + 1] * 0x1000000UL +
+			chunk->entries[off + 2] * 0x10000UL +
+			chunk->entries[off + 3] * 0x100UL +
+			chunk->entries[off + 4]
+		) - 0x7fffffff;
 }
 
 static void
 uc_compiler_set_jmpaddr(uc_compiler_t *compiler, size_t off, uint32_t dest)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
-	size_t addr = uc_compiler_reladdr(compiler, off, dest);
+	size_t width = (chunk->entries[off] == I_JMPNT) ? 2 : 4;
+	size_t addr;
 
-	assert(chunk->entries[off] == I_JMP || chunk->entries[off] == I_JMPZ);
+	assert(chunk->entries[off] == I_JMP || chunk->entries[off] == I_JMPZ || chunk->entries[off] == I_JMPNT);
 	assert(off + 4 < chunk->count);
 
-	chunk->entries[off + 1] = addr / 0x1000000;
-	chunk->entries[off + 2] = (addr / 0x10000) % 0x100;
-	chunk->entries[off + 3] = (addr / 0x100) % 0x100;
-	chunk->entries[off + 4] = addr % 0x100;
+	if (width == 2) {
+		addr = uc_compiler_reladdr16(compiler, off, dest);
+		chunk->entries[off + 3] = addr / 0x100;
+		chunk->entries[off + 4] = addr % 0x100;
+	}
+	else {
+		addr = uc_compiler_reladdr32(compiler, off, dest);
+		chunk->entries[off + 1] = addr / 0x1000000;
+		chunk->entries[off + 2] = (addr / 0x10000) % 0x100;
+		chunk->entries[off + 3] = (addr / 0x100) % 0x100;
+		chunk->entries[off + 4] = addr % 0x100;
+	}
 }
 
 static void
@@ -1153,9 +1209,7 @@ uc_compiler_emit_variable_rw(uc_compiler_t *compiler, uc_value_t *varname, uc_to
 	if (!varname) {
 		if (sub_insn != 0)
 			insn = I_UVAL;
-		else if (type == TK_QDOT || type == TK_QLBRACK)
-			insn = I_QLVAL;
-		else if (type != 0)
+		else if (type != 0 && type != TK_QDOT && type != TK_QLBRACK)
 			insn = I_SVAL;
 		else
 			insn = I_LVAL;
@@ -1602,12 +1656,23 @@ uc_compiler_compile_call(uc_compiler_t *compiler)
 	uc_jmplist_t spreads = { 0 };
 	uc_vm_insn_t type;
 	size_t i, nargs = 0;
+	bool mcall;
 
 	/* flag optional chaining usage in current expression */
 	compiler->exprstack->flags |= optional_chaining ? F_OPTCHAINING : 0;
 
 	/* determine the kind of the lhs */
 	type = chunk->entries[compiler->last_insn];
+	mcall = (type == I_LVAL);
+
+	if (mcall) {
+		uc_chunk_pop(chunk);
+		uc_compiler_emit_insn(compiler, 0, I_PVAL);
+	}
+
+	if (optional_chaining)
+		uc_compiler_emit_jmpnt(compiler, compiler->parser->prev.pos,
+			(1u << UC_CFUNCTION) | (1u << UC_CLOSURE), mcall);
 
 	/* compile arguments */
 	if (!uc_compiler_parse_check(compiler, TK_RPAREN)) {
@@ -1628,7 +1693,7 @@ uc_compiler_compile_call(uc_compiler_t *compiler)
 	uc_compiler_parse_consume(compiler, TK_RPAREN);
 
 	/* if lhs is a dot or bracket expression, emit a method call */
-	uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, optional_chaining ? I_QCALL : I_CALL);
+	uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_CALL);
 
 	if (nargs > 0xffff || spreads.count > 0x7fff)
 		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
@@ -1637,15 +1702,15 @@ uc_compiler_compile_call(uc_compiler_t *compiler)
 	/* encode ordinary (bits 0..15) and spread argument (bits 16..30) count
 	   as well as method call indication (bit 31) */
 	uc_compiler_emit_u32(compiler, 0,
-		((type == I_LVAL || type == I_QLVAL) ? 0x80000000 : 0) |
-		((spreads.count & 0x7fff) << 16) |
-		(nargs & 0xffff));
+		(mcall ? 0x80000000 : 0) | ((spreads.count & 0x7fff) << 16) | nargs);
 
 	/* encode spread arg positions */
 	for (i = 0; i < spreads.count; i++)
 		uc_compiler_emit_u16(compiler, 0, nargs - spreads.entries[i] - 1);
 
 	uc_vector_clear(&spreads);
+
+	compiler->patchlist->depth = uc_compiler_current_chunk(compiler)->count;
 }
 
 static void
@@ -1922,6 +1987,10 @@ uc_compiler_compile_dot(uc_compiler_t *compiler)
 	/* no regexp literal possible after property access */
 	compiler->parser->lex.no_regexp = true;
 
+	if (optional_chaining)
+		uc_compiler_emit_jmpnt(compiler, compiler->parser->prev.pos,
+			(1u << UC_ARRAY) | (1u << UC_OBJECT) | (1u << UC_RESOURCE), 0);
+
 	/* parse label lhs */
 	uc_compiler_parse_consume(compiler, TK_LABEL);
 	uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
@@ -1929,6 +1998,8 @@ uc_compiler_compile_dot(uc_compiler_t *compiler)
 	/* depending on context, compile into I_UVAL, I_SVAL or I_LVAL operation */
 	if (!uc_compiler_exprstack_is(compiler, F_ASSIGNABLE) || !uc_compiler_compile_assignment(compiler, NULL))
 		uc_compiler_emit_variable_rw(compiler, NULL, optional_chaining ? TK_QDOT : 0);
+
+	compiler->patchlist->depth = uc_compiler_current_chunk(compiler)->count;
 }
 
 static void
@@ -1938,6 +2009,10 @@ uc_compiler_compile_subscript(uc_compiler_t *compiler)
 
 	/* flag optional chaining usage in current expression */
 	compiler->exprstack->flags |= optional_chaining ? F_OPTCHAINING : 0;
+
+	if (optional_chaining)
+		uc_compiler_emit_jmpnt(compiler, compiler->parser->prev.pos,
+			(1u << UC_ARRAY) | (1u << UC_OBJECT) | (1u << UC_RESOURCE), 0);
 
 	/* compile lhs */
 	uc_compiler_compile_expression(compiler);
@@ -1949,6 +2024,8 @@ uc_compiler_compile_subscript(uc_compiler_t *compiler)
 	/* depending on context, compile into I_UVAL, I_SVAL or I_LVAL operation */
 	if (!uc_compiler_exprstack_is(compiler, F_ASSIGNABLE) || !uc_compiler_compile_assignment(compiler, NULL))
 		uc_compiler_emit_variable_rw(compiler, NULL, optional_chaining ? TK_QLBRACK : 0);
+
+	compiler->patchlist->depth = uc_compiler_current_chunk(compiler)->count;
 }
 
 static void

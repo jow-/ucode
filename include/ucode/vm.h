@@ -26,7 +26,7 @@
 #include "types.h"
 #include "program.h"
 
-#define UCODE_BYTECODE_VERSION 0x00
+#define UCODE_BYTECODE_VERSION 0x01
 
 #define __insns \
 __insn(NOOP) \
@@ -43,7 +43,7 @@ __insn(LLOC) \
 __insn(LUPV) \
 __insn(LVAR) \
 __insn(LVAL) \
-__insn(QLVAL) \
+__insn(PVAL) \
 __insn(CLFN) \
 __insn(ARFN) \
 __insn(SLOC) \
@@ -86,22 +86,19 @@ __insn(PLUS) \
 __insn(MINUS) \
 __insn(JMP) \
 __insn(JMPZ) \
+__insn(JMPNT) \
 __insn(COPY) \
 __insn(POP) \
 __insn(CUPV) \
 __insn(RETURN) \
 __insn(CALL) \
-__insn(MCALL) \
-__insn(QCALL) \
-__insn(QMCALL) \
 __insn(PRINT) \
 __insn(NEXTK) \
 __insn(NEXTKV) \
 __insn(DELETE) \
 __insn(IMPORT) \
 __insn(EXPORT) \
-__insn(DYNLOAD) \
-__insn(PVAL)
+__insn(DYNLOAD)
 
 
 #undef __insn

@@ -69,13 +69,11 @@ static const int8_t insn_operand_bytes[__I_MAX] = {
 
 	[I_JMP] = -4,
 	[I_JMPZ] = -4,
+	[I_JMPNT] = 4,
 
 	[I_COPY] = 1,
 
 	[I_CALL] = 4,
-	[I_MCALL] = 4,
-	[I_QCALL] = 4,
-	[I_QMCALL] = 4,
 
 	[I_IMPORT] = 4,
 	[I_EXPORT] = 4,
@@ -1176,12 +1174,9 @@ uc_vm_insn_load_val(uc_vm_t *vm, uc_vm_insn_t insn)
 		break;
 
 	default:
-		if (insn == I_QLVAL)
-			uc_vm_stack_push(vm, NULL);
-		else
-			uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
-			                      "left-hand side expression is %s",
-			                      v ? "not an array or object" : "null");
+		uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
+		                      "left-hand side expression is %s",
+		                      v ? "not an array or object" : "null");
 
 		break;
 	}
@@ -2248,6 +2243,35 @@ uc_vm_insn_jmpz(uc_vm_t *vm, uc_vm_insn_t insn)
 	ucv_put(v);
 }
 
+static void
+uc_vm_insn_jmpnt(uc_vm_t *vm, uc_vm_insn_t insn)
+{
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_chunk_t *chunk = uc_vm_frame_chunk(frame);
+	int16_t addr = (vm->arg.u32 & 0xffff) - 0x7fff;
+	uint16_t types = (vm->arg.u32 >> 16) & 0x1fff;
+	uint8_t depth = (vm->arg.u32 >> 29) & 0x7;
+	uc_value_t *v = uc_vm_stack_peek(vm, depth);
+	size_t i;
+
+	/* ip already has been incremented */
+	addr -= 5;
+
+	if (frame->ip + addr < chunk->entries ||
+	    frame->ip + addr >= chunk->entries + chunk->count) {
+		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME, "jump target out of range");
+		return;
+	}
+
+	if (!(types & (1u << ucv_type(v)))) {
+		for (i = 0; i <= depth; i++)
+			ucv_put(uc_vm_stack_pop(vm));
+
+		uc_vm_stack_push(vm, NULL);
+		frame->ip += addr;
+	}
+}
+
 
 static void
 uc_vm_object_iterator_free(void *ud)
@@ -2398,24 +2422,6 @@ uc_vm_insn_close_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 }
 
 static void
-uc_vm_skip_call(uc_vm_t *vm, bool mcall)
-{
-	uc_callframe_t *frame = uc_vm_current_frame(vm);
-	size_t i;
-
-	/* pop all function arguments, the function itself and the associated
-	 * function context off the stack */
-	for (i = 0; i < 1 + mcall + (vm->arg.u32 & 0xffff); i++)
-		ucv_put(uc_vm_stack_pop(vm));
-
-	/* skip all encoded spread value indexes */
-	for (i = 0; i < (vm->arg.u32 >> 16); i++)
-		frame->ip += 2;
-
-	uc_vm_stack_push(vm, NULL);
-}
-
-static void
 uc_vm_insn_call(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	bool mcall = (vm->arg.u32 & 0x80000000);
@@ -2423,35 +2429,12 @@ uc_vm_insn_call(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *fno = uc_vm_stack_peek(vm, nargs);
 	uc_value_t *ctx = NULL;
 
-	if (!ucv_is_callable(fno) && insn == I_QCALL)
-		return uc_vm_skip_call(vm, false);
-
 	if (!ucv_is_arrowfn(fno))
 		ctx = mcall ? uc_vm_stack_peek(vm, nargs + 1) : NULL;
 	else if (vm->callframes.count > 0)
 		ctx = uc_vm_current_frame(vm)->ctx;
 
 	uc_vm_call_function(vm, ucv_get(ctx), ucv_get(fno), mcall, vm->arg.u32);
-}
-
-static void
-uc_vm_insn_mcall(uc_vm_t *vm, uc_vm_insn_t insn)
-{
-	size_t key_slot = vm->stack.count - (vm->arg.u32 & 0xffff) - 1;
-	uc_value_t *ctx = vm->stack.entries[key_slot - 1];
-	uc_value_t *key = vm->stack.entries[key_slot];
-	uc_value_t *fno = uc_vm_resolve_upval(vm, ucv_key_get(vm, ctx, key));
-
-	if (!ucv_is_callable(fno) && insn == I_QMCALL)
-		return uc_vm_skip_call(vm, true);
-
-	uc_vm_stack_set(vm, key_slot, fno);
-
-	/* arrow functions as method calls inherit the parent ctx */
-	if (ucv_is_arrowfn(fno))
-		ctx = uc_vm_current_frame(vm)->ctx;
-
-	uc_vm_call_function(vm, ucv_get(ctx), ucv_get(fno), true, vm->arg.u32);
 }
 
 static void
@@ -2851,7 +2834,6 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 			break;
 
 		case I_LVAL:
-		case I_QLVAL:
 			uc_vm_insn_load_val(vm, insn);
 			break;
 
@@ -2984,6 +2966,10 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 			uc_vm_insn_jmpz(vm, insn);
 			break;
 
+		case I_JMPNT:
+			uc_vm_insn_jmpnt(vm, insn);
+			break;
+
 		case I_NEXTK:
 		case I_NEXTKV:
 			uc_vm_insn_next(vm, insn);
@@ -3003,13 +2989,7 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 			break;
 
 		case I_CALL:
-		case I_QCALL:
 			uc_vm_insn_call(vm, insn);
-			break;
-
-		case I_MCALL:
-		case I_QMCALL:
-			uc_vm_insn_mcall(vm, insn);
 			break;
 
 		case I_RETURN:
