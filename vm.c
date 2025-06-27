@@ -2251,7 +2251,7 @@ uc_vm_insn_jmpnt(uc_vm_t *vm, uc_vm_insn_t insn)
 	int16_t addr = (vm->arg.u32 & 0xffff) - 0x7fff;
 	uint16_t types = (vm->arg.u32 >> 16) & 0x1fff;
 	uint8_t depth = (vm->arg.u32 >> 29) & 0x7;
-	uc_value_t *v = uc_vm_stack_peek(vm, depth);
+	uc_value_t *v = uc_vm_stack_peek(vm, 0);
 	size_t i;
 
 	/* ip already has been incremented */
