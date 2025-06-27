@@ -62,8 +62,7 @@ typedef enum {
 
 typedef enum {
 	F_ASSIGNABLE = (1 << 0),
-	F_OPTCHAINING = (1 << 1),
-	F_ALTBLOCKMODE = (1 << 2),
+	F_ALTBLOCKMODE = (1 << 1),
 } uc_exprflag_t;
 
 typedef struct uc_patchlist {

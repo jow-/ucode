@@ -455,9 +455,6 @@ uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence
 
 	uc_compiler_backpatch(compiler, compiler->patchlist->depth, 0);
 
-	if (uc_compiler_exprstack_is(compiler, F_ASSIGNABLE) && uc_compiler_parse_at_assignment_op(compiler))
-		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos, "Invalid left-hand side expression for assignment");
-
 	uc_compiler_exprstack_pop(compiler);
 }
 
@@ -1038,6 +1035,16 @@ uc_compiler_backpatch(uc_compiler_t *compiler, size_t break_addr, size_t next_ad
 	compiler->patchlist = pl->parent;
 }
 
+static bool
+uc_compiler_check_assignment_lhs(uc_compiler_t *compiler)
+{
+	return (
+		compiler->patchlist == NULL ||
+		compiler->patchlist->count == 0 ||
+		compiler->patchlist->token != TK_EXP
+	);
+}
+
 static void
 uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool is_postfix)
 {
@@ -1072,7 +1079,14 @@ uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool i
 
 	/* if we're mutating an object or array field, pop the last lval instruction
 	 * to leave object + last field name value on stack */
-	else if (type == I_LVAL && !uc_compiler_exprstack_is(compiler, F_OPTCHAINING)) {
+	else if (type == I_LVAL) {
+		if (!uc_compiler_check_assignment_lhs(compiler)) {
+			uc_compiler_syntax_error(compiler, 0,
+				"Invalid left-hand side expression for increment/decrement");
+
+			return;
+		}
+
 		uc_chunk_pop(chunk);
 	}
 	else {
@@ -1213,10 +1227,6 @@ uc_compiler_emit_variable_rw(uc_compiler_t *compiler, uc_value_t *varname, uc_to
 			insn = I_SVAL;
 		else
 			insn = I_LVAL;
-
-		if ((insn == I_UVAL || insn == I_SVAL) && uc_compiler_exprstack_is(compiler, F_OPTCHAINING))
-			uc_compiler_syntax_error(compiler, 0,
-				"Invalid left-hand side expression for assignment");
 
 		uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, insn);
 
@@ -1373,33 +1383,41 @@ uc_compiler_compile_assignment(uc_compiler_t *compiler, uc_value_t *var)
 {
 	uc_tokentype_t type = compiler->parser->curr.type;
 
-	if (type == TK_ASNULLISH) {
+	if (!uc_compiler_parse_at_assignment_op(compiler))
+		return false;
+
+	if (!uc_compiler_check_assignment_lhs(compiler)) {
+		uc_compiler_syntax_error(compiler, 0,
+			"Invalid left-hand side expression for assignment");
+
+		return false;
+	}
+
+	switch (type)
+	{
+	case TK_ASNULLISH:
 		uc_compiler_parse_advance(compiler);
 		uc_compiler_compile_nullish_assignment(compiler, var);
+		break;
 
-		return true;
-	}
-	else if (type == TK_ASOR) {
+	case TK_ASOR:
 		uc_compiler_parse_advance(compiler);
 		uc_compiler_compile_or_assignment(compiler, var);
+		break;
 
-		return true;
-	}
-	else if (type == TK_ASAND) {
+	case TK_ASAND:
 		uc_compiler_parse_advance(compiler);
 		uc_compiler_compile_and_assignment(compiler, var);
+		break;
 
-		return true;
-	}
-	else if (uc_compiler_parse_at_assignment_op(compiler)) {
+	default:
 		uc_compiler_parse_advance(compiler);
 		uc_compiler_parse_precedence(compiler, P_ASSIGN);
 		uc_compiler_emit_variable_rw(compiler, var, type);
-
-		return true;
+		break;
 	}
 
-	return false;
+	return true;
 }
 
 static bool
@@ -1657,9 +1675,6 @@ uc_compiler_compile_call(uc_compiler_t *compiler)
 	uc_vm_insn_t type;
 	size_t i, nargs = 0;
 	bool mcall;
-
-	/* flag optional chaining usage in current expression */
-	compiler->exprstack->flags |= optional_chaining ? F_OPTCHAINING : 0;
 
 	/* determine the kind of the lhs */
 	type = chunk->entries[compiler->last_insn];
@@ -1981,9 +1996,6 @@ uc_compiler_compile_dot(uc_compiler_t *compiler)
 {
 	bool optional_chaining = (compiler->parser->prev.type == TK_QDOT);
 
-	/* flag optional chaining usage in current expression */
-	compiler->exprstack->flags |= optional_chaining ? F_OPTCHAINING : 0;
-
 	/* no regexp literal possible after property access */
 	compiler->parser->lex.no_regexp = true;
 
@@ -2006,9 +2018,6 @@ static void
 uc_compiler_compile_subscript(uc_compiler_t *compiler)
 {
 	bool optional_chaining = (compiler->parser->prev.type == TK_QLBRACK);
-
-	/* flag optional chaining usage in current expression */
-	compiler->exprstack->flags |= optional_chaining ? F_OPTCHAINING : 0;
 
 	if (optional_chaining)
 		uc_compiler_emit_jmpnt(compiler, compiler->parser->prev.pos,
