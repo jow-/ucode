@@ -13,6 +13,9 @@ yields the remaining value as calculated by fmod(3):
 10.2 % 4 = 2.2
 10 % 4.3 = 1.4
 "10.4" % 4 = 2.4
+
+Modulo by zero yields NaN:
+1 % 0 = NaN
 -- End --
 
 -- Testcase --
@@ -28,4 +31,7 @@ yields the remaining value as calculated by fmod(3):
 10.2 % 4 = {{ 10.2 % 4 }}
 10 % 4.3 = {{ 10 % 4.3 }}
 "10.4" % 4 = {{ "10.4" % 4 }}
+
+Modulo by zero yields NaN:
+1 % 0 = {{ 1 % 0 }}
 -- End --
