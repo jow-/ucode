@@ -1733,7 +1733,10 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 			break;
 
 		case I_MOD:
-			if (n1 < 0 || n2 < 0) {
+			if (n2 == 0) {
+				rv = ucv_double_new(NAN);
+			}
+			else if (n1 < 0 || n2 < 0) {
 				rv = ucv_int64_new(n1 % n2);
 			}
 			else {
