@@ -101,3 +101,40 @@ different options:
    ```
    ucode -c -o compiled.uc program.uc
    ```
+
+## Note
+
+Extra parameters can be passed to ucode scripts and programs from the command
+line as follows:
+```
+ucode foo.uc foo bar
+```
+
+Or if the shebang line `#!/usr/bin/env ucode` is the first line in the script:
+```
+./foo.uc foo bar
+```
+
+The parameters provided at command execution are available internally to the
+script via the following global variable:
+```
+ARGV
+```
+
+The script or program has access to its own name at runtime via the following
+global variable:
+```
+SCRIPT_NAME
+```
+
+For example, this ucode script:
+```
+print(ARGV, "\n");
+print(SCRIPT_NAME, "\n");
+```
+
+when run as `> ucode ./foo.uc foo bar` outputs:
+```
+[ "foo", "bar" ]
+./foo.uc
+```
