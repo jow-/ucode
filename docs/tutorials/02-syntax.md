@@ -148,7 +148,7 @@ calling scope.
 ### 1. Data types
 
 Ucode supports seven different basic types as well as two additional special
-types; function values and ressource values. The supported types are:
+types; function values and resource values. The supported types are:
 
  - Boolean values (`true` or `false`)
  - Integer values (`-9223372036854775808` to `+9223372036854775807`)
@@ -163,7 +163,7 @@ and frees data automatically as soon as values go out of scope.
 
 Numeric values are either stored as signed 64bit integers or as IEEE 756 double
 value. Conversion between integer and double values can happen implicitly, e.g.
-through numeric operations, or explicitely, e.g. by invoking functions such as
+through numeric operations, or explicitly, e.g. by invoking functions such as
 `int()`.
 
 ### 2. Variables
@@ -171,7 +171,7 @@ through numeric operations, or explicitely, e.g. by invoking functions such as
 Variable names must start with a letter or an underscore and may only contain
 the characters `A`..`Z`, `a`..`z`, `0`..`9` or `_`. By prefixing a variable
 name with the keyword `let`, it is declared in the local block scope only
-and not visible outside anymore.
+and not visible outside any more.
 
 Variables may also be declared using the `const` keyword. Such variables follow
 the same scoping rules as `let` declared ones but they cannot be modified after
@@ -426,7 +426,7 @@ operators to manipulate values and variables.
 #### 5.1. Arithmetic operations
 
 The operators `+`, `-`, `*`, `/`, `%`, `++` and `--` allow to perform
-additions, substractions, multiplications, divisions, modulo, increment or
+additions, subtractions, multiplications, divisions, modulo, increment or
 decrement operations respectively where the result depends on the type of
 involved values.
 
@@ -510,7 +510,7 @@ operand values to whole integers:
 #### 5.3. Relational operations
 
 The operators `==`, `!=`, `<`, `<=`, `>` and `>=` test whether their operands
-are equal, inequal, lower than, lower than/equal to, higher than or higher
+are equal, unequal, lower than, lower than/equal to, higher than or higher
 than/equal to each other respectively.
 
 If both operands are strings, their respective byte values are compared, if
@@ -522,7 +522,7 @@ resulting values are compared with each other.
 This means that comparing values of different types will coerce them both to
 numbers.
 
-The result of the relational operation is a boolean indicating truishness.
+The result of the relational operation is a boolean indicating truthiness.
 
 ```javascript
 {%
@@ -543,14 +543,14 @@ The operators `&&`, `||`, `??` and `!` test whether their operands are all true,
 partially true, null or false respectively.
 
 In the case of `&&` the rightmost value is returned while `||` results in the
-first truish and `??` in the first non-null value.
+first truthy value and `??` in the first non-null value.
 
-The unary `!` operator will result in `true` if the operand is not trueish,
+The unary `!` operator will result in `true` if the operand is falsy,
 otherwise it will result in `false`.
 
-Operands are evaluated from left to right while testing truishness, which means
+Operands are evaluated from left to right while testing truthiness, which means
 that expressions with side effects, such as function calls, are only executed
-if the preceeding condition was satisifed.
+if the preceding condition was satisfied.
 
 ```javascript
 {%
@@ -622,7 +622,7 @@ in the table below.
 | 19         | Grouping `( … )`                  | n/a            |
 | 18         | Property access `… . …`           | left-to-right  |
 | 18         | Optional chaining `… ?. …`        | left-to-right  |
-| 18         | Computed propery access `… [ … ]` | n/a            |
+| 18         | Computed property access `… [ … ]` | n/a            |
 | 18         | Function call `… (…)`             | n/a            |
 | 17         | Postfix increment `… ++`          | n/a            |
 | 17         | Postfix decrement `… --`          | n/a            |
@@ -638,7 +638,7 @@ in the table below.
 | 14         | Division `… / …`                  | left-to-right  |
 | 14         | Remainder `… % …`                 | left-to-right  |
 | 13         | Addition `… + …`                  | left-to-right  |
-| 13         | Substraction `… - …`              | left-to-right  |
+| 13         | Subtraction `… - …`              | left-to-right  |
 | 12         | Bitwise left shift `… << …`       | left-to-right  |
 | 12         | Bitwise right shift `… >> …`      | left-to-right  |
 | 11         | Less than `… < …`                 | left-to-right  |
