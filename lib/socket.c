@@ -2375,7 +2375,7 @@ uc_socket_strerror(uc_vm_t *vm, size_t nargs)
  *
  * @property {string|number} [interface]
  * Link local address scope (for IPv6 sockets) or bound network interface
- * (for packet sockets), either a network device name string or a nonzero
+ * (for packet sockets), either a network device name string or a non-zero
  * positive integer representing a network interface index (AF_INET6 and
  * AF_PACKET only).
  *
@@ -2755,8 +2755,8 @@ should_resolve(uc_value_t *host)
  *
  * @param {number} [timeout=-1]
  * The timeout in milliseconds for socket connect operations. If set to a
- * negative value, no specifc time limit is imposed and the function will
- * block until either a connection was successfull or the underlying operating
+ * negative value, no specific time limit is imposed and the function will
+ * block until either a connection was successful or the underlying operating
  * system timeout is reached.
  *
  * @returns {module:socket.socket}
@@ -3228,7 +3228,7 @@ uc_socket_listen(uc_vm_t *vm, size_t nargs)
  * // Create a TCP socket
  * const tcp_socket = create(AF_INET, SOCK_STREAM);
  *
- * // Create a nonblocking IPv6 UDP socket
+ * // Create a non-blocking IPv6 UDP socket
  * const udp_socket = create(AF_INET6, SOCK_DGRAM | SOCK_NONBLOCK);
  */
 static uc_value_t *
@@ -3996,7 +3996,7 @@ uc_socket_inst_sendmsg(uc_vm_t *vm, size_t nargs)
 
 	flagval = flags ? ucv_int64_get(flags) : 0;
 
-	/* treat string ancdata arguemnt as raw controldata buffer */
+	/* treat string ancdata argument as raw controldata buffer */
 	if (ucv_type(ancdata) == UC_STRING) {
 		msg.msg_control = ucv_string_get(ancdata);
 		msg.msg_controllen = ucv_string_length(ancdata);
@@ -4514,7 +4514,7 @@ uc_socket_inst_listen(uc_vm_t *vm, size_t nargs)
  * The optional `flags` parameter is a bitwise-or-ed number of flags to modify
  * the behavior of accepted peer socket. Possible values are:
  * - `SOCK_CLOEXEC`: Enable close-on-exec semantics for the new socket.
- * - `SOCK_NONBLOCK`: Enable nonblocking mode for the new socket.
+ * - `SOCK_NONBLOCK`: Enable non-blocking mode for the new socket.
  *
  * Returns a socket handle representing the newly created peer socket of the
  * accepted connection.
@@ -5511,7 +5511,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	 * they specify the I/O events that occurred on a watched handle.
 	 * @property {number} POLLIN - Data available to read.
 	 * @property {number} POLLPRI - Priority data available to read.
-	 * @property {number} POLLOUT - Writable data available.
+	 * @property {number} POLLOUT - Writeable data available.
 	 * @property {number} POLLERR - Error condition.
 	 * @property {number} POLLHUP - Hang up.
 	 * @property {number} POLLNVAL - Invalid request.

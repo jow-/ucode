@@ -56,7 +56,7 @@
  * - Inlined and refactored IEEE 754 float conversion routines
  * - Usage of stdbool for function return values and boolean parameters
  * - Renamed functions and structures for clarity
- * - Interface adapated to ucode C api
+ * - Interface adapted to ucode C api
  * - Removed unused code
  */
 
@@ -293,7 +293,7 @@
  * error exception is raised.
  *
  * For the `'?'` format character, the return value is either `true` or `false`.
- * When packing, the truish result value of the argument is used. Either 0 or 1
+ * When packing, the truthy result value of the argument is used. Either 0 or 1
  * in the native or standard bool representation will be packed, and any
  * non-zero value will be `true` when unpacking.
  *
@@ -3211,7 +3211,7 @@ uc_pack(uc_vm_t *vm, size_t nargs)
 /**
  * Unpack given byte string according to specified format.
  *
- * The `unpack()` function interpretes a byte string according to the given
+ * The `unpack()` function interprets a byte string according to the given
  * format string and returns the resulting values. If the optional offset
  * argument is given, unpacking starts from this byte position within the input.
  * If not specified, the start offset defaults to `0`, the start of the given
@@ -3298,11 +3298,11 @@ uc_unpack(uc_vm_t *vm, size_t nargs)
 /**
  * Precompile format string.
  *
- * The `new()` function precompiles the given format string argument and returns
+ * The `new()` function pre-compiles the given format string argument and returns
  * a `struct` object instance useful for packing and unpacking multiple items
  * without having to recompute the internal format each time.
  *
- * Returns an precompiled struct format instance.
+ * Returns an pre-compiled struct format instance.
  *
  * Raises a runtime exception if the format string is invalid.
  *
@@ -3381,7 +3381,7 @@ uc_struct_pack(uc_vm_t *vm, size_t nargs)
 /**
  * Unpack given byte string.
  *
- * The `unpack()` function interpretes a byte string according to the given
+ * The `unpack()` function interprets a byte string according to the given
  * format instance and returns the resulting values. If the optional offset
  * argument is given, unpacking starts from this byte position within the input.
  * If not specified, the start offset defaults to `0`, the start of the given
@@ -3853,10 +3853,10 @@ ebounds:
  * For a detailed explanation of the format string syntax, refer to the
  * ["Format Strings" section]{@link module:struct} in the module documentation.
  *
- * Alternatively, `get()` accepts a postive or negative integer as format, which
+ * Alternatively, `get()` accepts a positive or negative integer as format, which
  * specifies the length of a string to unpack before or after the current
  * position. Negative values extract that many bytes before the current offset
- * while postive ones extracts that many bytes after.
+ * while positive ones extracts that many bytes after.
  *
  * @function module:struct.buffer#get
  *

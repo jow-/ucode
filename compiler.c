@@ -1097,7 +1097,7 @@ uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool i
 
 	insn = (toktype == TK_INC) ? I_PLUS : I_MINUS;
 
-	/* add / substract 1 */
+	/* add / subtract 1 */
 	uc_compiler_emit_insn(compiler, 0, I_LOAD8);
 	uc_compiler_emit_u8(compiler, 0, 1);
 
@@ -1127,7 +1127,7 @@ uc_compiler_emit_inc_dec(uc_compiler_t *compiler, uc_tokentype_t toktype, bool i
 		break;
 	}
 
-	/* for post increment or decrement, add/substract 1 to yield final value */
+	/* for post increment or decrement, add/subtract 1 to yield final value */
 	if (is_postfix) {
 		uc_compiler_emit_insn(compiler, 0, I_LOAD8);
 		uc_compiler_emit_u8(compiler, 0, 1);
@@ -1578,7 +1578,7 @@ uc_compiler_compile_paren(uc_compiler_t *compiler)
 				uc_compiler_parse_advance(compiler);
 			}
 
-			/* If we encouter a dot, treat potential subsequent keyword as label */
+			/* If we encounter a dot, treat potential subsequent keyword as label */
 			if (uc_compiler_parse_check(compiler, TK_DOT) ||
 			    uc_compiler_parse_check(compiler, TK_QDOT))
 				compiler->parser->lex.no_keyword = true;
@@ -1587,7 +1587,7 @@ uc_compiler_compile_paren(uc_compiler_t *compiler)
 		}
 	}
 
-	/* The lhs we parsed so far is elligible for an arrow function arg list,
+	/* The lhs we parsed so far is eligible for an arrow function arg list,
 	 * try to continue compiling into arrow function... */
 	if (maybe_arrowfn) {
 		/* If we can parse the remainder as arrow function, we're done */
@@ -2158,7 +2158,7 @@ uc_compiler_compile_object(uc_compiler_t *compiler)
 			/* parse property name expression */
 			uc_compiler_parse_precedence(compiler, P_ASSIGN);
 
-			/* cosume closing bracket and colon */
+			/* consume closing bracket and colon */
 			uc_compiler_parse_consume(compiler, TK_RBRACK);
 			uc_compiler_parse_consume(compiler, TK_COLON);
 
@@ -2284,7 +2284,7 @@ uc_compiler_compile_declexpr(uc_compiler_t *compiler, bool constant)
 		/* if followed by '=', parse initializer expression */
 		if (uc_compiler_parse_match(compiler, TK_ASSIGN))
 			uc_compiler_parse_precedence(compiler, P_ASSIGN);
-		/* otherwise, for writable variables, load implicit null */
+		/* otherwise, for writeable variables, load implicit null */
 		else if (!constant)
 			uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LNULL);
 		/* for constant variables, a missing initializer is a syntax error */
@@ -2857,7 +2857,7 @@ uc_compiler_compile_switch(uc_compiler_t *compiler)
 			uc_compiler_compile_declaration(compiler);
 		}
 
-		/* a statement or expression preceeding any `default` or `case` is a
+		/* a statement or expression preceding any `default` or `case` is a
 		 * syntax error */
 		else {
 			uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
@@ -3406,7 +3406,7 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, 
 	if (n_imports > 0xfffe)
 		uc_compiler_syntax_error(compiler, 0, "Too many imports");
 
-	/* emit non-wilcard import instructions */
+	/* emit non-wildcard import instructions */
 	for (i = 0; i < ucv_array_length(imports); i++) {
 		import = ucv_array_get(imports, i);
 

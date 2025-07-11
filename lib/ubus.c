@@ -1577,7 +1577,7 @@ uc_ubus_handle_reply_common(struct ubus_context *ctx,
 	case EXCEPTION_NONE:
 		res = uc_vm_stack_pop(vm);
 
-		/* The handler function invoked a nested aync ubus request and returned it */
+		/* The handler function invoked a nested async ubus request and returned it */
 		if (ucv_resource_data(res, "ubus.deferred")) {
 			/* Install guard timer in case the reply callback is never called */
 			callctx->timeout.cb = uc_ubus_request_timeout;

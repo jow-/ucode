@@ -846,7 +846,7 @@ uc_zlib_infread(uc_vm_t *vm, size_t nargs)
 		(void)inflateEnd(&zstrm->strm);
 
 	rv = ucv_stringbuf_finish(zstrm->outbuf);
-	zstrm->outbuf = NULL;	// outbuf is now unuseable
+	zstrm->outbuf = NULL;	// outbuf is now unusable
 	return rv;
 }
 
