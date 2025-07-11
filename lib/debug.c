@@ -1235,7 +1235,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
  * The source line number where the local variable goes out of scope.
  *
  * @property {number} byteto
- * The source line offset where the local vatiable goes out of scope.
+ * The source line offset where the local variable goes out of scope.
  */
 static uc_value_t *
 uc_xlocal(uc_vm_t *vm, uc_value_t *level, uc_value_t *var, uc_value_t **set)
