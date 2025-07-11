@@ -16,6 +16,7 @@
 
 #include <unistd.h>
 #include <limits.h>
+#include <fnmatch.h>
 #include <libubus.h>
 #include <libubox/blobmsg.h>
 
@@ -274,6 +275,7 @@ enum {
 enum {
 	SUB_RES_NOTIFY_CB,
 	SUB_RES_REMOVE_CB,
+	SUB_RES_PATTERNS,
 	__SUB_RES_MAX,
 };
 
@@ -2102,6 +2104,31 @@ uc_ubus_subscriber_remove_common(uc_ubus_subscriber_t *uusub)
 	return rv;
 }
 
+#ifdef HAVE_UBUS_NEW_OBJ_CB
+static bool
+uc_ubus_subscriber_new_object_cb(struct ubus_context *ctx, struct ubus_subscriber *sub, const char *path)
+{
+	uc_ubus_subscriber_t *uusub = container_of(sub, uc_ubus_subscriber_t, sub);
+	uc_value_t *patterns = ucv_resource_value_get(uusub->res, SUB_RES_PATTERNS);
+	size_t len = ucv_array_length(patterns);
+
+	for (size_t i = 0; i < len; i++) {
+		uc_value_t *val = ucv_array_get(patterns, i);
+		const char *pattern;
+
+		if (ucv_type(val) != UC_STRING)
+			continue;
+
+		pattern = ucv_string_get(val);
+
+		if (fnmatch(pattern, path, 0) == 0)
+			return true;
+	}
+
+	return false;
+}
+#endif
+
 static uc_value_t *
 uc_ubus_subscriber_remove(uc_vm_t *vm, size_t nargs)
 {
@@ -2122,7 +2149,7 @@ uc_ubus_subscriber_remove(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *notify_cb, *remove_cb;
+	uc_value_t *notify_cb, *remove_cb, *subscriptions;
 	uc_ubus_subscriber_t *uusub = NULL;
 	uc_ubus_connection_t *c;
 	uc_value_t *res;
@@ -2132,7 +2159,8 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 
 	args_get(vm, nargs,
 	         "notify callback", UC_CLOSURE, true, &notify_cb,
-	         "remove callback", UC_CLOSURE, true, &remove_cb);
+	         "remove callback", UC_CLOSURE, true, &remove_cb,
+	         "subscription patterns", UC_ARRAY, true, &subscriptions);
 
 	if (!notify_cb && !remove_cb)
 		err_return(UBUS_STATUS_INVALID_ARGUMENT, "Either notify or remove callback required");
@@ -2144,10 +2172,21 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 
 	uusub->vm = vm;
 	uusub->ctx = &c->ctx;
+	uusub->res = ucv_get(res);
+
+	ucv_resource_value_set(res, SUB_RES_NOTIFY_CB, ucv_get(notify_cb));
+	ucv_resource_value_set(res, SUB_RES_REMOVE_CB, ucv_get(remove_cb));
+	ucv_resource_value_set(res, SUB_RES_PATTERNS, ucv_get(subscriptions));
+
+#ifdef HAVE_UBUS_NEW_OBJ_CB
+	if (subscriptions)
+		uusub->sub.new_obj_cb = uc_ubus_subscriber_new_object_cb;
+#endif
 
 	rv = ubus_register_subscriber(&c->ctx, &uusub->sub);
 
 	if (rv != UBUS_STATUS_OK) {
+		ucv_put(uusub->res);
 		ucv_put(res);
 		err_return(rv, "Failed to register subscriber object");
 	}
@@ -2158,10 +2197,7 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 	if (remove_cb)
 		uusub->sub.remove_cb = uc_ubus_subscriber_remove_cb;
 
-	uusub->res = ucv_get(res);
 	ucv_resource_persistent_set(res, true);
-	ucv_resource_value_set(res, SUB_RES_NOTIFY_CB, ucv_get(notify_cb));
-	ucv_resource_value_set(res, SUB_RES_REMOVE_CB, ucv_get(remove_cb));
 
 	ok_return(res);
 }
