@@ -1,0 +1,1362 @@
+<!DOCTYPE html><html lang="en" style="font-size:16px"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link type="text/css" rel="stylesheet" href="ucode.css"><title>Source: lib/resolv.c</title><!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]--><script src="scripts/third-party/hljs.js" defer="defer"></script><script src="scripts/third-party/hljs-line-num.js" defer="defer"></script><script src="scripts/third-party/popper.js" defer="defer"></script><script src="scripts/third-party/tippy.js" defer="defer"></script><script src="scripts/third-party/tocbot.min.js"></script><script>var baseURL="/",locationPathname="";baseURL=(locationPathname=document.location.pathname).substr(0,locationPathname.lastIndexOf("/")+1)</script><link rel="stylesheet" href="styles/clean-jsdoc-theme.min.css"><svg aria-hidden="true" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:none"><defs><symbol id="copy-icon" viewbox="0 0 488.3 488.3"><g><path d="M314.25,85.4h-227c-21.3,0-38.6,17.3-38.6,38.6v325.7c0,21.3,17.3,38.6,38.6,38.6h227c21.3,0,38.6-17.3,38.6-38.6V124    C352.75,102.7,335.45,85.4,314.25,85.4z M325.75,449.6c0,6.4-5.2,11.6-11.6,11.6h-227c-6.4,0-11.6-5.2-11.6-11.6V124    c0-6.4,5.2-11.6,11.6-11.6h227c6.4,0,11.6,5.2,11.6,11.6V449.6z"/><path d="M401.05,0h-227c-21.3,0-38.6,17.3-38.6,38.6c0,7.5,6,13.5,13.5,13.5s13.5-6,13.5-13.5c0-6.4,5.2-11.6,11.6-11.6h227    c6.4,0,11.6,5.2,11.6,11.6v325.7c0,6.4-5.2,11.6-11.6,11.6c-7.5,0-13.5,6-13.5,13.5s6,13.5,13.5,13.5c21.3,0,38.6-17.3,38.6-38.6    V38.6C439.65,17.3,422.35,0,401.05,0z"/></g></symbol><symbol id="search-icon" viewBox="0 0 512 512"><g><g><path d="M225.474,0C101.151,0,0,101.151,0,225.474c0,124.33,101.151,225.474,225.474,225.474    c124.33,0,225.474-101.144,225.474-225.474C450.948,101.151,349.804,0,225.474,0z M225.474,409.323    c-101.373,0-183.848-82.475-183.848-183.848S124.101,41.626,225.474,41.626s183.848,82.475,183.848,183.848    S326.847,409.323,225.474,409.323z"/></g></g><g><g><path d="M505.902,476.472L386.574,357.144c-8.131-8.131-21.299-8.131-29.43,0c-8.131,8.124-8.131,21.306,0,29.43l119.328,119.328    c4.065,4.065,9.387,6.098,14.715,6.098c5.321,0,10.649-2.033,14.715-6.098C514.033,497.778,514.033,484.596,505.902,476.472z"/></g></g></symbol><symbol id="font-size-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11.246 15H4.754l-2 5H.6L7 4h2l6.4 16h-2.154l-2-5zm-.8-2L8 6.885 5.554 13h4.892zM21 12.535V12h2v8h-2v-.535a4 4 0 1 1 0-6.93zM19 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></symbol><symbol id="add-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></symbol><symbol id="minus-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M5 11h14v2H5z"/></symbol><symbol id="dark-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol><symbol id="light-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol><symbol id="reset-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M18.537 19.567A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10c0 2.136-.67 4.116-1.81 5.74L17 12h3a8 8 0 1 0-2.46 5.772l.997 1.795z"/></symbol><symbol id="down-icon" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7803 6.21967C13.0732 6.51256 13.0732 6.98744 12.7803 7.28033L8.53033 11.5303C8.23744 11.8232 7.76256 11.8232 7.46967 11.5303L3.21967 7.28033C2.92678 6.98744 2.92678 6.51256 3.21967 6.21967C3.51256 5.92678 3.98744 5.92678 4.28033 6.21967L8 9.93934L11.7197 6.21967C12.0126 5.92678 12.4874 5.92678 12.7803 6.21967Z"></path></symbol><symbol id="codepen-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M16.5 13.202L13 15.535v3.596L19.197 15 16.5 13.202zM14.697 12L12 10.202 9.303 12 12 13.798 14.697 12zM20 10.869L18.303 12 20 13.131V10.87zM19.197 9L13 4.869v3.596l3.5 2.333L19.197 9zM7.5 10.798L11 8.465V4.869L4.803 9 7.5 10.798zM4.803 15L11 19.131v-3.596l-3.5-2.333L4.803 15zM4 13.131L5.697 12 4 10.869v2.262zM2 9a1 1 0 0 1 .445-.832l9-6a1 1 0 0 1 1.11 0l9 6A1 1 0 0 1 22 9v6a1 1 0 0 1-.445.832l-9 6a1 1 0 0 1-1.11 0l-9-6A1 1 0 0 1 2 15V9z"/></symbol><symbol id="close-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></symbol><symbol id="menu-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/></symbol><symbol id="toc-icon" viewBox="0 0 460 460"><path d="M40 70a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 190a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 310a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM430 80H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 200H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 320H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60z"/></symbol></defs></svg></head><body data-theme="light"><div class="sidebar-container"><div class="sidebar" id="sidebar"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="sidebar-items-container"><div class="sidebar-section-title with-arrow" data-isopen="false" id="BLd5CvAHMzPpMIwfLG-t6"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div><div class="sidebar-section-children"><a href="tutorial-04-arrays.html">Working with Arrays</a></div><div class="sidebar-section-children"><a href="tutorial-05-dictionaries.html">Working with Dictionaries</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="BWLV68ND1_sQoTn82FSdw"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-resolv.html">resolv</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div></div></div><div class="navbar-container" id="VuAckcnZhf"><nav class="navbar"><div class="navbar-left-items"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="navbar-right-items"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div><nav></nav></nav></div><div class="body-wrapper"><div class="main-content"><div class="main-wrapper"><section id="source-page" class="source-page"><header><h1 id="title" class="has-anchor">lib_resolv.c</h1></header><article><pre class="prettyprint source lang-js"><code>/*
+ * nslookup_lede - musl compatible replacement for busybox nslookup
+ *
+ * Copyright (C) 2017 Jo-Philipp Wich &lt;jo@mein.io>
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+/**
+ * # DNS Resolution Module
+ *
+ * The `resolv` module provides DNS resolution functionality for ucode, allowing
+ * you to perform DNS queries for various record types and handle responses.
+ *
+ * Functions can be individually imported and directly accessed using the
+ * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+ * syntax:
+ *
+ *   ```
+ *   import { query } from 'resolv';
+ *
+ *   let result = query('example.com', { type: ['A'] });
+ *   ```
+ *
+ * Alternatively, the module namespace can be imported
+ * using a wildcard import statement:
+ *
+ *   ```
+ *   import * as resolv from 'resolv';
+ *
+ *   let result = resolv.query('example.com', { type: ['A'] });
+ *   ```
+ *
+ * Additionally, the resolv module namespace may also be imported by invoking
+ * the `ucode` interpreter with the `-lresolv` switch.
+ *
+ * ## Record Types
+ *
+ * The module supports the following DNS record types:
+ *
+ * | Type    | Description                    |
+ * |---------|--------------------------------|
+ * | `A`     | IPv4 address record            |
+ * | `AAAA`  | IPv6 address record            |
+ * | `CNAME` | Canonical name record          |
+ * | `MX`    | Mail exchange record           |
+ * | `NS`    | Name server record             |
+ * | `PTR`   | Pointer record (reverse DNS)   |
+ * | `SOA`   | Start of authority record      |
+ * | `SRV`   | Service record                 |
+ * | `TXT`   | Text record                    |
+ * | `ANY`   | Any available record type      |
+ *
+ * ## Response Codes
+ *
+ * DNS queries can return the following response codes:
+ *
+ * | Code        | Description                               |
+ * |-------------|-------------------------------------------|
+ * | `NOERROR`   | No error, query successful                |
+ * | `FORMERR`   | Format error in query                     |
+ * | `SERVFAIL`  | Server failure                            |
+ * | `NXDOMAIN`  | Non-existent domain                       |
+ * | `NOTIMP`    | Not implemented                           |
+ * | `REFUSED`   | Query refused                             |
+ * | `TIMEOUT`   | Query timed out                           |
+ *
+ * ## Response Format
+ *
+ * DNS query results are returned as objects where:
+ * - Keys are the queried domain names
+ * - Values are objects containing arrays of records grouped by type
+ * - Special `rcode` property indicates query status for failed queries
+ *
+ * ### Record Format by Type
+ *
+ * **A and AAAA records:**
+ * ```javascript
+ * {
+ *   "example.com": {
+ *     "A": ["192.0.2.1", "192.0.2.2"],
+ *     "AAAA": ["2001:db8::1", "2001:db8::2"]
+ *   }
+ * }
+ * ```
+ *
+ * **MX records:**
+ * ```javascript
+ * {
+ *   "example.com": {
+ *     "MX": [
+ *       [10, "mail1.example.com"],
+ *       [20, "mail2.example.com"]
+ *     ]
+ *   }
+ * }
+ * ```
+ *
+ * **SRV records:**
+ * ```javascript
+ * {
+ *   "_http._tcp.example.com": {
+ *     "SRV": [
+ *       [10, 5, 80, "web1.example.com"],
+ *       [10, 10, 80, "web2.example.com"]
+ *     ]
+ *   }
+ * }
+ * ```
+ *
+ * **SOA records:**
+ * ```javascript
+ * {
+ *   "example.com": {
+ *     "SOA": [
+ *       [
+ *         "ns1.example.com",      // primary nameserver
+ *         "admin.example.com",    // responsible mailbox
+ *         2023010101,             // serial number
+ *         3600,                   // refresh interval
+ *         1800,                   // retry interval
+ *         604800,                 // expire time
+ *         86400                   // minimum TTL
+ *       ]
+ *     ]
+ *   }
+ * }
+ * ```
+ *
+ * **TXT, NS, CNAME, PTR records:**
+ * ```javascript
+ * {
+ *   "example.com": {
+ *     "TXT": ["v=spf1 include:_spf.example.com ~all"],
+ *     "NS": ["ns1.example.com", "ns2.example.com"],
+ *     "CNAME": ["alias.example.com"]
+ *   }
+ * }
+ * ```
+ *
+ * **Error responses:**
+ * ```javascript
+ * {
+ *   "nonexistent.example.com": {
+ *     "rcode": "NXDOMAIN"
+ *   }
+ * }
+ * ```
+ *
+ * ## Examples
+ *
+ * Basic A record lookup:
+ *
+ * ```javascript
+ * import { query } from 'resolv';
+ *
+ * const result = query(['example.com']);
+ * print(result, "\n");
+ * // {
+ * //   "example.com": {
+ * //     "A": ["192.0.2.1"],
+ * //     "AAAA": ["2001:db8::1"]
+ * //   }
+ * // }
+ * ```
+ *
+ * Specific record type query:
+ *
+ * ```javascript
+ * const mxRecords = query(['example.com'], { type: ['MX'] });
+ * print(mxRecords, "\n");
+ * // {
+ * //   "example.com": {
+ * //     "MX": [[10, "mail.example.com"]]
+ * //   }
+ * // }
+ * ```
+ *
+ * Multiple domains and types:
+ *
+ * ```javascript
+ * const results = query(
+ *   ['example.com', 'google.com'],
+ *   { 
+ *     type: ['A', 'MX'],
+ *     timeout: 10000,
+ *     nameserver: ['8.8.8.8', '1.1.1.1']
+ *   }
+ * );
+ * ```
+ *
+ * Reverse DNS lookup:
+ *
+ * ```javascript
+ * const ptrResult = query(['192.0.2.1'], { type: ['PTR'] });
+ * print(ptrResult, "\n");
+ * // {
+ * //   "1.2.0.192.in-addr.arpa": {
+ * //     "PTR": ["example.com"]
+ * //   }
+ * // }
+ * ```
+ *
+ * @module resolv
+ */
+
+#include &lt;stdio.h>
+#include &lt;resolv.h>
+#include &lt;string.h>
+#include &lt;errno.h>
+#include &lt;time.h>
+#include &lt;poll.h>
+#include &lt;unistd.h>
+#include &lt;stdlib.h>
+#include &lt;sys/socket.h>
+#include &lt;arpa/inet.h>
+#include &lt;net/if.h>
+#include &lt;netdb.h>
+#include &lt;fcntl.h>
+
+#include "ucode/module.h"
+
+#define for_each_item(arr, item) \
+	for (uc_value_t *_idx = NULL, *item = (ucv_type(arr) == UC_ARRAY) ? ucv_array_get(arr, 0) : arr; \
+	     (uintptr_t)_idx &lt; (ucv_type(arr) == UC_ARRAY ? ucv_array_length(arr) : (arr != NULL)); \
+	     _idx = (void *)((uintptr_t)_idx + 1), item = ucv_array_get(arr, (uintptr_t)_idx))
+
+#define err_return(code, ...) do { set_error(code, __VA_ARGS__); return NULL; } while(0)
+
+static struct {
+	int code;
+	char *msg;
+} last_error;
+
+__attribute__((format(printf, 2, 3))) static void
+set_error(int errcode, const char *fmt, ...) {
+	va_list ap;
+
+	free(last_error.msg);
+
+	last_error.code = errcode;
+	last_error.msg = NULL;
+
+	if (fmt) {
+		va_start(ap, fmt);
+		xvasprintf(&amp;last_error.msg, fmt, ap);
+		va_end(ap);
+	}
+}
+
+typedef struct {
+	socklen_t len;
+	union {
+		struct sockaddr sa;
+		struct sockaddr_in sin;
+		struct sockaddr_in6 sin6;
+	} u;
+} addr_t;
+
+typedef struct {
+	const char *name;
+	addr_t addr;
+} ns_t;
+
+typedef struct {
+	char *name;
+	size_t qlen, rlen;
+	unsigned char query[512];
+	int rcode;
+} query_t;
+
+typedef struct __attribute__((packed)) {
+	uint8_t root_domain;
+	uint16_t type;
+	uint16_t edns_maxsize;
+	uint8_t extended_rcode;
+	uint8_t edns_version;
+	uint16_t z;
+	uint16_t data_length;
+} opt_rr_t;
+
+typedef struct {
+	uint32_t qtypes;
+	size_t n_ns;
+	ns_t *ns;
+	size_t n_queries;
+	query_t *queries;
+	uint32_t retries;
+	uint32_t timeout;
+	uint16_t edns_maxsize;
+}  resolve_ctx_t;
+
+
+static struct {
+	int type;
+	const char *name;
+} qtypes[] = {
+	{ ns_t_soa,   "SOA"   },
+	{ ns_t_ns,    "NS"    },
+	{ ns_t_a,     "A"     },
+	{ ns_t_aaaa,  "AAAA"  },
+	{ ns_t_cname, "CNAME" },
+	{ ns_t_mx,    "MX"    },
+	{ ns_t_txt,   "TXT"   },
+	{ ns_t_srv,   "SRV"   },
+	{ ns_t_ptr,   "PTR"   },
+	{ ns_t_any,   "ANY"   },
+	{ }
+};
+
+static const char *rcodes[] = {
+	"NOERROR",
+	"FORMERR",
+	"SERVFAIL",
+	"NXDOMAIN",
+	"NOTIMP",
+	"REFUSED",
+	"YXDOMAIN",
+	"YXRRSET",
+	"NXRRSET",
+	"NOTAUTH",
+	"NOTZONE",
+	"RESERVED11",
+	"RESERVED12",
+	"RESERVED13",
+	"RESERVED14",
+	"RESERVED15",
+	"BADVERS"
+};
+
+static unsigned int default_port = 53;
+
+
+static uc_value_t *
+init_obj(uc_vm_t *vm, uc_value_t *obj, const char *key, uc_type_t type)
+{
+	uc_value_t *existing;
+
+	existing = ucv_object_get(obj, key, NULL);
+
+	if (existing == NULL) {
+		switch (type) {
+		case UC_ARRAY:
+			existing = ucv_array_new(vm);
+			break;
+
+		case UC_OBJECT:
+			existing = ucv_object_new(vm);
+			break;
+
+		default:
+			return NULL;
+		}
+
+		ucv_object_add(obj, key, existing);
+	}
+
+	return existing;
+}
+
+static int
+parse_reply(uc_vm_t *vm, uc_value_t *res_obj, const unsigned char *msg, size_t len)
+{
+	ns_msg handle;
+	ns_rr rr;
+	int i, n, rdlen;
+	const char *key = NULL;
+	char astr[INET6_ADDRSTRLEN], dname[MAXDNAME];
+	const unsigned char *cp;
+	uc_value_t *name_obj, *type_arr, *item;
+
+	if (ns_initparse(msg, len, &amp;handle) != 0) {
+		set_error(errno, "Unable to parse reply packet");
+
+		return -1;
+	}
+
+	for (i = 0; i &lt; ns_msg_count(handle, ns_s_an); i++) {
+		if (ns_parserr(&amp;handle, ns_s_an, i, &amp;rr) != 0) {
+			set_error(errno, "Unable to parse resource record");
+
+			return -1;
+		}
+
+		name_obj = init_obj(vm, res_obj, ns_rr_name(rr), UC_OBJECT);
+
+		rdlen = ns_rr_rdlen(rr);
+
+		switch (ns_rr_type(rr))
+		{
+		case ns_t_a:
+			if (rdlen != 4) {
+				set_error(EBADMSG, "Invalid A record length");
+
+				return -1;
+			}
+
+			type_arr = init_obj(vm, name_obj, "A", UC_ARRAY);
+
+			inet_ntop(AF_INET, ns_rr_rdata(rr), astr, sizeof(astr));
+			ucv_array_push(type_arr, ucv_string_new(astr));
+			break;
+
+		case ns_t_aaaa:
+			if (rdlen != 16) {
+				set_error(EBADMSG, "Invalid AAAA record length");
+
+				return -1;
+			}
+
+			type_arr = init_obj(vm, name_obj, "AAAA", UC_ARRAY);
+
+			inet_ntop(AF_INET6, ns_rr_rdata(rr), astr, sizeof(astr));
+			ucv_array_push(type_arr, ucv_string_new(astr));
+			break;
+
+		case ns_t_ns:
+			if (!key)
+				key = "NS";
+			/* fall through */
+
+		case ns_t_cname:
+			if (!key)
+				key = "CNAME";
+			/* fall through */
+
+		case ns_t_ptr:
+			if (!key)
+				key = "PTR";
+
+			if (ns_name_uncompress(ns_msg_base(handle), ns_msg_end(handle),
+				ns_rr_rdata(rr), dname, sizeof(dname)) &lt; 0) {
+				set_error(errno, "Unable to uncompress domain name");
+
+				return -1;
+			}
+
+			type_arr = init_obj(vm, name_obj, key, UC_ARRAY);
+			n = ucv_array_length(type_arr);
+			item = n ? ucv_array_get(type_arr, n - 1) : NULL;
+
+			if (!n || strcmp(ucv_string_get(item), dname))
+				ucv_array_push(type_arr, ucv_string_new(dname));
+
+			break;
+
+		case ns_t_mx:
+			if (rdlen &lt; 2) {
+				set_error(EBADMSG, "MX record too short");
+
+				return -1;
+			}
+
+			n = ns_get16(ns_rr_rdata(rr));
+
+			if (ns_name_uncompress(ns_msg_base(handle), ns_msg_end(handle),
+				ns_rr_rdata(rr) + 2, dname, sizeof(dname)) &lt; 0) {
+				set_error(errno, "Unable to uncompress MX domain");
+
+				return -1;
+			}
+
+			type_arr = init_obj(vm, name_obj, "MX", UC_ARRAY);
+			item = ucv_array_new_length(vm, 2);
+			ucv_array_push(item, ucv_int64_new(n));
+			ucv_array_push(item, ucv_string_new(dname));
+			ucv_array_push(type_arr, item);
+			break;
+
+		case ns_t_txt:
+			if (rdlen &lt; 1) {
+				set_error(EBADMSG, "TXT record too short");
+
+				return -1;
+			}
+
+			n = *(unsigned char *)ns_rr_rdata(rr);
+
+			if (n > 0) {
+				memset(dname, 0, sizeof(dname));
+				memcpy(dname, ns_rr_rdata(rr) + 1, n);
+
+				type_arr = init_obj(vm, name_obj, "TXT", UC_ARRAY);
+				ucv_array_push(type_arr, ucv_string_new(dname));
+			}
+			break;
+
+		case ns_t_srv:
+			if (rdlen &lt; 6) {
+				set_error(EBADMSG, "SRV record too short");
+
+				return -1;
+			}
+
+			cp = ns_rr_rdata(rr);
+			n = ns_name_uncompress(ns_msg_base(handle), ns_msg_end(handle),
+			                       cp + 6, dname, sizeof(dname));
+
+			if (n &lt; 0) {
+				set_error(errno, "Unable to uncompress domain name");
+
+				return -1;
+			}
+
+			type_arr = init_obj(vm, name_obj, "SRV", UC_ARRAY);
+			item = ucv_array_new_length(vm, 4);
+			ucv_array_push(item, ucv_int64_new(ns_get16(cp)));
+			ucv_array_push(item, ucv_int64_new(ns_get16(cp + 2)));
+			ucv_array_push(item, ucv_int64_new(ns_get16(cp + 4)));
+			ucv_array_push(item, ucv_string_new(dname));
+			ucv_array_push(type_arr, item);
+			break;
+
+		case ns_t_soa:
+			if (rdlen &lt; 20) {
+				set_error(EBADMSG, "SOA record too short");
+
+				return -1;
+			}
+
+			type_arr = init_obj(vm, name_obj, "SOA", UC_ARRAY);
+			item = ucv_array_new_length(vm, 7);
+
+			cp = ns_rr_rdata(rr);
+			n = ns_name_uncompress(ns_msg_base(handle), ns_msg_end(handle),
+			                       cp, dname, sizeof(dname));
+
+			if (n &lt; 0) {
+				set_error(errno, "Unable to uncompress domain name");
+				ucv_put(item);
+
+				return -1;
+			}
+
+			ucv_array_push(item, ucv_string_new(dname)); /* origin */
+			cp += n;
+
+			n = ns_name_uncompress(ns_msg_base(handle), ns_msg_end(handle),
+			                       cp, dname, sizeof(dname));
+
+			if (n &lt; 0) {
+				set_error(errno, "Unable to uncompress domain name");
+				ucv_put(item);
+
+				return -1;
+			}
+
+			ucv_array_push(item, ucv_string_new(dname)); /* mail addr */
+			cp += n;
+
+			ucv_array_push(item, ucv_int64_new(ns_get32(cp))); /* serial */
+			cp += 4;
+
+			ucv_array_push(item, ucv_int64_new(ns_get32(cp))); /* refresh */
+			cp += 4;
+
+			ucv_array_push(item, ucv_int64_new(ns_get32(cp))); /* retry */
+			cp += 4;
+
+			ucv_array_push(item, ucv_int64_new(ns_get32(cp))); /* expire */
+			cp += 4;
+
+			ucv_array_push(item, ucv_int64_new(ns_get32(cp))); /* minimum */
+
+			ucv_array_push(type_arr, item);
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	return i;
+}
+
+static int
+parse_nsaddr(const char *addrstr, addr_t *lsa)
+{
+	char *eptr, *hash, ifname[IFNAMSIZ], ipaddr[INET6_ADDRSTRLEN] = { 0 };
+	unsigned int port = default_port;
+	unsigned int scope = 0;
+
+	hash = strchr(addrstr, '#');
+
+	if (hash) {
+		port = strtoul(hash + 1, &amp;eptr, 10);
+
+		if ((size_t)(hash - addrstr) >= sizeof(ipaddr) ||
+		    eptr == hash + 1 || *eptr != '\0' || port > 65535) {
+			errno = EINVAL;
+			return -1;
+		}
+
+		memcpy(ipaddr, addrstr, hash - addrstr);
+	}
+	else {
+		strncpy(ipaddr, addrstr, sizeof(ipaddr) - 1);
+	}
+
+	hash = strchr(addrstr, '%');
+
+	if (hash) {
+		for (eptr = ++hash; *eptr != '\0' &amp;&amp; *eptr != '#'; eptr++) {
+			if ((eptr - hash) >= IFNAMSIZ) {
+				errno = ENODEV;
+				return -1;
+			}
+
+			ifname[eptr - hash] = *eptr;
+		}
+
+		ifname[eptr - hash] = '\0';
+		scope = if_nametoindex(ifname);
+
+		if (scope == 0) {
+			errno = ENODEV;
+			return -1;
+		}
+	}
+
+	if (inet_pton(AF_INET6, ipaddr, &amp;lsa->u.sin6.sin6_addr)) {
+		lsa->u.sin6.sin6_family = AF_INET6;
+		lsa->u.sin6.sin6_port = htons(port);
+		lsa->u.sin6.sin6_scope_id = scope;
+		lsa->len = sizeof(lsa->u.sin6);
+		return 0;
+	}
+
+	if (!scope &amp;&amp; inet_pton(AF_INET, ipaddr, &amp;lsa->u.sin.sin_addr)) {
+		lsa->u.sin.sin_family = AF_INET;
+		lsa->u.sin.sin_port = htons(port);
+		lsa->len = sizeof(lsa->u.sin);
+		return 0;
+	}
+
+	errno = EINVAL;
+	return -1;
+}
+
+static char *
+make_ptr(const char *addrstr)
+{
+	const char *hexdigit = "0123456789abcdef";
+	static char ptrstr[73];
+	unsigned char addr[16];
+	char *ptr = ptrstr;
+	int i;
+
+	if (inet_pton(AF_INET6, addrstr, addr)) {
+		if (memcmp(addr, "\0\0\0\0\0\0\0\0\0\0\xff\xff", 12) != 0) {
+			for (i = 0; i &lt; 16; i++) {
+				*ptr++ = hexdigit[(unsigned char)addr[15 - i] &amp; 0xf];
+				*ptr++ = '.';
+				*ptr++ = hexdigit[(unsigned char)addr[15 - i] >> 4];
+				*ptr++ = '.';
+			}
+			strcpy(ptr, "ip6.arpa");
+		}
+		else {
+			sprintf(ptr, "%u.%u.%u.%u.in-addr.arpa",
+			        addr[15], addr[14], addr[13], addr[12]);
+		}
+
+		return ptrstr;
+	}
+
+	if (inet_pton(AF_INET, addrstr, addr)) {
+		sprintf(ptr, "%u.%u.%u.%u.in-addr.arpa",
+		        addr[3], addr[2], addr[1], addr[0]);
+		return ptrstr;
+	}
+
+	return NULL;
+}
+
+static unsigned long
+mtime(void)
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &amp;ts);
+
+	return (unsigned long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+static void
+to_v4_mapped(addr_t *a)
+{
+	if (a->u.sa.sa_family != AF_INET)
+		return;
+
+	memcpy(a->u.sin6.sin6_addr.s6_addr + 12,
+	       &amp;a->u.sin.sin_addr, 4);
+
+	memcpy(a->u.sin6.sin6_addr.s6_addr,
+	       "\0\0\0\0\0\0\0\0\0\0\xff\xff", 12);
+
+	a->u.sin6.sin6_family = AF_INET6;
+	a->u.sin6.sin6_flowinfo = 0;
+	a->u.sin6.sin6_scope_id = 0;
+	a->len = sizeof(a->u.sin6);
+}
+
+static void
+add_status(uc_vm_t *vm, uc_value_t *res_obj, const char *name, const char *rcode)
+{
+	uc_value_t *name_obj = init_obj(vm, res_obj, name, UC_OBJECT);
+
+	ucv_object_add(name_obj, "rcode", ucv_string_new(rcode));
+}
+
+/*
+ * Function logic borrowed &amp; modified from musl libc, res_msend.c
+ */
+
+static int
+send_queries(resolve_ctx_t *ctx, uc_vm_t *vm, uc_value_t *res_obj)
+{
+	int fd, flags;
+	int servfail_retry = 0;
+	addr_t from = { };
+	int one = 1;
+	int recvlen = 0;
+	int n_replies = 0;
+	struct pollfd pfd;
+	unsigned long t0, t1, t2, timeout = ctx->timeout, retry_interval;
+	unsigned int nn, qn, next_query = 0;
+	struct { unsigned char *buf; size_t len; } reply_buf = { 0 };
+
+	from.u.sa.sa_family = AF_INET;
+	from.len = sizeof(from.u.sin);
+
+	for (nn = 0; nn &lt; ctx->n_ns; nn++) {
+		if (ctx->ns[nn].addr.u.sa.sa_family == AF_INET6) {
+			from.u.sa.sa_family = AF_INET6;
+			from.len = sizeof(from.u.sin6);
+			break;
+		}
+	}
+
+#ifdef __APPLE__
+	flags = SOCK_DGRAM;
+#else
+	flags = SOCK_DGRAM|SOCK_CLOEXEC|SOCK_NONBLOCK;
+#endif
+
+	/* Get local address and open/bind a socket */
+	fd = socket(from.u.sa.sa_family, flags, 0);
+
+	/* Handle case where system lacks IPv6 support */
+	if (fd &lt; 0 &amp;&amp; from.u.sa.sa_family == AF_INET6 &amp;&amp; errno == EAFNOSUPPORT) {
+		fd = socket(AF_INET, flags, 0);
+		from.u.sa.sa_family = AF_INET;
+	}
+
+	if (fd &lt; 0) {
+		set_error(errno, "Unable to open UDP socket");
+
+		return -1;
+	}
+
+#ifdef __APPLE__
+	flags = fcntl(fd, F_GETFD);
+
+	if (flags &lt; 0) {
+		set_error(errno, "Unable to acquire socket descriptor flags");
+		close(fd);
+
+		return -1;
+	}
+
+	if (fcntl(fd, F_SETFD, flags|O_CLOEXEC|O_NONBLOCK) &lt; 0) {
+		set_error(errno, "Unable to set socket descriptor flags");
+		close(fd);
+
+		return -1;
+	}
+#endif
+
+	if (bind(fd, &amp;from.u.sa, from.len) &lt; 0) {
+		set_error(errno, "Unable to bind UDP socket");
+		close(fd);
+
+		return -1;
+	}
+
+	/* Convert any IPv4 addresses in a mixed environment to v4-mapped */
+	if (from.u.sa.sa_family == AF_INET6) {
+		setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &amp;one, sizeof(one));
+
+		for (nn = 0; nn &lt; ctx->n_ns; nn++)
+			to_v4_mapped(&amp;ctx->ns[nn].addr);
+	}
+
+	pfd.fd = fd;
+	pfd.events = POLLIN;
+	retry_interval = timeout / ctx->retries;
+	t0 = t2 = mtime();
+	t1 = t2 - retry_interval;
+
+	for (; t2 - t0 &lt; timeout; t2 = mtime()) {
+		if (t2 - t1 >= retry_interval) {
+			for (qn = 0; qn &lt; ctx->n_queries; qn++) {
+				if (ctx->queries[qn].rcode == 0 || ctx->queries[qn].rcode == 3)
+					continue;
+
+				for (nn = 0; nn &lt; ctx->n_ns; nn++) {
+					sendto(fd, ctx->queries[qn].query, ctx->queries[qn].qlen,
+					       MSG_NOSIGNAL, &amp;ctx->ns[nn].addr.u.sa, ctx->ns[nn].addr.len);
+				}
+			}
+
+			t1 = t2;
+			servfail_retry = 2 * ctx->n_queries;
+		}
+
+		/* Wait for a response, or until time to retry */
+		switch (poll(&amp;pfd, 1, t1+retry_interval-t2)) {
+		case 0:
+			/* timeout */
+			for (qn = 0; qn &lt; ctx->n_queries; qn++) {
+				if (ctx->queries[qn].rcode != -1)
+					continue;
+
+				for (nn = 0; nn &lt; ctx->n_ns; nn++)
+					add_status(vm, res_obj, ctx->queries[qn].name, "TIMEOUT");
+			}
+
+			continue;
+
+		case -1:
+			/* error */
+			continue;
+		}
+
+		while (1) {
+			recvlen = recvfrom(fd, NULL, 0, MSG_PEEK|MSG_TRUNC, &amp;from.u.sa, &amp;from.len);
+
+			/* read error */
+			if (recvlen &lt; 0)
+				break;
+
+			if ((size_t)recvlen > reply_buf.len) {
+				reply_buf.buf = xrealloc(reply_buf.buf, recvlen);
+				reply_buf.len = recvlen;
+			}
+
+			recvlen = recvfrom(fd, reply_buf.buf, recvlen, 0, &amp;from.u.sa, &amp;from.len);
+
+			/* Ignore non-identifiable packets */
+			if (recvlen &lt; 4)
+				continue;
+
+			/* Ignore replies from addresses we didn't send to */
+			for (nn = 0; nn &lt; ctx->n_ns; nn++)
+				if (memcmp(&amp;from.u.sa, &amp;ctx->ns[nn].addr.u.sa, from.len) == 0)
+					break;
+
+			if (nn >= ctx->n_ns)
+				continue;
+
+			/* Find which query this answer goes with, if any */
+			for (qn = next_query; qn &lt; ctx->n_queries; qn++)
+				if (!memcmp(reply_buf.buf, ctx->queries[qn].query, 2))
+					break;
+
+			/* Do not overwrite previous replies from other servers
+			 * but allow overwriting preexisting NXDOMAIN reply */
+			if (qn >= ctx->n_queries ||
+			    ctx->queries[qn].rcode == 0 ||
+			    (ctx->queries[qn].rcode == 3 &amp;&amp; (reply_buf.buf[3] &amp; 15) != 0))
+				continue;
+
+			ctx->queries[qn].rcode = reply_buf.buf[3] &amp; 15;
+
+			switch (ctx->queries[qn].rcode) {
+			case 0:
+				ucv_object_delete(
+					ucv_object_get(res_obj, ctx->queries[qn].name, NULL),
+					"rcodes");
+
+				break;
+
+			case 2:
+				/* Retry immediately on server failure. */
+				if (servfail_retry &amp;&amp; servfail_retry--)
+					sendto(fd, ctx->queries[qn].query, ctx->queries[qn].qlen,
+					       MSG_NOSIGNAL, &amp;ctx->ns[nn].addr.u.sa, ctx->ns[nn].addr.len);
+
+				/* fall through */
+
+			default:
+				add_status(vm, res_obj, ctx->queries[qn].name,
+				           rcodes[ctx->queries[qn].rcode]);
+			}
+
+			/* Store answer */
+			n_replies++;
+
+			ctx->queries[qn].rlen = recvlen;
+
+			parse_reply(vm, res_obj, reply_buf.buf, recvlen);
+
+			if (qn == next_query) {
+				while (next_query &lt; ctx->n_queries) {
+					if (ctx->queries[next_query].rcode == -1)
+						break;
+
+					next_query++;
+				}
+			}
+
+			if (next_query >= ctx->n_queries)
+				goto out;
+		}
+	}
+
+out:
+	free(reply_buf.buf);
+	close(fd);
+
+	return n_replies;
+}
+
+static ns_t *
+add_ns(resolve_ctx_t *ctx, const char *addr)
+{
+	char portstr[sizeof("65535")], *p;
+	addr_t a = { };
+	struct addrinfo *ai, *aip, hints = {
+		.ai_flags = AI_NUMERICSERV,
+		.ai_socktype = SOCK_DGRAM
+	};
+
+	if (parse_nsaddr(addr, &amp;a)) {
+		/* Maybe we got a domain name, attempt to resolve it using the standard
+		 * resolver routines */
+
+		p = strchr(addr, '#');
+		snprintf(portstr, sizeof(portstr), "%hu",
+		         (unsigned short)(p ? strtoul(p, NULL, 10) : default_port));
+
+		if (!getaddrinfo(addr, portstr, &amp;hints, &amp;ai)) {
+			for (aip = ai; aip; aip = aip->ai_next) {
+				if (aip->ai_addr->sa_family != AF_INET &amp;&amp;
+				    aip->ai_addr->sa_family != AF_INET6)
+					continue;
+
+				ctx->ns = xrealloc(ctx->ns, sizeof(*ctx->ns) * (ctx->n_ns + 1));
+				ctx->ns[ctx->n_ns].name = addr;
+				ctx->ns[ctx->n_ns].addr.len = aip->ai_addrlen;
+
+				memcpy(&amp;ctx->ns[ctx->n_ns].addr.u.sa, aip->ai_addr, aip->ai_addrlen);
+
+				ctx->n_ns++;
+			}
+
+			freeaddrinfo(ai);
+
+			return &amp;ctx->ns[ctx->n_ns];
+		}
+
+		return NULL;
+	}
+
+	ctx->ns = xrealloc(ctx->ns, sizeof(*ctx->ns) * (ctx->n_ns + 1));
+	ctx->ns[ctx->n_ns].addr = a;
+	ctx->ns[ctx->n_ns].name = addr;
+
+	return &amp;ctx->ns[ctx->n_ns++];
+}
+
+static int
+parse_resolvconf(resolve_ctx_t *ctx)
+{
+	int prev_n_ns = ctx->n_ns;
+	char line[128], *p;
+	FILE *resolv;
+	bool ok;
+
+	if ((resolv = fopen("/etc/resolv.conf", "r")) != NULL) {
+		while (fgets(line, sizeof(line), resolv)) {
+			p = strtok(line, " \t\n");
+
+			if (!p || strcmp(p, "nameserver"))
+				continue;
+
+			p = strtok(NULL, " \t\n");
+
+			if (!p)
+				continue;
+
+			p = xstrdup(p);
+			ok = add_ns(ctx, p);
+
+			free(p);
+
+			if (!ok)
+				break;
+		}
+
+		fclose(resolv);
+	}
+
+	return ctx->n_ns - prev_n_ns;
+}
+
+static query_t *
+add_query(resolve_ctx_t *ctx, int type, const char *dname)
+{
+	opt_rr_t *opt;
+	ssize_t qlen;
+
+	ctx->queries = xrealloc(ctx->queries, sizeof(*ctx->queries) * (ctx->n_queries + 1));
+
+	memset(&amp;ctx->queries[ctx->n_queries], 0, sizeof(*ctx->queries));
+
+	qlen = res_mkquery(QUERY, dname, C_IN, type, NULL, 0, NULL,
+	                   ctx->queries[ctx->n_queries].query,
+	                   sizeof(ctx->queries[ctx->n_queries].query));
+
+	/* add OPT record */
+	if (ctx->edns_maxsize != 0 &amp;&amp; qlen + sizeof(opt_rr_t) &lt;= sizeof(ctx->queries[ctx->n_queries].query)) {
+		ctx->queries[ctx->n_queries].query[11] = 1;
+
+		opt = (opt_rr_t *)&amp;ctx->queries[ctx->n_queries].query[qlen];
+		opt->root_domain = 0;
+		opt->type = htons(41);
+		opt->edns_maxsize = htons(ctx->edns_maxsize);
+		opt->extended_rcode = 0;
+		opt->edns_version = 0;
+		opt->z = htons(0);
+		opt->data_length = htons(0);
+
+		qlen += sizeof(opt_rr_t);
+	}
+
+	ctx->queries[ctx->n_queries].qlen = qlen;
+	ctx->queries[ctx->n_queries].name = xstrdup(dname);
+	ctx->queries[ctx->n_queries].rcode = -1;
+
+	return &amp;ctx->queries[ctx->n_queries++];
+}
+
+static bool
+check_types(uc_value_t *typenames, uint32_t *types)
+{
+	size_t i;
+
+	*types = 0;
+
+	for_each_item(typenames, typename) {
+		if (ucv_type(typename) != UC_STRING)
+			err_return(EINVAL, "Query type value not a string");
+
+		for (i = 0; qtypes[i].name; i++) {
+			if (!strcasecmp(ucv_string_get(typename), qtypes[i].name)) {
+				*types |= (1 &lt;&lt; i);
+				break;
+			}
+		}
+
+		if (!qtypes[i].name)
+			err_return(EINVAL, "Unrecognized query type '%s'",
+			           ucv_string_get(typename));
+	}
+
+	return true;
+}
+
+static void
+add_queries(resolve_ctx_t *ctx, uc_value_t *name)
+{
+	char *s = ucv_string_get(name);
+	char *ptr;
+	size_t i;
+
+	if (ctx->qtypes == 0) {
+		ptr = make_ptr(s);
+
+		if (ptr) {
+			add_query(ctx, ns_t_ptr, ptr);
+		}
+		else {
+			add_query(ctx, ns_t_a, s);
+			add_query(ctx, ns_t_aaaa, s);
+		}
+	}
+	else {
+		for (i = 0; qtypes[i].name; i++) {
+			if (ctx->qtypes &amp; (1 &lt;&lt; i)) {
+				if (qtypes[i].type == ns_t_ptr) {
+					ptr = make_ptr(s);
+					add_query(ctx, ns_t_ptr, ptr ? ptr : s);
+				}
+				else {
+					add_query(ctx, qtypes[i].type, s);
+				}
+			}
+		}
+	}
+}
+
+static bool
+parse_options(resolve_ctx_t *ctx, uc_value_t *opts)
+{
+	uc_value_t *v;
+
+	if (!check_types(ucv_object_get(opts, "type", NULL), &amp;ctx->qtypes))
+		return false;
+
+	for_each_item(ucv_object_get(opts, "nameserver", NULL), server) {
+		if (ucv_type(server) != UC_STRING)
+			err_return(EINVAL, "Nameserver value not a string");
+
+		if (!add_ns(ctx, ucv_string_get(server)))
+			err_return(EINVAL, "Unable to resolve nameserver address '%s'",
+			           ucv_string_get(server));
+	}
+
+	/* Find NS servers in resolv.conf if none provided */
+	if (ctx->n_ns == 0)
+		parse_resolvconf(ctx);
+
+	/* Fall back to localhost if we could not find NS in resolv.conf */
+	if (ctx->n_ns == 0)
+		add_ns(ctx, "127.0.0.1");
+
+	v = ucv_object_get(opts, "retries", NULL);
+
+	if (ucv_type(v) == UC_INTEGER)
+		ctx->retries = ucv_uint64_get(v);
+	else if (v)
+		err_return(EINVAL, "Retries value not an integer");
+
+	v = ucv_object_get(opts, "timeout", NULL);
+
+	if (ucv_type(v) == UC_INTEGER)
+		ctx->timeout = ucv_uint64_get(v);
+	else if (v)
+		err_return(EINVAL, "Timeout value not an integer");
+
+	v = ucv_object_get(opts, "edns_maxsize", NULL);
+
+	if (ucv_type(v) == UC_INTEGER)
+		ctx->edns_maxsize = ucv_uint64_get(v);
+	else if (v)
+		err_return(EINVAL, "EDNS max size not an integer");
+
+	return true;
+}
+
+/**
+ * Perform DNS queries for specified domain names.
+ *
+ * The `query()` function performs DNS lookups for one or more domain names
+ * according to the specified options. It returns a structured object containing
+ * all resolved DNS records grouped by domain name and record type.
+ *
+ * If no record types are specified in the options, the function will perform
+ * both A and AAAA record lookups for regular domain names, or PTR record
+ * lookups for IP addresses (reverse DNS).
+ *
+ * Returns an object containing DNS query results organized by domain name.
+ *
+ * Raises a runtime exception if invalid arguments are provided or if DNS
+ * resolution encounters critical errors.
+ *
+ * @function module:resolv#query
+ *
+ * @param {string|string[]} names
+ * Domain name(s) to query. Can be a single domain name string or an array
+ * of domain name strings. IP addresses can also be provided for reverse
+ * DNS lookups.
+ *
+ * @param {object} [options]
+ * Query options object.
+ *
+ * @param {string[]} [options.type]
+ * Array of DNS record types to query for. Valid types are: 'A', 'AAAA',
+ * 'CNAME', 'MX', 'NS', 'PTR', 'SOA', 'SRV', 'TXT', 'ANY'. If not specified,
+ * defaults to 'A' and 'AAAA' for domain names, or 'PTR' for IP addresses.
+ *
+ * @param {string[]} [options.nameserver]
+ * Array of DNS nameserver addresses to query. Each address can optionally
+ * include a port number using '#' separator (e.g., '8.8.8.8#53'). IPv6
+ * addresses can include interface scope using '%' separator. If not specified,
+ * nameservers are read from /etc/resolv.conf, falling back to '127.0.0.1'.
+ *
+ * @param {number} [options.timeout=5000]
+ * Total timeout for all queries in milliseconds.
+ *
+ * @param {number} [options.retries=2]
+ * Number of retry attempts for failed queries.
+ *
+ * @param {number} [options.edns_maxsize=4096]
+ * Maximum UDP packet size for EDNS (Extension Mechanisms for DNS). Set to 0
+ * to disable EDNS.
+ *
+ * @returns {object}
+ * Object containing DNS query results. Keys are domain names, values are
+ * objects containing arrays of records grouped by type, or error information
+ * for failed queries.
+ *
+ * @example
+ * // Basic A and AAAA record lookup
+ * const result = query('example.com');
+ * print(result, "\n");
+ * // {
+ * //   "example.com": {
+ * //     "A": ["192.0.2.1"],
+ * //     "AAAA": ["2001:db8::1"]
+ * //   }
+ * // }
+ *
+ * @example
+ * // Specific record type queries
+ * const mxResult = query('example.com', { type: ['MX'] });
+ * print(mxResult, "\n");
+ * // {
+ * //   "example.com": {
+ * //     "MX": [[10, "mail.example.com"]]
+ * //   }
+ * // }
+ *
+ * @example
+ * // Multiple domains and types with custom nameserver
+ * const results = query(
+ *   ['example.com', 'google.com'],
+ *   {
+ *     type: ['A', 'MX'],
+ *     nameserver: ['8.8.8.8', '1.1.1.1'],
+ *     timeout: 10000
+ *   }
+ * );
+ *
+ * @example
+ * // Reverse DNS lookup
+ * const ptrResult = query(['192.0.2.1'], { type: ['PTR'] });
+ * print(ptrResult, "\n");
+ * // {
+ * //   "1.2.0.192.in-addr.arpa": {
+ * //     "PTR": ["example.com"]
+ * //   }
+ * // }
+ *
+ * @example
+ * // Handling errors
+ * const errorResult = query(['nonexistent.example.com']);
+ * print(errorResult, "\n");
+ * // {
+ * //   "nonexistent.example.com": {
+ * //     "rcode": "NXDOMAIN"
+ * //   }
+ * // }
+ */
+static uc_value_t *
+uc_resolv_query(uc_vm_t *vm, size_t nargs)
+{
+	resolve_ctx_t ctx = { .retries = 2, .timeout = 5000, .edns_maxsize = 4096 };
+	uc_value_t *names = uc_fn_arg(0);
+	uc_value_t *opts = uc_fn_arg(1);
+	uc_value_t *res_obj = NULL;
+
+	if (!parse_options(&amp;ctx, opts))
+		goto err;
+
+	for_each_item(names, name) {
+		if (ucv_type(name) != UC_STRING) {
+			set_error(EINVAL, "Domain name value not a string");
+			goto err;
+		}
+
+		add_queries(&amp;ctx, name);
+	}
+
+	res_obj = ucv_object_new(vm);
+
+	if (send_queries(&amp;ctx, vm, res_obj) == 0)
+		set_error(ETIMEDOUT, "Server did not respond");
+
+err:
+	while (ctx.n_queries)
+		free(ctx.queries[--ctx.n_queries].name);
+
+	free(ctx.queries);
+	free(ctx.ns);
+
+	return res_obj;
+}
+
+/**
+ * Get the last error message from DNS operations.
+ *
+ * The `error()` function returns a descriptive error message for the last
+ * failed DNS operation, or `null` if no error occurred. This function is
+ * particularly useful for debugging DNS resolution issues.
+ *
+ * After calling this function, the stored error state is cleared, so
+ * subsequent calls will return `null` unless a new error occurs.
+ *
+ * Returns a string describing the last error, or `null` if no error occurred.
+ *
+ * @function module:resolv#error
+ *
+ * @returns {string|null}
+ * A descriptive error message for the last failed operation, or `null` if
+ * no error occurred.
+ *
+ * @example
+ * // Check for errors after a failed query
+ * const result = query("example.org", { nameserver: "invalid..domain" });
+ * const err = error();
+ * if (err) {
+ *   print("DNS query failed: ", err, "\n");
+ * }
+ */
+static uc_value_t *
+uc_resolv_error(uc_vm_t *vm, size_t nargs)
+{
+	uc_stringbuf_t *buf;
+	const char *s;
+
+	if (last_error.code == 0)
+		return NULL;
+
+	buf = ucv_stringbuf_new();
+
+	s = strerror(last_error.code);
+
+	ucv_stringbuf_addstr(buf, s, strlen(s));
+
+	if (last_error.msg)
+		ucv_stringbuf_printf(buf, ": %s", last_error.msg);
+
+	set_error(0, NULL);
+
+	return ucv_stringbuf_finish(buf);
+}
+
+
+static const uc_function_list_t resolv_fns[] = {
+	{ "query",	uc_resolv_query },
+	{ "error",	uc_resolv_error },
+};
+
+void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
+{
+	uc_function_list_register(scope, resolv_fns);
+}
+</code></pre></article></section></div></div></div><div class="search-container" id="PkfLWpAbet" style="display:none"><div class="wrapper" id="iCxFxjkHbP"><button class="icon-button search-close-button" id="VjLlGakifb" aria-label="close search"><svg><use xlink:href="#close-icon"></use></svg></button><div class="search-box-c"><svg><use xlink:href="#search-icon"></use></svg> <input type="text" id="vpcKVYIppa" class="search-input" placeholder="Search..." autofocus></div><div class="search-result-c" id="fWwVHRuDuN"><span class="search-result-c-text">Type anything to view search result</span></div></div></div><div class="mobile-menu-icon-container"><button class="icon-button" id="mobile-menu" data-isopen="false" aria-label="menu"><svg><use xlink:href="#menu-icon"></use></svg></button> <button class="icon-button" id="mobile-toc" data-isopen="false" aria-label="toc"><svg><use xlink:href="#toc-icon"></use></svg></button></div><div id="mobile-sidebar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="mobile-nav-links"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="mobile-sidebar-items-c"><div class="sidebar-section-title with-arrow" data-isopen="false" id="BLd5CvAHMzPpMIwfLG-t6"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div><div class="sidebar-section-children"><a href="tutorial-04-arrays.html">Working with Arrays</a></div><div class="sidebar-section-children"><a href="tutorial-05-dictionaries.html">Working with Dictionaries</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="BWLV68ND1_sQoTn82FSdw"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-resolv.html">resolv</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div><div class="mobile-navbar-actions"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div></div></div><div id="mobile-tocbar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><span class="sidebar-title">Table of Contents</span><div class="toc-contents"></div></div></div><script type="text/javascript" src="scripts/core.min.js"></script><script src="scripts/search.min.js" defer="defer"></script><script src="scripts/third-party/fuse.js" defer="defer"></script><script type="text/javascript">var tocbotInstance=tocbot.init({tocSelector:"#mobile-tocbar > .mobile-sidebar-wrapper > .toc-contents",contentSelector:".main-content",headingSelector:"h1, h2, h3",hasInnerContainers:!0,scrollContainer:".main-content",headingsOffset:130,onClick:(...e)=>{hideMobileMenu(),bringLinkToView(...e)},includeHtml:!0})</script></body></html>
