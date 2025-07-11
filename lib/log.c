@@ -619,8 +619,8 @@ parse_channels(uc_value_t *channels)
 /**
  * Configure ulog logger.
  *
- * This functions configures the ulog mechanism and is analogeous to using the
- * `openlog()` function in conjuncton with `syslog()`.
+ * This functions configures the ulog mechanism and is analogous to using the
+ * `openlog()` function in conjunction with `syslog()`.
  *
  * The `ulog_open()` function is OpenWrt specific and may not be present on
  * other systems. Use `openlog()` and `syslog()` instead for portability to
@@ -746,7 +746,7 @@ uc_ulog_log_common(uc_vm_t *vm, size_t nargs, int priority)
  *
  * If the `ulog_open()` function has not been called explicitly before, `ulog()`
  * implicitly configures certain defaults, see
- * {@link module:log#ulog_open|ulog_open()} for a detailled description.
+ * {@link module:log#ulog_open|ulog_open()} for a detailed description.
  *
  * If the `format` argument is not a string and not `null`, it will be
  * implicitly converted to a string and logged as-is, without further format
@@ -865,7 +865,7 @@ uc_ulog_close(uc_vm_t *vm, size_t nargs)
  * // Set threshold to "warning" or more severe
  * ulog_threshold(LOG_WARNING);
  *
- * // This message will be supressed
+ * // This message will be suppressed
  * ulog(LOG_DEBUG, "Testing thresholds");
  *
  * // Using priority name
