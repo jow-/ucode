@@ -69,11 +69,11 @@ command.
 
 ### MacOS
 
-To build on MacOS, first install *cmake*, *json-c* and *libmd* via
+To build on MacOS, first install *cmake*, *json-c*, *libmd* and *openssl*/*mbedtls* via
 [Homebrew](https://brew.sh/), then clone the ucode repository and execute
 *cmake* followed by *make*:
 
-    $ brew install cmake json-c libmd
+    $ brew install cmake json-c libmd openssl
     $ git clone https://github.com/jow-/ucode.git
     $ cd ucode/
     $ cmake -DUBUS_SUPPORT=OFF -DUCI_SUPPORT=OFF -DULOOP_SUPPORT=OFF -DCMAKE_BUILD_RPATH=/usr/local/lib -DCMAKE_INSTALL_RPATH=/usr/local/lib .
