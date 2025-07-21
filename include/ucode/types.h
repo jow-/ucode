@@ -213,6 +213,8 @@ typedef struct {
 	uint32_t persistent:1;
 	uint32_t uvcount:8;
 	uint32_t datasize:20;
+
+	uint32_t _pad;
 } uc_resource_ext_t;
 
 uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
