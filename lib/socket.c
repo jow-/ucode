@@ -3283,6 +3283,32 @@ uc_socket_create(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Creates a network socket instance from an existing file descriptor.
+ *
+ * Returns a socket descriptor representing the newly created socket.
+ *
+ * Returns `null` if an error occurred during socket creation.
+ *
+ * @function module:socket#open
+ *
+ * @param {number} [fd]
+ * The file descriptor number
+ *
+ * @returns {?module:socket.socket}
+ * A socket instance representing the socket.
+ */
+static uc_value_t *
+uc_socket_open(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *fd;
+
+	args_get(vm, nargs, NULL,
+		"fd", UC_INTEGER, false, &fd);
+
+	ok_return(ucv_socket_new(vm, ucv_int64_get(fd)));
+}
+
+/**
  * Creates a connected socket instance with a pair file descriptor.
  *
  * This function creates new network sockets with the specified type,
@@ -4874,6 +4900,7 @@ static const uc_function_list_t global_fns[] = {
 	{ "sockaddr",	uc_socket_sockaddr },
 	{ "create",		uc_socket_create },
 	{ "pair",		uc_socket_pair },
+	{ "open",		uc_socket_open },
 	{ "nameinfo",	uc_socket_nameinfo },
 	{ "addrinfo",	uc_socket_addrinfo },
 	{ "poll",		uc_socket_poll },
