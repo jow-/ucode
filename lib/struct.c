@@ -192,6 +192,8 @@
  * | `p`    | `char[]`             | double     |                | (8)      |
  * | `P`    | `void *`             | int        |                | (5)      |
  * | `*`    | `char[]`             | string     |                | (10)     |
+ * | `X`    | `char[]`             | string     |                | (11)     |
+ * | `Z`    | `char[]`             | string     |                | (12)     |
  *
  * Notes:
  *
@@ -260,6 +262,22 @@
  *    format will yield a byte string containing the entire remaining input data
  *    bytes, or - when a repeat count is given - that many bytes of input data
  *    at most.
+ *
+ * - (11) The `X` format character provides a means to encode binary data as
+ *    hexadecimal strings and decode these strings back into raw C memory.
+ *    It is designed for efficiently representing binary data chunks as
+ *    printable text, particularly for inclusion in data formats like JSON.
+ *    When encoding or decoding, the specified format count dictates the number
+ *    of C memory bytes to be processed; the resulting ucode hexadecimal string
+ *    is exactly twice that length. Note that the decoding process interprets 
+ *    hexadecimal strings case-insensitively, but the encoding process will 
+ *    always produce lowercase hexadecimal characters.
+ *
+ * - (12) Similar to the `X` format, the `Z` format encodes and decodes C memory
+ *    into a textual representation. However, it utilizes base64 encoding
+ *    instead of hexadecimal. The format count again indicates the number of C
+ *    memory bytes to be processed, and the resulting ucode base64 string will
+ *    be approximately 1.4 times the size of the original data.
  *
  * A format character may be preceded by an integral repeat count.  For example,
  * the format string `'4h'` means exactly the same as `'hhhh'`.
@@ -1660,6 +1678,8 @@ static const formatdef_t native_endian_table[] = {
 	{ '*', sizeof(char), 0, NULL, NULL },
 	{ 's', sizeof(char), 0, NULL, NULL },
 	{ 'p', sizeof(char), 0, NULL, NULL },
+	{ 'X', sizeof(char), 0, NULL, NULL },
+	{ 'Z', sizeof(char), 0, NULL, NULL },
 	{ 'h', sizeof(short), SHORT_ALIGN, native_unpack_short, native_pack_short },
 	{ 'H', sizeof(short), SHORT_ALIGN, native_unpack_ushort, native_pack_ushort },
 	{ 'i', sizeof(int),	INT_ALIGN, native_unpack_int, native_pack_int },
@@ -1926,6 +1946,8 @@ static formatdef_t big_endian_table[] = {
 	{ '*', 1, 0, NULL, NULL },
 	{ 's', 1, 0, NULL, NULL },
 	{ 'p', 1, 0, NULL, NULL },
+	{ 'X', 1, 0, NULL, NULL },
+	{ 'Z', 1, 0, NULL, NULL },
 	{ 'h', 2, 0, be_unpack_int, be_pack_int },
 	{ 'H', 2, 0, be_unpack_uint, be_pack_uint },
 	{ 'i', 4, 0, be_unpack_int, be_pack_int },
@@ -2176,6 +2198,8 @@ static formatdef_t little_endian_table[] = {
 	{ '*', 1, 0, NULL, NULL },
 	{ 's', 1, 0, NULL, NULL },
 	{ 'p', 1, 0, NULL, NULL },
+	{ 'X', 1, 0, NULL, NULL },
+	{ 'Z', 1, 0, NULL, NULL },
 	{ 'h', 2, 0, le_unpack_int, le_pack_int },
 	{ 'H', 2, 0, le_unpack_uint, le_pack_uint },
 	{ 'i', 4, 0, le_unpack_int, le_pack_int },
@@ -2384,6 +2408,8 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 		case '*': /* fall through */
 		case 's':
 		case 'p':
+		case 'X':
+		case 'Z':
 			ncodes++;
 			break;
 
@@ -2449,7 +2475,7 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 
 		size = align_for_entry(size, e);
 
-		if (c == '*' || c == 's' || c == 'p') {
+		if (c == '*' || c == 's' || c == 'p' || c == 'X' || c == 'Z') {
 			codes->offset = size;
 			codes->size = num;
 			codes->fmtdef = e;
@@ -2524,6 +2550,250 @@ grow_buffer(uc_vm_t *vm, void **buf, size_t *bufsz, size_t length)
 	}
 
 	return true;
+}
+
+/* -------------------------------------------------------------------------
+ * The following base64 encoding and decoding routines are taken from
+ * https://git.openwrt.org/?p=project/libubox.git;a=blob;f=base64.c
+ * and modified for use in ucode.
+ *
+ * Original copyright and license statements below.
+ */
+
+/*
+ * base64 - libubox base64 functions
+ *
+ * Copyright (C) 2015 Felix Fietkau <nbd@openwrt.org>
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+/*	$OpenBSD: base64.c,v 1.7 2013/12/31 02:32:56 tedu Exp $	*/
+
+/*
+ * Copyright (c) 1996 by Internet Software Consortium.
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM DISCLAIMS
+ * ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL INTERNET SOFTWARE
+ * CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+ * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
+ * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS
+ * ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
+ * SOFTWARE.
+ */
+
+/*
+ * Portions Copyright (c) 1995 by International Business Machines, Inc.
+ *
+ * International Business Machines, Inc. (hereinafter called IBM) grants
+ * permission under its copyrights to use, copy, modify, and distribute this
+ * Software with or without fee, provided that the above copyright notice and
+ * all paragraphs of this notice appear in all copies, and that the name of IBM
+ * not be used in connection with the marketing of any product incorporating
+ * the Software or modifications thereof, without specific, written prior
+ * permission.
+ *
+ * To the extent it has a right to do so, IBM grants an immunity from suit
+ * under its patents, if any, for the use, sale or manufacture of products to
+ * the extent that such products are used for performing Domain Name System
+ * dynamic updates in TCP/IP networks by means of the Software.  No immunity is
+ * granted for any product per se or for any other function of any product.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", AND IBM DISCLAIMS ALL WARRANTIES,
+ * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE.  IN NO EVENT SHALL IBM BE LIABLE FOR ANY SPECIAL,
+ * DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER ARISING
+ * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE, EVEN
+ * IF IBM IS APPRISED OF THE POSSIBILITY OF SUCH DAMAGES.
+ */
+
+/* skips all whitespace anywhere.
+   converts characters, four at a time, starting at (or after)
+   src from base - 64 numbers into three 8 bit bytes in the target area.
+   it returns the number of data bytes stored at the target, or -1 on error.
+ */
+
+static bool
+b64dec(char *dest, size_t dest_len, const char *src, size_t src_len,
+       const char **errp)
+{
+	enum { BYTE1, BYTE2, BYTE3, BYTE4 } state = BYTE1;
+	unsigned int ch = 0;
+	size_t dest_off = 0;
+	size_t src_off = 0;
+	uint8_t val;
+
+	for (; src_off < src_len; src_off++) {
+		ch = (unsigned char)src[src_off];
+
+		if (isspace(ch))	/* Skip whitespace anywhere. */
+			continue;
+
+		if (ch == '=' || dest_off >= dest_len)
+			break;
+
+		if (ch >= 'A' && ch <= 'Z')
+			val = ch - 'A';
+		else if (ch >= 'a' && ch <= 'z')
+			val = ch - 'a' + 26;
+		else if (ch >= '0' && ch <= '9')
+			val = ch - '0' + 52;
+		else if (ch == '+')
+			val = 62;
+		else if (ch == '/')
+			val = 63;
+		else
+			return *errp = "Invalid character", false;
+
+		switch (state) {
+		case BYTE1:
+			dest[dest_off] = val << 2;
+			state = BYTE2;
+			break;
+
+		case BYTE2:
+			dest[dest_off++] |= val >> 4;
+			dest[dest_off] = (val & 0x0f) << 4;
+			state = BYTE3;
+			break;
+
+		case BYTE3:
+			dest[dest_off++] |= val >> 2;
+			dest[dest_off] = (val & 0x03) << 6;
+			state = BYTE4;
+			break;
+
+		case BYTE4:
+			dest[dest_off++] |= val;
+			state = BYTE1;
+			break;
+		}
+	}
+
+	/*
+	 * We are done decoding Base-64 chars.  Let's see if we ended
+	 * on a byte boundary, and/or with erroneous trailing characters.
+	 */
+
+	if (ch == '=') {			/* We got a pad char. */
+		if (src_off >= src_len)
+			return *errp = "Invalid padding", false;
+
+		src_off++;	/* Skip it, get next. */
+
+		switch (state) {
+		case BYTE1:		/* Invalid = in first position */
+		case BYTE2:		/* Invalid = in second position */
+			return false;
+
+		case BYTE3:		/* Valid, means one byte of info */
+			ch = 0;
+
+			while (src_off < src_len) {
+				ch = (unsigned char)src[src_off];
+
+				if (!isspace(ch))
+					break;
+			}
+
+			/* Make sure there is another trailing = sign. */
+			if (ch != '=')
+				return *errp = "Invalid padding", false;
+
+			src_off++; /* Skip the = */
+
+			/* Fall through to "single trailing =" case. */
+			/* FALLTHROUGH */
+
+		case BYTE4:		/* Valid, means two bytes of info */
+			/*
+			 * We know this char is an =.  Is there anything but
+			 * whitespace after it?
+			 */
+			while (src_off < src_len)
+				if (!isspace(src[src_off]))
+					return *errp = "Trailing data", false;
+
+			/*
+			 * Now make sure for cases BYTE3 and BYTE4 that the "extra"
+			 * bits that slopped past the last full byte were
+			 * zeros.  If we don't check them, they become a
+			 * subliminal channel.
+			 */
+			if (dest_off < dest_len && dest[dest_off] != 0)
+				return *errp = "Extraneous bits", false;
+		}
+	}
+	else {
+		/*
+		 * We ended by seeing the end of the string.  Make sure we
+		 * have no partial bytes lying around.
+		 */
+		if (state != BYTE1)
+			return *errp = "Input string too long", false;
+	}
+
+	return *errp = NULL, true;
+}
+
+static const char Base64[] =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static uc_value_t *
+b64enc(const char *src, size_t src_len)
+{
+	unsigned char input[3] = {0};
+	uc_stringbuf_t *buf;
+	char output[4];
+	size_t i;
+
+	buf = ucv_stringbuf_new();
+
+	while (2 < src_len) {
+		input[0] = (unsigned char)*src++;
+		input[1] = (unsigned char)*src++;
+		input[2] = (unsigned char)*src++;
+		src_len -= 3;
+
+		output[0] = Base64[input[0] >> 2];
+		output[1] = Base64[((input[0] & 0x03) << 4) + (input[1] >> 4)];
+		output[2] = Base64[((input[1] & 0x0f) << 2) + (input[2] >> 6)];
+		output[3] = Base64[input[2] & 0x3f];
+
+		ucv_stringbuf_addstr(buf, output, sizeof(output));
+	}
+
+	/* Now we worry about padding. */
+	if (0 != src_len) {
+		/* Get what's left. */
+		input[0] = input[1] = input[2] = '\0';
+		for (i = 0; i < src_len; i++)
+			input[i] = *src++;
+
+		output[0] = Base64[input[0] >> 2];
+		output[1] = Base64[((input[0] & 0x03) << 4) + (input[1] >> 4)];
+		output[2] = (src_len == 1) ? '=' : Base64[((input[1] & 0x0f) << 2) + (input[2] >> 6)];
+		output[3] = '=';
+
+		ucv_stringbuf_addstr(buf, output, sizeof(output));
+	}
+
+	return ucv_stringbuf_finish(buf);
 }
 
 static bool
@@ -2633,6 +2903,64 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff,
 
 				*res = (unsigned char)n;
 			}
+			else if (e->format == 'X') {
+				if (ucv_type(v) != UC_STRING) {
+					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+						"Argument for 'X' must be a string");
+
+					return false;
+				}
+
+				n = ucv_string_length(v);
+				p = ucv_string_get(v);
+
+				if (n % 2) {
+					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+						"String length must be multiple of 2");
+
+					return false;
+				}
+
+				if (n > size * 2)
+					n = size * 2;
+
+				for (ssize_t i = 0; i < n; i += 2) {
+					uint8_t c1 = ((uint8_t *)p)[i + 0];
+					uint8_t c2 = ((uint8_t *)p)[i + 1];
+
+					if (!isxdigit(c1) || !isxdigit(c2)) {
+						uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+							"Invalid hexadecimal string");
+
+						return false;
+					}
+
+					c1 |= 32; c1 = (c1 >= 'a') ? 10 + c1 - 'a' : c1 - '0';
+					c2 |= 32; c2 = (c2 >= 'a') ? 10 + c2 - 'a' : c2 - '0';
+
+					((uint8_t *)res)[i >> 1] = (c1 << 4) | c2;
+				}
+			}
+			else if (e->format == 'Z') {
+				if (ucv_type(v) != UC_STRING) {
+					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+						"Argument for 'Z' must be a string");
+
+					return false;
+				}
+
+				n = ucv_string_length(v);
+				p = ucv_string_get(v);
+
+				const char *err = NULL;
+
+				if (!b64dec(res, size, p, n, &err)) {
+					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+						"Invalid base64 string: %s", err);
+
+					return false;
+				}
+			}
 			else {
 				if (!e->pack(vm, res, v, e))
 					return false;
@@ -2645,6 +2973,26 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff,
 	*pos = new_pos;
 
 	return true;
+}
+
+static uc_value_t *
+hexenc(const char *src, size_t src_len)
+{
+	uc_string_t *us = xalloc(sizeof(*us) + src_len * 2 + 1);
+	const char *hexdigits = "0123456789abcdef";
+
+	us->header.type = UC_STRING;
+	us->header.refcount = 1;
+	us->length = src_len * 2;
+
+	for (size_t i = 0; i < src_len; i++) {
+		uint8_t c = (uint8_t)src[i];
+
+		us->str[(i << 1) + 0] = hexdigits[c >> 4];
+		us->str[(i << 1) + 1] = hexdigits[c & 0x0f];
+	}
+
+	return &us->header;
 }
 
 static uc_value_t *
@@ -2699,6 +3047,12 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state,
 					n = (size > 0 ? size - 1 : 0);
 
 				v = ucv_string_new_length(res + 1, n);
+			}
+			else if (e->format == 'X') {
+				v = hexenc(res, size);
+			}
+			else if (e->format == 'Z') {
+				v = b64enc(res, size);
 			}
 			else {
 				v = e->unpack(vm, res, e);
