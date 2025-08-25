@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en" style="font-size:16px"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link type="text/css" rel="stylesheet" href="ucode.css"><title>Source: lib/struct.c</title><!--[if lt IE 9]>
       <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
-    <![endif]--><script src="scripts/third-party/hljs.js" defer="defer"></script><script src="scripts/third-party/hljs-line-num.js" defer="defer"></script><script src="scripts/third-party/popper.js" defer="defer"></script><script src="scripts/third-party/tippy.js" defer="defer"></script><script src="scripts/third-party/tocbot.min.js"></script><script>var baseURL="/",locationPathname="";baseURL=(locationPathname=document.location.pathname).substr(0,locationPathname.lastIndexOf("/")+1)</script><link rel="stylesheet" href="styles/clean-jsdoc-theme.min.css"><svg aria-hidden="true" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:none"><defs><symbol id="copy-icon" viewbox="0 0 488.3 488.3"><g><path d="M314.25,85.4h-227c-21.3,0-38.6,17.3-38.6,38.6v325.7c0,21.3,17.3,38.6,38.6,38.6h227c21.3,0,38.6-17.3,38.6-38.6V124    C352.75,102.7,335.45,85.4,314.25,85.4z M325.75,449.6c0,6.4-5.2,11.6-11.6,11.6h-227c-6.4,0-11.6-5.2-11.6-11.6V124    c0-6.4,5.2-11.6,11.6-11.6h227c6.4,0,11.6,5.2,11.6,11.6V449.6z"/><path d="M401.05,0h-227c-21.3,0-38.6,17.3-38.6,38.6c0,7.5,6,13.5,13.5,13.5s13.5-6,13.5-13.5c0-6.4,5.2-11.6,11.6-11.6h227    c6.4,0,11.6,5.2,11.6,11.6v325.7c0,6.4-5.2,11.6-11.6,11.6c-7.5,0-13.5,6-13.5,13.5s6,13.5,13.5,13.5c21.3,0,38.6-17.3,38.6-38.6    V38.6C439.65,17.3,422.35,0,401.05,0z"/></g></symbol><symbol id="search-icon" viewBox="0 0 512 512"><g><g><path d="M225.474,0C101.151,0,0,101.151,0,225.474c0,124.33,101.151,225.474,225.474,225.474    c124.33,0,225.474-101.144,225.474-225.474C450.948,101.151,349.804,0,225.474,0z M225.474,409.323    c-101.373,0-183.848-82.475-183.848-183.848S124.101,41.626,225.474,41.626s183.848,82.475,183.848,183.848    S326.847,409.323,225.474,409.323z"/></g></g><g><g><path d="M505.902,476.472L386.574,357.144c-8.131-8.131-21.299-8.131-29.43,0c-8.131,8.124-8.131,21.306,0,29.43l119.328,119.328    c4.065,4.065,9.387,6.098,14.715,6.098c5.321,0,10.649-2.033,14.715-6.098C514.033,497.778,514.033,484.596,505.902,476.472z"/></g></g></symbol><symbol id="font-size-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11.246 15H4.754l-2 5H.6L7 4h2l6.4 16h-2.154l-2-5zm-.8-2L8 6.885 5.554 13h4.892zM21 12.535V12h2v8h-2v-.535a4 4 0 1 1 0-6.93zM19 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></symbol><symbol id="add-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></symbol><symbol id="minus-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M5 11h14v2H5z"/></symbol><symbol id="dark-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol><symbol id="light-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol><symbol id="reset-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M18.537 19.567A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10c0 2.136-.67 4.116-1.81 5.74L17 12h3a8 8 0 1 0-2.46 5.772l.997 1.795z"/></symbol><symbol id="down-icon" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7803 6.21967C13.0732 6.51256 13.0732 6.98744 12.7803 7.28033L8.53033 11.5303C8.23744 11.8232 7.76256 11.8232 7.46967 11.5303L3.21967 7.28033C2.92678 6.98744 2.92678 6.51256 3.21967 6.21967C3.51256 5.92678 3.98744 5.92678 4.28033 6.21967L8 9.93934L11.7197 6.21967C12.0126 5.92678 12.4874 5.92678 12.7803 6.21967Z"></path></symbol><symbol id="codepen-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M16.5 13.202L13 15.535v3.596L19.197 15 16.5 13.202zM14.697 12L12 10.202 9.303 12 12 13.798 14.697 12zM20 10.869L18.303 12 20 13.131V10.87zM19.197 9L13 4.869v3.596l3.5 2.333L19.197 9zM7.5 10.798L11 8.465V4.869L4.803 9 7.5 10.798zM4.803 15L11 19.131v-3.596l-3.5-2.333L4.803 15zM4 13.131L5.697 12 4 10.869v2.262zM2 9a1 1 0 0 1 .445-.832l9-6a1 1 0 0 1 1.11 0l9 6A1 1 0 0 1 22 9v6a1 1 0 0 1-.445.832l-9 6a1 1 0 0 1-1.11 0l-9-6A1 1 0 0 1 2 15V9z"/></symbol><symbol id="close-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></symbol><symbol id="menu-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/></symbol><symbol id="toc-icon" viewBox="0 0 460 460"><path d="M40 70a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 190a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 310a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM430 80H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 200H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 320H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60z"/></symbol></defs></svg></head><body data-theme="light"><div class="sidebar-container"><div class="sidebar" id="sidebar"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="sidebar-items-container"><div class="sidebar-section-title with-arrow" data-isopen="false" id="Mn2ZtWaSCf8lxqBM30jM0"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div><div class="sidebar-section-children"><a href="tutorial-04-arrays.html">Working with Arrays</a></div><div class="sidebar-section-children"><a href="tutorial-05-dictionaries.html">Working with Dictionaries</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="P3uD-u9aSgJIACEZlfa4D"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-resolv.html">resolv</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div></div></div><div class="navbar-container" id="VuAckcnZhf"><nav class="navbar"><div class="navbar-left-items"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="navbar-right-items"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div><nav></nav></nav></div><div class="body-wrapper"><div class="main-content"><div class="main-wrapper"><section id="source-page" class="source-page"><header><h1 id="title" class="has-anchor">lib_struct.c</h1></header><article><pre class="prettyprint source lang-js"><code>/*
+    <![endif]--><script src="scripts/third-party/hljs.js" defer="defer"></script><script src="scripts/third-party/hljs-line-num.js" defer="defer"></script><script src="scripts/third-party/popper.js" defer="defer"></script><script src="scripts/third-party/tippy.js" defer="defer"></script><script src="scripts/third-party/tocbot.min.js"></script><script>var baseURL="/",locationPathname="";baseURL=(locationPathname=document.location.pathname).substr(0,locationPathname.lastIndexOf("/")+1)</script><link rel="stylesheet" href="styles/clean-jsdoc-theme.min.css"><svg aria-hidden="true" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:none"><defs><symbol id="copy-icon" viewbox="0 0 488.3 488.3"><g><path d="M314.25,85.4h-227c-21.3,0-38.6,17.3-38.6,38.6v325.7c0,21.3,17.3,38.6,38.6,38.6h227c21.3,0,38.6-17.3,38.6-38.6V124    C352.75,102.7,335.45,85.4,314.25,85.4z M325.75,449.6c0,6.4-5.2,11.6-11.6,11.6h-227c-6.4,0-11.6-5.2-11.6-11.6V124    c0-6.4,5.2-11.6,11.6-11.6h227c6.4,0,11.6,5.2,11.6,11.6V449.6z"/><path d="M401.05,0h-227c-21.3,0-38.6,17.3-38.6,38.6c0,7.5,6,13.5,13.5,13.5s13.5-6,13.5-13.5c0-6.4,5.2-11.6,11.6-11.6h227    c6.4,0,11.6,5.2,11.6,11.6v325.7c0,6.4-5.2,11.6-11.6,11.6c-7.5,0-13.5,6-13.5,13.5s6,13.5,13.5,13.5c21.3,0,38.6-17.3,38.6-38.6    V38.6C439.65,17.3,422.35,0,401.05,0z"/></g></symbol><symbol id="search-icon" viewBox="0 0 512 512"><g><g><path d="M225.474,0C101.151,0,0,101.151,0,225.474c0,124.33,101.151,225.474,225.474,225.474    c124.33,0,225.474-101.144,225.474-225.474C450.948,101.151,349.804,0,225.474,0z M225.474,409.323    c-101.373,0-183.848-82.475-183.848-183.848S124.101,41.626,225.474,41.626s183.848,82.475,183.848,183.848    S326.847,409.323,225.474,409.323z"/></g></g><g><g><path d="M505.902,476.472L386.574,357.144c-8.131-8.131-21.299-8.131-29.43,0c-8.131,8.124-8.131,21.306,0,29.43l119.328,119.328    c4.065,4.065,9.387,6.098,14.715,6.098c5.321,0,10.649-2.033,14.715-6.098C514.033,497.778,514.033,484.596,505.902,476.472z"/></g></g></symbol><symbol id="font-size-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11.246 15H4.754l-2 5H.6L7 4h2l6.4 16h-2.154l-2-5zm-.8-2L8 6.885 5.554 13h4.892zM21 12.535V12h2v8h-2v-.535a4 4 0 1 1 0-6.93zM19 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></symbol><symbol id="add-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></symbol><symbol id="minus-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M5 11h14v2H5z"/></symbol><symbol id="dark-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol><symbol id="light-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol><symbol id="reset-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M18.537 19.567A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10c0 2.136-.67 4.116-1.81 5.74L17 12h3a8 8 0 1 0-2.46 5.772l.997 1.795z"/></symbol><symbol id="down-icon" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7803 6.21967C13.0732 6.51256 13.0732 6.98744 12.7803 7.28033L8.53033 11.5303C8.23744 11.8232 7.76256 11.8232 7.46967 11.5303L3.21967 7.28033C2.92678 6.98744 2.92678 6.51256 3.21967 6.21967C3.51256 5.92678 3.98744 5.92678 4.28033 6.21967L8 9.93934L11.7197 6.21967C12.0126 5.92678 12.4874 5.92678 12.7803 6.21967Z"></path></symbol><symbol id="codepen-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M16.5 13.202L13 15.535v3.596L19.197 15 16.5 13.202zM14.697 12L12 10.202 9.303 12 12 13.798 14.697 12zM20 10.869L18.303 12 20 13.131V10.87zM19.197 9L13 4.869v3.596l3.5 2.333L19.197 9zM7.5 10.798L11 8.465V4.869L4.803 9 7.5 10.798zM4.803 15L11 19.131v-3.596l-3.5-2.333L4.803 15zM4 13.131L5.697 12 4 10.869v2.262zM2 9a1 1 0 0 1 .445-.832l9-6a1 1 0 0 1 1.11 0l9 6A1 1 0 0 1 22 9v6a1 1 0 0 1-.445.832l-9 6a1 1 0 0 1-1.11 0l-9-6A1 1 0 0 1 2 15V9z"/></symbol><symbol id="close-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></symbol><symbol id="menu-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/></symbol><symbol id="toc-icon" viewBox="0 0 460 460"><path d="M40 70a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 190a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 310a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM430 80H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 200H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 320H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60z"/></symbol></defs></svg></head><body data-theme="light"><div class="sidebar-container"><div class="sidebar" id="sidebar"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="sidebar-items-container"><div class="sidebar-section-title with-arrow" data-isopen="false" id="lszo9tzN_ikDnv37DZQ9N"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div><div class="sidebar-section-children"><a href="tutorial-04-arrays.html">Working with Arrays</a></div><div class="sidebar-section-children"><a href="tutorial-05-dictionaries.html">Working with Dictionaries</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="vJgWWHLDX3rG2ox3uo1gQ"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-resolv.html">resolv</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div></div></div><div class="navbar-container" id="VuAckcnZhf"><nav class="navbar"><div class="navbar-left-items"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="navbar-right-items"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div><nav></nav></nav></div><div class="body-wrapper"><div class="main-content"><div class="main-wrapper"><section id="source-page" class="source-page"><header><h1 id="title" class="has-anchor">lib_struct.c</h1></header><article><pre class="prettyprint source lang-js"><code>/*
  * Binary data packing/unpacking module for ucode.
  * Copyright (C) 2021 Jo-Philipp Wich &lt;jo@mein.io>
  *
@@ -194,6 +194,8 @@
  * | `p`    | `char[]`             | double     |                | (8)      |
  * | `P`    | `void *`             | int        |                | (5)      |
  * | `*`    | `char[]`             | string     |                | (10)     |
+ * | `X`    | `char[]`             | string     |                | (11)     |
+ * | `Z`    | `char[]`             | string     |                | (12)     |
  *
  * Notes:
  *
@@ -262,6 +264,22 @@
  *    format will yield a byte string containing the entire remaining input data
  *    bytes, or - when a repeat count is given - that many bytes of input data
  *    at most.
+ *
+ * - (11) The `X` format character provides a means to encode binary data as
+ *    hexadecimal strings and decode these strings back into raw C memory.
+ *    It is designed for efficiently representing binary data chunks as
+ *    printable text, particularly for inclusion in data formats like JSON.
+ *    When encoding or decoding, the specified format count dictates the number
+ *    of C memory bytes to be processed; the resulting ucode hexadecimal string
+ *    is exactly twice that length. Note that the decoding process interprets 
+ *    hexadecimal strings case-insensitively, but the encoding process will 
+ *    always produce lowercase hexadecimal characters.
+ *
+ * - (12) Similar to the `X` format, the `Z` format encodes and decodes C memory
+ *    into a textual representation. However, it utilizes base64 encoding
+ *    instead of hexadecimal. The format count again indicates the number of C
+ *    memory bytes to be processed, and the resulting ucode base64 string will
+ *    be approximately 1.4 times the size of the original data.
  *
  * A format character may be preceded by an integral repeat count.  For example,
  * the format string `'4h'` means exactly the same as `'hhhh'`.
@@ -1662,6 +1680,8 @@ static const formatdef_t native_endian_table[] = {
 	{ '*', sizeof(char), 0, NULL, NULL },
 	{ 's', sizeof(char), 0, NULL, NULL },
 	{ 'p', sizeof(char), 0, NULL, NULL },
+	{ 'X', sizeof(char), 0, NULL, NULL },
+	{ 'Z', sizeof(char), 0, NULL, NULL },
 	{ 'h', sizeof(short), SHORT_ALIGN, native_unpack_short, native_pack_short },
 	{ 'H', sizeof(short), SHORT_ALIGN, native_unpack_ushort, native_pack_ushort },
 	{ 'i', sizeof(int),	INT_ALIGN, native_unpack_int, native_pack_int },
@@ -1928,6 +1948,8 @@ static formatdef_t big_endian_table[] = {
 	{ '*', 1, 0, NULL, NULL },
 	{ 's', 1, 0, NULL, NULL },
 	{ 'p', 1, 0, NULL, NULL },
+	{ 'X', 1, 0, NULL, NULL },
+	{ 'Z', 1, 0, NULL, NULL },
 	{ 'h', 2, 0, be_unpack_int, be_pack_int },
 	{ 'H', 2, 0, be_unpack_uint, be_pack_uint },
 	{ 'i', 4, 0, be_unpack_int, be_pack_int },
@@ -2178,6 +2200,8 @@ static formatdef_t little_endian_table[] = {
 	{ '*', 1, 0, NULL, NULL },
 	{ 's', 1, 0, NULL, NULL },
 	{ 'p', 1, 0, NULL, NULL },
+	{ 'X', 1, 0, NULL, NULL },
+	{ 'Z', 1, 0, NULL, NULL },
 	{ 'h', 2, 0, le_unpack_int, le_pack_int },
 	{ 'H', 2, 0, le_unpack_uint, le_pack_uint },
 	{ 'i', 4, 0, le_unpack_int, le_pack_int },
@@ -2386,6 +2410,8 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 		case '*': /* fall through */
 		case 's':
 		case 'p':
+		case 'X':
+		case 'Z':
 			ncodes++;
 			break;
 
@@ -2451,7 +2477,7 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 
 		size = align_for_entry(size, e);
 
-		if (c == '*' || c == 's' || c == 'p') {
+		if (c == '*' || c == 's' || c == 'p' || c == 'X' || c == 'Z') {
 			codes->offset = size;
 			codes->size = num;
 			codes->fmtdef = e;
@@ -2526,6 +2552,250 @@ grow_buffer(uc_vm_t *vm, void **buf, size_t *bufsz, size_t length)
 	}
 
 	return true;
+}
+
+/* -------------------------------------------------------------------------
+ * The following base64 encoding and decoding routines are taken from
+ * https://git.openwrt.org/?p=project/libubox.git;a=blob;f=base64.c
+ * and modified for use in ucode.
+ *
+ * Original copyright and license statements below.
+ */
+
+/*
+ * base64 - libubox base64 functions
+ *
+ * Copyright (C) 2015 Felix Fietkau &lt;nbd@openwrt.org>
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+/*	$OpenBSD: base64.c,v 1.7 2013/12/31 02:32:56 tedu Exp $	*/
+
+/*
+ * Copyright (c) 1996 by Internet Software Consortium.
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND INTERNET SOFTWARE CONSORTIUM DISCLAIMS
+ * ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL INTERNET SOFTWARE
+ * CONSORTIUM BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
+ * DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR
+ * PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS
+ * ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS
+ * SOFTWARE.
+ */
+
+/*
+ * Portions Copyright (c) 1995 by International Business Machines, Inc.
+ *
+ * International Business Machines, Inc. (hereinafter called IBM) grants
+ * permission under its copyrights to use, copy, modify, and distribute this
+ * Software with or without fee, provided that the above copyright notice and
+ * all paragraphs of this notice appear in all copies, and that the name of IBM
+ * not be used in connection with the marketing of any product incorporating
+ * the Software or modifications thereof, without specific, written prior
+ * permission.
+ *
+ * To the extent it has a right to do so, IBM grants an immunity from suit
+ * under its patents, if any, for the use, sale or manufacture of products to
+ * the extent that such products are used for performing Domain Name System
+ * dynamic updates in TCP/IP networks by means of the Software.  No immunity is
+ * granted for any product per se or for any other function of any product.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", AND IBM DISCLAIMS ALL WARRANTIES,
+ * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE.  IN NO EVENT SHALL IBM BE LIABLE FOR ANY SPECIAL,
+ * DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER ARISING
+ * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE, EVEN
+ * IF IBM IS APPRISED OF THE POSSIBILITY OF SUCH DAMAGES.
+ */
+
+/* skips all whitespace anywhere.
+   converts characters, four at a time, starting at (or after)
+   src from base - 64 numbers into three 8 bit bytes in the target area.
+   it returns the number of data bytes stored at the target, or -1 on error.
+ */
+
+static bool
+b64dec(char *dest, size_t dest_len, const char *src, size_t src_len,
+       const char **errp)
+{
+	enum { BYTE1, BYTE2, BYTE3, BYTE4 } state = BYTE1;
+	unsigned int ch = 0;
+	size_t dest_off = 0;
+	size_t src_off = 0;
+	uint8_t val;
+
+	for (; src_off &lt; src_len; src_off++) {
+		ch = (unsigned char)src[src_off];
+
+		if (isspace(ch))	/* Skip whitespace anywhere. */
+			continue;
+
+		if (ch == '=' || dest_off >= dest_len)
+			break;
+
+		if (ch >= 'A' &amp;&amp; ch &lt;= 'Z')
+			val = ch - 'A';
+		else if (ch >= 'a' &amp;&amp; ch &lt;= 'z')
+			val = ch - 'a' + 26;
+		else if (ch >= '0' &amp;&amp; ch &lt;= '9')
+			val = ch - '0' + 52;
+		else if (ch == '+')
+			val = 62;
+		else if (ch == '/')
+			val = 63;
+		else
+			return *errp = "Invalid character", false;
+
+		switch (state) {
+		case BYTE1:
+			dest[dest_off] = val &lt;&lt; 2;
+			state = BYTE2;
+			break;
+
+		case BYTE2:
+			dest[dest_off++] |= val >> 4;
+			dest[dest_off] = (val &amp; 0x0f) &lt;&lt; 4;
+			state = BYTE3;
+			break;
+
+		case BYTE3:
+			dest[dest_off++] |= val >> 2;
+			dest[dest_off] = (val &amp; 0x03) &lt;&lt; 6;
+			state = BYTE4;
+			break;
+
+		case BYTE4:
+			dest[dest_off++] |= val;
+			state = BYTE1;
+			break;
+		}
+	}
+
+	/*
+	 * We are done decoding Base-64 chars.  Let's see if we ended
+	 * on a byte boundary, and/or with erroneous trailing characters.
+	 */
+
+	if (ch == '=') {			/* We got a pad char. */
+		if (src_off >= src_len)
+			return *errp = "Invalid padding", false;
+
+		src_off++;	/* Skip it, get next. */
+
+		switch (state) {
+		case BYTE1:		/* Invalid = in first position */
+		case BYTE2:		/* Invalid = in second position */
+			return false;
+
+		case BYTE3:		/* Valid, means one byte of info */
+			ch = 0;
+
+			while (src_off &lt; src_len) {
+				ch = (unsigned char)src[src_off];
+
+				if (!isspace(ch))
+					break;
+			}
+
+			/* Make sure there is another trailing = sign. */
+			if (ch != '=')
+				return *errp = "Invalid padding", false;
+
+			src_off++; /* Skip the = */
+
+			/* Fall through to "single trailing =" case. */
+			/* FALLTHROUGH */
+
+		case BYTE4:		/* Valid, means two bytes of info */
+			/*
+			 * We know this char is an =.  Is there anything but
+			 * whitespace after it?
+			 */
+			while (src_off &lt; src_len)
+				if (!isspace(src[src_off]))
+					return *errp = "Trailing data", false;
+
+			/*
+			 * Now make sure for cases BYTE3 and BYTE4 that the "extra"
+			 * bits that slopped past the last full byte were
+			 * zeros.  If we don't check them, they become a
+			 * subliminal channel.
+			 */
+			if (dest_off &lt; dest_len &amp;&amp; dest[dest_off] != 0)
+				return *errp = "Extraneous bits", false;
+		}
+	}
+	else {
+		/*
+		 * We ended by seeing the end of the string.  Make sure we
+		 * have no partial bytes lying around.
+		 */
+		if (state != BYTE1)
+			return *errp = "Input string too long", false;
+	}
+
+	return *errp = NULL, true;
+}
+
+static const char Base64[] =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static uc_value_t *
+b64enc(const char *src, size_t src_len)
+{
+	unsigned char input[3] = {0};
+	uc_stringbuf_t *buf;
+	char output[4];
+	size_t i;
+
+	buf = ucv_stringbuf_new();
+
+	while (2 &lt; src_len) {
+		input[0] = (unsigned char)*src++;
+		input[1] = (unsigned char)*src++;
+		input[2] = (unsigned char)*src++;
+		src_len -= 3;
+
+		output[0] = Base64[input[0] >> 2];
+		output[1] = Base64[((input[0] &amp; 0x03) &lt;&lt; 4) + (input[1] >> 4)];
+		output[2] = Base64[((input[1] &amp; 0x0f) &lt;&lt; 2) + (input[2] >> 6)];
+		output[3] = Base64[input[2] &amp; 0x3f];
+
+		ucv_stringbuf_addstr(buf, output, sizeof(output));
+	}
+
+	/* Now we worry about padding. */
+	if (0 != src_len) {
+		/* Get what's left. */
+		input[0] = input[1] = input[2] = '\0';
+		for (i = 0; i &lt; src_len; i++)
+			input[i] = *src++;
+
+		output[0] = Base64[input[0] >> 2];
+		output[1] = Base64[((input[0] &amp; 0x03) &lt;&lt; 4) + (input[1] >> 4)];
+		output[2] = (src_len == 1) ? '=' : Base64[((input[1] &amp; 0x0f) &lt;&lt; 2) + (input[2] >> 6)];
+		output[3] = '=';
+
+		ucv_stringbuf_addstr(buf, output, sizeof(output));
+	}
+
+	return ucv_stringbuf_finish(buf);
 }
 
 static bool
@@ -2635,6 +2905,64 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff,
 
 				*res = (unsigned char)n;
 			}
+			else if (e->format == 'X') {
+				if (ucv_type(v) != UC_STRING) {
+					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+						"Argument for 'X' must be a string");
+
+					return false;
+				}
+
+				n = ucv_string_length(v);
+				p = ucv_string_get(v);
+
+				if (n % 2) {
+					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+						"String length must be multiple of 2");
+
+					return false;
+				}
+
+				if (n > size * 2)
+					n = size * 2;
+
+				for (ssize_t i = 0; i &lt; n; i += 2) {
+					uint8_t c1 = ((uint8_t *)p)[i + 0];
+					uint8_t c2 = ((uint8_t *)p)[i + 1];
+
+					if (!isxdigit(c1) || !isxdigit(c2)) {
+						uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+							"Invalid hexadecimal string");
+
+						return false;
+					}
+
+					c1 |= 32; c1 = (c1 >= 'a') ? 10 + c1 - 'a' : c1 - '0';
+					c2 |= 32; c2 = (c2 >= 'a') ? 10 + c2 - 'a' : c2 - '0';
+
+					((uint8_t *)res)[i >> 1] = (c1 &lt;&lt; 4) | c2;
+				}
+			}
+			else if (e->format == 'Z') {
+				if (ucv_type(v) != UC_STRING) {
+					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+						"Argument for 'Z' must be a string");
+
+					return false;
+				}
+
+				n = ucv_string_length(v);
+				p = ucv_string_get(v);
+
+				const char *err = NULL;
+
+				if (!b64dec(res, size, p, n, &amp;err)) {
+					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+						"Invalid base64 string: %s", err);
+
+					return false;
+				}
+			}
 			else {
 				if (!e->pack(vm, res, v, e))
 					return false;
@@ -2647,6 +2975,26 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff,
 	*pos = new_pos;
 
 	return true;
+}
+
+static uc_value_t *
+hexenc(const char *src, size_t src_len)
+{
+	uc_string_t *us = xalloc(sizeof(*us) + src_len * 2 + 1);
+	const char *hexdigits = "0123456789abcdef";
+
+	us->header.type = UC_STRING;
+	us->header.refcount = 1;
+	us->length = src_len * 2;
+
+	for (size_t i = 0; i &lt; src_len; i++) {
+		uint8_t c = (uint8_t)src[i];
+
+		us->str[(i &lt;&lt; 1) + 0] = hexdigits[c >> 4];
+		us->str[(i &lt;&lt; 1) + 1] = hexdigits[c &amp; 0x0f];
+	}
+
+	return &amp;us->header;
 }
 
 static uc_value_t *
@@ -2701,6 +3049,12 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state,
 					n = (size > 0 ? size - 1 : 0);
 
 				v = ucv_string_new_length(res + 1, n);
+			}
+			else if (e->format == 'X') {
+				v = hexenc(res, size);
+			}
+			else if (e->format == 'Z') {
+				v = b64enc(res, size);
 			}
 			else {
 				v = e->unpack(vm, res, e);
@@ -3698,4 +4052,4 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	uc_type_declare(vm, "struct.format", struct_inst_fns, free);
 	uc_type_declare(vm, "struct.buffer", buffer_inst_fns, free);
 }
-</code></pre></article></section></div></div></div><div class="search-container" id="PkfLWpAbet" style="display:none"><div class="wrapper" id="iCxFxjkHbP"><button class="icon-button search-close-button" id="VjLlGakifb" aria-label="close search"><svg><use xlink:href="#close-icon"></use></svg></button><div class="search-box-c"><svg><use xlink:href="#search-icon"></use></svg> <input type="text" id="vpcKVYIppa" class="search-input" placeholder="Search..." autofocus></div><div class="search-result-c" id="fWwVHRuDuN"><span class="search-result-c-text">Type anything to view search result</span></div></div></div><div class="mobile-menu-icon-container"><button class="icon-button" id="mobile-menu" data-isopen="false" aria-label="menu"><svg><use xlink:href="#menu-icon"></use></svg></button> <button class="icon-button" id="mobile-toc" data-isopen="false" aria-label="toc"><svg><use xlink:href="#toc-icon"></use></svg></button></div><div id="mobile-sidebar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="mobile-nav-links"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="mobile-sidebar-items-c"><div class="sidebar-section-title with-arrow" data-isopen="false" id="Mn2ZtWaSCf8lxqBM30jM0"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div><div class="sidebar-section-children"><a href="tutorial-04-arrays.html">Working with Arrays</a></div><div class="sidebar-section-children"><a href="tutorial-05-dictionaries.html">Working with Dictionaries</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="P3uD-u9aSgJIACEZlfa4D"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-resolv.html">resolv</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div><div class="mobile-navbar-actions"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div></div></div><div id="mobile-tocbar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><span class="sidebar-title">Table of Contents</span><div class="toc-contents"></div></div></div><script type="text/javascript" src="scripts/core.min.js"></script><script src="scripts/search.min.js" defer="defer"></script><script src="scripts/third-party/fuse.js" defer="defer"></script><script type="text/javascript">var tocbotInstance=tocbot.init({tocSelector:"#mobile-tocbar > .mobile-sidebar-wrapper > .toc-contents",contentSelector:".main-content",headingSelector:"h1, h2, h3",hasInnerContainers:!0,scrollContainer:".main-content",headingsOffset:130,onClick:(...e)=>{hideMobileMenu(),bringLinkToView(...e)},includeHtml:!0})</script></body></html>
+</code></pre></article></section></div></div></div><div class="search-container" id="PkfLWpAbet" style="display:none"><div class="wrapper" id="iCxFxjkHbP"><button class="icon-button search-close-button" id="VjLlGakifb" aria-label="close search"><svg><use xlink:href="#close-icon"></use></svg></button><div class="search-box-c"><svg><use xlink:href="#search-icon"></use></svg> <input type="text" id="vpcKVYIppa" class="search-input" placeholder="Search..." autofocus></div><div class="search-result-c" id="fWwVHRuDuN"><span class="search-result-c-text">Type anything to view search result</span></div></div></div><div class="mobile-menu-icon-container"><button class="icon-button" id="mobile-menu" data-isopen="false" aria-label="menu"><svg><use xlink:href="#menu-icon"></use></svg></button> <button class="icon-button" id="mobile-toc" data-isopen="false" aria-label="toc"><svg><use xlink:href="#toc-icon"></use></svg></button></div><div id="mobile-sidebar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="mobile-nav-links"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="mobile-sidebar-items-c"><div class="sidebar-section-title with-arrow" data-isopen="false" id="lszo9tzN_ikDnv37DZQ9N"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div><div class="sidebar-section-children"><a href="tutorial-04-arrays.html">Working with Arrays</a></div><div class="sidebar-section-children"><a href="tutorial-05-dictionaries.html">Working with Dictionaries</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="vJgWWHLDX3rG2ox3uo1gQ"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-resolv.html">resolv</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div><div class="mobile-navbar-actions"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div></div></div><div id="mobile-tocbar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><span class="sidebar-title">Table of Contents</span><div class="toc-contents"></div></div></div><script type="text/javascript" src="scripts/core.min.js"></script><script src="scripts/search.min.js" defer="defer"></script><script src="scripts/third-party/fuse.js" defer="defer"></script><script type="text/javascript">var tocbotInstance=tocbot.init({tocSelector:"#mobile-tocbar > .mobile-sidebar-wrapper > .toc-contents",contentSelector:".main-content",headingSelector:"h1, h2, h3",hasInnerContainers:!0,scrollContainer:".main-content",headingsOffset:130,onClick:(...e)=>{hideMobileMenu(),bringLinkToView(...e)},includeHtml:!0})</script></body></html>
