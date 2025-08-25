@@ -3283,6 +3283,114 @@ uc_socket_create(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Creates a network socket instance from an existing file descriptor.
+ *
+ * Returns a socket descriptor representing the newly created socket.
+ *
+ * Returns `null` if an error occurred during socket creation.
+ *
+ * @function module:socket#open
+ *
+ * @param {number} [fd]
+ * The file descriptor number
+ *
+ * @returns {?module:socket.socket}
+ * A socket instance representing the socket.
+ */
+static uc_value_t *
+uc_socket_open(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *fd;
+
+	args_get(vm, nargs, NULL,
+		"fd", UC_INTEGER, false, &fd);
+
+	ok_return(ucv_socket_new(vm, ucv_int64_get(fd)));
+}
+
+/**
+ * Creates a connected socket instance with a pair file descriptor.
+ *
+ * This function creates new network sockets with the specified type,
+ * determined by one of the `SOCK_*` constants, and returns resulting socket
+ * instances for use in subsequent socket operations.
+ *
+ * The type argument specifies the socket type, such as SOCK_STREAM or
+ * SOCK_DGRAM, and defaults to SOCK_STREAM if not provided. It may also
+ * be bitwise OR-ed with SOCK_NONBLOCK to enable non-blocking mode or
+ * SOCK_CLOEXEC to enable close-on-exec semantics.
+ *
+ * Returns an array of socket descriptors.
+ *
+ * Returns `null` if an error occurred during socket creation.
+ *
+ * @function module:socket#pair
+ *
+ * @param {number} [type=SOCK_STREAM]
+ * The socket type, e.g., SOCK_STREAM or SOCK_DGRAM. It may also be
+ * bitwise OR-ed with SOCK_NONBLOCK or SOCK_CLOEXEC.
+ *
+ * @returns {Array.<?module:socket.socket>}
+ * Socket instances representing the newly created sockets.
+ *
+ * @example
+ * // Create a TCP socket pair
+ * const tcp_sockets = pair(SOCK_STREAM);
+ *
+ * // Create a nonblocking IPv6 UDP socket pair
+ * const udp_sockets = pair(SOCK_DGRAM | SOCK_NONBLOCK);
+ */
+static uc_value_t *
+uc_socket_pair(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *type, *res;
+	int sockfds[2], socktype;
+
+	args_get(vm, nargs, NULL,
+		"type", UC_INTEGER, true, &type);
+
+	socktype = type ? (int)ucv_int64_get(type) : SOCK_STREAM;
+
+	if (socketpair(AF_UNIX,
+#if defined(__APPLE__)
+		socktype & ~(SOCK_NONBLOCK|SOCK_CLOEXEC),
+#else
+		socktype,
+#endif
+		0, sockfds) < 0)
+		err_return(errno, "socketpair()");
+
+#if defined(__APPLE__)
+	if (socktype & SOCK_NONBLOCK) {
+		int flags = fcntl(sockfds[0], F_GETFL);
+
+		if (flags == -1)
+			goto error;
+
+		if (fcntl(sockfds[0], F_SETFL, flags | O_NONBLOCK) == -1)
+			goto error;
+	}
+
+	if (socktype & SOCK_CLOEXEC) {
+		if (fcntl(sockfds[0], F_SETFD, FD_CLOEXEC) == -1)
+			goto error;
+	}
+#endif
+
+	res = ucv_array_new(vm);
+	ucv_array_set(res, 0, ucv_socket_new(vm, sockfds[0]));
+	ucv_array_set(res, 1, ucv_socket_new(vm, sockfds[1]));
+	ok_return(res);
+
+#if defined(__APPLE__)
+error:
+#endif
+	close(sockfds[0]);
+	close(sockfds[1]);
+	err_return(errno, "fcntl");
+}
+
+/**
  * Connects the socket to a remote address.
  *
  * Attempts to establish a connection to the specified remote address.
@@ -4791,6 +4899,8 @@ static const uc_function_list_t socket_fns[] = {
 static const uc_function_list_t global_fns[] = {
 	{ "sockaddr",	uc_socket_sockaddr },
 	{ "create",		uc_socket_create },
+	{ "pair",		uc_socket_pair },
+	{ "open",		uc_socket_open },
 	{ "nameinfo",	uc_socket_nameinfo },
 	{ "addrinfo",	uc_socket_addrinfo },
 	{ "poll",		uc_socket_poll },
