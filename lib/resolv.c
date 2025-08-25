@@ -298,6 +298,7 @@ typedef struct {
 	uint32_t retries;
 	uint32_t timeout;
 	uint16_t edns_maxsize;
+	bool txt_as_array;
 }  resolve_ctx_t;
 
 
@@ -369,7 +370,7 @@ init_obj(uc_vm_t *vm, uc_value_t *obj, const char *key, uc_type_t type)
 }
 
 static int
-parse_reply(uc_vm_t *vm, uc_value_t *res_obj, const unsigned char *msg, size_t len)
+parse_reply(uc_vm_t *vm, uc_value_t *res_obj, const unsigned char *msg, size_t len, bool txt_as_array)
 {
 	ns_msg handle;
 	ns_rr rr;
@@ -484,15 +485,54 @@ parse_reply(uc_vm_t *vm, uc_value_t *res_obj, const unsigned char *msg, size_t l
 				return -1;
 			}
 
-			n = *(unsigned char *)ns_rr_rdata(rr);
+			if (txt_as_array) {
+				uc_value_t *values = ucv_array_new(vm);
 
-			if (n > 0) {
-				memset(dname, 0, sizeof(dname));
-				memcpy(dname, ns_rr_rdata(rr) + 1, n);
+				for (const unsigned char *p = ns_rr_rdata(rr); rdlen > 0; ) {
+					n = *p++;
+					rdlen--;
+
+					if (n > rdlen) {
+						set_error(EBADMSG, "TXT string exceeds record length");
+
+						return -1;
+					}
+
+					ucv_array_push(values,
+						ucv_string_new_length((const char *)p, n));
+
+					rdlen -= n;
+					p += n;
+				}
 
 				type_arr = init_obj(vm, name_obj, "TXT", UC_ARRAY);
-				ucv_array_push(type_arr, ucv_string_new(dname));
+				ucv_array_push(type_arr, values);
 			}
+			else {
+				uc_stringbuf_t *buf = ucv_stringbuf_new();
+
+				for (const unsigned char *p = ns_rr_rdata(rr); rdlen > 0; ) {
+					n = *p++;
+					rdlen--;
+
+					if (n > rdlen) {
+						set_error(EBADMSG, "TXT string exceeds record length");
+
+						return -1;
+					}
+
+					if (buf->bpos > 0)
+						ucv_stringbuf_append(buf, " ");
+
+					ucv_stringbuf_addstr(buf, (const char *)p, n);
+					rdlen -= n;
+					p += n;
+				}
+
+				type_arr = init_obj(vm, name_obj, "TXT", UC_ARRAY);
+				ucv_array_push(type_arr, ucv_stringbuf_finish(buf));
+			}
+
 			break;
 
 		case ns_t_srv:
@@ -908,7 +948,7 @@ send_queries(resolve_ctx_t *ctx, uc_vm_t *vm, uc_value_t *res_obj)
 
 			ctx->queries[qn].rlen = recvlen;
 
-			parse_reply(vm, res_obj, reply_buf.buf, recvlen);
+			parse_reply(vm, res_obj, reply_buf.buf, recvlen, ctx->txt_as_array);
 
 			if (qn == next_query) {
 				while (next_query < ctx->n_queries) {
@@ -1156,6 +1196,13 @@ parse_options(resolve_ctx_t *ctx, uc_value_t *opts)
 	else if (v)
 		err_return(EINVAL, "EDNS max size not an integer");
 
+	v = ucv_object_get(opts, "txt_as_array", NULL);
+
+	if (ucv_type(v) == UC_BOOLEAN)
+		ctx->txt_as_array = ucv_boolean_get(v);
+	else if (v)
+		err_return(EINVAL, "Array TXT record flag not a boolean");
+
 	return true;
 }
 
@@ -1206,6 +1253,10 @@ parse_options(resolve_ctx_t *ctx, uc_value_t *opts)
  * Maximum UDP packet size for EDNS (Extension Mechanisms for DNS). Set to 0
  * to disable EDNS.
  *
+ * @param {boolean} [options.txt_as_array=false]
+ * Return TXT record strings as array elements instead of space-joining all
+ * record strings into one single string per record.
+ *
  * @returns {object}
  * Object containing DNS query results. Keys are domain names, values are
  * objects containing arrays of records grouped by type, or error information
@@ -1250,6 +1301,21 @@ parse_options(resolve_ctx_t *ctx, uc_value_t *opts)
  * // {
  * //   "1.2.0.192.in-addr.arpa": {
  * //     "PTR": ["example.com"]
+ * //   }
+ * // }
+ *
+ * @example
+ * // TXT record with multiple elements
+ * const txtResult = query(['_spf.facebook.com'], { type: ['TXT'], txt_as_array: true });
+ * printf(txtResult, "\n");
+ * // {
+ * //   "_spf.facebook.com": {
+ * //     "TXT": [
+ * //       [
+ * //         "v=spf1 ip4:66.220.144.128/25 ip4:66.220.155.0/24 ip4:66.220.157.0/25 ip4:69.63.178.128/25 ip4:69.63.181.0/24 ip4:69.63.184.0/25",
+ * //         " ip4:69.171.232.0/24 ip4:69.171.244.0/23 -all"
+ * //       ]
+ * //     ]
  * //   }
  * // }
  *
