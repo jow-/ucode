@@ -90,6 +90,24 @@ static const char *exception_type_strings[] = {
 };
 
 
+static const char *
+uc_vm_insn_to_name(uc_vm_insn_t insn)
+{
+	if (insn < 0 || insn >= __I_MAX)
+		return NULL;
+
+	return insn_names[insn];
+}
+
+static int8_t
+uc_vm_insn_to_argtype(uc_vm_insn_t insn)
+{
+	if (insn < 0 || insn >= __I_MAX)
+		return 0;
+
+	return insn_operand_bytes[insn];
+}
+
 static void
 uc_vm_reset_stack(uc_vm_t *vm)
 {
@@ -311,6 +329,7 @@ static uc_vm_insn_t
 uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 {
 	uc_vm_insn_t insn;
+	int8_t argtype;
 
 #ifndef NDEBUG
 	uint8_t *end = chunk->entries + chunk->count;
@@ -321,9 +340,11 @@ uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 	insn = frame->ip[0];
 	frame->ip++;
 
-	assert(frame->ip + abs(insn_operand_bytes[insn]) <= end);
+	argtype = uc_vm_insn_to_argtype(insn);
 
-	switch (insn_operand_bytes[insn]) {
+	assert(frame->ip + abs(argtype) <= end);
+
+	switch (argtype) {
 	case 0:
 		break;
 
@@ -361,7 +382,7 @@ uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 		break;
 
 	default:
-		fprintf(stderr, "Unhandled operand format: %" PRId8 "\n", insn_operand_bytes[insn]);
+		fprintf(stderr, "Unhandled operand format: %" PRId8 "\n", argtype);
 		abort();
 	}
 
@@ -698,6 +719,7 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 	uc_stringbuf_t *buf = NULL;
 	uc_value_t *cnst = NULL;
 	uc_source_t *source;
+	int8_t argtype;
 	size_t srcpos;
 
 	srcpos = uc_program_function_srcpos(frame->closure->function, pos - chunk->entries);
@@ -714,9 +736,12 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 		last_srcpos = srcpos;
 	}
 
-	fprintf(stderr, "%08zx  %s", pos - chunk->entries, insn_names[insn]);
+	fprintf(stderr, "%08zx  %s", pos - chunk->entries,
+		uc_vm_insn_to_name(insn));
 
-	switch (insn_operand_bytes[insn]) {
+	argtype = uc_vm_insn_to_argtype(insn);
+
+	switch (argtype) {
 	case 0:
 		break;
 
@@ -749,7 +774,7 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 		break;
 
 	default:
-		fprintf(stderr, " (unknown operand format: %" PRId8 ")", insn_operand_bytes[insn]);
+		fprintf(stderr, " (unknown operand format: %" PRId8 ")", argtype);
 		break;
 	}
 
@@ -788,13 +813,13 @@ uc_dump_insn(uc_vm_t *vm, uint8_t *pos, uc_vm_insn_t insn)
 
 		fprintf(stderr, "\t; %s (%s)",
 			cnst ? uc_vm_format_val(vm, cnst) : "(?)",
-			insn_names[vm->arg.u32 >> 24]);
+			uc_vm_insn_to_name(vm->arg.u32 >> 24));
 
 		ucv_put(cnst);
 		break;
 
 	case I_UVAL:
-		fprintf(stderr, "\t; (%s)", insn_names[vm->arg.u32]);
+		fprintf(stderr, "\t; (%s)", uc_vm_insn_to_name(vm->arg.u8));
 		break;
 
 	default:
