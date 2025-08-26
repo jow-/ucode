@@ -2427,6 +2427,20 @@ uc_vm_insn_close_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 	ucv_put(uc_vm_stack_pop(vm));
 }
 
+static uc_value_t *
+uc_vm_get_operator_exec( uc_value_t *proto )
+{
+	int i;
+	for( i=0; i<16 && proto; i++ ) {
+		bool found = false;
+		uc_value_t *fn = ucv_object_get( proto, "operator()", &found );
+		if( found && ucv_is_callable( fn ) )
+			return fn;
+		proto = ucv_prototype_get( proto );
+	}
+	return 0;
+}
+
 static void
 uc_vm_insn_call(uc_vm_t *vm, uc_vm_insn_t insn)
 {
@@ -2435,10 +2449,39 @@ uc_vm_insn_call(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *fno = uc_vm_stack_peek(vm, nargs);
 	uc_value_t *ctx = NULL;
 
-	if (!ucv_is_arrowfn(fno))
-		ctx = mcall ? uc_vm_stack_peek(vm, nargs + 1) : NULL;
-	else if (vm->callframes.count > 0)
-		ctx = uc_vm_current_frame(vm)->ctx;
+	switch( ucv_type( fno ) )
+	{
+		case UC_OBJECT: {
+			uc_value_t *fn = uc_vm_get_operator_exec( fno );
+			if( fn ) {
+				fno = fn;
+				if( ucv_is_arrowfn( fno ) )
+					ctx = uc_vm_current_frame(vm)->ctx;
+				else 
+					ctx = uc_vm_stack_peek( vm, nargs );
+				break;
+			}
+			break;
+		}
+		case UC_RESOURCE:
+		case UC_ARRAY: {
+			uc_value_t *fn = uc_vm_get_operator_exec( ucv_prototype_get( fno ) );
+			if( fn ) {
+				fno = fn;
+				if( ucv_is_arrowfn( fno ) )
+					ctx = uc_vm_current_frame(vm)->ctx;
+				else 
+					ctx = uc_vm_stack_peek( vm, nargs );
+				break;
+			}
+		default:
+			if (!ucv_is_arrowfn(fno))
+				ctx = mcall ? uc_vm_stack_peek(vm, nargs + 1) : NULL;
+			else if (vm->callframes.count > 0)
+				ctx = uc_vm_current_frame(vm)->ctx;
+			break;
+		}
+	}
 
 	uc_vm_call_function(vm, ucv_get(ctx), ucv_get(fno), mcall, vm->arg.u32);
 }
