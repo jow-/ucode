@@ -372,16 +372,20 @@ uc_pow(uc_vm_t *vm, size_t nargs)
 }
 
 /**
- * Produces a pseudo-random positive integer.
+ * Depending on the arguments, it produces a pseudo-random positive integer, 
+ * or a pseudo-random number in a supplied range.
  *
- * Returns the calculated pseuo-random value. The value is within the range
- * `0` to `RAND_MAX` inclusive where `RAND_MAX` is a platform specific value
- * guaranteed to be at least `32767`.
- *
+ * Without arguments it returns the calculated pseuo-random value. The value 
+ * is within the range `0` to `RAND_MAX` inclusive where `RAND_MAX` is a platform 
+ * specific value guaranteed to be at least `32767`.
+ * 
+ * With 2 arguments `a, b` it returns a number in the range `a` to `b` inclusive.
+ * With a single argument `a` it returns a number in the range `0` to `a` inclusive.
+ * 
  * The {@link module:math~srand `srand()`} function sets its argument as the
- * seed for a new sequence of pseudo-random integers to be returned by `rand()`. These sequences are
- * repeatable by calling {@link module:math~srand `srand()`} with the same
- * seed value.
+ * seed for a new sequence of pseudo-random integers to be returned by `rand()`.
+ * These sequences are repeatable by calling {@link module:math~srand `srand()`}
+ * with the same seed value.
  *
  * If no seed value is explicitly set by calling
  * {@link module:math~srand `srand()`} prior to the first call to `rand()`,
@@ -390,6 +394,12 @@ uc_pow(uc_vm_t *vm, size_t nargs)
  *
  * @function module:math#rand
  *
+ * @param {number} [a]
+ * End of the desired range.
+ * 
+ * @param {number} [b]
+ * The other end of the desired range.
+ * 
  * @returns {number}
  */
 static uc_value_t *
@@ -404,7 +414,15 @@ uc_rand(uc_vm_t *vm, size_t nargs)
 		uc_vm_registry_set(vm, "math.srand_called", ucv_boolean_new(true));
 	}
 
-	return ucv_int64_new(rand());
+	if (nargs == 0)
+		return ucv_int64_new(rand());
+
+	double a = ucv_to_double(uc_fn_arg(0)), b = 0;
+
+	if (nargs > 1)
+		b = ucv_to_double(uc_fn_arg(1));
+
+	return ucv_double_new(a + ((b - a) * rand()) / RAND_MAX);
 }
 
 /**
