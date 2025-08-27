@@ -2452,15 +2452,21 @@ uc_vm_insn_close_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 	ucv_put(uc_vm_stack_pop(vm));
 }
 
-static uc_value_t *
-uc_vm_get_operator_exec( uc_value_t *proto )
+uc_value_t *
+uc_vm_get_invoke_fn( uc_value_t *proto )
 {
-	int i;
-	for( i=0; i<16 && proto; i++ ) {
+	while( proto ) {
 		bool found = false;
-		uc_value_t *fn = ucv_object_get( proto, "operator()", &found );
-		if( found && ucv_is_callable( fn ) )
-			return fn;
+		uc_value_t *fn = ucv_object_get( proto, "invoke", &found );
+		if( found )	{
+			switch (ucv_type(fn)) {
+				case UC_CLOSURE:
+				case UC_CFUNCTION:
+					return fn;
+				default:
+					break;
+			}
+		}
 		proto = ucv_prototype_get( proto );
 	}
 	return 0;
@@ -2476,21 +2482,10 @@ uc_vm_insn_call(uc_vm_t *vm, uc_vm_insn_t insn)
 
 	switch( ucv_type( fno ) )
 	{
-		case UC_OBJECT: {
-			uc_value_t *fn = uc_vm_get_operator_exec( fno );
-			if( fn ) {
-				fno = fn;
-				if( ucv_is_arrowfn( fno ) )
-					ctx = uc_vm_current_frame(vm)->ctx;
-				else 
-					ctx = uc_vm_stack_peek( vm, nargs );
-				break;
-			}
-			break;
-		}
+		case UC_OBJECT: 
 		case UC_RESOURCE:
 		case UC_ARRAY: {
-			uc_value_t *fn = uc_vm_get_operator_exec( ucv_prototype_get( fno ) );
+			uc_value_t *fn = uc_vm_get_invoke_fn( ucv_prototype_get( fno ) );
 			if( fn ) {
 				fno = fn;
 				if( ucv_is_arrowfn( fno ) )
