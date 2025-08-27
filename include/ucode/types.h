@@ -575,18 +575,7 @@ ucv_to_unsigned(uc_value_t *v)
 	return u;
 }
 
-static inline bool
-ucv_is_callable(uc_value_t *uv)
-{
-	switch (ucv_type(uv)) {
-	case UC_CLOSURE:
-	case UC_CFUNCTION:
-		return true;
-
-	default:
-		return false;
-	}
-}
+bool ucv_is_callable(uc_value_t *uv);
 
 static inline bool
 ucv_is_arrowfn(uc_value_t *uv)

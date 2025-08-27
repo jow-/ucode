@@ -161,4 +161,7 @@ uc_exception_type_t uc_vm_signal_dispatch(uc_vm_t *vm);
 void uc_vm_signal_raise(uc_vm_t *vm, int signo);
 int uc_vm_signal_notifyfd(uc_vm_t *vm);
 
+__hidden uc_value_t *uc_vm_get_invoke_fn( uc_value_t *proto );
+
+
 #endif /* UCODE_VM_H */

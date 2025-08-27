@@ -2182,6 +2182,21 @@ ucv_is_truish(uc_value_t *val)
 	}
 }
 
+bool
+ucv_is_callable(uc_value_t *uv)
+{
+	switch (ucv_type(uv)) {
+	case UC_CLOSURE:
+	case UC_CFUNCTION:
+		return true;
+
+	default:
+		if( uc_vm_get_invoke_fn( ucv_prototype_get( uv ) ) )
+			return true;
+		return false;
+	}
+}
+
 uc_value_t *
 ucv_to_number(uc_value_t *v)
 {
