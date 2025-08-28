@@ -2388,10 +2388,20 @@ uc_nl_prepare_event(uc_vm_t *vm, struct nl_msg *msg)
 	struct nlmsghdr *hdr = nlmsg_hdr(msg);
 	struct genlmsghdr *gnlh = nlmsg_data(hdr);
 	uc_value_t *o = ucv_object_new(vm);
+	const uc_nl_attr_spec_t *attrs;
+	size_t nattrs;
+
+	if (hdr->nlmsg_type == uc_nl_find_family_id("MAC80211_HWSIM")) {
+		attrs = hwsim_msg.attrs;
+		nattrs = hwsim_msg.nattrs;
+	}
+	else {
+		attrs = nl80211_msg.attrs;
+		nattrs = nl80211_msg.nattrs;
+	}
 
 	if (!uc_nl_convert_attrs(msg, genlmsg_attrdata(gnlh, 0),
-		genlmsg_attrlen(gnlh, 0), 0,
-		nl80211_msg.attrs, nl80211_msg.nattrs, vm, o)) {
+		genlmsg_attrlen(gnlh, 0), 0, attrs, nattrs, vm, o)) {
 		ucv_put(o);
 		return NULL;
 	}
@@ -2485,6 +2495,9 @@ uc_nl_fill_cmds(uint32_t *cmd_bits, uc_value_t *cmds)
 		for (size_t i = 0; i < ucv_array_length(cmds); i++) {
 			int64_t n = ucv_int64_get(ucv_array_get(cmds, i));
 
+			if (n >= HWSIM_CMD_OFFSET)
+				n -= HWSIM_CMD_OFFSET;
+
 			if (errno || n < 0 || n > NL80211_CMD_MAX)
 				return false;
 
@@ -2494,7 +2507,10 @@ uc_nl_fill_cmds(uint32_t *cmd_bits, uc_value_t *cmds)
 	else if (ucv_type(cmds) == UC_INTEGER) {
 		int64_t n = ucv_int64_get(cmds);
 
-		if (errno || n < 0 || n > 255)
+		if (n >= HWSIM_CMD_OFFSET)
+			n -= HWSIM_CMD_OFFSET;
+
+		if (errno || n < 0 || n > NL80211_CMD_MAX)
 			return false;
 
 		cmd_bits[n / 32] |= (1 << (n % 32));
@@ -2593,7 +2609,7 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_nl_request(uc_vm_t *vm, size_t nargs)
+uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 {
 	request_state_t st = { .vm = vm };
 	uc_value_t *cmd = uc_fn_arg(0);
@@ -2615,9 +2631,6 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 		else
 			flagval = (uint16_t)ucv_int64_get(flags);
 	}
-
-	if (!uc_nl_connect_sock(&nl80211_conn.sock, false))
-		return NULL;
 
 	msg = nlmsg_alloc();
 
@@ -2672,10 +2685,10 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_done, &st);
 	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &ret);
 
-	nl_send_auto_complete(nl80211_conn.sock, msg);
+	nl_send_auto_complete(sock, msg);
 
 	while (ret > 0 && st.state < STATE_REPLIED)
-		nl_recvmsgs(nl80211_conn.sock, cb);
+		nl_recvmsgs(sock, cb);
 
 	nlmsg_free(msg);
 	nl_cb_put(cb);
@@ -2695,6 +2708,15 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 
 		return ucv_boolean_new(false);
 	}
+}
+
+static uc_value_t *
+uc_nl_request(uc_vm_t *vm, size_t nargs)
+{
+	if (!uc_nl_connect_sock(&nl80211_conn.sock, false))
+		return NULL;
+
+	return uc_nl_request_common(nl80211_conn.sock, vm, nargs);
 }
 
 static void
@@ -2783,6 +2805,12 @@ uc_nl_listener_set_commands(uc_vm_t *vm, size_t nargs)
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid command ID");
 
 	return NULL;
+}
+
+static uc_value_t *
+uc_nl_listener_request(uc_vm_t *vm, size_t nargs)
+{
+	return uc_nl_request_common(nl80211_conn.evsock, vm, nargs);
 }
 
 static uc_value_t *
@@ -2984,6 +3012,7 @@ static const uc_function_list_t global_fns[] = {
 
 static const uc_function_list_t listener_fns[] = {
 	{ "set_commands",	uc_nl_listener_set_commands },
+	{ "request",		uc_nl_listener_request },
 	{ "close",			uc_nl_listener_close },
 };
 
