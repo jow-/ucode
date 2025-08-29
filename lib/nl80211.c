@@ -1888,6 +1888,9 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 
 			return v;
 		}
+		else if (spec->attr == 0) {
+			return uc_nl_convert_numval(spec, base + (uintptr_t)spec->auxdata);
+		}
 		else if (nla_check_len(attr, dt_sizes[spec->type])) {
 			return uc_nl_convert_numval(spec, nla_data(attr));
 		}
