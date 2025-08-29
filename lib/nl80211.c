@@ -1723,13 +1723,20 @@ uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, 
 	case DT_STRING:
 		assert(spec->attr != 0);
 
-		s = ucv_to_string(vm, val);
+		if (ucv_type(val) == UC_STRING) {
+			nla_put(msg, attr,
+			        ucv_string_length(val) + !(spec->flags & DF_BINARY),
+					ucv_string_get(val));
+		}
+		else {
+			s = ucv_to_string(vm, val);
 
-		if (!s)
-			return nla_parse_error(spec, vm, val, "out of memory");
+			if (!s)
+				return nla_parse_error(spec, vm, val, "out of memory");
 
-		nla_put_string(msg, attr, s);
-		free(s);
+			nla_put(msg, attr, strlen(s) + !(spec->flags & DF_BINARY), s);
+			free(s);
+		}
 
 		break;
 
