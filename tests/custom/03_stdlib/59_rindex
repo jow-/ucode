@@ -20,6 +20,7 @@ Returns the last found index position in all other cases.
 		rindex("foobarfoobarfoobar", "arf"),			// should return 10
 		rindex("test", "hello"),						// should return -1
 		rindex("test", "test"),							// should return 0 (needle = haystack length special case)
+		rindex("hello", "h"),							// should return 0 (needle at haystack start special case)
 		rindex("test", ""),								// should return 4 (zero length needle special case)
 		rindex("", ""),									// should return 0 (zero length special case)
 		rindex("foo\0foo\0foo", "o\0f"),				// should return 6 (binary safe)
@@ -38,6 +39,7 @@ Returns the last found index position in all other cases.
 	1,
 	10,
 	-1,
+	0,
 	0,
 	4,
 	0,

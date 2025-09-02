@@ -449,7 +449,7 @@ uc_index(uc_vm_t *vm, size_t nargs, bool right)
 							break;
 						}
 					}
-					while (--p != sstr);
+					while (p-- != sstr);
 				}
 				else if (nlen > 0) {
 					p = (const char *)memmem(sstr, slen, nstr, nlen);
