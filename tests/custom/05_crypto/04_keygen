@@ -1,0 +1,62 @@
+-- Testcase --
+{%
+	import { pk as pk_mbedtls } from 'crypto_mbedtls';
+	import { test_keygen } from './files/keygen.uc';
+
+	curves = [
+		'P-192',
+		'P-224',
+		'P-256',
+		'P-384',
+		'P-521',
+		'brainpoolP256r1',
+		'brainpoolP384r1',
+		'brainpoolP512r1',
+		'secp192k1',
+		'secp224k1',
+		'secp256k1',
+	];
+
+
+	for (c in curves) {
+		test_keygen(pk_mbedtls, pk_mbedtls, "EC", "SHA256", c);
+	}
+	test_keygen(pk_mbedtls, pk_mbedtls, "RSA", "SHA256", 2048);
+%}
+-- End --
+
+-- Expect stdout --
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+-- End --
+
+-- Expect stderr --
+-- End --
+
+-- File keygen.uc --
+export
+function test_keygen(pk_init, other_pk_init, type, md_alg, ...args)
+{
+	let pk = pk_init();
+	let res = pk.keygen(type, ...args);
+	let pkey = pk.get_public_key();
+	const data = "Message";
+	const signature = pk.sign(md_alg, data);
+
+	let other_pk = other_pk_init();
+	other_pk.set_public_key(pkey);
+
+	const verify = other_pk.verify(md_alg, data, signature);
+	print(verify, '\n');
+};
+-- End --
