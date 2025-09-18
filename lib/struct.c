@@ -263,21 +263,23 @@
  *    bytes, or - when a repeat count is given - that many bytes of input data
  *    at most.
  *
- * - (11) The `X` format character provides a means to encode binary data as
- *    hexadecimal strings and decode these strings back into raw C memory.
- *    It is designed for efficiently representing binary data chunks as
- *    printable text, particularly for inclusion in data formats like JSON.
- *    When encoding or decoding, the specified format count dictates the number
- *    of C memory bytes to be processed; the resulting ucode hexadecimal string
- *    is exactly twice that length. Note that the decoding process interprets 
- *    hexadecimal strings case-insensitively, but the encoding process will 
- *    always produce lowercase hexadecimal characters.
+ * - (11) The `X` format character handles hexadecimal encoding of binary data.
+ *    On `pack()`, the argument is a hexadecimal string; with no repeat count the
+ *    entire string is decoded into binary, while a repeat count limits the
+ *    number of output bytes (truncating longer input). On `unpack()`, the input
+ *    binary data is converted into a hexadecimal string, using all remaining
+ *    bytes by default, or at most the specified number of bytes when a repeat
+ *    count is given. Decoding accepts both upper- and lowercase hex digits, but
+ *    encoding always produces lowercase output. The encoded text length is
+ *    exactly twice the number of processed binary bytes.
  *
- * - (12) Similar to the `X` format, the `Z` format encodes and decodes C memory
- *    into a textual representation. However, it utilizes base64 encoding
- *    instead of hexadecimal. The format count again indicates the number of C
- *    memory bytes to be processed, and the resulting ucode base64 string will
- *    be approximately 1.4 times the size of the original data.
+ * - (12) The `Z` format character behaves like `X`, but uses base64 encoding
+ *    instead of hexadecimal. On `pack()`, the argument is a base64 string; by
+ *    default the entire string is decoded into binary, or at most the specified
+ *    number of bytes when a repeat count is given. On `unpack()`, the input
+ *    binary data is converted into a base64 string, consuming all remaining
+ *    bytes by default, or at most the repeat count if given. The encoded base64
+ *    string is approximately 1.4 times the size of the processed binary data.
  *
  * A format character may be preceded by an integral repeat count.  For example,
  * the format string `'4h'` means exactly the same as `'hhhh'`.
@@ -2396,6 +2398,8 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 				return NULL;
 			}
 		}
+		else if (c == '*' || c == 'X' || c == 'Z')
+			num = -1;
 		else
 			num = 1;
 
@@ -2433,7 +2437,7 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 		if (num > (SSIZE_MAX - size) / itemsize)
 			goto overflow;
 
-		size += (c != '*') ? num * itemsize : 0;
+		size += (c != '*' && c != 'X' && c != 'Z') ? num * itemsize : 0;
 	}
 
 	/* check for overflow */
@@ -2463,7 +2467,7 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 				num = num*10 + (c - '0');
 
 		}
-		else if (c == '*')
+		else if (c == '*' || c == 'X' || c == 'Z')
 			num = -1;
 		else
 			num = 1;
@@ -2481,7 +2485,7 @@ parse_format(uc_vm_t *vm, uc_value_t *fmtval)
 			codes->fmtdef = e;
 			codes->repeat = 1;
 			codes++;
-			size += (c != '*') ? num : 0;
+			size += (c == 's' || c == 'p') ? num : 0;
 		}
 		else if (c == 'x') {
 			size += num;
@@ -2629,7 +2633,7 @@ grow_buffer(uc_vm_t *vm, void **buf, size_t *bufsz, size_t length)
  */
 
 static bool
-b64dec(char *dest, size_t dest_len, const char *src, size_t src_len,
+b64dec(char *dest, size_t *dest_len, const char *src, size_t src_len,
        const char **errp)
 {
 	enum { BYTE1, BYTE2, BYTE3, BYTE4 } state = BYTE1;
@@ -2644,7 +2648,7 @@ b64dec(char *dest, size_t dest_len, const char *src, size_t src_len,
 		if (isspace(ch))	/* Skip whitespace anywhere. */
 			continue;
 
-		if (ch == '=' || dest_off >= dest_len)
+		if (ch == '=' || dest_off >= *dest_len)
 			break;
 
 		if (ch >= 'A' && ch <= 'Z')
@@ -2735,7 +2739,7 @@ b64dec(char *dest, size_t dest_len, const char *src, size_t src_len,
 			 * zeros.  If we don't check them, they become a
 			 * subliminal channel.
 			 */
-			if (dest_off < dest_len && dest[dest_off] != 0)
+			if (dest_off < *dest_len && dest[dest_off] != 0)
 				return *errp = "Extraneous bits", false;
 		}
 	}
@@ -2744,15 +2748,51 @@ b64dec(char *dest, size_t dest_len, const char *src, size_t src_len,
 		 * We ended by seeing the end of the string.  Make sure we
 		 * have no partial bytes lying around.
 		 */
-		if (state != BYTE1)
+		if (state != BYTE1 && *dest_len == SIZE_MAX)
 			return *errp = "Input string too long", false;
 	}
 
-	return *errp = NULL, true;
+	return *dest_len = dest_off, *errp = NULL, true;
 }
 
 static const char Base64[] =
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static size_t
+b64len(const char *src, size_t src_len)
+{
+	size_t padding_len = 0;
+	size_t total_len = 0;
+	size_t i = 0;
+
+	for (; i < src_len; i++) {
+		if (isspace(src[i]))
+			continue;
+
+		if ((src[i] >= 'A' && src[i] <= 'Z') ||
+		    (src[i] >= 'a' && src[i] <= 'z') ||
+		    (src[i] >= '0' && src[i] <= '9') ||
+		    (src[i] == '+') || (src[i] == '/'))
+			total_len++;
+		else
+			break;
+	}
+
+	for (; i < src_len; i++) {
+		if (isspace(src[i]))
+			continue;
+
+		if (src[i] == '=')
+			total_len++, padding_len++;
+		else
+			return 0;
+	}
+
+	if ((total_len % 4) != 0 || total_len < 4 || padding_len > 2)
+		return 0;
+
+	return (total_len / 4) * 3 - padding_len;
+}
 
 static uc_value_t *
 b64enc(const char *src, size_t src_len)
@@ -2815,6 +2855,32 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff,
 				continue;
 
 			n = ucv_string_length(v);
+
+			if (code->size == -1 || code->size > n)
+				off += n;
+			else
+				off += code->size;
+		}
+		else if (code->fmtdef->format == 'X') {
+			uc_value_t *v = uc_fn_arg(arg++);
+
+			if (ucv_type(v) != UC_STRING)
+				continue;
+
+			n = ucv_string_length(v) / 2;
+
+			if (code->size == -1 || code->size > n)
+				off += n;
+			else
+				off += code->size;
+		}
+		else if (code->fmtdef->format == 'Z') {
+			uc_value_t *v = uc_fn_arg(arg++);
+
+			if (ucv_type(v) != UC_STRING)
+				continue;
+
+			n = b64len(ucv_string_get(v), ucv_string_length(v));
 
 			if (code->size == -1 || code->size > n)
 				off += n;
@@ -2921,7 +2987,9 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff,
 					return false;
 				}
 
-				if (n > size * 2)
+				if (size == -1 || n / 2 < size)
+					size = n / 2;
+				else if (n > size * 2)
 					n = size * 2;
 
 				for (ssize_t i = 0; i < n; i += 2) {
@@ -2952,14 +3020,18 @@ uc_pack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state, size_t argoff,
 				n = ucv_string_length(v);
 				p = ucv_string_get(v);
 
+				size_t len = (size == -1) ? SIZE_MAX : (size_t)size;
 				const char *err = NULL;
 
-				if (!b64dec(res, size, p, n, &err)) {
+				if (!b64dec(res, &len, p, n, &err)) {
 					uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 						"Invalid base64 string: %s", err);
 
 					return false;
 				}
+
+				if (size == -1 || len < (size_t)size)
+					size = len;
 			}
 			else {
 				if (!e->pack(vm, res, v, e))
@@ -3027,7 +3099,7 @@ uc_unpack_common(uc_vm_t *vm, size_t nargs, formatstate_t *state,
 
 			size = code->size;
 
-			if (e->format == '*') {
+			if (e->format == '*' || e->format == 'X' || e->format == 'Z') {
 				if (size == -1 || (size_t)size > *rem)
 					size = *rem;
 
