@@ -2722,7 +2722,8 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 static void
 uc_nl_listener_cb(struct uloop_fd *fd, unsigned int events)
 {
-	nl_recvmsgs(nl80211_conn.evsock, nl80211_conn.evsock_cb);
+	while (nl_recvmsgs(nl80211_conn.evsock, nl80211_conn.evsock_cb) == 0)
+		;
 }
 
 static uc_value_t *
