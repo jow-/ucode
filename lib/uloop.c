@@ -105,12 +105,15 @@ uc_uloop_alloc(uc_vm_t *vm, const char *type, size_t size, uc_value_t *func)
 static void
 uc_uloop_cb_free(uc_uloop_cb_t *cb)
 {
-	if (!cb->obj)
+	uc_value_t *obj = cb->obj;
+
+	if (!obj)
 		return;
 
-	ucv_resource_persistent_set(cb->obj, false);
-	ucv_put(cb->obj);
 	cb->obj = NULL;
+
+	ucv_resource_persistent_set(obj, false);
+	ucv_put(obj);
 }
 
 static bool
