@@ -3574,10 +3574,15 @@ uc_socket_inst_recv(uc_vm_t *vm, size_t nargs)
 		"flags", UC_INTEGER, true, &flags,
 		"address", UC_OBJECT, true, &addrobj);
 
-	len = length ? ucv_to_integer(length) : 4096;
+	if (length) {
+		len = ucv_to_integer(length);
 
-	if (errno || len <= 0)
-		err_return(errno, "Invalid length argument");
+		if (errno || len <= 0)
+			err_return(errno, "Invalid length argument");
+	}
+	else {
+		len = 4096;
+	}
 
 	buf = strbuf_alloc(len);
 
