@@ -316,7 +316,7 @@ hwaddr_to_uv(uint8_t *addr, size_t alen)
 		*p++ = hex[addr[i] % 16];
 	}
 
-	return ucv_string_new_length(buf, alen);
+	return ucv_string_new_length(buf, p - buf);
 }
 
 static bool
