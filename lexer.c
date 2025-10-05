@@ -277,7 +277,7 @@ parse_escape(uc_lexer_t *lex, const char *regex_macros)
 			code = code * 16 + hex(ch);
 		}
 
-		append_utf8(lex, code);
+		uc_vector_push(&lex->buffer, code);
 	}
 
 	/* octal or letter */
@@ -293,7 +293,7 @@ parse_escape(uc_lexer_t *lex, const char *regex_macros)
 			if (code > 255)
 				return emit_op(lex, -3, TK_ERROR, ucv_string_new("Invalid escape sequence"));
 
-			append_utf8(lex, code);
+			uc_vector_push(&lex->buffer, code);
 		}
 
 		/* ... no octal sequence, handle potential regex macros */
