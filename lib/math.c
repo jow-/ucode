@@ -220,7 +220,7 @@ uc_exp(uc_vm_t *vm, size_t nargs)
  * On success, returns the natural logarithm of `x`.
  *
  *  - If `x` is `1`, the result is `+0`.
- *  - If `x` is positive nfinity, positive infinity is returned.
+ *  - If `x` is positive infinity, positive infinity is returned.
  *  - If `x` is zero, then a pole error occurs, and the function
  *    returns negative infinity.
  *  - If `x` is negative (including negative infinity), then a domain
@@ -231,7 +231,7 @@ uc_exp(uc_vm_t *vm, size_t nargs)
  * @function module:math#log
  *
  * @param {number} x
- * Value to calulate natural logarithm of.
+ * Value to calculate natural logarithm of.
  *
  * @returns {number}
  */
@@ -275,7 +275,7 @@ uc_sin(uc_vm_t *vm, size_t nargs)
 }
 
 /**
- * Calculates the nonnegative square root of `x`.
+ * Calculates the non-negative square root of `x`.
  *
  * Returns the resulting square root value.
  *
@@ -326,7 +326,7 @@ uc_sqrt(uc_vm_t *vm, size_t nargs)
  *  - If `x` is `+1`, the result is `1.0` (even if `y` is `NaN`).
  *  - If `y` is `0`, the result is `1.0` (even if `x` is `NaN`).
  *  - If `x` is a finite value less than `0`, and `y` is a finite
- *    noninteger, a domain error occurs, and `NaN` is returned.
+ *    non-integer, a domain error occurs, and `NaN` is returned.
  *  - If the absolute value of `x` is less than `1`, and `y` is negative
  *    infinity, the result is positive infinity.
  *  - If the absolute value of `x` is greater than `1`, and `y` is
