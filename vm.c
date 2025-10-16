@@ -94,7 +94,7 @@ static const char *
 uc_vm_insn_to_name(uc_vm_insn_t insn)
 {
 	if (insn < 0 || insn >= __I_MAX)
-		return NULL;
+		return "(unknown)";
 
 	return insn_names[insn];
 }
