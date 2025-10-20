@@ -219,6 +219,7 @@ enum {
 	UC_PROGRAM_F_DEBUG      = (1 << 0),
 	UC_PROGRAM_F_SOURCEINFO = (1 << 1),
 	UC_PROGRAM_F_SOURCEBUF  = (1 << 2),
+	UC_PROGRAM_F_EXPORTS    = (1 << 3),
 };
 
 enum {
@@ -318,6 +319,30 @@ write_function(uc_function_t *func, FILE *file, bool debug)
 	write_chunk(&func->chunk, file, flags);
 }
 
+static bool
+write_exports(FILE *file, uc_source_t *source, uint32_t flags, const char *subj)
+{
+	size_t i, num_exports = source->exports.count - 1;
+	char *name;
+
+	if (flags & UC_PROGRAM_F_EXPORTS)
+	{
+		/* write export count */
+		write_u32(num_exports, file);
+
+		/* write each export name */
+		for (i = 1; i <= num_exports; i++)
+		{
+			name = ucv_string_get(source->exports.entries[i]);
+
+			assert(name);
+			write_string(name, file);
+		}
+	}
+
+	return true;
+}
+
 void
 uc_program_write(uc_program_t *prog, FILE *file, bool debug)
 {
@@ -329,6 +354,9 @@ uc_program_write(uc_program_t *prog, FILE *file, bool debug)
 
 	if (debug && prog->sources.count)
 		flags |= UC_PROGRAM_F_SOURCEINFO;
+
+	if (prog->sources.count && prog->sources.entries[0]->exports.count)
+		flags |= UC_PROGRAM_F_EXPORTS;
 
 	/* magic word + flags */
 	write_u32(UC_PRECOMPILED_BYTECODE_MAGIC, file);
@@ -356,6 +384,9 @@ uc_program_write(uc_program_t *prog, FILE *file, bool debug)
 
 	/* write constants */
 	write_vallist(&prog->constants, file);
+
+	/* write export symbols */
+	write_exports(file, prog->sources.entries[0], flags, "exports");
 
 	/* write program sections */
 	i = 0;
@@ -563,6 +594,52 @@ out:
 	vallist->data = NULL;
 
 	return false;
+}
+
+static bool
+read_exports(FILE *file, uc_source_t *source, uint32_t flags, const char *subj, char **errp)
+{
+	size_t i, num_exports, len;
+	uc_stringbuf_t *buf;
+	uc_value_t *symname;
+	char subjbuf[64];
+
+	if (flags & UC_PROGRAM_F_EXPORTS)
+	{
+		/* read export count */
+		snprintf(subjbuf, sizeof(subjbuf), "%s count", subj);
+
+		if (!read_size_t(file, &num_exports, sizeof(uint32_t), subjbuf, errp))
+			return false;
+
+		/* read export symbol names */
+		for (i = 0; i < num_exports; i++)
+		{
+			snprintf(subjbuf, sizeof(subjbuf), "%s entry %zu of %zu size",
+					 subj, i, num_exports);
+
+			if (!read_size_t(file, &len, sizeof(uint32_t), subjbuf, errp))
+				return false;
+
+			snprintf(subjbuf, sizeof(subjbuf), "%s entry %zu of %zu name",
+					 subj, i, num_exports);
+
+			buf = ucv_stringbuf_new();
+			printbuf_memset(buf, -1, 0, len + 1);
+
+			if (!read_string(file, buf->buf + buf->bpos - len - 1, len, subjbuf, errp))
+			{
+				printbuf_free(buf);
+				return false;
+			}
+
+			symname = ucv_stringbuf_finish(buf);
+			uc_source_export_add(source, symname);
+			ucv_put(symname);
+		}
+	}
+
+	return true;
 }
 
 static uc_source_t *
@@ -837,6 +914,10 @@ uc_program_load(uc_source_t *input, char **errp)
 		goto out;
 
 	if (!read_vallist(input->fp, &program->constants, "constants", errp))
+		goto out;
+
+	if (!read_exports(input->fp, program->sources.entries[0], flags,
+					  "exports", errp))
 		goto out;
 
 	if (!read_u32(input->fp, &nfuncs, "function count", errp))
