@@ -2735,14 +2735,16 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 
 		*res = uc_callfunc(vm, 3);
 
-		if (module_mode) {
-			ucv_put(*res);
-			*res = uc_require_imports(vm, closure);
-		}
+		if (vm->exception.type != EXCEPTION_EXIT) {
+			if (module_mode) {
+				ucv_put(*res);
+				*res = uc_require_imports(vm, closure);
+			}
 
-		uc_vm_stack_pop(vm);
-		uc_vm_stack_pop(vm);
-		uc_vm_stack_pop(vm);
+			uc_vm_stack_pop(vm);
+			uc_vm_stack_pop(vm);
+			uc_vm_stack_pop(vm);
+		}
 	}
 
 	vm->config = prev_config;
