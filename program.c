@@ -323,7 +323,7 @@ static bool
 write_exports(FILE *file, uc_source_t *source, uint32_t flags, const char *subj)
 {
 	size_t i, num_exports = source->exports.count - 1;
-	char *name;
+	uc_value_t *sym;
 
 	if (flags & UC_PROGRAM_F_EXPORTS)
 	{
@@ -333,10 +333,15 @@ write_exports(FILE *file, uc_source_t *source, uint32_t flags, const char *subj)
 		/* write each export name */
 		for (i = 1; i <= num_exports; i++)
 		{
-			name = ucv_string_get(source->exports.entries[i]);
+			sym = source->exports.entries[i];
 
-			assert(name);
-			write_string(name, file);
+			if (ucv_type(sym) == UC_STRING)
+				_write_vector(ucv_string_length(sym) + 1, 1,
+				              ucv_string_get(sym), file);
+			else if (ucv_type(sym) == UC_NULL)
+				write_u32(0xffffffff, file);
+			else
+				assert(0);
 		}
 	}
 
@@ -621,19 +626,25 @@ read_exports(FILE *file, uc_source_t *source, uint32_t flags, const char *subj, 
 			if (!read_size_t(file, &len, sizeof(uint32_t), subjbuf, errp))
 				return false;
 
-			snprintf(subjbuf, sizeof(subjbuf), "%s entry %zu of %zu name",
-					 subj, i, num_exports);
+			if (len < 0xffffffff) {
+				snprintf(subjbuf, sizeof(subjbuf), "%s entry %zu of %zu name",
+						subj, i, num_exports);
 
-			buf = ucv_stringbuf_new();
-			printbuf_memset(buf, -1, 0, len + 1);
+				buf = ucv_stringbuf_new();
+				printbuf_memset(buf, -1, 0, len + 1);
 
-			if (!read_string(file, buf->buf + buf->bpos - len - 1, len, subjbuf, errp))
-			{
-				printbuf_free(buf);
-				return false;
+				if (!read_string(file, buf->buf + buf->bpos - len - 1, len, subjbuf, errp))
+				{
+					printbuf_free(buf);
+					return false;
+				}
+
+				symname = ucv_stringbuf_finish(buf);
+			}
+			else {
+				symname = NULL;
 			}
 
-			symname = ucv_stringbuf_finish(buf);
 			uc_source_export_add(source, symname);
 			ucv_put(symname);
 		}

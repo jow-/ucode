@@ -258,6 +258,7 @@ typedef struct {
 	uc_search_path_t module_search_path;
 	uc_search_path_t force_dynlink_list;
 	bool setup_signal_handlers;
+	bool compile_module;
 } uc_parse_config_t;
 
 extern uc_parse_config_t uc_default_parse_config;

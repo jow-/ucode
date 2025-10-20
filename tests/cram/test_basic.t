@@ -69,7 +69,8 @@ check that ucode provides exepected help:
     Compile the given source file(s) to bytecode instead of executing them.
     Supported flags: no-interp (omit interpreter line), interp=... (over-
     ride interpreter line with ...), dynlink=... (force import from ... to
-    be treated as shared extensions loaded at runtime).
+    be treated as shared extensions loaded at runtime), module (build load-
+    able library).
   
   -o path
     Output file path when compiling. If omitted, the compiled byte code
