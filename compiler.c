@@ -3522,9 +3522,9 @@ uc_compiler_compile_dynload(uc_compiler_t *compiler, const char *name, uc_value_
 		import = ucv_array_get(imports, i);
 
 		if (ucv_boolean_get(import)) {
+			uc_compiler_emit_constant(compiler, 0, modname);
 			uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
 			uc_compiler_emit_u32(compiler, 0, 0);
-			uc_compiler_emit_constant_index(compiler, 0, modname);
 		}
 		else {
 			n_imports++;
@@ -3532,9 +3532,9 @@ uc_compiler_compile_dynload(uc_compiler_t *compiler, const char *name, uc_value_
 	}
 
 	if (n_imports > 0) {
+		uc_compiler_emit_constant(compiler, 0, modname);
 		uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
 		uc_compiler_emit_u32(compiler, 0, n_imports | ((compiler->upvals.count - n_imports) << 16));
-		uc_compiler_emit_constant_index(compiler, 0, modname);
 
 		for (i = 0; i < ucv_array_length(imports); i++) {
 			import = ucv_get(ucv_array_get(imports, i));
