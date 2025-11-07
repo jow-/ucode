@@ -3333,7 +3333,50 @@ static uc_program_t *
 uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_program_t *prog, char **errp);
 
 static bool
-uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, uc_value_t *imports, char **errp)
+uc_compiler_compile_dynload(uc_compiler_t *compiler, const char *name, uc_value_t *imports)
+{
+	uc_value_t *modname = ucv_string_new(name);
+	size_t i, n_imports;
+	uc_value_t *import;
+
+	for (i = 0, n_imports = 0; i < ucv_array_length(imports); i++) {
+		import = ucv_array_get(imports, i);
+
+		if (ucv_boolean_get(import)) {
+			uc_compiler_emit_constant(compiler, 0, modname);
+			uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
+			uc_compiler_emit_u32(compiler, 0, 0);
+		}
+		else {
+			n_imports++;
+		}
+	}
+
+	if (n_imports > 0) {
+		uc_compiler_emit_constant(compiler, 0, modname);
+		uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
+		uc_compiler_emit_u32(compiler, 0, n_imports | ((compiler->upvals.count - n_imports) << 16));
+
+		for (i = 0; i < ucv_array_length(imports); i++) {
+			import = ucv_get(ucv_array_get(imports, i));
+
+			if (!import)
+				import = ucv_string_new("default");
+
+			if (!ucv_boolean_get(import))
+				uc_compiler_emit_constant_index(compiler, 0, import);
+
+			ucv_put(import);
+		}
+	}
+
+	ucv_put(modname);
+
+	return true;
+}
+
+static bool
+uc_compiler_compile_module_source(uc_compiler_t *compiler, const char *modname, uc_source_t *source, uc_value_t *imports, char **errp)
 {
 	uc_parse_config_t config = {
 		.raw_mode = true,
@@ -3358,6 +3401,11 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, 
 	}
 
 	if (!loaded) {
+		/* We do not yet support linking precompiled modules at compile time,
+		   turn static import operation into dynamic load one. */
+		if (uc_source_type_test(source) == UC_SOURCE_TYPE_PRECOMPILED)
+			return uc_compiler_compile_dynload(compiler, modname, imports);
+
 		load_idx = uc_program_function_id(compiler->program,
 			uc_program_function_last(compiler->program)) + 1;
 
@@ -3521,49 +3569,6 @@ uc_compiler_acquire_source(uc_compiler_t *compiler, const char *path)
 }
 
 static bool
-uc_compiler_compile_dynload(uc_compiler_t *compiler, const char *name, uc_value_t *imports)
-{
-	uc_value_t *modname = ucv_string_new(name);
-	size_t i, n_imports;
-	uc_value_t *import;
-
-	for (i = 0, n_imports = 0; i < ucv_array_length(imports); i++) {
-		import = ucv_array_get(imports, i);
-
-		if (ucv_boolean_get(import)) {
-			uc_compiler_emit_constant(compiler, 0, modname);
-			uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
-			uc_compiler_emit_u32(compiler, 0, 0);
-		}
-		else {
-			n_imports++;
-		}
-	}
-
-	if (n_imports > 0) {
-		uc_compiler_emit_constant(compiler, 0, modname);
-		uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
-		uc_compiler_emit_u32(compiler, 0, n_imports | ((compiler->upvals.count - n_imports) << 16));
-
-		for (i = 0; i < ucv_array_length(imports); i++) {
-			import = ucv_get(ucv_array_get(imports, i));
-
-			if (!import)
-				import = ucv_string_new("default");
-
-			if (!ucv_boolean_get(import))
-				uc_compiler_emit_constant_index(compiler, 0, import);
-
-			ucv_put(import);
-		}
-	}
-
-	ucv_put(modname);
-
-	return true;
-}
-
-static bool
 uc_compiler_is_dynlink_module(uc_compiler_t *compiler, const char *name, const char *path)
 {
 	uc_search_path_t *dynlink_list = &compiler->parser->config->force_dynlink_list;
@@ -3602,7 +3607,7 @@ uc_compiler_compile_module(uc_compiler_t *compiler, const char *name, uc_value_t
 
 		if (source) {
 			err = NULL;
-			res = uc_compiler_compile_module_source(compiler, source, imports, &err);
+			res = uc_compiler_compile_module_source(compiler, name, source, imports, &err);
 
 			if (!res) {
 				uc_error_message_indent(&err);
