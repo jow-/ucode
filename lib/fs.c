@@ -90,6 +90,7 @@ get_fd(uc_vm_t *vm, uc_value_t *val)
 	int64_t n;
 
 	fn = ucv_property_get(val, "fileno");
+	errno = 0;
 
 	if (ucv_is_callable(fn)) {
 		uc_vm_stack_push(vm, ucv_get(val));
