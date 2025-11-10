@@ -79,6 +79,9 @@ int main(int argc, char **argv)
 	uc_value_t *last_expression_result = NULL;
 	int return_code = uc_vm_execute(&vm, program, &last_expression_result);
 
+	/* release program */
+	uc_program_put(program);
+
 	/* handle return status */
 	switch (return_code) {
 	case STATUS_OK:
