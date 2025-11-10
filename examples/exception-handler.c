@@ -70,6 +70,7 @@ int main(int argc, char **argv)
 	/* check if compilation failed */
 	if (!program) {
 		fprintf(stderr, "Failed to compile program: %s\n", syntax_error);
+		free(syntax_error);
 
 		return 1;
 	}

@@ -57,6 +57,7 @@ int main(int argc, char **argv)
 	/* check if compilation failed */
 	if (!program) {
 		fprintf(stderr, "Failed to compile program: %s\n", syntax_error);
+		free(syntax_error);
 
 		return 1;
 	}
@@ -78,6 +79,9 @@ int main(int argc, char **argv)
 	/* execute compiled program function */
 	uc_value_t *last_expression_result = NULL;
 	int return_code = uc_vm_execute(&vm, program, &last_expression_result);
+
+	/* release program */
+	uc_program_put(program);
 
 	/* handle return status */
 	switch (return_code) {
