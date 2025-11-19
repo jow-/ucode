@@ -55,7 +55,7 @@ limitations under the License.
 
 #define DIV_ROUND_UP(n, d)      (((n) + (d) - 1) / (d))
 
-#define err_return(code, ...) do { set_error(code, __VA_ARGS__); return NULL; } while(0)
+#define err_return(code, ...) do { set_error(vm, code, __VA_ARGS__); return NULL; } while(0)
 
 #define NLM_F_STRICT_CHK (1 << 15)
 
@@ -68,34 +68,38 @@ limitations under the License.
 extern unsigned int if_nametoindex (const char *);
 extern char *if_indextoname (unsigned int ifindex, char *ifname);
 
-static struct {
-	int code;
-	char *msg;
-} last_error;
-
-__attribute__((format(printf, 2, 3))) static void
-set_error(int errcode, const char *fmt, ...) {
+__attribute__((format(printf, 3, 4))) static void
+set_error(uc_vm_t *vm, int errcode, const char *fmt, ...)
+{
+	uc_value_t *last_error;
 	va_list ap;
+	char *s;
 
-	free(last_error.msg);
+	last_error = uc_vm_registry_get(vm, "rtnl.error");
 
-	last_error.code = errcode;
-	last_error.msg = NULL;
+	if (!last_error) {
+		last_error = ucv_array_new_length(vm, 2);
+		uc_vm_registry_set(vm, "rtnl.error", last_error);
+	}
+
+	ucv_array_set(last_error, 0, ucv_int64_new(errcode));
 
 	if (fmt) {
 		va_start(ap, fmt);
-		xvasprintf(&last_error.msg, fmt, ap);
+		xvasprintf(&s, fmt, ap);
 		va_end(ap);
+
+		ucv_array_set(last_error, 1, ucv_string_new(s));
+		free(s);
+	}
+	else {
+		ucv_array_set(last_error, 1, NULL);
 	}
 }
 
-static uc_resource_type_t *listener_type;
-static uc_value_t *listener_registry;
-static uc_vm_t *listener_vm;
-
 typedef struct {
 	uint32_t cmds[RTNL_CMDS_BITMAP_SIZE];
-	size_t index;
+	uc_value_t *res;
 } uc_nl_listener_t;
 
 typedef struct {
@@ -1285,7 +1289,7 @@ nla_parse_error(const uc_nl_attr_spec_t *spec, uc_vm_t *vm, uc_value_t *v, const
 
 	s = ucv_to_string(vm, v);
 
-	set_error(NLE_INVAL, "%s `%s` has invalid value `%s`: %s",
+	set_error(vm, NLE_INVAL, "%s `%s` has invalid value `%s`: %s",
 		spec->attr ? "attribute" : "field",
 		spec->key,
 		s,
@@ -3225,12 +3229,13 @@ uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base
 }
 
 
-static struct nl_sock *sock = NULL;
-static struct {
+typedef struct {
+	struct nl_sock *sock;
 	struct nl_sock *evsock;
 	struct uloop_fd evsock_fd;
+	struct nl_cb *evsock_cb;
 	uint32_t groups[RTNL_GRPS_BITMAP_SIZE];
-} nl_conn;
+} nl_conn_t;
 
 typedef enum {
 	STATE_UNREPLIED,
@@ -3248,30 +3253,61 @@ typedef struct {
 } request_state_t;
 
 
+static nl_conn_t *
+uc_nl_conn_ctx(uc_vm_t *vm)
+{
+	struct {
+		uc_resource_t resource;
+		nl_conn_t conn;
+	} *ctx;
+
+	ctx = (void *)uc_vm_registry_get(vm, "rtnl.connection");
+
+	if (ucv_type((uc_value_t *)ctx) != UC_RESOURCE) {
+		ctx = xalloc(sizeof(*ctx));
+		ctx->resource.header.type = UC_RESOURCE;
+		ctx->resource.header.refcount = 1;
+		ctx->resource.data = &ctx->conn;
+
+		uc_vm_registry_set(vm, "rtnl.connection", &ctx->resource.header);
+	}
+
+	return &ctx->conn;
+}
+
 static uc_value_t *
 uc_nl_error(uc_vm_t *vm, size_t nargs)
 {
+	uc_value_t *last_error, *msg;
 	uc_stringbuf_t *buf;
 	const char *s;
+	int code;
 
-	if (last_error.code == 0)
+	last_error = uc_vm_registry_get(vm, "rtnl.error");
+	code = last_error ? ucv_int64_get(ucv_array_get(last_error, 0)) : 0;
+	msg = ucv_array_get(last_error, 1);
+
+	if (code == 0)
 		return NULL;
 
 	buf = ucv_stringbuf_new();
 
-	if (last_error.code == NLE_FAILURE && last_error.msg) {
-		ucv_stringbuf_addstr(buf, last_error.msg, strlen(last_error.msg));
+	if (code == NLE_FAILURE && msg) {
+		ucv_stringbuf_addstr(buf, ucv_string_get(msg), ucv_string_length(msg));
 	}
 	else {
-		s = nl_geterror(last_error.code);
+		s = nl_geterror(code);
 
 		ucv_stringbuf_addstr(buf, s, strlen(s));
 
-		if (last_error.msg)
-			ucv_stringbuf_printf(buf, ": %s", last_error.msg);
+		if (msg) {
+			ucv_stringbuf_append(buf, ": ");
+			ucv_stringbuf_addstr(buf,
+				ucv_string_get(msg), ucv_string_length(msg));
+		}
 	}
 
-	set_error(0, NULL);
+	set_error(vm, 0, NULL);
 
 	return ucv_stringbuf_finish(buf);
 }
@@ -3296,7 +3332,7 @@ cb_error(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg)
 	request_state_t *s = arg;
 	int errnum = err->error;
 
-	set_error(NLE_FAILURE, "RTNETLINK answers: %s",
+	set_error(s->vm, NLE_FAILURE, "RTNETLINK answers: %s",
 	          strerror(errnum < 0 ? -errnum : errnum));
 
 	s->state = STATE_ERROR;
@@ -3366,6 +3402,7 @@ static const struct {
 static uc_value_t *
 uc_nl_request(uc_vm_t *vm, size_t nargs)
 {
+	nl_conn_t *conn = uc_nl_conn_ctx(vm);
 	uc_value_t *cmd = uc_fn_arg(0);
 	uc_value_t *flags = uc_fn_arg(1);
 	uc_value_t *payload = uc_fn_arg(2);
@@ -3398,13 +3435,13 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 		}
 	}
 
-	if (!sock) {
-		sock = nl_socket_alloc();
+	if (!conn->sock) {
+		conn->sock = nl_socket_alloc();
 
-		if (!sock)
+		if (!conn->sock)
 			err_return(NLE_NOMEM, NULL);
 
-		err = nl_connect(sock, NETLINK_ROUTE);
+		err = nl_connect(conn->sock, NETLINK_ROUTE);
 
 		if (err != 0)
 			err_return(err, NULL);
@@ -3412,13 +3449,13 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 
 	optlen = sizeof(enable);
 
-	if (getsockopt(sock->s_fd, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &enable, &optlen) < 0)
+	if (getsockopt(conn->sock->s_fd, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &enable, &optlen) < 0)
 		enable = 0;
 
 	if (!!(flagval & NLM_F_STRICT_CHK) != enable) {
 		enable = !!(flagval & NLM_F_STRICT_CHK);
 
-		if (setsockopt(sock->s_fd, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &enable, sizeof(enable)) < 0)
+		if (setsockopt(conn->sock->s_fd, SOL_NETLINK, NETLINK_GET_STRICT_CHK, &enable, sizeof(enable)) < 0)
 			err_return(nl_syserr2nlerr(errno), "Unable to toggle NETLINK_GET_STRICT_CHK");
 	}
 
@@ -3459,13 +3496,13 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_done, &st);
 	nl_cb_err(cb, NL_CB_CUSTOM, cb_error, &st);
 
-	nl_send_auto_complete(sock, msg);
+	nl_send_auto_complete(conn->sock, msg);
 
 	do {
-		err = nl_recvmsgs(sock, cb);
+		err = nl_recvmsgs(conn->sock, cb);
 
 		if (err && st.state != STATE_ERROR) {
-			set_error(err, NULL);
+			set_error(vm, err, NULL);
 
 			st.state = STATE_ERROR;
 		}
@@ -3486,7 +3523,7 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 		return ucv_boolean_new(false);
 
 	default:
-		set_error(NLE_FAILURE, "Interrupted reply");
+		set_error(vm, NLE_FAILURE, "Interrupted reply");
 
 		return ucv_boolean_new(false);
 	}
@@ -3581,43 +3618,52 @@ uc_nl_fill_cmds(uint32_t *cmd_bits, uc_value_t *cmds)
 	return true;
 }
 
+#define uc_nl_listener_foreach(vm, r_, i_, l_) \
+	for (uc_value_t *r_ = uc_vm_registry_get(vm, "rtnl.registry"); \
+	     r_ != NULL; \
+	     r_ = NULL) \
+	for (size_t i_ = 0, i_##_length_ = ucv_array_length(r_); \
+	     i_##_length_ > 0; \
+	     i_##_length_ = 0) \
+	for (uc_nl_listener_t *l_ = ucv_resource_data(ucv_array_get(r_, 0), \
+	                                              "rtnl.listener"); \
+	     i_ < i_##_length_; \
+	     l_ = ucv_resource_data(ucv_array_get(r_, ++i_), "rtnl.listener"))
+
 static int
 cb_listener_event(struct nl_msg *msg, void *arg)
 {
 	struct nlmsghdr *hdr = nlmsg_hdr(msg);
-	uc_vm_t *vm = listener_vm;
+	uc_vm_t *vm = arg;
+	nl_conn_t *conn = uc_nl_conn_ctx(vm);
 	int cmd = hdr->nlmsg_type;
 
-	if (!nl_conn.evsock_fd.registered || !vm)
+	if (!conn->evsock_fd.registered)
 		return NL_SKIP;
 
-	for (size_t i = 0; i < ucv_array_length(listener_registry); i += 2) {
-		uc_value_t *this = ucv_array_get(listener_registry, i);
-		uc_value_t *func = ucv_array_get(listener_registry, i + 1);
-		uc_nl_listener_t *l;
-		uc_value_t *o;
-
-		l = ucv_resource_data(this, "rtnl.listener");
-		if (!l)
+	uc_nl_listener_foreach(vm, registry, i, listener) {
+		if (!listener)
 			continue;
 
-		if (cmd > __RTM_MAX || !(l->cmds[cmd / 32] & (1 << (cmd % 32))))
+		if (cmd > __RTM_MAX || !(listener->cmds[cmd / 32] & (1 << (cmd % 32))))
 			continue;
 
-		if (!ucv_is_callable(func))
+		uc_value_t *callback = ucv_resource_value_get(listener->res, 0);
+
+		if (!ucv_is_callable(callback))
 			continue;
 
-		o = ucv_object_new(vm);
+		uc_value_t *o = ucv_object_new(vm);
 		uc_nl_prepare_event(vm, o, msg);
 		ucv_object_add(o, "cmd", ucv_int64_new(cmd));
 
-		uc_vm_stack_push(vm, ucv_get(this));
-		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, ucv_get(listener->res));
+		uc_vm_stack_push(vm, ucv_get(callback));
 		uc_vm_stack_push(vm, o);
 
 		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE) {
 			uloop_end();
-			set_error(NLE_FAILURE, "Runtime exception in callback");
+			set_error(vm, NLE_FAILURE, "Runtime exception in callback");
 
 			errno = EINVAL;
 
@@ -3635,10 +3681,11 @@ cb_listener_event(struct nl_msg *msg, void *arg)
 static void
 uc_nl_listener_cb(struct uloop_fd *fd, unsigned int events)
 {
+	nl_conn_t *conn = container_of(fd, nl_conn_t, evsock_fd);
+
 	while (true) {
 		errno = 0;
-
-		nl_recvmsgs_default(nl_conn.evsock);
+		nl_recvmsgs_default(conn->evsock);
 
 		if (errno != 0)
 			break;
@@ -3646,25 +3693,25 @@ uc_nl_listener_cb(struct uloop_fd *fd, unsigned int events)
 }
 
 static void
-uc_nl_add_group(unsigned int idx)
+uc_nl_add_group(nl_conn_t *conn, unsigned int idx)
 {
 	if (idx >= __RTNLGRP_MAX)
 		return;
 
-	if (nl_conn.groups[idx / 32] & (1 << (idx % 32)))
+	if (conn->groups[idx / 32] & (1 << (idx % 32)))
 		return;
 
-	nl_conn.groups[idx / 32] |= (1 << (idx % 32));
-	nl_socket_add_membership(nl_conn.evsock, idx);
+	conn->groups[idx / 32] |= (1 << (idx % 32));
+	nl_socket_add_membership(conn->evsock, idx);
 }
 
 static bool
-uc_nl_evsock_init(void)
+uc_nl_evsock_init(uc_vm_t *vm, nl_conn_t *conn)
 {
-	struct uloop_fd *fd = &nl_conn.evsock_fd;
+	struct uloop_fd *fd = &conn->evsock_fd;
 	struct nl_sock *sock;
 
-	if (nl_conn.evsock)
+	if (conn->evsock)
 		return true;
 
 	sock = nl_socket_alloc();
@@ -3678,9 +3725,9 @@ uc_nl_evsock_init(void)
 
 	nl_socket_set_buffer_size(sock, 1024 * 1024, 0);
 	nl_socket_disable_seq_check(sock);
-	nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, cb_listener_event, NULL);
+	nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, cb_listener_event, vm);
 
-	nl_conn.evsock = sock;
+	conn->evsock = sock;
 
 	return true;
 
@@ -3692,66 +3739,61 @@ free:
 static uc_value_t *
 uc_nl_listener(uc_vm_t *vm, size_t nargs)
 {
-	uc_nl_listener_t *l;
+	nl_conn_t *conn = uc_nl_conn_ctx(vm);
 	uc_value_t *cb_func = uc_fn_arg(0);
 	uc_value_t *cmds = uc_fn_arg(1);
 	uc_value_t *groups = uc_fn_arg(2);
-	uc_value_t *rv;
-	size_t i;
+	uc_nl_listener_t *listener;
+	uc_value_t *res;
 
 	if (!ucv_is_callable(cb_func)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid callback");
 		return NULL;
 	}
 
-	if (!uc_nl_evsock_init())
+	if (!uc_nl_evsock_init(vm, conn))
 		return NULL;
 
 	if (ucv_type(groups) == UC_ARRAY) {
-		for (i = 0; i < ucv_array_length(groups); i++) {
+		for (size_t i = 0; i < ucv_array_length(groups); i++) {
 			int64_t n = ucv_int64_get(ucv_array_get(groups, i));
 
 			if (errno || n < 0 || n >= __RTNLGRP_MAX)
 				err_return(NLE_INVAL, NULL);
 
-			uc_nl_add_group(n);
+			uc_nl_add_group(conn, n);
 		}
-	} else {
-		uc_nl_add_group(RTNLGRP_LINK);
+	}
+	else {
+		uc_nl_add_group(conn, RTNLGRP_LINK);
 	}
 
-	for (i = 0; i < ucv_array_length(listener_registry); i += 2) {
-		if (!ucv_array_get(listener_registry, i))
-			break;
-	}
+	res = ucv_resource_create_ex(vm, "rtnl.listener",
+	                             (void **)&listener, 1, sizeof(*listener));
 
-	l = xalloc(sizeof(*l));
-	l->index = i;
+	listener->res = res;
 
-	if (!uc_nl_fill_cmds(l->cmds, cmds)) {
+	ucv_resource_value_set(res, 0, ucv_get(cb_func));
+
+	if (!uc_nl_fill_cmds(listener->cmds, cmds)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid command ID");
-		free(l);
+		ucv_put(res);
+
 		return NULL;
 	}
 
-	rv = uc_resource_new(listener_type, l);
+	uc_nl_listener_foreach(vm, registry, i, listener) {
+		if (listener == NULL) {
+			ucv_array_set(registry, i, ucv_get(res));
+			goto out;
+		}
+	}
 
-	ucv_array_set(listener_registry, i, ucv_get(rv));
-	ucv_array_set(listener_registry, i + 1, ucv_get(cb_func));
+	ucv_array_push(uc_vm_registry_get(vm, "rtnl.registry"),
+		ucv_get(res));
 
-	listener_vm = vm;
-
-	return rv;
-}
-
-static void
-uc_nl_listener_free(void *arg)
-{
-	uc_nl_listener_t *l = arg;
-
-	ucv_array_set(listener_registry, l->index, NULL);
-	ucv_array_set(listener_registry, l->index + 1, NULL);
-	free(l);
+out:
+	return res;
 }
 
 static uc_value_t *
@@ -3773,18 +3815,17 @@ uc_nl_listener_set_commands(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_nl_listener_close(uc_vm_t *vm, size_t nargs)
 {
-	uc_nl_listener_t **lptr = uc_fn_this("rtnl.listener");
-	uc_nl_listener_t *l;
+	uc_nl_listener_t *lptr = uc_fn_thisval("rtnl.listener");
 
 	if (!lptr)
 		return NULL;
 
-	l = *lptr;
-	if (!l)
-		return NULL;
-
-	*lptr = NULL;
-	uc_nl_listener_free(l);
+	uc_nl_listener_foreach(vm, registry, i, listener) {
+		if (listener == lptr) {
+			ucv_array_set(registry, i, NULL);
+			break;
+		}
+	}
 
 	return NULL;
 }
@@ -4171,10 +4212,8 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
 
-	listener_type = uc_type_declare(vm, "rtnl.listener", listener_fns, uc_nl_listener_free);
-	listener_registry = ucv_array_new(vm);
-
-	uc_vm_registry_set(vm, "rtnl.registry", listener_registry);
+	uc_type_declare(vm, "rtnl.listener", listener_fns, NULL);
+	uc_vm_registry_set(vm, "rtnl.registry", ucv_array_new(vm));
 
 	register_constants(vm, scope);
 }
