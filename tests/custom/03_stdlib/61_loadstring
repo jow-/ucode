@@ -128,7 +128,7 @@ Test loading precompiled bytecode
 	// utpl -c -o - -e $'Hello world\n' | hexdump -v -e '"" 16/1 "%02x " "\n"'
 	const program = hexdec(`
 		23 21 2f 75 73 72 2f 62 69 6e 2f 65 6e 76 20 75
-		63 6f 64 65 0a 1b 75 63 62 01 00 00 03 00 00 00
+		63 6f 64 65 0a 1b 75 63 62 02 00 00 03 00 00 00
 		01 00 00 00 0e 5b 2d 65 20 61 72 67 75 6d 65 6e
 		74 5d 00 00 00 00 00 00 0d 48 65 6c 6c 6f 20 77
 		6f 72 6c 64 0a 00 00 00 00 00 00 00 02 8b 80 00
