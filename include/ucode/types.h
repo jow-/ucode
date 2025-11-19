@@ -376,6 +376,7 @@ const char *ucv_typename(uc_value_t *);
 uc_value_t *ucv_boolean_new(bool);
 bool ucv_boolean_get(uc_value_t *);
 
+uc_value_t *ucv_string_alloc(char **, size_t);
 uc_value_t *ucv_string_new(const char *);
 uc_value_t *ucv_string_new_length(const char *, size_t);
 size_t ucv_string_length(uc_value_t *);

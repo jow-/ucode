@@ -432,15 +432,29 @@ ucv_string_new(const char *str)
 }
 
 uc_value_t *
-ucv_string_new_length(const char *str, size_t length)
+ucv_string_alloc(char **str, size_t length)
 {
 	uc_string_t *ustr;
-	uintptr_t pv;
-	size_t i;
-	char *s;
+
+	ustr = xalloc(sizeof(*ustr) + length + 1);
+	ustr->header.type = UC_STRING;
+	ustr->header.refcount = 1;
+	ustr->length = length;
+	*str = (char *)ustr->str;
+
+	return &ustr->header;
+}
+
+uc_value_t *
+ucv_string_new_length(const char *str, size_t length)
+{
+	uc_value_t *ustr;
+	char *buf;
 
 	if ((length + 1) < sizeof(void *)) {
-		pv = UC_STRING | (length << 2);
+		uintptr_t pv = UC_STRING | (length << 2);
+		size_t i;
+		char *s;
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 		s = (char *)&pv + 1;
@@ -454,13 +468,10 @@ ucv_string_new_length(const char *str, size_t length)
 		return (uc_value_t *)pv;
 	}
 
-	ustr = xalloc(sizeof(*ustr) + length + 1);
-	ustr->header.type = UC_STRING;
-	ustr->header.refcount = 1;
-	ustr->length = length;
-	memcpy(ustr->str, str, length);
+	ustr = ucv_string_alloc(&buf, length);
+	memcpy(buf, str, length);
 
-	return &ustr->header;
+	return ustr;
 }
 
 uc_stringbuf_t *
