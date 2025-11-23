@@ -2779,6 +2779,56 @@ uc_fs_readfile(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Read from a file descriptor, optionally limited to the given amount of bytes.
+ *
+ * Returns a string containing the file contents.
+ *
+ * Returns `null` if an error occurred, e.g. due to insufficient permissions.
+ *
+ * @function module:fs#read_fd
+ *
+ * @param {number} fd
+ * The name of the fd.
+ *
+ * @param {number} limit
+ * Number of bytes to limit the result to.
+ *
+ * @returns {?string}
+ *
+ * @example
+ * // Read a maximum of 100 bytes from STDIN
+ * const content = read_fd(0, 100);
+ */
+static uc_value_t *
+uc_fs_read_fd(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *name = uc_fn_arg(0);
+	uc_value_t *size = uc_fn_arg(1);
+	uc_value_t *res = NULL;
+	char *buf;
+	ssize_t limit;
+	int fd;
+	ssize_t rlen;
+
+	if (ucv_type(name) != UC_INTEGER)
+		err_return(EINVAL);
+
+	if (ucv_type(size) != UC_INTEGER)
+		err_return(EINVAL);
+
+	fd = ucv_int64_get(name);
+	limit = ucv_int64_get(size);
+
+	buf = alloca(limit);
+
+	rlen = read(fd, buf, limit);
+	if (rlen == -1)
+		err_return(errno);
+
+	return ucv_string_new_length(buf, rlen);
+}
+
+/**
  * Writes the given data to a file, optionally truncated to the given amount
  * of bytes.
  *
@@ -3042,6 +3092,7 @@ static const uc_function_list_t global_fns[] = {
 	{ "mkdtemp",	uc_fs_mkdtemp },
 	{ "access",		uc_fs_access },
 	{ "readfile",	uc_fs_readfile },
+	{ "read_fd",	uc_fs_read_fd },
 	{ "writefile",	uc_fs_writefile },
 	{ "realpath",	uc_fs_realpath },
 	{ "pipe",		uc_fs_pipe },
