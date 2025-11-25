@@ -145,7 +145,7 @@ error:
 }
 
 static void
-uc_uloop_cb_invoke(uc_uloop_cb_t *cb, uc_value_t *arg)
+uc_uloop_cb_invoke(uc_uloop_cb_t *cb, uc_value_t **args, size_t nargs)
 {
 	uc_vm_t *vm = cb->vm;
 	uc_value_t *func = ucv_resource_value_get(cb->obj, 0);
@@ -155,9 +155,10 @@ uc_uloop_cb_invoke(uc_uloop_cb_t *cb, uc_value_t *arg)
 
 	uc_vm_stack_push(vm, ucv_get(cb->obj));
 	uc_vm_stack_push(vm, ucv_get(func));
-	uc_vm_stack_push(vm, ucv_get(arg));
+	for (size_t i = 0; i < nargs; i++)
+		uc_vm_stack_push(vm, ucv_get(args[i]));
 
-	if (uc_uloop_vm_call(vm, true, 1))
+	if (uc_uloop_vm_call(vm, true, nargs))
 		ucv_put(uc_vm_stack_pop(vm));
 }
 
@@ -536,7 +537,7 @@ uc_uloop_timer_cb(struct uloop_timeout *timeout)
 {
 	uc_uloop_timer_t *timer = container_of(timeout, uc_uloop_timer_t, timeout);
 
-	uc_uloop_cb_invoke(&timer->cb, NULL);
+	uc_uloop_cb_invoke(&timer->cb, NULL, 0);
 }
 
 /**
@@ -724,10 +725,16 @@ static void
 uc_uloop_handle_cb(struct uloop_fd *fd, unsigned int flags)
 {
 	uc_uloop_handle_t *handle = container_of(fd, uc_uloop_handle_t, fd);
-	uc_value_t *f = ucv_uint64_new(flags);
+	uc_value_t *args[3] = {
+		ucv_uint64_new(flags),
+		ucv_boolean_new(fd->eof),
+		ucv_boolean_new(fd->error),
+	};
 
-	uc_uloop_cb_invoke(&handle->cb, f);
-	ucv_put(f);
+	uc_uloop_cb_invoke(&handle->cb, args, 3);
+	ucv_put(args[0]);
+	ucv_put(args[1]);
+	ucv_put(args[2]);
 }
 
 static int
@@ -951,7 +958,7 @@ uc_uloop_process_cb(struct uloop_process *proc, int exitcode)
 	uc_uloop_process_t *process = container_of(proc, uc_uloop_process_t, process);
 	uc_value_t *e = ucv_int64_new(exitcode >> 8);
 
-	uc_uloop_cb_invoke(&process->cb, e);
+	uc_uloop_cb_invoke(&process->cb, &e, 1);
 	uc_uloop_process_clear(process);
 	ucv_put(e);
 }
@@ -1947,7 +1954,7 @@ uc_uloop_interval_cb(struct uloop_interval *uintv)
 {
 	uc_uloop_interval_t *interval = container_of(uintv, uc_uloop_interval_t, interval);
 
-	uc_uloop_cb_invoke(&interval->cb, NULL);
+	uc_uloop_cb_invoke(&interval->cb, NULL, 0);
 }
 
 /**
@@ -2105,7 +2112,7 @@ uc_uloop_signal_cb(struct uloop_signal *usig)
 {
 	uc_uloop_signal_t *signal = container_of(usig, uc_uloop_signal_t, signal);
 
-	uc_uloop_cb_invoke(&signal->cb, NULL);
+	uc_uloop_cb_invoke(&signal->cb, NULL, 0);
 }
 
 static int
