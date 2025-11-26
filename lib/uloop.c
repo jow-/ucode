@@ -244,23 +244,23 @@ uc_uloop_init(uc_vm_t *vm, size_t nargs)
  * Optional. The timeout value in milliseconds for running the event loop.
  * Defaults to -1, indicating an indefinite run.
  *
- * @returns {?boolean}
- * Returns `true` on success, `null` on error.
+ * @returns {?number}
+ * Returns a signal number or 0 on success, `null` on error.
  *
  * @example
  * // Run the uloop event loop indefinitely
  * const success = uloop.run();
- * if (success)
- *     printf("uloop event loop ran successfully\n");
- * else
+ * if (rc == null)
  *     die(`Error occurred during uloop execution: ${uloop.error()}\n`);
+ * else if (rc != 0)
+ *     printf("uloop event loop was interrupted by a signal: %d\n", rc);
  *
  * // Run the uloop event loop for 1000 milliseconds
  * const success = uloop.run(1000);
- * if (success)
- *     printf("uloop event loop ran successfully\n");
- * else
+ * if (rc == null)
  *     die(`Error occurred during uloop execution: ${uloop.error()}\n`);
+ * else if (rc != 0)
+ *     printf("uloop event loop was interrupted by a signal: %d\n", rc);
  */
 static uc_value_t *
 uc_uloop_run(uc_vm_t *vm, size_t nargs)
