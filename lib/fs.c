@@ -274,7 +274,7 @@ uc_fs_flush_common(uc_vm_t *vm, size_t nargs, const char *type)
 	if (!fp || !*fp)
 		err_return(EBADF);
 
-	if (fflush(*fp) != EOF)
+	if (fflush(*fp) == EOF)
 		err_return(errno);
 
 	return ucv_boolean_new(true);
