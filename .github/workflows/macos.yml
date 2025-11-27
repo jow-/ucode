@@ -15,7 +15,7 @@ jobs:
 
       - name: Setup
         run: |
-          brew install json-c libmd
+          brew install json-c libmd mbedtls@3
 
       - name: Build minimal version
         run: |
