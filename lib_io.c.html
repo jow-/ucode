@@ -1,0 +1,1144 @@
+<!DOCTYPE html><html lang="en" style="font-size:16px"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link type="text/css" rel="stylesheet" href="ucode.css"><title>Source: lib/io.c</title><!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]--><script src="scripts/third-party/hljs.js" defer="defer"></script><script src="scripts/third-party/hljs-line-num.js" defer="defer"></script><script src="scripts/third-party/popper.js" defer="defer"></script><script src="scripts/third-party/tippy.js" defer="defer"></script><script src="scripts/third-party/tocbot.min.js"></script><script>var baseURL="/",locationPathname="";baseURL=(locationPathname=document.location.pathname).substr(0,locationPathname.lastIndexOf("/")+1)</script><link rel="stylesheet" href="styles/clean-jsdoc-theme.min.css"><svg aria-hidden="true" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:none"><defs><symbol id="copy-icon" viewbox="0 0 488.3 488.3"><g><path d="M314.25,85.4h-227c-21.3,0-38.6,17.3-38.6,38.6v325.7c0,21.3,17.3,38.6,38.6,38.6h227c21.3,0,38.6-17.3,38.6-38.6V124    C352.75,102.7,335.45,85.4,314.25,85.4z M325.75,449.6c0,6.4-5.2,11.6-11.6,11.6h-227c-6.4,0-11.6-5.2-11.6-11.6V124    c0-6.4,5.2-11.6,11.6-11.6h227c6.4,0,11.6,5.2,11.6,11.6V449.6z"/><path d="M401.05,0h-227c-21.3,0-38.6,17.3-38.6,38.6c0,7.5,6,13.5,13.5,13.5s13.5-6,13.5-13.5c0-6.4,5.2-11.6,11.6-11.6h227    c6.4,0,11.6,5.2,11.6,11.6v325.7c0,6.4-5.2,11.6-11.6,11.6c-7.5,0-13.5,6-13.5,13.5s6,13.5,13.5,13.5c21.3,0,38.6-17.3,38.6-38.6    V38.6C439.65,17.3,422.35,0,401.05,0z"/></g></symbol><symbol id="search-icon" viewBox="0 0 512 512"><g><g><path d="M225.474,0C101.151,0,0,101.151,0,225.474c0,124.33,101.151,225.474,225.474,225.474    c124.33,0,225.474-101.144,225.474-225.474C450.948,101.151,349.804,0,225.474,0z M225.474,409.323    c-101.373,0-183.848-82.475-183.848-183.848S124.101,41.626,225.474,41.626s183.848,82.475,183.848,183.848    S326.847,409.323,225.474,409.323z"/></g></g><g><g><path d="M505.902,476.472L386.574,357.144c-8.131-8.131-21.299-8.131-29.43,0c-8.131,8.124-8.131,21.306,0,29.43l119.328,119.328    c4.065,4.065,9.387,6.098,14.715,6.098c5.321,0,10.649-2.033,14.715-6.098C514.033,497.778,514.033,484.596,505.902,476.472z"/></g></g></symbol><symbol id="font-size-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11.246 15H4.754l-2 5H.6L7 4h2l6.4 16h-2.154l-2-5zm-.8-2L8 6.885 5.554 13h4.892zM21 12.535V12h2v8h-2v-.535a4 4 0 1 1 0-6.93zM19 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></symbol><symbol id="add-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></symbol><symbol id="minus-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M5 11h14v2H5z"/></symbol><symbol id="dark-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol><symbol id="light-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol><symbol id="reset-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M18.537 19.567A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10c0 2.136-.67 4.116-1.81 5.74L17 12h3a8 8 0 1 0-2.46 5.772l.997 1.795z"/></symbol><symbol id="down-icon" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7803 6.21967C13.0732 6.51256 13.0732 6.98744 12.7803 7.28033L8.53033 11.5303C8.23744 11.8232 7.76256 11.8232 7.46967 11.5303L3.21967 7.28033C2.92678 6.98744 2.92678 6.51256 3.21967 6.21967C3.51256 5.92678 3.98744 5.92678 4.28033 6.21967L8 9.93934L11.7197 6.21967C12.0126 5.92678 12.4874 5.92678 12.7803 6.21967Z"></path></symbol><symbol id="codepen-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M16.5 13.202L13 15.535v3.596L19.197 15 16.5 13.202zM14.697 12L12 10.202 9.303 12 12 13.798 14.697 12zM20 10.869L18.303 12 20 13.131V10.87zM19.197 9L13 4.869v3.596l3.5 2.333L19.197 9zM7.5 10.798L11 8.465V4.869L4.803 9 7.5 10.798zM4.803 15L11 19.131v-3.596l-3.5-2.333L4.803 15zM4 13.131L5.697 12 4 10.869v2.262zM2 9a1 1 0 0 1 .445-.832l9-6a1 1 0 0 1 1.11 0l9 6A1 1 0 0 1 22 9v6a1 1 0 0 1-.445.832l-9 6a1 1 0 0 1-1.11 0l-9-6A1 1 0 0 1 2 15V9z"/></symbol><symbol id="close-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></symbol><symbol id="menu-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/></symbol><symbol id="toc-icon" viewBox="0 0 460 460"><path d="M40 70a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 190a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 310a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM430 80H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 200H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 320H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60z"/></symbol></defs></svg></head><body data-theme="light"><div class="sidebar-container"><div class="sidebar" id="sidebar"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="sidebar-items-container"><div class="sidebar-section-title with-arrow" data-isopen="false" id="je2vq9rMQtETT_gffGRur"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div><div class="sidebar-section-children"><a href="tutorial-04-arrays.html">Working with Arrays</a></div><div class="sidebar-section-children"><a href="tutorial-05-dictionaries.html">Working with Dictionaries</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="YKXXZ2AoD6atg9y-q35YG"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-io.html">io</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-resolv.html">resolv</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div></div></div><div class="navbar-container" id="VuAckcnZhf"><nav class="navbar"><div class="navbar-left-items"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="navbar-right-items"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div><nav></nav></nav></div><div class="body-wrapper"><div class="main-content"><div class="main-wrapper"><section id="source-page" class="source-page"><header><h1 id="title" class="has-anchor">lib_io.c</h1></header><article><pre class="prettyprint source lang-js"><code>/*
+ * Copyright (C) 2025 Jo-Philipp Wich &lt;jo@mein.io>
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+/**
+ * # I/O Operations
+ *
+ * The `io` module provides object-oriented access to UNIX file descriptors.
+ *
+ * Functions can be individually imported and directly accessed using the
+ * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+ * syntax:
+ *
+ *   ```
+ *   import { open, O_RDWR } from 'io';
+ *
+ *   let handle = open('/tmp/test.txt', O_RDWR);
+ *   handle.write('Hello World\n');
+ *   handle.close();
+ *   ```
+ *
+ * Alternatively, the module namespace can be imported
+ * using a wildcard import statement:
+ *
+ *   ```
+ *   import * as io from 'io';
+ *
+ *   let handle = io.open('/tmp/test.txt', io.O_RDWR);
+ *   handle.write('Hello World\n');
+ *   handle.close();
+ *   ```
+ *
+ * Additionally, the io module namespace may also be imported by invoking
+ * the `ucode` interpreter with the `-lio` switch.
+ *
+ * @module io
+ */
+
+#include &lt;stdio.h>
+#include &lt;errno.h>
+#include &lt;string.h>
+#include &lt;unistd.h>
+#include &lt;fcntl.h>
+#include &lt;sys/types.h>
+#include &lt;sys/stat.h>
+#include &lt;limits.h>
+
+#if defined(__linux__)
+#define HAS_IOCTL
+#endif
+
+#ifdef HAS_IOCTL
+#include &lt;sys/ioctl.h>
+
+#define IOC_DIR_NONE	(_IOC_NONE)
+#define IOC_DIR_READ	(_IOC_READ)
+#define IOC_DIR_WRITE	(_IOC_WRITE)
+#define IOC_DIR_RW		(_IOC_READ | _IOC_WRITE)
+
+#endif
+
+#include "ucode/module.h"
+#include "ucode/platform.h"
+
+#define err_return(err) do { \
+	uc_vm_registry_set(vm, "io.last_error", ucv_int64_new(err)); \
+	return NULL; \
+} while(0)
+
+typedef struct {
+	int fd;
+	bool close_on_free;
+} uc_io_handle_t;
+
+static bool
+get_fd_from_value(uc_vm_t *vm, uc_value_t *val, int *fd)
+{
+	uc_io_handle_t *handle;
+	uc_value_t *fn;
+	int64_t n;
+
+	/* Check if it's an io.handle resource */
+	handle = ucv_resource_data(val, "io.handle");
+
+	if (handle) {
+		if (handle->fd &lt; 0)
+			err_return(EBADF);
+
+		*fd = handle->fd;
+
+		return true;
+	}
+
+	/* Try calling fileno() method */
+	fn = ucv_property_get(val, "fileno");
+	errno = 0;
+
+	if (ucv_is_callable(fn)) {
+		uc_vm_stack_push(vm, ucv_get(val));
+		uc_vm_stack_push(vm, ucv_get(fn));
+
+		if (uc_vm_call(vm, true, 0) != EXCEPTION_NONE)
+			err_return(EBADF);
+
+		val = uc_vm_stack_pop(vm);
+		n = ucv_int64_get(val);
+		ucv_put(val);
+	}
+	else {
+		n = ucv_int64_get(val);
+	}
+
+	if (errno || n &lt; 0 || n > (int64_t)INT_MAX)
+		err_return(errno ? errno : EBADF);
+
+	*fd = n;
+
+	return true;
+}
+
+/**
+ * Query error information.
+ *
+ * Returns a string containing a description of the last occurred error or
+ * `null` if there is no error information.
+ *
+ * @function module:io#error
+ *
+ * @returns {?string}
+ *
+ * @example
+ * // Trigger an error
+ * io.open('/path/does/not/exist');
+ *
+ * // Print error (should yield "No such file or directory")
+ * print(io.error(), "\n");
+ */
+static uc_value_t *
+uc_io_error(uc_vm_t *vm, size_t nargs)
+{
+	int last_error = ucv_int64_get(uc_vm_registry_get(vm, "io.last_error"));
+
+	if (last_error == 0)
+		return NULL;
+
+	uc_vm_registry_set(vm, "io.last_error", ucv_int64_new(0));
+
+	return ucv_string_new(strerror(last_error));
+}
+
+/**
+ * Represents a handle for interacting with a file descriptor.
+ *
+ * @class module:io.handle
+ * @hideconstructor
+ *
+ * @borrows module:io#error as module:io.handle#error
+ *
+ * @see {@link module:io#new|new()}
+ * @see {@link module:io#open|open()}
+ * @see {@link module:io#from|from()}
+ *
+ * @example
+ *
+ * const handle = io.open(…);
+ *
+ * handle.read(…);
+ * handle.write(…);
+ *
+ * handle.seek(…);
+ * handle.tell();
+ *
+ * handle.fileno();
+ *
+ * handle.close();
+ *
+ * handle.error();
+ */
+
+/**
+ * Reads data from the file descriptor.
+ *
+ * Reads up to the specified number of bytes from the file descriptor.
+ *
+ * Returns a string containing the read data.
+ *
+ * Returns an empty string on EOF.
+ *
+ * Returns `null` if a read error occurred.
+ *
+ * @function module:io.handle#read
+ *
+ * @param {number} length
+ * The maximum number of bytes to read.
+ *
+ * @returns {?string}
+ *
+ * @example
+ * const handle = io.open('/tmp/test.txt', O_RDONLY);
+ * const data = handle.read(1024);
+ */
+static uc_value_t *
+uc_io_read(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *limit = uc_fn_arg(0);
+	uc_value_t *rv = NULL;
+	uc_io_handle_t *handle;
+	int fd;
+	int64_t len;
+	ssize_t rlen;
+	char *buf;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	if (ucv_type(limit) != UC_INTEGER)
+		err_return(EINVAL);
+
+	len = ucv_int64_get(limit);
+
+	if (len &lt;= 0)
+		return ucv_string_new_length("", 0);
+
+	if (len > SSIZE_MAX)
+		len = SSIZE_MAX;
+
+	buf = xalloc(len);
+
+	rlen = read(fd, buf, len);
+
+	if (rlen &lt; 0) {
+		free(buf);
+		err_return(errno);
+	}
+
+	rv = ucv_string_new_length(buf, rlen);
+	free(buf);
+
+	return rv;
+}
+
+/**
+ * Writes data to the file descriptor.
+ *
+ * Writes the given data to the file descriptor. Non-string values are
+ * converted to strings before being written.
+ *
+ * Returns the number of bytes written.
+ *
+ * Returns `null` if a write error occurred.
+ *
+ * @function module:io.handle#write
+ *
+ * @param {*} data
+ * The data to write.
+ *
+ * @returns {?number}
+ *
+ * @example
+ * const handle = io.open('/tmp/test.txt', O_WRONLY | O_CREAT);
+ * handle.write('Hello World\n');
+ */
+static uc_value_t *
+uc_io_write(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *data = uc_fn_arg(0);
+	uc_io_handle_t *handle;
+	ssize_t wlen;
+	size_t len;
+	char *str;
+	int fd;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	if (ucv_type(data) == UC_STRING) {
+		len = ucv_string_length(data);
+		wlen = write(fd, ucv_string_get(data), len);
+	}
+	else {
+		str = ucv_to_jsonstring(vm, data);
+		len = str ? strlen(str) : 0;
+		wlen = write(fd, str, len);
+		free(str);
+	}
+
+	if (wlen &lt; 0)
+		err_return(errno);
+
+	return ucv_int64_new(wlen);
+}
+
+/**
+ * Sets the file descriptor position.
+ *
+ * Sets the file position of the descriptor to the given offset and whence.
+ *
+ * Returns `true` if the position was successfully set.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#seek
+ *
+ * @param {number} [offset=0]
+ * The offset in bytes.
+ *
+ * @param {number} [whence=0]
+ * The position reference.
+ *
+ * | Whence | Description                                                        |
+ * |--------|--------------------------------------------------------------------|
+ * | `0`    | The offset is relative to the start of the file (SEEK_SET).       |
+ * | `1`    | The offset is relative to the current position (SEEK_CUR).        |
+ * | `2`    | The offset is relative to the end of the file (SEEK_END).         |
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const handle = io.open('/tmp/test.txt', O_RDONLY);
+ * handle.seek(100, 0);  // Seek to byte 100 from start
+ */
+static uc_value_t *
+uc_io_seek(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *ofs = uc_fn_arg(0);
+	uc_value_t *how = uc_fn_arg(1);
+	uc_io_handle_t *handle;
+	int whence;
+	off_t offset;
+	int fd;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	if (!ofs)
+		offset = 0;
+	else if (ucv_type(ofs) != UC_INTEGER)
+		err_return(EINVAL);
+	else
+		offset = (off_t)ucv_int64_get(ofs);
+
+	if (!how)
+		whence = SEEK_SET;
+	else if (ucv_type(how) != UC_INTEGER)
+		err_return(EINVAL);
+	else
+		whence = (int)ucv_int64_get(how);
+
+	if (lseek(fd, offset, whence) &lt; 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Gets the current file descriptor position.
+ *
+ * Returns the current file position as an integer.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#tell
+ *
+ * @returns {?number}
+ *
+ * @example
+ * const handle = io.open('/tmp/test.txt', O_RDONLY);
+ * const pos = handle.tell();
+ */
+static uc_value_t *
+uc_io_tell(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle;
+	off_t offset;
+	int fd;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	offset = lseek(fd, 0, SEEK_CUR);
+
+	if (offset &lt; 0)
+		err_return(errno);
+
+	return ucv_int64_new(offset);
+}
+
+/**
+ * Duplicates the file descriptor.
+ *
+ * Creates a duplicate of the file descriptor using dup(2).
+ *
+ * Returns a new io.handle for the duplicated descriptor.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#dup
+ *
+ * @returns {?module:io.handle}
+ *
+ * @example
+ * const handle = io.open('/tmp/test.txt', O_RDONLY);
+ * const dup_handle = handle.dup();
+ */
+static uc_value_t *
+uc_io_dup(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle, *new_handle = NULL;
+	uc_value_t *res;
+	int fd, newfd;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	newfd = dup(fd);
+
+	if (newfd &lt; 0)
+		err_return(errno);
+
+	res = ucv_resource_create_ex(vm, "io.handle",
+	                             (void **)&amp;new_handle, 0, sizeof(*new_handle));
+
+	if (!new_handle)
+		err_return(ENOMEM);
+
+	new_handle->fd = newfd;
+	new_handle->close_on_free = true;
+
+	return res;
+}
+
+/**
+ * Duplicates the file descriptor to a specific descriptor number.
+ *
+ * Creates a duplicate of the file descriptor to the specified descriptor
+ * number using dup2(2). If newfd was previously open, it is silently closed.
+ *
+ * Returns `true` on success.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#dup2
+ *
+ * @param {number} newfd
+ * The target file descriptor number.
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const handle = io.open('/tmp/test.txt', O_WRONLY);
+ * handle.dup2(2);  // Redirect stderr to the file
+ */
+static uc_value_t *
+uc_io_dup2(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *newfd_arg = uc_fn_arg(0);
+	uc_io_handle_t *handle;
+	int fd, newfd;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	if (!get_fd_from_value(vm, newfd_arg, &amp;newfd))
+		return NULL;
+
+	if (dup2(fd, newfd) &lt; 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Gets the file descriptor number.
+ *
+ * Returns the underlying file descriptor number.
+ *
+ * Returns `null` if the handle is closed.
+ *
+ * @function module:io.handle#fileno
+ *
+ * @returns {?number}
+ *
+ * @example
+ * const handle = io.open('/tmp/test.txt', O_RDONLY);
+ * print(handle.fileno(), "\n");
+ */
+static uc_value_t *
+uc_io_fileno(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	return ucv_int64_new(handle->fd);
+}
+
+/**
+ * Performs fcntl() operations on the file descriptor.
+ *
+ * Performs the specified fcntl() command on the file descriptor with an
+ * optional argument.
+ *
+ * Returns the result of the fcntl() call. For F_DUPFD and F_DUPFD_CLOEXEC,
+ * returns a new io.handle wrapping the duplicated descriptor. For other
+ * commands, returns a number (interpretation depends on cmd).
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#fcntl
+ *
+ * @param {number} cmd
+ * The fcntl command (e.g., F_GETFL, F_SETFL, F_GETFD, F_SETFD, F_DUPFD).
+ *
+ * @param {number} [arg]
+ * Optional argument for the command.
+ *
+ * @returns {?(number|module:io.handle)}
+ *
+ * @example
+ * const handle = io.open('/tmp/test.txt', O_RDONLY);
+ * const flags = handle.fcntl(F_GETFL);
+ * handle.fcntl(F_SETFL, flags | O_NONBLOCK);
+ * const dup_handle = handle.fcntl(F_DUPFD, 10);  // Returns io.handle
+ */
+static uc_value_t *
+uc_io_fcntl(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle, *new_handle = NULL;
+	uc_value_t *cmd_arg = uc_fn_arg(0);
+	uc_value_t *val_arg = uc_fn_arg(1);
+	uc_value_t *res;
+	int fd, cmd, ret;
+	long arg = 0;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	if (ucv_type(cmd_arg) != UC_INTEGER)
+		err_return(EINVAL);
+
+	cmd = (int)ucv_int64_get(cmd_arg);
+
+	if (val_arg) {
+		if (ucv_type(val_arg) != UC_INTEGER)
+			err_return(EINVAL);
+
+		arg = (long)ucv_int64_get(val_arg);
+	}
+
+	ret = fcntl(fd, cmd, arg);
+
+	if (ret &lt; 0)
+		err_return(errno);
+
+	/* F_DUPFD and F_DUPFD_CLOEXEC return a new fd that we own */
+	if (cmd == F_DUPFD
+#ifdef F_DUPFD_CLOEXEC
+	    || cmd == F_DUPFD_CLOEXEC
+#endif
+	) {
+		res = ucv_resource_create_ex(vm, "io.handle", (void **)&amp;new_handle,
+		                             0, sizeof(*new_handle));
+
+		if (!new_handle)
+			err_return(ENOMEM);
+
+		new_handle->fd = ret;
+		new_handle->close_on_free = true;
+
+		return res;
+	}
+
+	return ucv_int64_new(ret);
+}
+
+#ifdef HAS_IOCTL
+
+/**
+ * Performs an ioctl operation on the file descriptor.
+ *
+ * The direction parameter specifies who is reading and writing,
+ * from the user's point of view. It can be one of the following values:
+ *
+ * | Direction      | Description                                                                       |
+ * |----------------|-----------------------------------------------------------------------------------|
+ * | IOC_DIR_NONE   | neither userspace nor kernel is writing, ioctl is executed without passing data.  |
+ * | IOC_DIR_WRITE  | userspace is writing and kernel is reading.                                       |
+ * | IOC_DIR_READ   | kernel is writing and userspace is reading.                                       |
+ * | IOC_DIR_RW     | userspace is writing and kernel is writing back into the data structure.          |
+ *
+ * Returns the result of the ioctl operation; for `IOC_DIR_READ` and
+ * `IOC_DIR_RW` this is a string containing the data, otherwise a number as
+ * return code.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#ioctl
+ *
+ * @param {number} direction
+ * The direction of the ioctl operation. Use constants IOC_DIR_*.
+ *
+ * @param {number} type
+ * The ioctl type (see https://www.kernel.org/doc/html/latest/userspace-api/ioctl/ioctl-number.html)
+ *
+ * @param {number} num
+ * The ioctl sequence number.
+ *
+ * @param {number|string} [value]
+ * The value to pass to the ioctl system call. For `IOC_DIR_NONE`, this argument
+ * is ignored. With `IOC_DIR_READ`, the value should be a positive integer
+ * specifying the number of bytes to expect from the kernel. For the other
+ * directions, `IOC_DIR_WRITE` and `IOC_DIR_RW`, that value parameter must be a
+ * string, serving as buffer for the data to send.
+ *
+ * @returns {?number|?string}
+ *
+ * @example
+ * const handle = io.open('/dev/tty', O_RDWR);
+ * const size = handle.ioctl(IOC_DIR_READ, 0x54, 0x13, 8);  // TIOCGWINSZ
+ */
+static uc_value_t *
+uc_io_ioctl(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle = uc_fn_thisval("io.handle");
+	uc_value_t *direction = uc_fn_arg(0);
+	uc_value_t *type = uc_fn_arg(1);
+	uc_value_t *num = uc_fn_arg(2);
+	uc_value_t *value = uc_fn_arg(3);
+	uc_value_t *mem = NULL;
+	char *buf = NULL;
+	unsigned long req = 0;
+	unsigned int dir, ty, nr;
+	size_t sz = 0;
+	int fd, ret;
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	if (ucv_type(direction) != UC_INTEGER || ucv_type(type) != UC_INTEGER ||
+	    ucv_type(num) != UC_INTEGER)
+		err_return(EINVAL);
+
+	dir = ucv_uint64_get(direction);
+	ty = ucv_uint64_get(type);
+	nr = ucv_uint64_get(num);
+
+	switch (dir) {
+	case IOC_DIR_NONE:
+		break;
+
+	case IOC_DIR_WRITE:
+		if (ucv_type(value) != UC_STRING)
+			err_return(EINVAL);
+
+		sz = ucv_string_length(value);
+		buf = ucv_string_get(value);
+		break;
+
+	case IOC_DIR_READ:
+		if (ucv_type(value) != UC_INTEGER)
+			err_return(EINVAL);
+
+		sz = ucv_to_unsigned(value);
+
+		if (errno != 0)
+			err_return(errno);
+
+		mem = xalloc(sizeof(uc_string_t) + sz + 1);
+		mem->type = UC_STRING;
+		mem->refcount = 1;
+		buf = ucv_string_get(mem);
+		((uc_string_t *)mem)->length = sz;
+		break;
+
+	case IOC_DIR_RW:
+		if (ucv_type(value) != UC_STRING)
+			err_return(EINVAL);
+
+		sz = ucv_string_length(value);
+		mem = ucv_string_new_length(ucv_string_get(value), sz);
+		buf = ucv_string_get(mem);
+		break;
+
+	default:
+		err_return(EINVAL);
+	}
+
+	req = _IOC(dir, ty, nr, sz);
+	ret = ioctl(fd, req, buf);
+
+	if (ret &lt; 0) {
+		ucv_put(mem);
+		err_return(errno);
+	}
+
+	return mem ? mem : ucv_uint64_new(ret);
+}
+
+#endif
+
+/**
+ * Checks if the file descriptor refers to a terminal.
+ *
+ * Returns `true` if the descriptor refers to a terminal device.
+ *
+ * Returns `false` otherwise.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#isatty
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const handle = io.new(0);  // stdin
+ * if (handle.isatty())
+ *     print("Running in a terminal\n");
+ */
+static uc_value_t *
+uc_io_isatty(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle;
+	int fd;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	return ucv_boolean_new(isatty(fd) == 1);
+}
+
+/**
+ * Closes the file descriptor.
+ *
+ * Closes the underlying file descriptor. Further operations on this handle
+ * will fail.
+ *
+ * Returns `true` if the descriptor was successfully closed.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#close
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const handle = io.open('/tmp/test.txt', O_RDONLY);
+ * handle.close();
+ */
+static uc_value_t *
+uc_io_close(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd &lt; 0)
+		err_return(EBADF);
+
+	if (close(handle->fd) &lt; 0)
+		err_return(errno);
+
+	handle->fd = -1;
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Creates an io.handle from a file descriptor number.
+ *
+ * Wraps the given file descriptor number in an io.handle object.
+ *
+ * Returns an io.handle object.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io#new
+ *
+ * @param {number} fd
+ * The file descriptor number.
+ *
+ * @returns {?module:io.handle}
+ *
+ * @example
+ * // Wrap stdin
+ * const stdin = io.new(0);
+ * const data = stdin.read(100);
+ */
+static uc_value_t *
+uc_io_new(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *fdno = uc_fn_arg(0);
+	uc_io_handle_t *handle = NULL;
+	uc_value_t *res;
+	int64_t n;
+
+	if (ucv_type(fdno) != UC_INTEGER)
+		err_return(EINVAL);
+
+	n = ucv_int64_get(fdno);
+
+	if (n &lt; 0 || n > INT_MAX)
+		err_return(EBADF);
+
+	res = ucv_resource_create_ex(vm, "io.handle",
+	                             (void **)&amp;handle, 0, sizeof(*handle));
+
+	if (!handle)
+		err_return(ENOMEM);
+
+	handle->fd = (int)n;
+	handle->close_on_free = false;  /* Don't own this fd */
+
+	return res;
+}
+
+/**
+ * Opens a file and returns an io.handle.
+ *
+ * Opens the specified file with the given flags and mode, returning an
+ * io.handle wrapping the resulting file descriptor.
+ *
+ * Returns an io.handle object.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io#open
+ *
+ * @param {string} path
+ * The path to the file.
+ *
+ * @param {number} [flags=O_RDONLY]
+ * The open flags (O_RDONLY, O_WRONLY, O_RDWR, etc.).
+ *
+ * @param {number} [mode=0o666]
+ * The file creation mode (used with O_CREAT).
+ *
+ * @returns {?module:io.handle}
+ *
+ * @example
+ * const handle = io.open('/tmp/test.txt', O_RDWR | O_CREAT, 0o644);
+ * handle.write('Hello World\n');
+ * handle.close();
+ */
+static uc_value_t *
+uc_io_open(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *path = uc_fn_arg(0);
+	uc_value_t *flags = uc_fn_arg(1);
+	uc_value_t *mode = uc_fn_arg(2);
+	uc_io_handle_t *handle = NULL;
+	uc_value_t *res;
+	int open_flags = O_RDONLY;
+	mode_t open_mode = 0666;
+	int fd;
+
+	if (ucv_type(path) != UC_STRING)
+		err_return(EINVAL);
+
+	if (flags) {
+		if (ucv_type(flags) != UC_INTEGER)
+			err_return(EINVAL);
+
+		open_flags = (int)ucv_int64_get(flags);
+	}
+
+	if (mode) {
+		if (ucv_type(mode) != UC_INTEGER)
+			err_return(EINVAL);
+
+		open_mode = (mode_t)ucv_int64_get(mode);
+	}
+
+	fd = open(ucv_string_get(path), open_flags, open_mode);
+
+	if (fd &lt; 0)
+		err_return(errno);
+
+	res = ucv_resource_create_ex(vm, "io.handle",
+	                             (void **)&amp;handle, 0, sizeof(*handle));
+
+	if (!handle)
+		err_return(ENOMEM);
+
+	handle->fd = fd;
+	handle->close_on_free = true;  /* We own this fd */
+
+	return res;
+}
+
+/**
+ * Creates a pipe.
+ *
+ * Creates a unidirectional data channel (pipe) that can be used for
+ * inter-process communication. Returns an array containing two io.handle
+ * objects: the first is the read end of the pipe, the second is the write end.
+ *
+ * Data written to the write end can be read from the read end.
+ *
+ * Returns an array `[read_handle, write_handle]` on success.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io#pipe
+ *
+ * @returns {?Array&lt;module:io.handle>}
+ *
+ * @example
+ * const [reader, writer] = io.pipe();
+ * writer.write('Hello from pipe!');
+ * const data = reader.read(100);
+ * print(data, "\n");  // Prints: Hello from pipe!
+ */
+static uc_value_t *
+uc_io_pipe(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *read_handle = NULL, *write_handle = NULL;
+	uc_value_t *result, *res;
+	int fds[2];
+
+	if (pipe(fds) &lt; 0)
+		err_return(errno);
+
+	res = ucv_resource_create_ex(vm, "io.handle", (void **)&amp;read_handle, 0,
+	                             sizeof(*read_handle));
+
+	if (!read_handle)
+		err_return(ENOMEM);
+
+	read_handle->fd = fds[0];
+	read_handle->close_on_free = true;
+
+	result = ucv_array_new(vm);
+	ucv_array_push(result, res);
+
+	res = ucv_resource_create_ex(vm, "io.handle", (void **)&amp;write_handle, 0,
+	                             sizeof(*write_handle));
+
+	if (!write_handle) {
+		ucv_put(result);
+		err_return(ENOMEM);
+	}
+
+	write_handle->fd = fds[1];
+	write_handle->close_on_free = true;
+
+	ucv_array_push(result, res);
+
+	return result;
+}
+
+/**
+ * Creates an io.handle from various value types.
+ *
+ * Creates an io.handle by extracting the file descriptor from the given value.
+ * The value can be:
+ * - An integer file descriptor number
+ * - An fs.file, fs.proc, or socket resource
+ * - Any object/array/resource with a fileno() method
+ *
+ * Returns an io.handle object.
+ *
+ * Returns `null` if an error occurred or the value cannot be converted.
+ *
+ * @function module:io#from
+ *
+ * @param {*} value
+ * The value to convert.
+ *
+ * @returns {?module:io.handle}
+ *
+ * @example
+ * import { open as fsopen } from 'fs';
+ * const fp = fsopen('/tmp/test.txt', 'r');
+ * const handle = io.from(fp);
+ * const data = handle.read(100);
+ */
+static uc_value_t *
+uc_io_from(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle = NULL;
+	uc_value_t *val = uc_fn_arg(0);
+	uc_value_t *res;
+	int fd;
+
+	if (!val)
+		err_return(EINVAL);
+
+	if (!get_fd_from_value(vm, val, &amp;fd))
+		return NULL;
+
+	res = ucv_resource_create_ex(vm, "io.handle",
+	                             (void **)&amp;handle, 0, sizeof(*handle));
+
+	if (!handle)
+		err_return(ENOMEM);
+
+	handle->fd = fd;
+	handle->close_on_free = false;  /* Don't own this fd, it's from external source */
+
+	return res;
+}
+
+static void
+uc_io_handle_free(void *ptr)
+{
+	uc_io_handle_t *handle = ptr;
+
+	if (!handle)
+		return;
+
+	if (handle->close_on_free &amp;&amp; handle->fd >= 0)
+		close(handle->fd);
+}
+
+static const uc_function_list_t io_handle_fns[] = {
+	{ "read",		uc_io_read },
+	{ "write",		uc_io_write },
+	{ "seek",		uc_io_seek },
+	{ "tell",		uc_io_tell },
+	{ "dup",		uc_io_dup },
+	{ "dup2",		uc_io_dup2 },
+	{ "fileno",		uc_io_fileno },
+	{ "fcntl",		uc_io_fcntl },
+#ifdef HAS_IOCTL
+	{ "ioctl",		uc_io_ioctl },
+#endif
+	{ "isatty",		uc_io_isatty },
+	{ "close",		uc_io_close },
+	{ "error",		uc_io_error },
+};
+
+static const uc_function_list_t io_fns[] = {
+	{ "error",		uc_io_error },
+	{ "new",		uc_io_new },
+	{ "open",		uc_io_open },
+	{ "from",		uc_io_from },
+	{ "pipe",		uc_io_pipe },
+};
+
+#define ADD_CONST(x) ucv_object_add(scope, #x, ucv_int64_new(x))
+
+void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
+{
+	uc_function_list_register(scope, io_fns);
+
+	ADD_CONST(O_RDONLY);
+	ADD_CONST(O_WRONLY);
+	ADD_CONST(O_RDWR);
+	ADD_CONST(O_CREAT);
+	ADD_CONST(O_EXCL);
+	ADD_CONST(O_TRUNC);
+	ADD_CONST(O_APPEND);
+	ADD_CONST(O_NONBLOCK);
+	ADD_CONST(O_NOCTTY);
+	ADD_CONST(O_SYNC);
+	ADD_CONST(O_CLOEXEC);
+#ifdef O_DIRECTORY
+	ADD_CONST(O_DIRECTORY);
+#endif
+#ifdef O_NOFOLLOW
+	ADD_CONST(O_NOFOLLOW);
+#endif
+
+	ADD_CONST(SEEK_SET);
+	ADD_CONST(SEEK_CUR);
+	ADD_CONST(SEEK_END);
+
+	ADD_CONST(F_DUPFD);
+#ifdef F_DUPFD_CLOEXEC
+	ADD_CONST(F_DUPFD_CLOEXEC);
+#endif
+	ADD_CONST(F_GETFD);
+	ADD_CONST(F_SETFD);
+	ADD_CONST(F_GETFL);
+	ADD_CONST(F_SETFL);
+	ADD_CONST(F_GETLK);
+	ADD_CONST(F_SETLK);
+	ADD_CONST(F_SETLKW);
+	ADD_CONST(F_GETOWN);
+	ADD_CONST(F_SETOWN);
+
+	ADD_CONST(FD_CLOEXEC);
+
+#ifdef HAS_IOCTL
+	ADD_CONST(IOC_DIR_NONE);
+	ADD_CONST(IOC_DIR_READ);
+	ADD_CONST(IOC_DIR_WRITE);
+	ADD_CONST(IOC_DIR_RW);
+#endif
+
+	uc_type_declare(vm, "io.handle", io_handle_fns, uc_io_handle_free);
+}
+</code></pre></article></section></div></div></div><div class="search-container" id="PkfLWpAbet" style="display:none"><div class="wrapper" id="iCxFxjkHbP"><button class="icon-button search-close-button" id="VjLlGakifb" aria-label="close search"><svg><use xlink:href="#close-icon"></use></svg></button><div class="search-box-c"><svg><use xlink:href="#search-icon"></use></svg> <input type="text" id="vpcKVYIppa" class="search-input" placeholder="Search..." autofocus></div><div class="search-result-c" id="fWwVHRuDuN"><span class="search-result-c-text">Type anything to view search result</span></div></div></div><div class="mobile-menu-icon-container"><button class="icon-button" id="mobile-menu" data-isopen="false" aria-label="menu"><svg><use xlink:href="#menu-icon"></use></svg></button> <button class="icon-button" id="mobile-toc" data-isopen="false" aria-label="toc"><svg><use xlink:href="#toc-icon"></use></svg></button></div><div id="mobile-sidebar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="mobile-nav-links"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="mobile-sidebar-items-c"><div class="sidebar-section-title with-arrow" data-isopen="false" id="je2vq9rMQtETT_gffGRur"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div><div class="sidebar-section-children"><a href="tutorial-04-arrays.html">Working with Arrays</a></div><div class="sidebar-section-children"><a href="tutorial-05-dictionaries.html">Working with Dictionaries</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="YKXXZ2AoD6atg9y-q35YG"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-io.html">io</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-resolv.html">resolv</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div><div class="mobile-navbar-actions"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div></div></div><div id="mobile-tocbar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><span class="sidebar-title">Table of Contents</span><div class="toc-contents"></div></div></div><script type="text/javascript" src="scripts/core.min.js"></script><script src="scripts/search.min.js" defer="defer"></script><script src="scripts/third-party/fuse.js" defer="defer"></script><script type="text/javascript">var tocbotInstance=tocbot.init({tocSelector:"#mobile-tocbar > .mobile-sidebar-wrapper > .toc-contents",contentSelector:".main-content",headingSelector:"h1, h2, h3",hasInnerContainers:!0,scrollContainer:".main-content",headingsOffset:130,onClick:(...e)=>{hideMobileMenu(),bringLinkToView(...e)},includeHtml:!0})</script></body></html>
