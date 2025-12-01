@@ -1561,7 +1561,8 @@ uc_vm_value_bitop(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 static uc_value_t *
 uc_vm_string_concat(uc_vm_t *vm, uc_value_t *v1, uc_value_t *v2)
 {
-	char buf[sizeof(void *)], *s1, *s2;
+	char buf[sizeof(void *)], *s1, *s2, *str;
+	uc_value_t *ustr;
 	uc_stringbuf_t *sbuf;
 	size_t l1, l2;
 
@@ -1578,6 +1579,13 @@ uc_vm_string_concat(uc_vm_t *vm, uc_value_t *v1, uc_value_t *v2)
 			memcpy(&buf[l1], s2, l2);
 
 			return ucv_string_new_length(buf, l1 + l2);
+		}
+		else {
+			ustr = ucv_string_alloc(&str, l1 + l2);
+			memcpy(&str[0], s1, l1);
+			memcpy(&str[l1], s2, l2);
+
+			return ustr;
 		}
 	}
 
