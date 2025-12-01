@@ -29,6 +29,7 @@
 static void uc_compiler_compile_unary(uc_compiler_t *compiler);
 static void uc_compiler_compile_binary(uc_compiler_t *compiler);
 static void uc_compiler_compile_delete(uc_compiler_t *compiler);
+static void uc_compiler_compile_importcall(uc_compiler_t *compiler);
 static void uc_compiler_compile_paren(uc_compiler_t *compiler);
 static void uc_compiler_compile_call(uc_compiler_t *compiler);
 static void uc_compiler_compile_post_inc(uc_compiler_t *compiler);
@@ -59,6 +60,7 @@ uc_compiler_parse_rules[TK_ERROR + 1] = {
 	[TK_COMPL]		= { uc_compiler_compile_unary, NULL, P_UNARY },
 	[TK_NOT]		= { uc_compiler_compile_unary, NULL, P_UNARY },
 	[TK_DELETE]		= { uc_compiler_compile_delete, NULL, P_UNARY },
+	[TK_IMPORT]		= { uc_compiler_compile_importcall, NULL, P_UNARY },
 	[TK_INC]		= { uc_compiler_compile_unary, uc_compiler_compile_post_inc, P_INC },
 	[TK_DEC]		= { uc_compiler_compile_unary, uc_compiler_compile_post_inc, P_INC },
 	[TK_DIV]		= { NULL, uc_compiler_compile_binary, P_MUL },
@@ -395,40 +397,25 @@ static void
 uc_compiler_backpatch(uc_compiler_t *compiler, size_t break_addr, size_t next_addr);
 
 static void
-uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence)
+uc_compiler_parse_precedence_for_token(uc_compiler_t *compiler, uc_precedence_t precedence, uc_token_t *token)
 {
 	uc_parse_rule_t *rule;
 
-	rule = uc_compiler_parse_rule(compiler->parser->curr.type);
+	rule = uc_compiler_parse_rule(token->type);
 
 	if (!rule->prefix) {
-		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos, "Expecting expression");
-		uc_compiler_parse_advance(compiler);
+		uc_compiler_syntax_error(compiler, token->pos, "Expecting expression");
 
 		return;
 	}
 
-	uc_compiler_exprstack_push(compiler,
-		compiler->parser->curr.type,
+	uc_compiler_exprstack_push(compiler, token->type,
 		(precedence <= P_ASSIGN) ? F_ASSIGNABLE : 0);
-
-	/* allow reserved words as property names in object literals */
-	if (rule->prefix == uc_compiler_compile_object)
-		compiler->parser->lex.no_keyword = true;
-
-	/* unless a sub-expression follows, treat subsequent slash as division
-	 * operator and not as beginning of regexp literal */
-	if (rule->prefix != uc_compiler_compile_paren &&
-	    rule->prefix != uc_compiler_compile_unary &&
-	    rule->prefix != uc_compiler_compile_array)
-		compiler->parser->lex.no_regexp = true;
 
 	compiler->patchlist = &(uc_patchlist_t){
 		.parent = compiler->patchlist,
 		.token = TK_EXP,
 	};
-
-	uc_compiler_parse_advance(compiler);
 
 	rule->prefix(compiler);
 
@@ -456,6 +443,27 @@ uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence
 	uc_compiler_backpatch(compiler, compiler->patchlist->depth, 0);
 
 	uc_compiler_exprstack_pop(compiler);
+}
+
+static void
+uc_compiler_parse_precedence(uc_compiler_t *compiler, uc_precedence_t precedence)
+{
+	uc_token_t token = compiler->parser->curr;
+	uc_parse_rule_t *rule = uc_compiler_parse_rule(token.type);
+
+	/* allow reserved words as property names in object literals */
+	if (rule->prefix == uc_compiler_compile_object)
+		compiler->parser->lex.no_keyword = true;
+
+	/* unless a sub-expression follows, treat subsequent slash as division
+	 * operator and not as beginning of regexp literal */
+	if (rule->prefix != uc_compiler_compile_paren &&
+	    rule->prefix != uc_compiler_compile_unary &&
+	    rule->prefix != uc_compiler_compile_array)
+		compiler->parser->lex.no_regexp = true;
+
+	uc_compiler_parse_advance(compiler);
+	uc_compiler_parse_precedence_for_token(compiler, precedence, &token);
 }
 
 static size_t
@@ -3206,6 +3214,8 @@ uc_compiler_export_add(uc_compiler_t *compiler, uc_value_t *name, ssize_t slot)
 {
 	uc_source_t *source = uc_compiler_current_source(compiler);
 
+	uc_compiler_inc_exportnum(compiler);
+
 	if (!uc_source_export_add(source, name)) {
 		if (name)
 			uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
@@ -3216,7 +3226,6 @@ uc_compiler_export_add(uc_compiler_t *compiler, uc_value_t *name, ssize_t slot)
 	}
 	else {
 		uc_vector_push(compiler->patchlist, slot);
-		uc_compiler_inc_exportnum(compiler);
 	}
 }
 
@@ -3324,7 +3333,50 @@ static uc_program_t *
 uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_program_t *prog, char **errp);
 
 static bool
-uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, uc_value_t *imports, char **errp)
+uc_compiler_compile_dynload(uc_compiler_t *compiler, const char *name, uc_value_t *imports)
+{
+	uc_value_t *modname = ucv_string_new(name);
+	size_t i, n_imports;
+	uc_value_t *import;
+
+	for (i = 0, n_imports = 0; i < ucv_array_length(imports); i++) {
+		import = ucv_array_get(imports, i);
+
+		if (ucv_boolean_get(import)) {
+			uc_compiler_emit_constant(compiler, 0, modname);
+			uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
+			uc_compiler_emit_u32(compiler, 0, 0);
+		}
+		else {
+			n_imports++;
+		}
+	}
+
+	if (n_imports > 0) {
+		uc_compiler_emit_constant(compiler, 0, modname);
+		uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
+		uc_compiler_emit_u32(compiler, 0, n_imports | ((compiler->upvals.count - n_imports) << 16));
+
+		for (i = 0; i < ucv_array_length(imports); i++) {
+			import = ucv_get(ucv_array_get(imports, i));
+
+			if (!import)
+				import = ucv_string_new("default");
+
+			if (!ucv_boolean_get(import))
+				uc_compiler_emit_constant_index(compiler, 0, import);
+
+			ucv_put(import);
+		}
+	}
+
+	ucv_put(modname);
+
+	return true;
+}
+
+static bool
+uc_compiler_compile_module_source(uc_compiler_t *compiler, const char *modname, uc_source_t *source, uc_value_t *imports, char **errp)
 {
 	uc_parse_config_t config = {
 		.raw_mode = true,
@@ -3349,6 +3401,11 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, uc_source_t *source, 
 	}
 
 	if (!loaded) {
+		/* We do not yet support linking precompiled modules at compile time,
+		   turn static import operation into dynamic load one. */
+		if (uc_source_type_test(source) == UC_SOURCE_TYPE_PRECOMPILED)
+			return uc_compiler_compile_dynload(compiler, modname, imports);
+
 		load_idx = uc_program_function_id(compiler->program,
 			uc_program_function_last(compiler->program)) + 1;
 
@@ -3512,49 +3569,6 @@ uc_compiler_acquire_source(uc_compiler_t *compiler, const char *path)
 }
 
 static bool
-uc_compiler_compile_dynload(uc_compiler_t *compiler, const char *name, uc_value_t *imports)
-{
-	uc_value_t *modname = ucv_string_new(name);
-	size_t i, n_imports;
-	uc_value_t *import;
-
-	for (i = 0, n_imports = 0; i < ucv_array_length(imports); i++) {
-		import = ucv_array_get(imports, i);
-
-		if (ucv_boolean_get(import)) {
-			uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
-			uc_compiler_emit_u32(compiler, 0, 0);
-			uc_compiler_emit_constant_index(compiler, 0, modname);
-		}
-		else {
-			n_imports++;
-		}
-	}
-
-	if (n_imports > 0) {
-		uc_compiler_emit_insn(compiler, 0, I_DYNLOAD);
-		uc_compiler_emit_u32(compiler, 0, n_imports | ((compiler->upvals.count - n_imports) << 16));
-		uc_compiler_emit_constant_index(compiler, 0, modname);
-
-		for (i = 0; i < ucv_array_length(imports); i++) {
-			import = ucv_get(ucv_array_get(imports, i));
-
-			if (!import)
-				import = ucv_string_new("default");
-
-			if (!ucv_boolean_get(import))
-				uc_compiler_emit_constant_index(compiler, 0, import);
-
-			ucv_put(import);
-		}
-	}
-
-	ucv_put(modname);
-
-	return true;
-}
-
-static bool
 uc_compiler_is_dynlink_module(uc_compiler_t *compiler, const char *name, const char *path)
 {
 	uc_search_path_t *dynlink_list = &compiler->parser->config->force_dynlink_list;
@@ -3593,7 +3607,7 @@ uc_compiler_compile_module(uc_compiler_t *compiler, const char *name, uc_value_t
 
 		if (source) {
 			err = NULL;
-			res = uc_compiler_compile_module_source(compiler, source, imports, &err);
+			res = uc_compiler_compile_module_source(compiler, name, source, imports, &err);
 
 			if (!res) {
 				uc_error_message_indent(&err);
@@ -3709,18 +3723,39 @@ uc_compiler_compile_importlist(uc_compiler_t *compiler, uc_value_t *namelist)
 }
 
 static void
+uc_compiler_compile_importcall(uc_compiler_t *compiler)
+{
+	uc_compiler_parse_consume(compiler, TK_LPAREN);
+	uc_compiler_parse_precedence(compiler, P_ASSIGN);
+	uc_compiler_parse_consume(compiler, TK_RPAREN);
+
+	uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_DYNLOAD);
+	uc_compiler_emit_u32(compiler, 0, 0);
+}
+
+static uc_tokentype_t
 uc_compiler_compile_import(uc_compiler_t *compiler)
 {
-	uc_value_t *namelist = ucv_array_new(NULL);
+	uc_value_t *namelist;
+
+	/* import(...) */
+	if (uc_compiler_parse_check(compiler, TK_LPAREN)) {
+		uc_compiler_parse_precedence_for_token(compiler, P_UNARY,
+		                                       &compiler->parser->prev);
+
+		uc_compiler_emit_insn(compiler, 0, I_POP);
+
+		return TK_SCOL;
+	}
 
 	if (compiler->scope_depth) {
 		uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 			"Imports may only appear at top level");
 
-		ucv_put(namelist);
-
-		return;
+		return TK_IMPORT;
 	}
+
+	namelist = ucv_array_new(NULL);
 
 	/* import { ... } from */
 	if (uc_compiler_parse_match(compiler, TK_LBRACE)) {
@@ -3779,6 +3814,8 @@ uc_compiler_compile_import(uc_compiler_t *compiler)
 	uc_compiler_parse_consume(compiler, TK_SCOL);
 
 	ucv_put(namelist);
+
+	return TK_IMPORT;
 }
 
 static uc_tokentype_t
@@ -3793,7 +3830,7 @@ uc_compiler_compile_declaration(uc_compiler_t *compiler)
 	else if (uc_compiler_parse_match(compiler, TK_EXPORT))
 		uc_compiler_compile_export(compiler);
 	else if (uc_compiler_parse_match(compiler, TK_IMPORT))
-		uc_compiler_compile_import(compiler);
+		last_statement_type = uc_compiler_compile_import(compiler);
 	else
 		last_statement_type = uc_compiler_compile_statement(compiler);
 
@@ -3815,6 +3852,7 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_progra
 
 	return NULL;
 #else
+	bool is_module = (prog != NULL) || (config && config->compile_module);
 	uc_patchlist_t exports = { .token = TK_EXPORT };
 	uc_exprstack_t expr = { .token = TK_EOF };
 	uc_parser_t parser = { .config = config };
@@ -3826,7 +3864,7 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_progra
 
 	if (!prog) {
 		progptr = uc_program_new();
-		name = "main";
+		name = is_module ? "module" : "main";
 	}
 	else {
 		progptr = prog;
@@ -3837,7 +3875,7 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_progra
 	uc_compiler_init(&compiler, name, source, 0, progptr,
 		config && config->strict_declarations);
 
-	if (progptr == prog) {
+	if (is_module) {
 		compiler.patchlist = &exports;
 		compiler.function->module = true;
 	}
