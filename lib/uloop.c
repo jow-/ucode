@@ -367,7 +367,7 @@ uc_uloop_end(uc_vm_t *vm, size_t nargs)
  * Stops the uloop event loop and cancels pending timeouts and events.
  *
  * This function immediately stops the uloop event loop, cancels all pending
- * timeouts and events, unregisters all handles, and deallocates associated
+ * timeouts and events, deregisters all handles, and deallocates associated
  * resources.
  *
  * @function module:uloop#done
@@ -688,9 +688,9 @@ uc_uloop_handle_handle(uc_vm_t *vm, size_t nargs)
 }
 
 /**
- * Unregisters the uloop handle.
+ * Deregisters the uloop handle.
  *
- * This method unregisters the uloop handle from the uloop event loop and frees
+ * This method deregisters the uloop handle from the uloop event loop and frees
  * any associated resources. After calling this method, the handle instance
  * should no longer be used.
  *
@@ -700,7 +700,7 @@ uc_uloop_handle_handle(uc_vm_t *vm, size_t nargs)
  * This function does not return a value.
  *
  * @example
- * // Unregister the uloop handle and free associated resources
+ * // Deregister the uloop handle and free associated resources
  * handle.delete();
  * printf("Handle deleted successfully\n");
  */
@@ -812,7 +812,7 @@ get_fd(uc_vm_t *vm, uc_value_t *val)
  *         printf("Read event occurred!\n");
  * }, uloop.ULOOP_READ);
  *
- * // Check socket for writability
+ * // Check socket for writeability
  * const sock = socket.connect("example.org", 80);
  * uloop.handle(sock, (events) => {
  *     sock.send("GET / HTTP/1.0\r\n\r\n");
@@ -919,9 +919,9 @@ uc_uloop_process_pid(uc_vm_t *vm, size_t nargs)
 }
 
 /**
- * Unregisters the process from uloop.
+ * Deregisters the process from uloop.
  *
- * This method unregisters the process from the uloop event loop and releases
+ * This method deregisters the process from the uloop event loop and releases
  * any associated resources. However, note that the operating system process
  * itself is not terminated by this method.
  *
@@ -2353,7 +2353,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	 * {@link module:uloop.handle#handle|handle()} function to specify the IO
 	 * events that should be monitored on the given handle.
 	 * @property {number} ULOOP_READ - File or socket is readable.
-	 * @property {number} ULOOP_WRITE - File or socket is writable.
+	 * @property {number} ULOOP_WRITE - File or socket is writeable.
 	 * @property {number} ULOOP_EDGE_TRIGGER - Enable edge-triggered event mode.
 	 * @property {number} ULOOP_BLOCKING - Do not make descriptor non-blocking.
 	 */
