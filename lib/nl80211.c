@@ -14,6 +14,54 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+/**
+* # Wireless Netlink
+*
+* The `nl80211` module provides functions for interacting with the nl80211 netlink interface
+* for wireless networking configuration and management.
+*
+* Functions can be individually imported and directly accessed using the
+* {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+* syntax:
+*
+*   ```javascript
+*   import { error, request, listener, waitfor, const } from 'nl80211';
+*
+*   // Send a nl80211 request
+*   let response = request(const.NL80211_CMD_GET_WIPHY, 0, { wiphy: 0 });
+*
+*   // Create a listener for wireless events
+*   let wifiListener = listener((msg) => {
+*       print('Received wireless event:', msg, '\n');
+*   }, [const.NL80211_CMD_NEW_INTERFACE, const.NL80211_CMD_DEL_INTERFACE]);
+*
+*   // Wait for a specific nl80211 event
+*   let event = waitfor([const.NL80211_CMD_NEW_SCAN_RESULTS], 5000);
+*   if (event)
+*       print('Received scan results:', event.msg, '\n');
+*   ```
+*
+* Alternatively, the module namespace can be imported
+* using a wildcard import statement:
+*
+*   ```javascript
+*   import * as nl80211 from 'nl80211';
+*
+*   // Send a nl80211 request
+*   let response = nl80211.request(nl80211.const.NL80211_CMD_GET_WIPHY, 0, { wiphy: 0 });
+*
+*   // Create a listener for wireless events
+*   let listener = nl80211.listener((msg) => {
+*       print('Received wireless event:', msg, '\n');
+*   }, [nl80211.const.NL80211_CMD_NEW_INTERFACE, nl80211.const.NL80211_CMD_DEL_INTERFACE]);
+*   ```
+*
+* Additionally, the nl80211 module namespace may also be imported by invoking
+* the `ucode` interpreter with the `-lnl80211` switch.
+*
+* @module nl80211
+*/
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -2040,6 +2088,22 @@ typedef struct {
 } request_state_t;
 
 
+/**
+ * Get the last error information
+ *
+ * This function returns information about the last error that occurred
+ * in nl80211 operations. It provides both error code and error message.
+ *
+ * @returns {Object|null} Object with 'code' and 'msg' properties containing
+ *                       the error information, or null if no error occurred
+ * @example
+ * // Send a request that might fail
+ * let result = request(const.SOME_COMMAND, 0, invalid_params);
+ * if (!result) {
+ *     let error = error();
+ *     print('Error occurred:', error.code, error.msg);
+ * }
+ */
 static uc_value_t *
 uc_nl_error(uc_vm_t *vm, size_t nargs)
 {
@@ -2546,6 +2610,22 @@ uc_nl_evsock_init(void)
 	return true;
 }
 
+/**
+ * Wait for a specific nl80211 event
+ *
+ * This function waits for a specified nl80211 command to be received within
+ * a given timeout period. It's useful for asynchronous event handling.
+ *
+ * @param {Array|number} cmds - Array of command IDs or single command ID to wait for
+ * @param {number} timeout - Timeout in milliseconds (optional, default: -1 for infinite)
+ * @returns {Object|null} Object with 'cmd' and 'msg' properties if event received,
+ *                       null if timeout or error occurs
+ * @example
+ * // Wait for scan results with 5 second timeout
+ * let event = waitfor([const.NL80211_CMD_NEW_SCAN_RESULTS], 5000);
+ * if (event)
+ *     print('Received scan results:', event.msg);
+ */
 static uc_value_t *
 uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 {
@@ -2710,6 +2790,28 @@ uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 	}
 }
 
+/**
+ * Send a nl80211 request
+ *
+ * This function sends a nl80211 netlink request to the kernel and processes
+ * the response. It's the main interface for interacting with wireless devices.
+ *
+ * @param {number} cmd - The nl80211 command ID to execute
+ * @param {number} flags - Netlink flags (optional, default: 0)
+ * @param {Object} payload - Request payload object with attributes (optional)
+ * @returns {Object|boolean} Response object from the kernel, or true for
+ *                           successful acknowledgment without data
+ * @example
+ * // Get wireless device information
+ * let response = request(const.NL80211_CMD_GET_WIPHY, 0, { wiphy: 0 });
+ * print('Wireless device info:', response);
+ *
+ * // Set wireless interface mode
+ * let result = request(const.NL80211_CMD_SET_INTERFACE, 0, {
+ *     ifindex: 1,
+ *     iftype: const.NL80211_IFTYPE_AP
+ * });
+ */
 static uc_value_t *
 uc_nl_request(uc_vm_t *vm, size_t nargs)
 {
@@ -2719,12 +2821,52 @@ uc_nl_request(uc_vm_t *vm, size_t nargs)
 	return uc_nl_request_common(nl80211_conn.sock, vm, nargs);
 }
 
+
+/**
+ * Represents a netlink listener resource.
+ *
+ * @class module:nl80211.listener
+ * @hideconstructor
+ *
+ * @see {@link module:nl80211#listener|listener()}
+ *
+ * @example
+ * const nlListener = listener((msg) => {
+ *     print('Received netlink message:', msg, '\n');
+ * }, [const.NL80211_CMD_NEW_INTERFACE, const.NL80211_CMD_DEL_INTERFACE]);
+ *
+ * nlListener.set_commands([const.NL80211_CMD_GET_WIPHY, const.NL80211_CMD_SET_INTERFACE]);
+ *
+ * nlListener.close();
+ */
+
 static void
 uc_nl_listener_cb(struct uloop_fd *fd, unsigned int events)
 {
 	nl_recvmsgs(nl80211_conn.evsock, nl80211_conn.evsock_cb);
 }
 
+/**
+ * Create a listener for nl80211 events
+ *
+ * This function creates a listener that will receive nl80211 events matching
+ * the specified command IDs. The listener runs asynchronously and calls the
+ * provided callback function when events are received.
+ *
+ * @param {Function} callback - Function to call when an event is received
+ * @param {Array|number} cmds - Array of command IDs or single command ID to listen for
+ * @returns {Object} Listener resource object that can be used to manage the listener
+ * @example
+ * // Listen for interface changes
+ * let listener = listener((msg) => {
+ *     print('Interface event:', msg.cmd, msg.msg);
+ * }, [const.NL80211_CMD_NEW_INTERFACE, const.NL80211_CMD_DEL_INTERFACE]);
+ *
+ * // Listen for scan results
+ * let scanListener = listener((msg) => {
+ *     print('Scan completed:', msg.msg);
+ * }, const.NL80211_CMD_NEW_SCAN_RESULTS);
+ */
 static uc_value_t *
 uc_nl_listener(uc_vm_t *vm, size_t nargs)
 {
@@ -2791,6 +2933,21 @@ uc_nl_listener_free(void *arg)
 	free(l);
 }
 
+/**
+ * Set the commands this listener should listen for
+ *
+ * This method updates the command IDs that the listener will respond to.
+ * It allows dynamic modification of which events the listener handles.
+ *
+ * @param {number[]|number} cmds - Array of command IDs or single command ID to listen for
+ * @returns {void}
+ * @example
+ * // Create a listener initially for interface events
+ * let listener = listener(callback, [const.NL80211_CMD_NEW_INTERFACE]);
+ *
+ * // Later, make it also listen for scan events
+ * listener.set_commands([const.NL80211_CMD_NEW_INTERFACE, const.NL80211_CMD_NEW_SCAN_RESULTS]);
+ */
 static uc_value_t *
 uc_nl_listener_set_commands(uc_vm_t *vm, size_t nargs)
 {
@@ -2807,12 +2964,45 @@ uc_nl_listener_set_commands(uc_vm_t *vm, size_t nargs)
 	return NULL;
 }
 
+/**
+ * Send a nl80211 request from the listener
+ *
+ * This method allows the listener to send its own nl80211 requests
+ * using the same connection used for event listening.
+ *
+ * @param {number} cmd - The nl80211 command ID to execute
+ * @param {number} flags - Netlink flags (optional, default: 0)
+ * @param {Object} payload - Request payload object with attributes (optional)
+ * @returns {Object|boolean} Response object from the kernel, or true for
+ *                           successful acknowledgment without data
+ * @example
+ * // Listener sends its own request
+ * let response = listener.request(const.NL80211_CMD_GET_STATION, 0, {
+ *     ifindex: 1,
+ *     mac: "00:11:22:33:44:55"
+ * });
+ */
 static uc_value_t *
 uc_nl_listener_request(uc_vm_t *vm, size_t nargs)
 {
 	return uc_nl_request_common(nl80211_conn.evsock, vm, nargs);
 }
 
+/**
+ * Close and remove the listener
+ *
+ * This method stops the listener from receiving further events and
+ * cleans up all associated resources. The listener becomes invalid
+ * after this method is called.
+ *
+ * @returns {void}
+ * @example
+ * // Create and use a listener
+ * let listener = listener(callback, [const.NL80211_CMD_NEW_INTERFACE]);
+ *
+ * // Later, clean it up
+ * listener.close();
+ */
 static uc_value_t *
 uc_nl_listener_close(uc_vm_t *vm, size_t nargs)
 {
@@ -2840,6 +3030,27 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 
 #define ADD_CONST(x) ucv_object_add(c, #x, ucv_int64_new(x))
 
+	/**
+	 * @typedef
+	 * @name Netlink message flags
+	 * @property {number} NLM_F_ACK - Request for acknowledgment
+	 * @property {number} NLM_F_ACK_TLVS - Request for acknowledgment with TLVs
+	 * @property {number} NLM_F_APPEND - Append to existing list
+	 * @property {number} NLM_F_ATOMIC - Atomic operation
+	 * @property {number} NLM_F_CAPPED - Request capped
+	 * @property {number} NLM_F_CREATE - Create if not exists
+	 * @property {number} NLM_F_DUMP - Dump request
+	 * @property {number} NLM_F_DUMP_FILTERED - Dump filtered request
+	 * @property {number} NLM_F_DUMP_INTR - Dump interrupted
+	 * @property {number} NLM_F_ECHO - Echo request
+	 * @property {number} NLM_F_EXCL - Exclusive creation
+	 * @property {number} NLM_F_MATCH - Match request
+	 * @property {number} NLM_F_MULTI - Multi-part message
+	 * @property {number} NLM_F_NONREC - Non-recursive operation
+	 * @property {number} NLM_F_REPLACE - Replace existing
+	 * @property {number} NLM_F_REQUEST - Request message
+	 * @property {number} NLM_F_ROOT - Root operation
+	 */
 	ADD_CONST(NLM_F_ACK);
 	ADD_CONST(NLM_F_ACK_TLVS);
 	ADD_CONST(NLM_F_APPEND);
@@ -2858,6 +3069,125 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(NLM_F_REQUEST);
 	ADD_CONST(NLM_F_ROOT);
 
+	/**
+	 * @typedef
+	 * @name nl80211 commands
+	 * @property {number} NL80211_CMD_GET_WIPHY - Get wireless PHY attributes
+	 * @property {number} NL80211_CMD_SET_WIPHY - Set wireless PHY attributes
+	 * @property {number} NL80211_CMD_NEW_WIPHY - Create new wireless PHY
+	 * @property {number} NL80211_CMD_DEL_WIPHY - Delete wireless PHY
+	 * @property {number} NL80211_CMD_GET_INTERFACE - Get interface information
+	 * @property {number} NL80211_CMD_SET_INTERFACE - Set interface attributes
+	 * @property {number} NL80211_CMD_NEW_INTERFACE - Create new interface
+	 * @property {number} NL80211_CMD_DEL_INTERFACE - Delete interface
+	 * @property {number} NL80211_CMD_GET_KEY - Get key
+	 * @property {number} NL80211_CMD_SET_KEY - Set key
+	 * @property {number} NL80211_CMD_NEW_KEY - Add new key
+	 * @property {number} NL80211_CMD_DEL_KEY - Delete key
+	 * @property {number} NL80211_CMD_GET_BEACON - Get beacon
+	 * @property {number} NL80211_CMD_SET_BEACON - Set beacon
+	 * @property {number} NL80211_CMD_NEW_BEACON - Set beacon (alias)
+	 * @property {number} NL80211_CMD_STOP_AP - Stop AP operation
+	 * @property {number} NL80211_CMD_DEL_BEACON - Delete beacon
+	 * @property {number} NL80211_CMD_GET_STATION - Get station information
+	 * @property {number} NL80211_CMD_SET_STATION - Set station attributes
+	 * @property {number} NL80211_CMD_NEW_STATION - Add new station
+	 * @property {number} NL80211_CMD_DEL_STATION - Delete station
+	 * @property {number} NL80211_CMD_GET_MPATH - Get mesh path
+	 * @property {number} NL80211_CMD_SET_MPATH - Set mesh path
+	 * @property {number} NL80211_CMD_NEW_MPATH - Add new mesh path
+	 * @property {number} NL80211_CMD_DEL_MPATH - Delete mesh path
+	 * @property {number} NL80211_CMD_SET_BSS - Set BSS attributes
+	 * @property {number} NL80211_CMD_SET_REG - Set regulatory domain
+	 * @property {number} NL80211_CMD_REQ_SET_REG - Request regulatory domain change
+	 * @property {number} NL80211_CMD_GET_MESH_CONFIG - Get mesh configuration
+	 * @property {number} NL80211_CMD_SET_MESH_CONFIG - Set mesh configuration
+	 * @property {number} NL80211_CMD_GET_REG - Get regulatory domain
+	 * @property {number} NL80211_CMD_GET_SCAN - Get scan results
+	 * @property {number} NL80211_CMD_TRIGGER_SCAN - Trigger scan
+	 * @property {number} NL80211_CMD_NEW_SCAN_RESULTS - New scan results available
+	 * @property {number} NL80211_CMD_SCAN_ABORTED - Scan aborted
+	 * @property {number} NL80211_CMD_REG_CHANGE - Regulatory domain change
+	 * @property {number} NL80211_CMD_AUTHENTICATE - Authenticate
+	 * @property {number} NL80211_CMD_ASSOCIATE - Associate
+	 * @property {number} NL80211_CMD_DEAUTHENTICATE - Deauthenticate
+	 * @property {number} NL80211_CMD_DISASSOCIATE - Disassociate
+	 * @property {number} NL80211_CMD_MICHAEL_MIC_FAILURE - Michael MIC failure
+	 * @property {number} NL80211_CMD_REG_BEACON_HINT - Beacon regulatory hint
+	 * @property {number} NL80211_CMD_JOIN_IBSS - Join IBSS
+	 * @property {number} NL80211_CMD_LEAVE_IBSS - Leave IBSS
+	 * @property {number} NL80211_CMD_TESTMODE - Test mode
+	 * @property {number} NL80211_CMD_CONNECT - Connect
+	 * @property {number} NL80211_CMD_ROAM - Roam
+	 * @property {number} NL80211_CMD_DISCONNECT - Disconnect
+	 * @property {number} NL80211_CMD_SET_WIPHY_NETNS - Set wireless PHY network namespace
+	 * @property {number} NL80211_CMD_GET_SURVEY - Get survey data
+	 * @property {number} NL80211_CMD_NEW_SURVEY_RESULTS - New survey results
+	 * @property {number} NL80211_CMD_SET_PMKSA - Set PMKSA
+	 * @property {number} NL80211_CMD_DEL_PMKSA - Delete PMKSA
+	 * @property {number} NL80211_CMD_FLUSH_PMKSA - Flush PMKSA
+	 * @property {number} NL80211_CMD_REMAIN_ON_CHANNEL - Remain on channel
+	 * @property {number} NL80211_CMD_CANCEL_REMAIN_ON_CHANNEL - Cancel remain on channel
+	 * @property {number} NL80211_CMD_SET_TX_BITRATE_MASK - Set TX bitrate mask
+	 * @property {number} NL80211_CMD_REGISTER_FRAME - Register frame
+	 * @property {number} NL80211_CMD_REGISTER_ACTION - Register action frame
+	 * @property {number} NL80211_CMD_FRAME - Frame
+	 * @property {number} NL80211_CMD_ACTION - Action frame
+	 * @property {number} NL80211_CMD_FRAME_TX_STATUS - Frame TX status
+	 * @property {number} NL80211_CMD_ACTION_TX_STATUS - Action TX status
+	 * @property {number} NL80211_CMD_SET_POWER_SAVE - Set power save
+	 * @property {number} NL80211_CMD_GET_POWER_SAVE - Get power save
+	 * @property {number} NL80211_CMD_SET_CQM - Set CQM
+	 * @property {number} NL80211_CMD_NOTIFY_CQM - Notify CQM
+	 * @property {number} NL80211_CMD_SET_CHANNEL - Set channel
+	 * @property {number} NL80211_CMD_SET_WDS_PEER - Set WDS peer
+	 * @property {number} NL80211_CMD_FRAME_WAIT_CANCEL - Cancel frame wait
+	 * @property {number} NL80211_CMD_JOIN_MESH - Join mesh
+	 * @property {number} NL80211_CMD_LEAVE_MESH - Leave mesh
+	 * @property {number} NL80211_CMD_UNPROT_DEAUTHENTICATE - Unprotected deauthenticate
+	 * @property {number} NL80211_CMD_UNPROT_DISASSOCIATE - Unprotected disassociate
+	 * @property {number} NL80211_CMD_NEW_PEER_CANDIDATE - New peer candidate
+	 * @property {number} NL80211_CMD_GET_WOWLAN - Get WoWLAN
+	 * @property {number} NL80211_CMD_SET_WOWLAN - Set WoWLAN
+	 * @property {number} NL80211_CMD_START_SCHED_SCAN - Start scheduled scan
+	 * @property {number} NL80211_CMD_STOP_SCHED_SCAN - Stop scheduled scan
+	 * @property {number} NL80211_CMD_SCHED_SCAN_RESULTS - Scheduled scan results
+	 * @property {number} NL80211_CMD_SCHED_SCAN_STOPPED - Scheduled scan stopped
+	 * @property {number} NL80211_CMD_SET_REKEY_OFFLOAD - Set rekey offload
+	 * @property {number} NL80211_CMD_PMKSA_CANDIDATE - PMKSA candidate
+	 * @property {number} NL80211_CMD_TDLS_OPER - TDLS operation
+	 * @property {number} NL80211_CMD_TDLS_MGMT - TDLS management
+	 * @property {number} NL80211_CMD_UNEXPECTED_FRAME - Unexpected frame
+	 * @property {number} NL80211_CMD_PROBE_CLIENT - Probe client
+	 * @property {number} NL80211_CMD_REGISTER_BEACONS - Register beacons
+	 * @property {number} NL80211_CMD_UNEXPECTED_4ADDR_FRAME - Unexpected 4-address frame
+	 * @property {number} NL80211_CMD_SET_NOACK_MAP - Set no-ack map
+	 * @property {number} NL80211_CMD_CH_SWITCH_NOTIFY - Channel switch notify
+	 * @property {number} NL80211_CMD_START_P2P_DEVICE - Start P2P device
+	 * @property {number} NL80211_CMD_STOP_P2P_DEVICE - Stop P2P device
+	 * @property {number} NL80211_CMD_CONN_FAILED - Connection failed
+	 * @property {number} NL80211_CMD_SET_MCAST_RATE - Set multicast rate
+	 * @property {number} NL80211_CMD_SET_MAC_ACL - Set MAC ACL
+	 * @property {number} NL80211_CMD_RADAR_DETECT - Radar detect
+	 * @property {number} NL80211_CMD_GET_PROTOCOL_FEATURES - Get protocol features
+	 * @property {number} NL80211_CMD_UPDATE_FT_IES - Update FT IEs
+	 * @property {number} NL80211_CMD_FT_EVENT - FT event
+	 * @property {number} NL80211_CMD_CRIT_PROTOCOL_START - Start critical protocol
+	 * @property {number} NL80211_CMD_CRIT_PROTOCOL_STOP - Stop critical protocol
+	 * @property {number} NL80211_CMD_GET_COALESCE - Get coalesce
+	 * @property {number} NL80211_CMD_SET_COALESCE - Set coalesce
+	 * @property {number} NL80211_CMD_CHANNEL_SWITCH - Channel switch
+	 * @property {number} NL80211_CMD_VENDOR - Vendor command
+	 * @property {number} NL80211_CMD_SET_QOS_MAP - Set QoS map
+	 * @property {number} NL80211_CMD_ADD_TX_TS - Add TX TS
+	 * @property {number} NL80211_CMD_DEL_TX_TS - Delete TX TS
+	 * @property {number} NL80211_CMD_GET_MPP - Get MPP
+	 * @property {number} NL80211_CMD_JOIN_OCB - Join OCB
+	 * @property {number} NL80211_CMD_LEAVE_OCB - Leave OCB
+	 * @property {number} NL80211_CMD_CH_SWITCH_STARTED_NOTIFY - Channel switch started notify
+	 * @property {number} NL80211_CMD_TDLS_CHANNEL_SWITCH - TDLS channel switch
+	 * @property {number} NL80211_CMD_TDLS_CANCEL_CHANNEL_SWITCH - Cancel TDLS channel switch
+	 */
 	ADD_CONST(NL80211_CMD_GET_WIPHY);
 	ADD_CONST(NL80211_CMD_SET_WIPHY);
 	ADD_CONST(NL80211_CMD_NEW_WIPHY);
@@ -2975,6 +3305,21 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(NL80211_CMD_TDLS_CHANNEL_SWITCH);
 	ADD_CONST(NL80211_CMD_TDLS_CANCEL_CHANNEL_SWITCH);
 
+	/**
+	 * @typedef
+	 * @name HWSIM commands
+	 * @property {number} HWSIM_CMD_REGISTER - Register radio
+	 * @property {number} HWSIM_CMD_FRAME - Send frame
+	 * @property {number} HWSIM_CMD_TX_INFO_FRAME - Send TX info frame
+	 * @property {number} HWSIM_CMD_NEW_RADIO - Create new radio
+	 * @property {number} HWSIM_CMD_DEL_RADIO - Delete radio
+	 * @property {number} HWSIM_CMD_GET_RADIO - Get radio information
+	 * @property {number} HWSIM_CMD_ADD_MAC_ADDR - Add MAC address
+	 * @property {number} HWSIM_CMD_DEL_MAC_ADDR - Delete MAC address
+	 * @property {number} HWSIM_CMD_START_PMSR - Start peer measurement
+	 * @property {number} HWSIM_CMD_ABORT_PMSR - Abort peer measurement
+	 * @property {number} HWSIM_CMD_REPORT_PMSR - Report peer measurement
+	 */
 	ADD_CONST(HWSIM_CMD_REGISTER),
 	ADD_CONST(HWSIM_CMD_FRAME),
 	ADD_CONST(HWSIM_CMD_TX_INFO_FRAME),
@@ -2987,6 +3332,21 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(HWSIM_CMD_ABORT_PMSR),
 	ADD_CONST(HWSIM_CMD_REPORT_PMSR),
 
+	/**
+	 * @typedef
+	 * @name Interface types
+	 * @property {number} NL80211_IFTYPE_ADHOC - IBSS/ad-hoc interface
+	 * @property {number} NL80211_IFTYPE_STATION - Station interface
+	 * @property {number} NL80211_IFTYPE_AP - Access point interface
+	 * @property {number} NL80211_IFTYPE_AP_VLAN - AP VLAN interface
+	 * @property {number} NL80211_IFTYPE_WDS - WDS interface
+	 * @property {number} NL80211_IFTYPE_MONITOR - Monitor interface
+	 * @property {number} NL80211_IFTYPE_MESH_POINT - Mesh point interface
+	 * @property {number} NL80211_IFTYPE_P2P_CLIENT - P2P client interface
+	 * @property {number} NL80211_IFTYPE_P2P_GO - P2P group owner interface
+	 * @property {number} NL80211_IFTYPE_P2P_DEVICE - P2P device interface
+	 * @property {number} NL80211_IFTYPE_OCB - Outside context of BSS (OCB) interface
+	 */
 	ADD_CONST(NL80211_IFTYPE_ADHOC);
 	ADD_CONST(NL80211_IFTYPE_STATION);
 	ADD_CONST(NL80211_IFTYPE_AP);
