@@ -1,0 +1,3392 @@
+<!DOCTYPE html><html lang="en" style="font-size:16px"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link type="text/css" rel="stylesheet" href="ucode.css"><title>Source: lib/nl80211.c</title><!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]--><script src="scripts/third-party/hljs.js" defer="defer"></script><script src="scripts/third-party/hljs-line-num.js" defer="defer"></script><script src="scripts/third-party/popper.js" defer="defer"></script><script src="scripts/third-party/tippy.js" defer="defer"></script><script src="scripts/third-party/tocbot.min.js"></script><script>var baseURL="/",locationPathname="";baseURL=(locationPathname=document.location.pathname).substr(0,locationPathname.lastIndexOf("/")+1)</script><link rel="stylesheet" href="styles/clean-jsdoc-theme.min.css"><svg aria-hidden="true" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:none"><defs><symbol id="copy-icon" viewbox="0 0 488.3 488.3"><g><path d="M314.25,85.4h-227c-21.3,0-38.6,17.3-38.6,38.6v325.7c0,21.3,17.3,38.6,38.6,38.6h227c21.3,0,38.6-17.3,38.6-38.6V124    C352.75,102.7,335.45,85.4,314.25,85.4z M325.75,449.6c0,6.4-5.2,11.6-11.6,11.6h-227c-6.4,0-11.6-5.2-11.6-11.6V124    c0-6.4,5.2-11.6,11.6-11.6h227c6.4,0,11.6,5.2,11.6,11.6V449.6z"/><path d="M401.05,0h-227c-21.3,0-38.6,17.3-38.6,38.6c0,7.5,6,13.5,13.5,13.5s13.5-6,13.5-13.5c0-6.4,5.2-11.6,11.6-11.6h227    c6.4,0,11.6,5.2,11.6,11.6v325.7c0,6.4-5.2,11.6-11.6,11.6c-7.5,0-13.5,6-13.5,13.5s6,13.5,13.5,13.5c21.3,0,38.6-17.3,38.6-38.6    V38.6C439.65,17.3,422.35,0,401.05,0z"/></g></symbol><symbol id="search-icon" viewBox="0 0 512 512"><g><g><path d="M225.474,0C101.151,0,0,101.151,0,225.474c0,124.33,101.151,225.474,225.474,225.474    c124.33,0,225.474-101.144,225.474-225.474C450.948,101.151,349.804,0,225.474,0z M225.474,409.323    c-101.373,0-183.848-82.475-183.848-183.848S124.101,41.626,225.474,41.626s183.848,82.475,183.848,183.848    S326.847,409.323,225.474,409.323z"/></g></g><g><g><path d="M505.902,476.472L386.574,357.144c-8.131-8.131-21.299-8.131-29.43,0c-8.131,8.124-8.131,21.306,0,29.43l119.328,119.328    c4.065,4.065,9.387,6.098,14.715,6.098c5.321,0,10.649-2.033,14.715-6.098C514.033,497.778,514.033,484.596,505.902,476.472z"/></g></g></symbol><symbol id="font-size-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11.246 15H4.754l-2 5H.6L7 4h2l6.4 16h-2.154l-2-5zm-.8-2L8 6.885 5.554 13h4.892zM21 12.535V12h2v8h-2v-.535a4 4 0 1 1 0-6.93zM19 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></symbol><symbol id="add-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></symbol><symbol id="minus-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M5 11h14v2H5z"/></symbol><symbol id="dark-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol><symbol id="light-theme-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol><symbol id="reset-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M18.537 19.567A9.961 9.961 0 0 1 12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10c0 2.136-.67 4.116-1.81 5.74L17 12h3a8 8 0 1 0-2.46 5.772l.997 1.795z"/></symbol><symbol id="down-icon" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.7803 6.21967C13.0732 6.51256 13.0732 6.98744 12.7803 7.28033L8.53033 11.5303C8.23744 11.8232 7.76256 11.8232 7.46967 11.5303L3.21967 7.28033C2.92678 6.98744 2.92678 6.51256 3.21967 6.21967C3.51256 5.92678 3.98744 5.92678 4.28033 6.21967L8 9.93934L11.7197 6.21967C12.0126 5.92678 12.4874 5.92678 12.7803 6.21967Z"></path></symbol><symbol id="codepen-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M16.5 13.202L13 15.535v3.596L19.197 15 16.5 13.202zM14.697 12L12 10.202 9.303 12 12 13.798 14.697 12zM20 10.869L18.303 12 20 13.131V10.87zM19.197 9L13 4.869v3.596l3.5 2.333L19.197 9zM7.5 10.798L11 8.465V4.869L4.803 9 7.5 10.798zM4.803 15L11 19.131v-3.596l-3.5-2.333L4.803 15zM4 13.131L5.697 12 4 10.869v2.262zM2 9a1 1 0 0 1 .445-.832l9-6a1 1 0 0 1 1.11 0l9 6A1 1 0 0 1 22 9v6a1 1 0 0 1-.445.832l-9 6a1 1 0 0 1-1.11 0l-9-6A1 1 0 0 1 2 15V9z"/></symbol><symbol id="close-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></symbol><symbol id="menu-icon" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z"/></symbol><symbol id="toc-icon" viewBox="0 0 460 460"><path d="M40 70a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 190a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM40 310a40 40 0 1 0 0 80 40 40 0 0 0 0-80zM430 80H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 200H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60zM430 320H145a30 30 0 0 0 0 60h285a30 30 0 0 0 0-60z"/></symbol></defs></svg></head><body data-theme="light"><div class="sidebar-container"><div class="sidebar" id="sidebar"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="sidebar-items-container"><div class="sidebar-section-title with-arrow" data-isopen="false" id="fP1xmZdg7FupIkxjBK7Cf"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div><div class="sidebar-section-children"><a href="tutorial-04-arrays.html">Working with Arrays</a></div><div class="sidebar-section-children"><a href="tutorial-05-dictionaries.html">Working with Dictionaries</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="vCjzIDHDHkD5qTZNpkR3a"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-io.html">io</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-nl80211.html">nl80211</a></div><div class="sidebar-section-children"><a href="module-resolv.html">resolv</a></div><div class="sidebar-section-children"><a href="module-rtnl.html">rtnl</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div></div></div><div class="navbar-container" id="VuAckcnZhf"><nav class="navbar"><div class="navbar-left-items"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="navbar-right-items"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div><nav></nav></nav></div><div class="body-wrapper"><div class="main-content"><div class="main-wrapper"><section id="source-page" class="source-page"><header><h1 id="title" class="has-anchor">lib_nl80211.c</h1></header><article><pre class="prettyprint source lang-js"><code>/*
+Copyright 2021 Jo-Philipp Wich &lt;jo@mein.io>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+/**
+* # Wireless Netlink
+*
+* The `nl80211` module provides functions for interacting with the nl80211 netlink interface
+* for wireless networking configuration and management.
+*
+* Functions can be individually imported and directly accessed using the
+* {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+* syntax:
+*
+*   ```javascript
+*   import { error, request, listener, waitfor, const } from 'nl80211';
+*
+*   // Send a nl80211 request
+*   let response = request(const.NL80211_CMD_GET_WIPHY, 0, { wiphy: 0 });
+*
+*   // Create a listener for wireless events
+*   let wifiListener = listener((msg) => {
+*       print('Received wireless event:', msg, '\n');
+*   }, [const.NL80211_CMD_NEW_INTERFACE, const.NL80211_CMD_DEL_INTERFACE]);
+*
+*   // Wait for a specific nl80211 event
+*   let event = waitfor([const.NL80211_CMD_NEW_SCAN_RESULTS], 5000);
+*   if (event)
+*       print('Received scan results:', event.msg, '\n');
+*   ```
+*
+* Alternatively, the module namespace can be imported
+* using a wildcard import statement:
+*
+*   ```javascript
+*   import * as nl80211 from 'nl80211';
+*
+*   // Send a nl80211 request
+*   let response = nl80211.request(nl80211.const.NL80211_CMD_GET_WIPHY, 0, { wiphy: 0 });
+*
+*   // Create a listener for wireless events
+*   let listener = nl80211.listener((msg) => {
+*       print('Received wireless event:', msg, '\n');
+*   }, [nl80211.const.NL80211_CMD_NEW_INTERFACE, nl80211.const.NL80211_CMD_DEL_INTERFACE]);
+*   ```
+*
+* Additionally, the nl80211 module namespace may also be imported by invoking
+* the `ucode` interpreter with the `-lnl80211` switch.
+*
+* @module nl80211
+*/
+
+#include &lt;stdio.h>
+#include &lt;stdint.h>
+#include &lt;stdbool.h>
+#include &lt;stdarg.h>
+#include &lt;unistd.h>
+#include &lt;errno.h>
+#include &lt;string.h>
+#include &lt;limits.h>
+#include &lt;math.h>
+#include &lt;assert.h>
+#include &lt;fcntl.h>
+#include &lt;poll.h>
+
+#include &lt;net/if.h>
+#include &lt;netinet/ether.h>
+#include &lt;arpa/inet.h>
+#include &lt;netlink/msg.h>
+#include &lt;netlink/attr.h>
+#include &lt;netlink/socket.h>
+#include &lt;netlink/genl/genl.h>
+#include &lt;netlink/genl/family.h>
+#include &lt;netlink/genl/ctrl.h>
+
+#include &lt;linux/nl80211.h>
+#include &lt;linux/ieee80211.h>
+#include &lt;linux/mac80211_hwsim.h>
+#include &lt;libubox/uloop.h>
+
+#include "ucode/module.h"
+#include "ucode/platform.h"
+
+#define DIV_ROUND_UP(n, d)      (((n) + (d) - 1) / (d))
+
+#define err_return(code, ...) do { set_error(code, __VA_ARGS__); return NULL; } while(0)
+
+/* Modified downstream nl80211.h headers may disable certain unsupported
+ * attributes by setting the corresponding defines to 0x10000 without having
+ * to patch the attribute dictionaries within this file. */
+
+#define NL80211_ATTR_NOT_IMPLEMENTED 0x10000
+
+#define NL80211_CMDS_BITMAP_SIZE	DIV_ROUND_UP(NL80211_CMD_MAX + 1, 32)
+
+static struct {
+	int code;
+	char *msg;
+} last_error;
+
+__attribute__((format(printf, 2, 3))) static void
+set_error(int errcode, const char *fmt, ...) {
+	va_list ap;
+
+	if (errcode == -(NLE_MAX + 1))
+		return;
+
+	free(last_error.msg);
+
+	last_error.code = errcode;
+	last_error.msg = NULL;
+
+	if (fmt) {
+		va_start(ap, fmt);
+		xvasprintf(&amp;last_error.msg, fmt, ap);
+		va_end(ap);
+	}
+}
+
+static uc_resource_type_t *listener_type;
+static uc_value_t *listener_registry;
+static uc_vm_t *listener_vm;
+
+typedef struct {
+	uint32_t cmds[NL80211_CMDS_BITMAP_SIZE];
+	size_t index;
+} uc_nl_listener_t;
+
+static bool
+uc_nl_parse_u32(uc_value_t *val, uint32_t *n)
+{
+	uint64_t u;
+
+	u = ucv_to_unsigned(val);
+
+	if (errno != 0 || u > UINT32_MAX)
+		return false;
+
+	*n = (uint32_t)u;
+
+	return true;
+}
+
+static bool
+uc_nl_parse_s32(uc_value_t *val, uint32_t *n)
+{
+	int64_t i;
+
+	i = ucv_to_integer(val);
+
+	if (errno != 0 || i &lt; INT32_MIN || i > INT32_MAX)
+		return false;
+
+	*n = (uint32_t)i;
+
+	return true;
+}
+
+static bool
+uc_nl_parse_u64(uc_value_t *val, uint64_t *n)
+{
+	*n = ucv_to_unsigned(val);
+
+	return (errno == 0);
+}
+
+static bool
+uc_nl_parse_ipaddr(uc_vm_t *vm, uc_value_t *val, struct in_addr *in)
+{
+	char *s = ucv_to_string(vm, val);
+	bool valid = true;
+
+	if (!s)
+		return false;
+
+	valid = (inet_pton(AF_INET, s, in) == 1);
+
+	free(s);
+
+	return valid;
+}
+
+typedef enum {
+	DT_FLAG,
+	DT_BOOL,
+	DT_U8,
+	DT_S8,
+	DT_U16,
+	DT_U32,
+	DT_S32,
+	DT_U64,
+	DT_STRING,
+	DT_NETDEV,
+	DT_LLADDR,
+	DT_INADDR,
+	DT_NESTED,
+	DT_HT_MCS,
+	DT_HT_CAP,
+	DT_VHT_MCS,
+	DT_HE_MCS,
+	DT_IE,
+} uc_nl_attr_datatype_t;
+
+enum {
+	DF_NO_SET = (1 &lt;&lt; 0),
+	DF_MULTIPLE = (1 &lt;&lt; 1),
+	DF_AUTOIDX = (1 &lt;&lt; 2),
+	DF_TYPEIDX = (1 &lt;&lt; 3),
+	DF_OFFSET1 = (1 &lt;&lt; 4),
+	DF_ARRAY = (1 &lt;&lt; 5),
+	DF_BINARY = (1 &lt;&lt; 6),
+	DF_RELATED = (1 &lt;&lt; 7),
+	DF_REPEATED = (1 &lt;&lt; 8),
+};
+
+typedef struct uc_nl_attr_spec {
+	size_t attr;
+	const char *key;
+	uc_nl_attr_datatype_t type;
+	uint32_t flags;
+	const void *auxdata;
+} uc_nl_attr_spec_t;
+
+typedef struct uc_nl_nested_spec {
+	size_t headsize;
+	size_t nattrs;
+	const uc_nl_attr_spec_t attrs[];
+} uc_nl_nested_spec_t;
+
+#define SIZE(type) (void *)(uintptr_t)sizeof(struct type)
+#define MEMBER(type, field) (void *)(uintptr_t)offsetof(struct type, field)
+#define ATTRID(id) (void *)(uintptr_t)(id)
+
+static const uc_nl_nested_spec_t nl80211_cqm_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_ATTR_CQM_PKT_LOSS_EVENT, "cqm_pkt_loss_event", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CQM_RSSI_HYST, "cqm_rssi_hyst", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CQM_RSSI_LEVEL, "cqm_rssi_level", DT_S32, 0, NULL },
+		{ NL80211_ATTR_CQM_RSSI_THOLD, "cqm_rssi_thold", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CQM_RSSI_THRESHOLD_EVENT, "cqm_rssi_threshold_event", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_ftm_responder_stats_nla = {
+	.headsize = 0,
+	.nattrs = 9,
+	.attrs = {
+		{ NL80211_FTM_STATS_SUCCESS_NUM, "success_num", DT_U32, 0, NULL },
+		{ NL80211_FTM_STATS_PARTIAL_NUM, "partial_num", DT_U32, 0, NULL },
+		{ NL80211_FTM_STATS_FAILED_NUM, "failed_num", DT_U32, 0, NULL },
+		{ NL80211_FTM_STATS_ASAP_NUM, "asap_num", DT_U32, 0, NULL },
+		{ NL80211_FTM_STATS_NON_ASAP_NUM, "non_asap_num", DT_U32, 0, NULL },
+		{ NL80211_FTM_STATS_TOTAL_DURATION_MSEC, "total_duration_msec", DT_U64, 0, NULL },
+		{ NL80211_FTM_STATS_UNKNOWN_TRIGGERS_NUM, "unknown_triggers_num", DT_U32, 0, NULL },
+		{ NL80211_FTM_STATS_RESCHEDULE_REQUESTS_NUM, "reschedule_requests_num", DT_U32, 0, NULL },
+		{ NL80211_FTM_STATS_OUT_OF_WINDOW_TRIGGERS_NUM, "out_of_window_triggers_num", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_ifcomb_limit_types_nla = {
+	.headsize = 0,
+	.nattrs = 12,
+	.attrs = {
+		{ 1, "ibss", DT_FLAG, 0, NULL },
+		{ 2, "managed", DT_FLAG, 0, NULL },
+		{ 3, "ap", DT_FLAG, 0, NULL },
+		{ 4, "ap_vlan", DT_FLAG, 0, NULL },
+		{ 5, "wds", DT_FLAG, 0, NULL },
+		{ 6, "monitor", DT_FLAG, 0, NULL },
+		{ 7, "mesh_point", DT_FLAG, 0, NULL },
+		{ 8, "p2p_client", DT_FLAG, 0, NULL },
+		{ 9, "p2p_go", DT_FLAG, 0, NULL },
+		{ 10, "p2p_device", DT_FLAG, 0, NULL },
+		{ 11, "outside_bss_context", DT_FLAG, 0, NULL },
+		{ 12, "nan", DT_FLAG, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_ifcomb_limits_nla = {
+	.headsize = 0,
+	.nattrs = 2,
+	.attrs = {
+		{ NL80211_IFACE_LIMIT_TYPES, "types", DT_NESTED, 0, &amp;nl80211_ifcomb_limit_types_nla },
+		{ NL80211_IFACE_LIMIT_MAX, "max", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_ifcomb_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_IFACE_COMB_LIMITS, "limits", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_ifcomb_limits_nla },
+		{ NL80211_IFACE_COMB_MAXNUM, "maxnum", DT_U32, 0, NULL },
+		{ NL80211_IFACE_COMB_STA_AP_BI_MATCH, "sta_ap_bi_match", DT_FLAG, 0, NULL },
+		{ NL80211_IFACE_COMB_NUM_CHANNELS, "num_channels", DT_U32, 0, NULL },
+		{ NL80211_IFACE_COMB_RADAR_DETECT_WIDTHS, "radar_detect_widths", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_ftm_responder_nla = {
+	.headsize = 0,
+	.nattrs = 3,
+	.attrs = {
+		{ NL80211_FTM_RESP_ATTR_ENABLED, "enabled", DT_FLAG, 0, NULL },
+		{ NL80211_FTM_RESP_ATTR_LCI, "lci", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_FTM_RESP_ATTR_CIVICLOC, "civicloc", DT_STRING, DF_BINARY, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_keys_nla = {
+	.headsize = 0,
+	.nattrs = 4,
+	.attrs = {
+		{ NL80211_KEY_DEFAULT, "default", DT_FLAG, 0, NULL },
+		{ NL80211_KEY_IDX, "idx", DT_U8, 0, NULL },
+		{ NL80211_KEY_CIPHER, "cipher", DT_U32, 0, NULL },
+		{ NL80211_KEY_DATA, "data", DT_STRING, DF_BINARY, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_mesh_params_nla = {
+	.headsize = 0,
+	.nattrs = 29,
+	.attrs = {
+		{ NL80211_MESHCONF_RETRY_TIMEOUT, "retry_timeout", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_CONFIRM_TIMEOUT, "confirm_timeout", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_HOLDING_TIMEOUT, "holding_timeout", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_MAX_PEER_LINKS, "max_peer_links", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_MAX_RETRIES, "max_retries", DT_U8, 0, NULL },
+		{ NL80211_MESHCONF_TTL, "ttl", DT_U8, 0, NULL },
+		{ NL80211_MESHCONF_ELEMENT_TTL, "element_ttl", DT_U8, 0, NULL },
+		{ NL80211_MESHCONF_AUTO_OPEN_PLINKS, "auto_open_plinks", DT_BOOL, 0, NULL },
+		{ NL80211_MESHCONF_HWMP_MAX_PREQ_RETRIES, "hwmp_max_preq_retries", DT_U8, 0, NULL },
+		{ NL80211_MESHCONF_PATH_REFRESH_TIME, "path_refresh_time", DT_U32, 0, NULL },
+		{ NL80211_MESHCONF_MIN_DISCOVERY_TIMEOUT, "min_discovery_timeout", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_HWMP_ACTIVE_PATH_TIMEOUT, "hwmp_active_path_timeout", DT_U32, 0, NULL },
+		{ NL80211_MESHCONF_HWMP_PREQ_MIN_INTERVAL, "hwmp_preq_min_interval", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_HWMP_NET_DIAM_TRVS_TIME, "hwmp_net_diam_trvs_time", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_HWMP_ROOTMODE, "hwmp_rootmode", DT_U8, 0, NULL },
+		{ NL80211_MESHCONF_HWMP_RANN_INTERVAL, "hwmp_rann_interval", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_GATE_ANNOUNCEMENTS, "gate_announcements", DT_U8, 0, NULL },
+		{ NL80211_MESHCONF_FORWARDING, "forwarding", DT_BOOL, 0, NULL },
+		{ NL80211_MESHCONF_SYNC_OFFSET_MAX_NEIGHBOR, "sync_offset_max_neighbor", DT_U32, 0, NULL },
+		{ NL80211_MESHCONF_RSSI_THRESHOLD, "rssi_threshold", DT_S32, 0, NULL },
+		{ NL80211_MESHCONF_HWMP_PATH_TO_ROOT_TIMEOUT, "hwmp_path_to_root_timeout", DT_U32, 0, NULL },
+		{ NL80211_MESHCONF_HWMP_ROOT_INTERVAL, "hwmp_root_interval", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_HWMP_CONFIRMATION_INTERVAL, "hwmp_confirmation_interval", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_POWER_MODE, "power_mode", DT_U32, 0, NULL },
+		{ NL80211_MESHCONF_AWAKE_WINDOW, "awake_window", DT_U16, 0, NULL },
+		{ NL80211_MESHCONF_PLINK_TIMEOUT, "plink_timeout", DT_U32, 0, NULL },
+		{ NL80211_MESHCONF_CONNECTED_TO_GATE, "connected_to_gate", DT_BOOL, 0, NULL },
+		{ NL80211_MESHCONF_NOLEARN, "nolearn", DT_BOOL, 0, NULL },
+		{ NL80211_MESHCONF_CONNECTED_TO_AS, "connected_to_as", DT_BOOL, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_mesh_setup_nla = {
+	.headsize = 0,
+	.nattrs = 1,
+	.attrs = {
+		{ NL80211_MESH_SETUP_ENABLE_VENDOR_SYNC, "enable_vendor_sync", DT_BOOL, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_mntr_flags_nla = {
+	.headsize = 0,
+	.nattrs = 7,
+	.attrs = {
+		{ NL80211_MNTR_FLAG_FCSFAIL, "fcsfail", DT_FLAG, 0, NULL },
+		{ NL80211_MNTR_FLAG_PLCPFAIL, "plcpfail", DT_FLAG, 0, NULL },
+		{ NL80211_MNTR_FLAG_CONTROL, "control", DT_FLAG, 0, NULL },
+		{ NL80211_MNTR_FLAG_OTHER_BSS, "other_bss", DT_FLAG, 0, NULL },
+		{ NL80211_MNTR_FLAG_COOK_FRAMES, "cook_frames", DT_FLAG, 0, NULL },
+		{ NL80211_MNTR_FLAG_ACTIVE, "active", DT_FLAG, 0, NULL },
+		{ NL80211_MNTR_FLAG_SKIP_TX, "skip_tx", DT_FLAG, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_nan_func_srf_nla = {
+	.headsize = 0,
+	.nattrs = 4,
+	.attrs = {
+		{ NL80211_NAN_SRF_INCLUDE, "include", DT_FLAG, 0, NULL },
+		{ NL80211_NAN_SRF_BF_IDX, "bf_idx", DT_U8, 0, NULL },
+		{ NL80211_NAN_SRF_BF, "bf", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_NAN_SRF_MAC_ADDRS, "mac_addrs", DT_LLADDR, DF_MULTIPLE|DF_AUTOIDX, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_nan_func_nla = {
+	.headsize = 0,
+	.nattrs = 16,
+	.attrs = {
+		{ NL80211_NAN_FUNC_TYPE, "type", DT_U8, 0, NULL },
+		{ NL80211_NAN_FUNC_SERVICE_ID, "service_id", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_NAN_FUNC_PUBLISH_TYPE, "publish_type", DT_U8, 0, NULL },
+		{ NL80211_NAN_FUNC_PUBLISH_BCAST, "publish_bcast", DT_FLAG, 0, NULL },
+		{ NL80211_NAN_FUNC_SUBSCRIBE_ACTIVE, "subscribe_active", DT_FLAG, 0, NULL },
+		{ NL80211_NAN_FUNC_FOLLOW_UP_ID, "follow_up_id", DT_U8, 0, NULL },
+		{ NL80211_NAN_FUNC_FOLLOW_UP_REQ_ID, "follow_up_req_id", DT_U8, 0, NULL },
+		{ NL80211_NAN_FUNC_FOLLOW_UP_DEST, "follow_up_dest", DT_LLADDR, 0, NULL },
+		{ NL80211_NAN_FUNC_CLOSE_RANGE, "close_range", DT_FLAG, 0, NULL },
+		{ NL80211_NAN_FUNC_TTL, "ttl", DT_U32, 0, NULL },
+		{ NL80211_NAN_FUNC_SERVICE_INFO, "service_info", DT_STRING, 0, NULL },
+		{ NL80211_NAN_FUNC_SRF, "srf", DT_NESTED, 0, &amp;nl80211_nan_func_srf_nla },
+		{ NL80211_NAN_FUNC_RX_MATCH_FILTER, "rx_match_filter", DT_STRING, DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_NAN_FUNC_TX_MATCH_FILTER, "tx_match_filter", DT_STRING, DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_NAN_FUNC_INSTANCE_ID, "instance_id", DT_U8, 0, NULL },
+		{ NL80211_NAN_FUNC_TERM_REASON, "term_reason", DT_U8, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_peer_measurements_type_ftm_nla = {
+	.headsize = 0,
+	.nattrs = 13,
+	.attrs = {
+		{ NL80211_PMSR_FTM_REQ_ATTR_NUM_BURSTS_EXP, "num_bursts_exp", DT_U8, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_BURST_PERIOD, "burst_period", DT_U16, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_NUM_FTMR_RETRIES, "num_ftmr_retries", DT_U8, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_BURST_DURATION, "burst_duration", DT_U8, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_FTMS_PER_BURST, "ftms_per_burst", DT_U8, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_ASAP, "asap", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_REQUEST_CIVICLOC, "request_civicloc", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_REQUEST_LCI, "request_lci", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_TRIGGER_BASED, "trigger_based", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_PREAMBLE, "preamble", DT_U32, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_NON_TRIGGER_BASED, "non_trigger_based", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_LMR_FEEDBACK, "lmr_feedback", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_FTM_REQ_ATTR_BSS_COLOR, "bss_color", DT_U8, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_req_data_nla = {
+	.headsize = 0,
+	.nattrs = 2,
+	.attrs = {
+		{ NL80211_PMSR_TYPE_FTM, "ftm", DT_NESTED, 0, &amp;nl80211_peer_measurements_type_ftm_nla },
+		{ NL80211_PMSR_REQ_ATTR_GET_AP_TSF, "get_ap_tsf", DT_FLAG, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_req_nla = {
+	.headsize = 0,
+	.nattrs = 1,
+	.attrs = {
+		{ NL80211_PMSR_REQ_ATTR_DATA, "data", DT_NESTED, 0, &amp;nl80211_peer_measurements_peers_req_data_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_chan_nla = {
+	.headsize = 0,
+	.nattrs = 4,
+	.attrs = {
+		{ NL80211_ATTR_WIPHY_FREQ, "freq", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CENTER_FREQ1, "center_freq1", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CENTER_FREQ2, "center_freq2", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CHANNEL_WIDTH, "channel_width", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_resp_data_nla = {
+	.headsize = 0,
+	.nattrs = 1,
+	.attrs = {
+		{ NL80211_PMSR_TYPE_FTM, "ftm", DT_NESTED, 0, &amp;nl80211_peer_measurements_type_ftm_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_resp_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_PMSR_RESP_ATTR_STATUS, "status", DT_U32, 0, NULL },
+		{ NL80211_PMSR_RESP_ATTR_HOST_TIME, "host_time", DT_U64, 0, NULL },
+		{ NL80211_PMSR_RESP_ATTR_AP_TSF, "ap_tsf", DT_U64, 0, NULL },
+		{ NL80211_PMSR_RESP_ATTR_FINAL, "final", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_RESP_ATTR_DATA, "data", DT_NESTED, 0, &amp;nl80211_peer_measurements_peers_resp_data_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_peer_measurements_peers_nla = {
+	.headsize = 0,
+	.nattrs = 4,
+	.attrs = {
+		{ NL80211_PMSR_PEER_ATTR_ADDR, "addr", DT_LLADDR, 0, NULL },
+		{ NL80211_PMSR_PEER_ATTR_REQ, "req", DT_NESTED, 0, &amp;nl80211_peer_measurements_peers_req_nla },
+		{ NL80211_PMSR_PEER_ATTR_CHAN, "chan", DT_NESTED, 0, &amp;nl80211_peer_measurements_peers_chan_nla },
+		{ NL80211_PMSR_PEER_ATTR_RESP, "resp", DT_NESTED, 0, &amp;nl80211_peer_measurements_peers_resp_nla }
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_peer_measurements_nla = {
+	.headsize = 0,
+	.nattrs = 1,
+	.attrs = {
+		{ NL80211_PMSR_ATTR_PEERS, "peers", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_peer_measurements_peers_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_reg_rules_nla = {
+	.headsize = 0,
+	.nattrs = 7,
+	.attrs = {
+		{ NL80211_ATTR_REG_RULE_FLAGS, "reg_rule_flags", DT_U32, 0, NULL },
+		{ NL80211_ATTR_FREQ_RANGE_START, "freq_range_start", DT_U32, 0, NULL },
+		{ NL80211_ATTR_FREQ_RANGE_END, "freq_range_end", DT_U32, 0, NULL },
+		{ NL80211_ATTR_FREQ_RANGE_MAX_BW, "freq_range_max_bw", DT_U32, 0, NULL },
+		{ NL80211_ATTR_POWER_RULE_MAX_ANT_GAIN, "power_rule_max_ant_gain", DT_U32, 0, NULL },
+		{ NL80211_ATTR_POWER_RULE_MAX_EIRP, "power_rule_max_eirp", DT_U32, 0, NULL },
+		{ NL80211_ATTR_DFS_CAC_TIME, "dfs_cac_time", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_frame_types_nla = {
+	.headsize = 0,
+	.nattrs = 12,
+	.attrs = {
+		{ 1, "ibss", DT_U16, DF_MULTIPLE, NULL },
+		{ 2, "managed", DT_U16, DF_MULTIPLE, NULL },
+		{ 3, "ap", DT_U16, DF_MULTIPLE, NULL },
+		{ 4, "ap_vlan", DT_U16, DF_MULTIPLE, NULL },
+		{ 5, "wds", DT_U16, DF_MULTIPLE, NULL },
+		{ 6, "monitor", DT_U16, DF_MULTIPLE, NULL },
+		{ 7, "mesh_point", DT_U16, DF_MULTIPLE, NULL },
+		{ 8, "p2p_client", DT_U16, DF_MULTIPLE, NULL },
+		{ 9, "p2p_go", DT_U16, DF_MULTIPLE, NULL },
+		{ 10, "p2p_device", DT_U16, DF_MULTIPLE, NULL },
+		{ 11, "outside_bss_context", DT_U16, DF_MULTIPLE, NULL },
+		{ 12, "nan", DT_U16, DF_MULTIPLE, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_sched_scan_match_nla = {
+	.headsize = 0,
+	.nattrs = 1,
+	.attrs = {
+		{ NL80211_SCHED_SCAN_MATCH_ATTR_SSID, "ssid", DT_STRING, DF_BINARY, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_sched_scan_plan_nla = {
+	.headsize = 0,
+	.nattrs = 2,
+	.attrs = {
+		{ NL80211_SCHED_SCAN_PLAN_INTERVAL, "interval", DT_U32, 0, NULL },
+		{ NL80211_SCHED_SCAN_PLAN_ITERATIONS, "iterations", DT_U32, 0, NULL },
+	}
+};
+
+enum {
+	HWSIM_TM_ATTR_CMD = 1,
+	HWSIM_TM_ATTR_PS  = 2,
+};
+
+static const uc_nl_nested_spec_t nl80211_testdata_nla = {
+	.headsize = 0,
+	.nattrs = 2,
+	.attrs = {
+		{ HWSIM_TM_ATTR_CMD, "cmd", DT_U32, 0, NULL },
+		{ HWSIM_TM_ATTR_PS, "ps", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_tid_config_nla = {
+	.headsize = 0,
+	.nattrs = 1,
+	.attrs = {
+		{ NL80211_TID_CONFIG_ATTR_TIDS, "tids", DT_U16, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_wiphy_bands_freqs_wmm_nla = {
+	.headsize = 0,
+	.nattrs = 4,
+	.attrs = {
+		{ NL80211_WMMR_CW_MIN, "cw_min", DT_U16, 0, NULL },
+		{ NL80211_WMMR_CW_MAX, "cw_max", DT_U16, 0, NULL },
+		{ NL80211_WMMR_AIFSN, "aifsn", DT_U8, 0, NULL },
+		{ NL80211_WMMR_TXOP, "txop", DT_U16, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_wiphy_bands_freqs_nla = {
+	.headsize = 0,
+	.nattrs = 25,
+	.attrs = {
+		{ NL80211_FREQUENCY_ATTR_FREQ, "freq", DT_U32, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_DISABLED, "disabled", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_NO_IR, "no_ir", DT_FLAG, 0, NULL },
+		{ __NL80211_FREQUENCY_ATTR_NO_IBSS, "no_ibss", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_RADAR, "radar", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_MAX_TX_POWER, "max_tx_power", DT_U32, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_DFS_STATE, "dfs_state", DT_U32, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_DFS_TIME, "dfs_time", DT_U32, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_NO_HT40_MINUS, "no_ht40_minus", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_NO_HT40_PLUS, "no_ht40_plus", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_NO_80MHZ, "no_80mhz", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_NO_160MHZ, "no_160mhz", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_DFS_CAC_TIME, "dfs_cac_time", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_INDOOR_ONLY, "indoor_only", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_IR_CONCURRENT, "ir_concurrent", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_NO_20MHZ, "no_20mhz", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_NO_10MHZ, "no_10mhz", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_WMM, "wmm", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_wiphy_bands_freqs_wmm_nla },
+		{ NL80211_FREQUENCY_ATTR_NO_HE, "no_he", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_OFFSET, "offset", DT_U32, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_1MHZ, "1mhz", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_2MHZ, "2mhz", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_4MHZ, "4mhz", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_8MHZ, "8mhz", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_16MHZ, "16mhz", DT_FLAG, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_wiphy_bands_rates_nla = {
+	.headsize = 0,
+	.nattrs = 2,
+	.attrs = {
+		{ NL80211_BITRATE_ATTR_RATE, "rate", DT_U32, 0, NULL },
+		{ NL80211_BITRATE_ATTR_2GHZ_SHORTPREAMBLE, "2ghz_shortpreamble", DT_FLAG, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_wiphy_bands_iftype_data_nla = {
+	.headsize = 0,
+	.nattrs = 9,
+	.attrs = {
+		{ NL80211_BAND_IFTYPE_ATTR_IFTYPES, "iftypes", DT_NESTED, 0, &amp;nl80211_ifcomb_limit_types_nla },
+		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_MAC, "he_cap_mac", DT_U8, DF_ARRAY, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY, "he_cap_phy", DT_U8, DF_ARRAY, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_MCS_SET, "he_cap_mcs_set", DT_HE_MCS, DF_RELATED, ATTRID(NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY) },
+		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_PPE, "he_cap_ppe", DT_U8, DF_ARRAY, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_HE_6GHZ_CAPA, "he_6ghz_capa", DT_U16, 0, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_VENDOR_ELEMS, "vendor_elems", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC, "eht_cap_mac", DT_U8, DF_ARRAY, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_EHT_CAP_PHY, "eht_cap_phy", DT_U8, DF_ARRAY, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_wiphy_bands_nla = {
+	.headsize = 0,
+	.nattrs = 11,
+	.attrs = {
+		{ NL80211_BAND_ATTR_FREQS, "freqs", DT_NESTED, DF_MULTIPLE|DF_TYPEIDX, &amp;nl80211_wiphy_bands_freqs_nla },
+		{ NL80211_BAND_ATTR_RATES, "rates", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_wiphy_bands_rates_nla },
+		{ NL80211_BAND_ATTR_HT_MCS_SET, "ht_mcs_set", DT_HT_MCS, 0, NULL },
+		{ NL80211_BAND_ATTR_HT_CAPA, "ht_capa", DT_U16, 0, NULL },
+		{ NL80211_BAND_ATTR_HT_AMPDU_FACTOR, "ht_ampdu_factor", DT_U8, 0, NULL },
+		{ NL80211_BAND_ATTR_HT_AMPDU_DENSITY, "ht_ampdu_density", DT_U8, 0, NULL },
+		{ NL80211_BAND_ATTR_VHT_MCS_SET, "vht_mcs_set", DT_VHT_MCS, 0, NULL },
+		{ NL80211_BAND_ATTR_VHT_CAPA, "vht_capa", DT_U32, 0, NULL },
+		{ NL80211_BAND_ATTR_IFTYPE_DATA, "iftype_data", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_wiphy_bands_iftype_data_nla },
+		{ NL80211_BAND_ATTR_EDMG_CHANNELS, "edmg_channels", DT_U8, 0, NULL },
+		{ NL80211_BAND_ATTR_EDMG_BW_CONFIG, "edmg_bw_config", DT_U8, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_wowlan_triggers_tcp_nla = {
+	.headsize = 0,
+	.nattrs = 11,
+	.attrs = {
+		{ NL80211_WOWLAN_TCP_SRC_IPV4, "src_ipv4", DT_INADDR, 0, NULL },
+		{ NL80211_WOWLAN_TCP_SRC_PORT, "src_port", DT_U16, 0, NULL },
+		{ NL80211_WOWLAN_TCP_DST_IPV4, "dst_ipv4", DT_INADDR, 0, NULL },
+		{ NL80211_WOWLAN_TCP_DST_PORT, "dst_port", DT_U16, 0, NULL },
+		{ NL80211_WOWLAN_TCP_DST_MAC, "dst_mac", DT_LLADDR, 0, NULL },
+		{ NL80211_WOWLAN_TCP_DATA_PAYLOAD, "data_payload", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_WOWLAN_TCP_DATA_INTERVAL, "data_interval", DT_U32, 0, NULL },
+		{ NL80211_WOWLAN_TCP_WAKE_MASK, "wake_mask", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_WOWLAN_TCP_WAKE_PAYLOAD, "wake_payload", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_WOWLAN_TCP_DATA_PAYLOAD_SEQ, "data_payload_seq", DT_U32, DF_ARRAY, NULL },
+		{ NL80211_WOWLAN_TCP_DATA_PAYLOAD_TOKEN, "data_payload_token", DT_STRING, DF_BINARY, NULL }, /* XXX: struct nl80211_wowlan_tcp_data_token */
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_pkt_pattern_nla = {
+	.headsize = 0,
+	.nattrs = 3,
+	.attrs = {
+		{ NL80211_PKTPAT_MASK, "mask", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_PKTPAT_PATTERN, "pattern", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_PKTPAT_OFFSET, "offset", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_wowlan_triggers_nla = {
+	.headsize = 0,
+	.nattrs = 9,
+	.attrs = {
+		{ NL80211_WOWLAN_TRIG_ANY, "any", DT_FLAG, 0, NULL },
+		{ NL80211_WOWLAN_TRIG_DISCONNECT, "disconnect", DT_FLAG, 0, NULL },
+		{ NL80211_WOWLAN_TRIG_MAGIC_PKT, "magic_pkt", DT_FLAG, 0, NULL },
+		{ NL80211_WOWLAN_TRIG_GTK_REKEY_FAILURE, "gtk_rekey_failure", DT_FLAG, 0, NULL },
+		{ NL80211_WOWLAN_TRIG_EAP_IDENT_REQUEST, "eap_ident_request", DT_FLAG, 0, NULL },
+		{ NL80211_WOWLAN_TRIG_4WAY_HANDSHAKE, "4way_handshake", DT_FLAG, 0, NULL },
+		{ NL80211_WOWLAN_TRIG_RFKILL_RELEASE, "rfkill_release", DT_FLAG, 0, NULL },
+		{ NL80211_WOWLAN_TRIG_TCP_CONNECTION, "tcp_connection", DT_NESTED, 0, &amp;nl80211_wowlan_triggers_tcp_nla },
+		{ NL80211_WOWLAN_TRIG_PKT_PATTERN, "pkt_pattern", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX|DF_OFFSET1, &amp;nl80211_pkt_pattern_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_coalesce_rule_nla = {
+	.headsize = 0,
+	.nattrs = 3,
+	.attrs = {
+		{ NL80211_ATTR_COALESCE_RULE_CONDITION, "coalesce_rule_condition", DT_U32, 0, NULL },
+		{ NL80211_ATTR_COALESCE_RULE_DELAY, "coalesce_rule_delay", DT_U32, 0, NULL },
+		{ NL80211_ATTR_COALESCE_RULE_PKT_PATTERN, "coalesce_rule_pkt_pattern", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX|DF_OFFSET1, &amp;nl80211_pkt_pattern_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_bss_nla = {
+	.headsize = 0,
+	.nattrs = 12,
+	.attrs = {
+		{ NL80211_BSS_BSSID, "bssid", DT_LLADDR, 0, NULL },
+		{ NL80211_BSS_STATUS, "status", DT_U32, 0, NULL },
+		{ NL80211_BSS_LAST_SEEN_BOOTTIME, "last_seen_boottime", DT_U64, 0, NULL },
+		{ NL80211_BSS_TSF, "tsf", DT_U64, 0, NULL },
+		{ NL80211_BSS_FREQUENCY, "frequency", DT_U32, 0, NULL },
+		{ NL80211_BSS_BEACON_INTERVAL, "beacon_interval", DT_U16, 0, NULL },
+		{ NL80211_BSS_CAPABILITY, "capability", DT_U16, 0, NULL },
+		{ NL80211_BSS_SIGNAL_MBM, "signal_mbm", DT_S32, 0, NULL },
+		{ NL80211_BSS_SIGNAL_UNSPEC, "signal_unspec", DT_U8, 0, NULL },
+		{ NL80211_BSS_SEEN_MS_AGO, "seen_ms_ago", DT_S32, 0, NULL },
+		{ NL80211_BSS_INFORMATION_ELEMENTS, "information_elements", DT_IE, 0, NULL },
+		{ NL80211_BSS_BEACON_IES, "beacon_ies", DT_IE, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_sta_info_bitrate_nla = {
+	.headsize = 0,
+	.nattrs = 22,
+	.attrs = {
+		{ NL80211_RATE_INFO_BITRATE, "bitrate", DT_U16, 0, NULL },
+		{ NL80211_RATE_INFO_BITRATE32, "bitrate32", DT_U32, 0, NULL },
+		{ NL80211_RATE_INFO_MCS, "mcs", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_40_MHZ_WIDTH, "40_mhz_width", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_SHORT_GI, "short_gi", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_VHT_MCS, "vht_mcs", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_VHT_NSS, "vht_nss", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_HE_MCS, "he_mcs", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_HE_NSS, "he_nss", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_HE_GI, "he_gi", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_HE_DCM, "he_dcm", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_HE_RU_ALLOC, "he_ru_alloc", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_EHT_MCS, "eht_mcs", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_EHT_NSS, "eht_nss", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_EHT_GI, "eht_gi", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_40_MHZ_WIDTH, "width_40", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_80_MHZ_WIDTH, "width_80", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_80P80_MHZ_WIDTH, "width_80p80", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_160_MHZ_WIDTH, "width_160", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_320_MHZ_WIDTH, "width_320", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_10_MHZ_WIDTH, "width_10", DT_FLAG, 0, NULL },
+		{ NL80211_RATE_INFO_5_MHZ_WIDTH, "width_5", DT_FLAG, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_tid_txq_stats_nla = {
+	.headsize = 0,
+	.nattrs = 9,
+	.attrs = {
+		{ NL80211_TXQ_STATS_BACKLOG_BYTES, "backlog_bytes", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_BACKLOG_PACKETS, "backlog_packets", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_FLOWS, "flows", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_DROPS, "drops", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_ECN_MARKS, "ecn_marks", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_OVERLIMIT, "overlimit", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_COLLISIONS, "collisions", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_TX_BYTES, "tx_bytes", DT_U32, 0, NULL },
+		{ NL80211_TXQ_STATS_TX_PACKETS, "tx_packets", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_tid_stats_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_TID_STATS_RX_MSDU, "rx_msdu", DT_U64, 0, NULL },
+		{ NL80211_TID_STATS_TX_MSDU, "tx_msdu", DT_U64, 0, NULL },
+		{ NL80211_TID_STATS_TX_MSDU_RETRIES, "tx_msdu_retries", DT_U64, 0, NULL },
+		{ NL80211_TID_STATS_TX_MSDU_FAILED, "tx_msdu_failed", DT_U64, 0, NULL },
+		{ NL80211_TID_STATS_TXQ_STATS, "txq_stats", DT_NESTED, 0, &amp;nl80211_tid_txq_stats_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_bss_param_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_STA_BSS_PARAM_CTS_PROT, "cts_prot", DT_FLAG, 0, NULL },
+		{ NL80211_STA_BSS_PARAM_SHORT_PREAMBLE, "short_preamble", DT_FLAG, 0, NULL },
+		{ NL80211_STA_BSS_PARAM_SHORT_SLOT_TIME, "short_slot_time", DT_FLAG, 0, NULL },
+		{ NL80211_STA_BSS_PARAM_DTIM_PERIOD, "dtim_period", DT_U8, 0, NULL },
+		{ NL80211_STA_BSS_PARAM_BEACON_INTERVAL, "beacon_interval", DT_U16, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_sta_info_nla = {
+	.headsize = 0,
+	.nattrs = 40,
+	.attrs = {
+		{ NL80211_STA_INFO_INACTIVE_TIME, "inactive_time", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_RX_BYTES, "rx_bytes", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_TX_BYTES, "tx_bytes", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_RX_BYTES64, "rx_bytes64", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_TX_BYTES64, "tx_bytes64", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_RX_PACKETS, "rx_packets", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_TX_PACKETS, "tx_packets", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_BEACON_RX, "beacon_rx", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_SIGNAL, "signal", DT_S8, 0, NULL },
+		{ NL80211_STA_INFO_T_OFFSET, "t_offset", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_TX_BITRATE, "tx_bitrate", DT_NESTED, 0, &amp;nl80211_sta_info_bitrate_nla },
+		{ NL80211_STA_INFO_RX_BITRATE, "rx_bitrate", DT_NESTED, 0, &amp;nl80211_sta_info_bitrate_nla },
+		{ NL80211_STA_INFO_LLID, "llid", DT_U16, 0, NULL },
+		{ NL80211_STA_INFO_PLID, "plid", DT_U16, 0, NULL },
+		{ NL80211_STA_INFO_PLINK_STATE, "plink_state", DT_U8, 0, NULL },
+		{ NL80211_STA_INFO_TX_RETRIES, "tx_retries", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_TX_FAILED, "tx_failed", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_BEACON_LOSS, "beacon_loss", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_RX_DROP_MISC, "rx_drop_misc", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_STA_FLAGS, "sta_flags", DT_U32, DF_ARRAY, NULL },
+		{ NL80211_STA_INFO_LOCAL_PM, "local_pm", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_PEER_PM, "peer_pm", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_NONPEER_PM, "nonpeer_pm", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_CHAIN_SIGNAL, "chain_signal", DT_S8, DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_STA_INFO_CHAIN_SIGNAL_AVG, "chain_signal_avg", DT_S8, DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_STA_INFO_TID_STATS, "tid_stats", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_tid_stats_nla },
+		{ NL80211_STA_INFO_BSS_PARAM, "bss_param", DT_NESTED, 0, &amp;nl80211_bss_param_nla },
+		{ NL80211_STA_INFO_RX_DURATION, "rx_duration", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_TX_DURATION, "tx_duration", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_ACK_SIGNAL, "ack_signal", DT_S8, 0, NULL },
+		{ NL80211_STA_INFO_ACK_SIGNAL_AVG, "ack_signal_avg", DT_S8, 0, NULL },
+		{ NL80211_STA_INFO_AIRTIME_LINK_METRIC, "airtime_link_metric", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_AIRTIME_WEIGHT, "airtime_weight", DT_U16, 0, NULL },
+		{ NL80211_STA_INFO_CONNECTED_TO_AS, "connected_to_as", DT_BOOL, 0, NULL },
+		{ NL80211_STA_INFO_CONNECTED_TO_GATE, "connected_to_gate", DT_BOOL, 0, NULL },
+		{ NL80211_STA_INFO_CONNECTED_TIME, "connected_time", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_ASSOC_AT_BOOTTIME, "assoc_at_boottime", DT_U64, 0, NULL },
+		{ NL80211_STA_INFO_BEACON_SIGNAL_AVG, "beacon_signal_avg", DT_S8, 0, NULL },
+		{ NL80211_STA_INFO_EXPECTED_THROUGHPUT, "expected_throughput", DT_U32, 0, NULL },
+		{ NL80211_STA_INFO_SIGNAL_AVG, "signal_avg", DT_S8, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_survey_info_nla = {
+	.headsize = 0,
+	.nattrs = 8,
+	.attrs = {
+		{ NL80211_SURVEY_INFO_FREQUENCY, "frequency", DT_U32, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME, "time", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME_TX, "time_tx", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME_RX, "time_rx", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME_BUSY, "busy", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME_EXT_BUSY, "ext_busy", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_TIME_SCAN, "scan", DT_U64, 0, NULL },
+		{ NL80211_SURVEY_INFO_NOISE, "noise", DT_S8, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_mpath_info_nla = {
+	.headsize = 0,
+	.nattrs = 8,
+	.attrs = {
+		{ NL80211_MPATH_INFO_SN, "sn", DT_U32, 0, NULL },
+		{ NL80211_MPATH_INFO_METRIC, "metric", DT_U32, 0, NULL },
+		{ NL80211_MPATH_INFO_EXPTIME, "expire", DT_U32, 0, NULL },
+		{ NL80211_MPATH_INFO_DISCOVERY_TIMEOUT, "discovery_timeout", DT_U32, 0, NULL },
+		{ NL80211_MPATH_INFO_DISCOVERY_RETRIES, "discovery_retries", DT_U8, 0, NULL },
+		{ NL80211_MPATH_INFO_FLAGS, "flags", DT_U8, 0, NULL },
+		{ NL80211_MPATH_INFO_HOP_COUNT, "hop_count", DT_U8, 0, NULL },
+		{ NL80211_MPATH_INFO_PATH_CHANGE, "path_change", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_radio_freq_range_nla = {
+	.headsize = 0,
+	.nattrs = 2,
+	.attrs = {
+		{ NL80211_WIPHY_RADIO_FREQ_ATTR_START, "start", DT_U32, 0, NULL },
+		{ NL80211_WIPHY_RADIO_FREQ_ATTR_END, "end", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_wiphy_radio_nla = {
+	.headsize = 0,
+	.nattrs = 4,
+	.attrs = {
+		{ NL80211_WIPHY_RADIO_ATTR_INDEX, "index", DT_U32, 0, NULL },
+		{ NL80211_WIPHY_RADIO_ATTR_FREQ_RANGE, "freq_ranges", DT_NESTED, DF_REPEATED, &amp;nl80211_radio_freq_range_nla },
+		{ NL80211_WIPHY_RADIO_ATTR_INTERFACE_COMBINATION, "interface_combinations", DT_NESTED, DF_REPEATED, &amp;nl80211_ifcomb_nla },
+		{ NL80211_WIPHY_RADIO_ATTR_ANTENNA_MASK, "antenna_mask", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t nl80211_msg = {
+	.headsize = 0,
+	.nattrs = 130,
+	.attrs = {
+		{ NL80211_ATTR_4ADDR, "4addr", DT_U8, 0, NULL },
+		{ NL80211_ATTR_AIRTIME_WEIGHT, "airtime_weight", DT_U16, 0, NULL },
+		{ NL80211_ATTR_AKM_SUITES, "akm_suites", DT_U32, 0, NULL },
+		{ NL80211_ATTR_AUTH_TYPE, "auth_type", DT_U32, 0, NULL },
+		{ NL80211_ATTR_BANDS, "bands", DT_U32, 0, NULL },
+		{ NL80211_ATTR_BEACON_HEAD, "beacon_head", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_BEACON_INTERVAL, "beacon_interval", DT_U32, 0, NULL },
+		{ NL80211_ATTR_BEACON_TAIL, "beacon_tail", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_BSS, "bss", DT_NESTED, 0, &amp;nl80211_bss_nla },
+		{ NL80211_ATTR_BSS_BASIC_RATES, "bss_basic_rates", DT_U32, DF_ARRAY, NULL },
+		{ NL80211_ATTR_CENTER_FREQ1, "center_freq1", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CENTER_FREQ2, "center_freq2", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CHANNEL_WIDTH, "channel_width", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CH_SWITCH_BLOCK_TX, "ch_switch_block_tx", DT_FLAG, 0, NULL },
+		{ NL80211_ATTR_CH_SWITCH_COUNT, "ch_switch_count", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CIPHER_SUITES, "cipher_suites", DT_U32, DF_ARRAY, NULL },
+		{ NL80211_ATTR_CIPHER_SUITES_PAIRWISE, "cipher_suites_pairwise", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CIPHER_SUITE_GROUP, "cipher_suite_group", DT_U32, 0, NULL },
+		{ NL80211_ATTR_COALESCE_RULE, "coalesce_rule", DT_NESTED, 0, &amp;nl80211_coalesce_rule_nla },
+		{ NL80211_ATTR_COOKIE, "cookie", DT_U64, 0, NULL },
+		{ NL80211_ATTR_CQM, "cqm", DT_NESTED, 0, &amp;nl80211_cqm_nla },
+		{ NL80211_ATTR_DFS_CAC_TIME, "dfs_cac_time", DT_U32, 0, NULL },
+		{ NL80211_ATTR_DFS_REGION, "dfs_region", DT_U8, 0, NULL },
+		{ NL80211_ATTR_DTIM_PERIOD, "dtim_period", DT_U32, 0, NULL },
+		{ NL80211_ATTR_DURATION, "duration", DT_U32, 0, NULL },
+		{ NL80211_ATTR_EXT_FEATURES, "extended_features", DT_U8, DF_ARRAY, NULL },
+		{ NL80211_ATTR_FEATURE_FLAGS, "feature_flags", DT_U32, 0, NULL },
+		{ NL80211_ATTR_FRAME, "frame", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_FRAME_MATCH, "frame_match", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_FRAME_TYPE, "frame_type", DT_U16, 0, NULL },
+		{ NL80211_ATTR_FREQ_FIXED, "freq_fixed", DT_FLAG, 0, NULL },
+		{ NL80211_ATTR_FTM_RESPONDER, "ftm_responder", DT_NESTED, 0, &amp;nl80211_ftm_responder_nla },
+		{ NL80211_ATTR_FTM_RESPONDER_STATS, "ftm_responder_stats", DT_NESTED, 0, &amp;nl80211_ftm_responder_stats_nla },
+		{ NL80211_ATTR_HIDDEN_SSID, "hidden_ssid", DT_U32, 0, NULL },
+		{ NL80211_ATTR_HT_CAPABILITY_MASK, "ht_capability_mask", DT_HT_CAP, 0, NULL },
+		{ NL80211_ATTR_IE, "ie", DT_IE, 0, NULL },
+		{ NL80211_ATTR_IFINDEX, "dev", DT_NETDEV, 0, NULL },
+		{ NL80211_ATTR_IFNAME, "ifname", DT_STRING, 0, NULL },
+		{ NL80211_ATTR_IFTYPE, "iftype", DT_U32, 0, NULL },
+		{ NL80211_ATTR_INACTIVITY_TIMEOUT, "inactivity_timeout", DT_U16, 0, NULL },
+		{ NL80211_ATTR_INTERFACE_COMBINATIONS, "interface_combinations", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_ifcomb_nla },
+		{ NL80211_ATTR_KEYS, "keys", DT_NESTED, DF_AUTOIDX, &amp;nl80211_keys_nla },
+		{ NL80211_ATTR_KEY_SEQ, "key_seq", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_KEY_TYPE, "key_type", DT_U32, 0, NULL },
+		{ NL80211_ATTR_LOCAL_MESH_POWER_MODE, "local_mesh_power_mode", DT_U32, 0, NULL },
+		{ NL80211_ATTR_MAC, "mac", DT_LLADDR, 0, NULL },
+		{ NL80211_ATTR_MAC_MASK, "mac_mask", DT_LLADDR, 0, NULL },
+		{ NL80211_ATTR_MCAST_RATE, "mcast_rate", DT_U32, 0, NULL },
+		{ NL80211_ATTR_MEASUREMENT_DURATION, "measurement_duration", DT_U16, 0, NULL },
+		{ NL80211_ATTR_MESH_ID, "mesh_id", DT_STRING, 0, NULL },
+		{ NL80211_ATTR_MESH_PARAMS, "mesh_params", DT_NESTED, 0, &amp;nl80211_mesh_params_nla },
+		{ NL80211_ATTR_MESH_SETUP, "mesh_setup", DT_NESTED, 0, &amp;nl80211_mesh_setup_nla },
+		{ NL80211_ATTR_MGMT_SUBTYPE, "mgmt_subtype", DT_U8, 0, NULL },
+		{ NL80211_ATTR_MNTR_FLAGS, "mntr_flags", DT_NESTED, 0, &amp;nl80211_mntr_flags_nla },
+		{ NL80211_ATTR_MPATH_NEXT_HOP, "mpath_next_hop", DT_LLADDR, 0, NULL },
+		{ NL80211_ATTR_MPATH_INFO, "mpath_info", DT_NESTED, 0, &amp;nl80211_mpath_info_nla },
+		{ NL80211_ATTR_MU_MIMO_FOLLOW_MAC_ADDR, "mu_mimo_follow_mac_addr", DT_LLADDR, 0, NULL },
+		{ NL80211_ATTR_NAN_FUNC, "nan_func", DT_NESTED, 0, &amp;nl80211_nan_func_nla },
+		{ NL80211_ATTR_NAN_MASTER_PREF, "nan_master_pref", DT_U8, 0, NULL },
+		{ NL80211_ATTR_NETNS_FD, "netns_fd", DT_U32, 0, NULL },
+		{ NL80211_ATTR_NOACK_MAP, "noack_map", DT_U16, 0, NULL },
+		{ NL80211_ATTR_NSS, "nss", DT_U8, 0, NULL },
+		{ NL80211_ATTR_PEER_MEASUREMENTS, "peer_measurements", DT_NESTED, 0, &amp;nl80211_peer_measurements_nla },
+		{ NL80211_ATTR_PID, "pid", DT_U32, 0, NULL },
+		{ NL80211_ATTR_PMK, "pmk", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_PRIVACY, "privacy", DT_FLAG, 0, NULL },
+		{ NL80211_ATTR_PROTOCOL_FEATURES, "protocol_features", DT_U32, 0, NULL },
+		{ NL80211_ATTR_PS_STATE, "ps_state", DT_U32, 0, NULL },
+		{ NL80211_ATTR_RADAR_EVENT, "radar_event", DT_U32, 0, NULL },
+		{ NL80211_ATTR_REASON_CODE, "reason_code", DT_U16, 0, NULL },
+		{ NL80211_ATTR_REG_ALPHA2, "reg_alpha2", DT_STRING, 0, NULL },
+		{ NL80211_ATTR_REG_INITIATOR, "reg_initiator", DT_U32, 0, NULL },
+		{ NL80211_ATTR_REG_RULES, "reg_rules", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_reg_rules_nla },
+		{ NL80211_ATTR_REG_TYPE, "reg_type", DT_U8, 0, NULL },
+		{ NL80211_ATTR_RX_FRAME_TYPES, "rx_frame_types", DT_NESTED, 0, &amp;nl80211_frame_types_nla },
+		{ NL80211_ATTR_RX_SIGNAL_DBM, "rx_signal_dbm", DT_U32, 0, NULL },
+		{ NL80211_ATTR_SCAN_FLAGS, "scan_flags", DT_U32, 0, NULL },
+		{ NL80211_ATTR_SCAN_FREQUENCIES, "scan_frequencies", DT_U32, DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_ATTR_SCAN_SSIDS, "scan_ssids", DT_STRING, DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_ATTR_SCHED_SCAN_DELAY, "sched_scan_delay", DT_U32, 0, NULL },
+		{ NL80211_ATTR_SCHED_SCAN_INTERVAL, "sched_scan_interval", DT_U32, 0, NULL },
+		{ NL80211_ATTR_SCHED_SCAN_MATCH, "sched_scan_match", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_sched_scan_match_nla },
+		{ NL80211_ATTR_SCHED_SCAN_PLANS, "sched_scan_plans", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX|DF_OFFSET1, &amp;nl80211_sched_scan_plan_nla },
+		{ NL80211_ATTR_SMPS_MODE, "smps_mode", DT_U8, 0, NULL },
+		{ NL80211_ATTR_SPLIT_WIPHY_DUMP, "split_wiphy_dump", DT_FLAG, 0, NULL },
+		{ NL80211_ATTR_SSID, "ssid", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_STATUS_CODE, "status_code", DT_U16, 0, NULL },
+		{ NL80211_ATTR_STA_INFO, "sta_info", DT_NESTED, 0, &amp;nl80211_sta_info_nla },
+		{ NL80211_ATTR_STA_PLINK_ACTION, "sta_plink_action", DT_U8, 0, NULL },
+		{ NL80211_ATTR_STA_TX_POWER, "sta_tx_power", DT_U16, 0, NULL },
+		{ NL80211_ATTR_STA_TX_POWER_SETTING, "sta_tx_power_setting", DT_U8, 0, NULL },
+		{ NL80211_ATTR_STA_VLAN, "sta_vlan", DT_U32, 0, NULL },
+		{ NL80211_ATTR_SUPPORTED_COMMANDS, "supported_commands", DT_U32, DF_NO_SET|DF_MULTIPLE|DF_AUTOIDX, NULL },
+		{ NL80211_ATTR_TESTDATA, "testdata", DT_NESTED, 0, &amp;nl80211_testdata_nla },
+		{ NL80211_ATTR_TID_CONFIG, "tid_config", DT_NESTED, DF_MULTIPLE, &amp;nl80211_tid_config_nla },
+		{ NL80211_ATTR_TIMEOUT, "timeout", DT_U32, 0, NULL },
+		{ NL80211_ATTR_TXQ_LIMIT, "txq_limit", DT_U32, 0, NULL },
+		{ NL80211_ATTR_TXQ_MEMORY_LIMIT, "txq_memory_limit", DT_U32, 0, NULL },
+		{ NL80211_ATTR_TXQ_QUANTUM, "txq_quantum", DT_U32, 0, NULL },
+		{ NL80211_ATTR_TX_FRAME_TYPES, "tx_frame_types", DT_NESTED, 0, &amp;nl80211_frame_types_nla },
+		{ NL80211_ATTR_USE_MFP, "use_mfp", DT_U32, 0, NULL },
+		{ NL80211_ATTR_VENDOR_DATA, "vendor_data", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_VENDOR_ID, "vendor_id", DT_U32, 0, NULL },
+		{ NL80211_ATTR_VENDOR_SUBCMD, "vendor_subcmd", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WDEV, "wdev", DT_U64, 0, NULL },
+		{ NL80211_ATTR_WIPHY, "wiphy", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_ANTENNA_AVAIL_RX, "wiphy_antenna_avail_rx", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_ANTENNA_AVAIL_TX, "wiphy_antenna_avail_tx", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_ANTENNA_RX, "wiphy_antenna_rx", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_ANTENNA_TX, "wiphy_antenna_tx", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_BANDS, "wiphy_bands", DT_NESTED, DF_NO_SET|DF_MULTIPLE|DF_TYPEIDX, &amp;nl80211_wiphy_bands_nla },
+		{ NL80211_ATTR_WIPHY_CHANNEL_TYPE, "wiphy_channel_type", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_COVERAGE_CLASS, "wiphy_coverage_class", DT_U8, 0, NULL },
+		{ NL80211_ATTR_WIPHY_DYN_ACK, "wiphy_dyn_ack", DT_FLAG, 0, NULL },
+		{ NL80211_ATTR_WIPHY_FRAG_THRESHOLD, "wiphy_frag_threshold", DT_S32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_FREQ, "wiphy_freq", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_NAME, "wiphy_name", DT_STRING, 0, NULL },
+		{ NL80211_ATTR_WIPHY_RETRY_LONG, "wiphy_retry_long", DT_U8, 0, NULL },
+		{ NL80211_ATTR_WIPHY_RETRY_SHORT, "wiphy_retry_short", DT_U8, 0, NULL },
+		{ NL80211_ATTR_WIPHY_RTS_THRESHOLD, "wiphy_rts_threshold", DT_S32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_TX_POWER_LEVEL, "wiphy_tx_power_level", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_TX_POWER_SETTING, "wiphy_tx_power_setting", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WOWLAN_TRIGGERS, "wowlan_triggers", DT_NESTED, 0, &amp;nl80211_wowlan_triggers_nla },
+		{ NL80211_ATTR_WPA_VERSIONS, "wpa_versions", DT_U32, 0, NULL },
+		{ NL80211_ATTR_SUPPORTED_IFTYPES, "supported_iftypes", DT_NESTED, 0, &amp;nl80211_ifcomb_limit_types_nla },
+		{ NL80211_ATTR_SOFTWARE_IFTYPES, "software_iftypes", DT_NESTED, 0, &amp;nl80211_ifcomb_limit_types_nla },
+		{ NL80211_ATTR_MAX_AP_ASSOC_STA, "max_ap_assoc", DT_U16, 0, NULL },
+		{ NL80211_ATTR_SURVEY_INFO, "survey_info", DT_NESTED, 0, &amp;nl80211_survey_info_nla },
+		{ NL80211_ATTR_WIPHY_RADIOS, "radios", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_wiphy_radio_nla },
+		{ NL80211_ATTR_VIF_RADIO_MASK, "vif_radio_mask", DT_U32, 0, NULL },
+	}
+};
+
+static const uc_nl_nested_spec_t hwsim_tx_info_struct = {
+	.headsize = sizeof(struct hwsim_tx_rate),
+	.nattrs = 2,
+	.attrs = {
+		{ NLA_UNSPEC, "idx", DT_S8, 0, MEMBER(hwsim_tx_rate, idx) },
+		{ NLA_UNSPEC, "count", DT_U8, 0, MEMBER(hwsim_tx_rate, count) },
+	}
+};
+
+static const uc_nl_nested_spec_t hwsim_tx_info_flags_struct = {
+	.headsize = sizeof(struct hwsim_tx_rate_flag),
+	.nattrs = 2,
+	.attrs = {
+		{ NLA_UNSPEC, "idx", DT_S8, 0, MEMBER(hwsim_tx_rate_flag, idx) },
+		{ NLA_UNSPEC, "flags", DT_U16, 0, MEMBER(hwsim_tx_rate_flag, flags) },
+	}
+};
+
+static const uc_nl_nested_spec_t hwsim_pmsr_support_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_PMSR_ATTR_MAX_PEERS, "max_peers", DT_U32, 0, NULL },
+		{ NL80211_PMSR_ATTR_REPORT_AP_TSF, "report_ap_tsf", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_ATTR_RANDOMIZE_MAC_ADDR, "randomize_mac_addr", DT_FLAG, 0, NULL },
+		{ NL80211_PMSR_ATTR_TYPE_CAPA, "type_capa", DT_U32, 0, NULL },
+		{ NL80211_PMSR_ATTR_PEERS, "peers", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &amp;nl80211_peer_measurements_peers_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t hwsim_pmsr_request_nla = {
+	.headsize = 0,
+	.nattrs = 1,
+	.attrs = {
+		{ NL80211_ATTR_PEER_MEASUREMENTS, "peer_measurements", DT_NESTED, 0, &amp;nl80211_peer_measurements_nla },
+	}
+};
+
+static const uc_nl_nested_spec_t hwsim_msg = {
+	.headsize = 0,
+	.nattrs = 27,
+	.attrs = {
+		{ HWSIM_ATTR_ADDR_RECEIVER, "addr_receiver", DT_LLADDR, 0, NULL },
+		{ HWSIM_ATTR_ADDR_TRANSMITTER, "addr_transmitter", DT_LLADDR, 0, NULL },
+		{ HWSIM_ATTR_FRAME, "frame", DT_STRING, DF_BINARY, NULL },
+		{ HWSIM_ATTR_FLAGS, "flags", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_RX_RATE, "rx_rate", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_SIGNAL, "signal", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_TX_INFO, "tx_info", DT_NESTED, DF_ARRAY, &amp;hwsim_tx_info_struct },
+		{ HWSIM_ATTR_COOKIE, "cookie", DT_U64, 0, NULL },
+		{ HWSIM_ATTR_CHANNELS, "channels", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_RADIO_ID, "radio_id", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_REG_HINT_ALPHA2, "reg_hint_alpha2", DT_STRING, DF_BINARY, NULL },
+		{ HWSIM_ATTR_REG_CUSTOM_REG, "reg_custom_reg", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_REG_STRICT_REG, "reg_strict_reg", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_SUPPORT_P2P_DEVICE, "support_p2p_device", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_USE_CHANCTX, "use_chanctx", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_DESTROY_RADIO_ON_CLOSE, "destroy_radio_on_close", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_RADIO_NAME, "radio_name", DT_STRING, DF_BINARY, NULL },
+		{ HWSIM_ATTR_NO_VIF, "no_vif", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_FREQ, "freq", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_TX_INFO_FLAGS, "tx_info_flags", DT_NESTED, DF_ARRAY, &amp;hwsim_tx_info_flags_struct },
+		{ HWSIM_ATTR_PERM_ADDR, "perm_addr", DT_LLADDR, 0, NULL },
+		{ HWSIM_ATTR_IFTYPE_SUPPORT, "iftype_support", DT_U32, 0, NULL },
+		{ HWSIM_ATTR_CIPHER_SUPPORT, "cipher_support", DT_U32, DF_ARRAY, NULL },
+		{ HWSIM_ATTR_MLO_SUPPORT, "mlo_support", DT_FLAG, 0, NULL },
+		{ HWSIM_ATTR_PMSR_SUPPORT, "pmsr_support", DT_NESTED, 0, &amp;hwsim_pmsr_support_nla },
+		{ HWSIM_ATTR_PMSR_REQUEST, "pmsr_request", DT_NESTED, 0, &amp;hwsim_pmsr_request_nla },
+		{ HWSIM_ATTR_PMSR_RESULT, "pmsr_result", DT_NESTED, 0, &amp;hwsim_pmsr_support_nla },
+	}
+};
+
+
+static bool
+nla_check_len(struct nlattr *nla, size_t sz)
+{
+	return (nla &amp;&amp; nla_len(nla) >= (ssize_t)sz);
+}
+
+static bool
+nla_parse_error(const uc_nl_attr_spec_t *spec, uc_vm_t *vm, uc_value_t *v, const char *msg)
+{
+	char *s;
+
+	s = ucv_to_string(vm, v);
+
+	set_error(NLE_INVAL, "%s `%s` has invalid value `%s`: %s",
+		spec->attr ? "attribute" : "field",
+		spec->key,
+		s,
+		msg);
+
+	free(s);
+
+	return false;
+}
+
+static void
+uc_nl_put_struct_member(char *base, const void *offset, size_t datalen, void *data)
+{
+	memcpy(base + (uintptr_t)offset, data, datalen);
+}
+
+static void
+uc_nl_put_struct_member_u8(char *base, const void *offset, uint8_t u8)
+{
+	base[(uintptr_t)offset] = u8;
+}
+
+static void
+uc_nl_put_struct_member_u32(char *base, const void *offset, uint32_t u32)
+{
+	uc_nl_put_struct_member(base, offset, sizeof(u32), &amp;u32);
+}
+
+static void *
+uc_nl_get_struct_member(char *base, const void *offset, size_t datalen, void *data)
+{
+	memcpy(data, base + (uintptr_t)offset, datalen);
+
+	return data;
+}
+
+static uint8_t
+uc_nl_get_struct_member_u8(char *base, const void *offset)
+{
+	return (uint8_t)base[(uintptr_t)offset];
+}
+
+static uint32_t
+uc_nl_get_struct_member_u32(char *base, const void *offset)
+{
+	uint32_t u32;
+
+	uc_nl_get_struct_member(base, offset, sizeof(u32), &amp;u32);
+
+	return u32;
+}
+
+static bool
+uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, uc_vm_t *vm, uc_value_t *val, size_t idx);
+
+static uc_value_t *
+uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, struct nlattr *attr, struct nlattr *attr2, uc_vm_t *vm);
+
+static bool
+uc_nl_convert_attrs(struct nl_msg *msg, void *buf, size_t buflen, size_t headsize, const uc_nl_attr_spec_t *attrs, size_t nattrs, uc_vm_t *vm, uc_value_t *obj)
+{
+	struct nlattr **tb, *nla, *nla2, *nla_nest;
+	size_t i, type, maxattr = 0;
+	uc_value_t *v, *arr;
+	int rem;
+
+	for (i = 0; i &lt; nattrs; i++)
+		if (attrs[i].attr > maxattr)
+			maxattr = attrs[i].attr;
+
+	tb = calloc(maxattr + 1, sizeof(struct nlattr *));
+
+	if (!tb)
+		return false;
+
+	nla_for_each_attr(nla, buf + headsize, buflen - headsize, rem) {
+		type = nla_type(nla);
+
+		if (type &lt;= maxattr &amp;&amp; !tb[type])
+			tb[type] = nla;
+	}
+
+	for (i = 0; i &lt; nattrs; i++) {
+		if (attrs[i].attr != 0 &amp;&amp; !tb[attrs[i].attr])
+			continue;
+
+		if (attrs[i].flags &amp; DF_REPEATED) {
+			arr = ucv_array_new(vm);
+
+			nla = tb[attrs[i].attr];
+			rem = buflen - ((void *)nla - buf);
+			for (; nla_ok(nla, rem); nla = nla_next(nla, &amp;rem)) {
+				if (nla_type(nla) != (int)attrs[i].attr)
+					break;
+				v = uc_nl_convert_attr(&amp;attrs[i], msg, (char *)buf, nla, NULL, vm);
+				if (!v)
+					continue;
+
+				ucv_array_push(arr, v);
+			}
+			if (!ucv_array_length(arr)) {
+				ucv_put(arr);
+				continue;
+			}
+
+			v = arr;
+		}
+		else if (attrs[i].flags &amp; DF_MULTIPLE) {
+			arr = ucv_array_new(vm);
+			nla_nest = tb[attrs[i].attr];
+
+			nla_for_each_attr(nla, nla_data(nla_nest), nla_len(nla_nest), rem) {
+				if (!(attrs[i].flags &amp; (DF_AUTOIDX|DF_TYPEIDX)) &amp;&amp;
+				    attrs[i].auxdata &amp;&amp; nla_type(nla) != (intptr_t)attrs[i].auxdata)
+					continue;
+
+				v = uc_nl_convert_attr(&amp;attrs[i], msg, (char *)buf, nla, NULL, vm);
+
+				if (!v)
+					continue;
+
+				if (attrs[i].flags &amp; DF_TYPEIDX)
+					ucv_array_set(arr, nla_type(nla) - !!(attrs[i].flags &amp; DF_OFFSET1), v);
+				else
+					ucv_array_push(arr, v);
+			}
+
+			if (!ucv_array_length(arr)) {
+				ucv_put(arr);
+
+				continue;
+			}
+
+			v = arr;
+		}
+		else {
+			if (attrs[i].flags &amp; DF_RELATED)
+				nla2 = tb[(uintptr_t)attrs[i].auxdata];
+			else
+				nla2 = NULL;
+
+			v = uc_nl_convert_attr(&amp;attrs[i], msg, (char *)buf, tb[attrs[i].attr], nla2, vm);
+
+			if (!v)
+				continue;
+		}
+
+		ucv_object_add(obj, attrs[i].key, v);
+	}
+
+	free(tb);
+
+	return true;
+}
+
+static bool
+uc_nl_parse_attrs(struct nl_msg *msg, char *base, const uc_nl_attr_spec_t *attrs, size_t nattrs, uc_vm_t *vm, uc_value_t *obj)
+{
+	struct nlattr *nla_nest = NULL;
+	uc_value_t *v, *item;
+	size_t i, j, idx;
+	bool exists;
+
+	for (i = 0; i &lt; nattrs; i++) {
+		if (attrs[i].attr == NL80211_ATTR_NOT_IMPLEMENTED)
+			continue;
+
+		v = ucv_object_get(obj, attrs[i].key, &amp;exists);
+
+		if (!exists)
+			continue;
+
+		if (attrs[i].flags &amp; DF_MULTIPLE) {
+			nla_nest = nla_nest_start(msg, attrs[i].attr);
+
+			if (ucv_type(v) == UC_ARRAY) {
+				for (j = 0; j &lt; ucv_array_length(v); j++) {
+					item = ucv_array_get(v, j);
+
+					if (!item &amp;&amp; (attrs[i].flags &amp; DF_TYPEIDX))
+						continue;
+
+					if (!attrs[i].auxdata || (attrs[i].flags &amp; (DF_AUTOIDX|DF_TYPEIDX)))
+						idx = j + !!(attrs[i].flags &amp; DF_OFFSET1);
+					else
+						idx = (uintptr_t)attrs[i].auxdata;
+
+					if (!uc_nl_parse_attr(&amp;attrs[i], msg, base, vm, item, idx))
+						return false;
+				}
+			}
+			else {
+				if (!attrs[i].auxdata || (attrs[i].flags &amp; (DF_AUTOIDX|DF_TYPEIDX)))
+					idx = !!(attrs[i].flags &amp; DF_OFFSET1);
+				else
+					idx = (uintptr_t)attrs[i].auxdata;
+
+				if (!uc_nl_parse_attr(&amp;attrs[i], msg, base, vm, v, idx))
+					return false;
+			}
+
+			nla_nest_end(msg, nla_nest);
+		}
+		else if (!uc_nl_parse_attr(&amp;attrs[i], msg, base, vm, v, 0)) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static bool
+uc_nl_parse_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, uc_vm_t *vm, uc_value_t *val)
+{
+	const uc_nl_nested_spec_t *nest = spec->auxdata;
+	struct nlattr *nested_nla;
+
+	if (!nest)
+		return false;
+
+	nested_nla = nla_reserve(msg, spec->attr, nest->headsize);
+
+	if (!uc_nl_parse_attrs(msg, nla_data(nested_nla), nest->attrs, nest->nattrs, vm, val))
+		return false;
+
+	nla_nest_end(msg, nested_nla);
+
+	return true;
+}
+
+static uc_value_t *
+uc_nl_convert_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, uc_vm_t *vm)
+{
+	const uc_nl_nested_spec_t *nest = spec->auxdata;
+	uc_value_t *nested_obj;
+	bool rv;
+
+	if (!nest)
+		return NULL;
+
+	if (!nla_check_len(attr, nest->headsize))
+		return NULL;
+
+	nested_obj = ucv_object_new(vm);
+
+	rv = uc_nl_convert_attrs(msg,
+		nla_data(attr), nla_len(attr), nest->headsize,
+		nest->attrs, nest->nattrs,
+		vm, nested_obj);
+
+	if (!rv) {
+		ucv_put(nested_obj);
+
+		return NULL;
+	}
+
+	return nested_obj;
+}
+
+static uc_value_t *
+uc_nl_convert_rta_ht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, uc_vm_t *vm)
+{
+	uc_value_t *mcs_obj, *mcs_idx;
+	uint16_t max_rate = 0;
+	uint8_t *mcs;
+	size_t i;
+
+	if (!nla_check_len(attr, 16))
+		return NULL;
+
+	mcs = nla_data(attr);
+	mcs_obj = ucv_object_new(vm);
+
+	max_rate = (mcs[10] | ((mcs[11] &amp; 0x3) &lt;&lt; 8));
+
+	if (max_rate)
+		ucv_object_add(mcs_obj, "rx_highest_data_rate", ucv_uint64_new(max_rate));
+
+	mcs_idx = ucv_array_new(vm);
+
+	for (i = 0; i &lt;= 76; i++)
+		if (mcs[i / 8] &amp; (1 &lt;&lt; (i % 8)))
+			ucv_array_push(mcs_idx, ucv_uint64_new(i));
+
+	ucv_object_add(mcs_obj, "rx_mcs_indexes", mcs_idx);
+
+	ucv_object_add(mcs_obj, "tx_mcs_set_defined", ucv_boolean_new(mcs[12] &amp; (1 &lt;&lt; 0)));
+	ucv_object_add(mcs_obj, "tx_rx_mcs_set_equal", ucv_boolean_new(!(mcs[12] &amp; (1 &lt;&lt; 1))));
+	ucv_object_add(mcs_obj, "tx_max_spatial_streams", ucv_uint64_new(((mcs[12] >> 2) &amp; 3) + 1));
+	ucv_object_add(mcs_obj, "tx_unequal_modulation", ucv_boolean_new(mcs[12] &amp; (1 &lt;&lt; 4)));
+
+	return mcs_obj;
+}
+
+static uc_value_t *
+uc_nl_convert_rta_ht_cap(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, uc_vm_t *vm)
+{
+	uc_value_t *cap_obj, *mcs_obj, *rx_mask;
+	struct ieee80211_ht_cap *cap;
+	size_t i;
+
+	if (!nla_check_len(attr, sizeof(*cap)))
+		return NULL;
+
+	cap = nla_data(attr);
+	cap_obj = ucv_object_new(vm);
+
+	ucv_object_add(cap_obj, "cap_info", ucv_uint64_new(le16toh(cap->cap_info)));
+	ucv_object_add(cap_obj, "ampdu_params_info", ucv_uint64_new(cap->ampdu_params_info));
+	ucv_object_add(cap_obj, "extended_ht_cap_info", ucv_uint64_new(le16toh(cap->extended_ht_cap_info)));
+	ucv_object_add(cap_obj, "tx_BF_cap_info", ucv_uint64_new(le32toh(cap->tx_BF_cap_info)));
+	ucv_object_add(cap_obj, "antenna_selection_info", ucv_uint64_new(cap->antenna_selection_info));
+
+	mcs_obj = ucv_object_new(vm);
+	rx_mask = ucv_array_new_length(vm, sizeof(cap->mcs.rx_mask));
+
+	for (i = 0; i &lt; sizeof(cap->mcs.rx_mask); i++)
+		ucv_array_push(rx_mask, ucv_uint64_new(cap->mcs.rx_mask[i]));
+
+	ucv_object_add(mcs_obj, "rx_mask", rx_mask);
+	ucv_object_add(mcs_obj, "rx_highest", ucv_uint64_new(le16toh(cap->mcs.rx_highest)));
+	ucv_object_add(mcs_obj, "tx_params", ucv_uint64_new(cap->mcs.tx_params));
+
+	ucv_object_add(cap_obj, "mcs", mcs_obj);
+
+	return cap_obj;
+}
+
+static uc_value_t *
+uc_nl_convert_rta_vht_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, uc_vm_t *vm)
+{
+	uc_value_t *mcs_obj, *mcs_set, *mcs_entry, *mcs_idx;
+	size_t i, j, max_idx;
+	uint16_t u16;
+	uint8_t *mcs;
+
+	if (!nla_check_len(attr, 8))
+		return NULL;
+
+	mcs = nla_data(attr);
+	mcs_obj = ucv_object_new(vm);
+
+	u16 = mcs[0] | (mcs[1] &lt;&lt; 8);
+	mcs_set = ucv_array_new(vm);
+
+	for (i = 1; i &lt;= 8; i++) {
+		switch ((u16 >> ((i - 1) * 2)) &amp; 3) {
+		case 0: max_idx = 7; break;
+		case 1: max_idx = 8; break;
+		case 2: max_idx = 9; break;
+		default: continue;
+		}
+
+		mcs_idx = ucv_array_new_length(vm, max_idx + 1);
+
+		for (j = 0; j &lt;= max_idx; j++)
+			ucv_array_push(mcs_idx, ucv_uint64_new(j));
+
+		mcs_entry = ucv_object_new(vm);
+
+		ucv_object_add(mcs_entry, "streams", ucv_uint64_new(i));
+		ucv_object_add(mcs_entry, "mcs_indexes", mcs_idx);
+
+		ucv_array_push(mcs_set, mcs_entry);
+	}
+
+	ucv_object_add(mcs_obj, "rx_mcs_set", mcs_set);
+	ucv_object_add(mcs_obj, "rx_highest_data_rate", ucv_uint64_new((mcs[2] | (mcs[3] &lt;&lt; 8)) &amp; 0x1fff));
+
+	u16 = mcs[4] | (mcs[5] &lt;&lt; 8);
+	mcs_set = ucv_array_new(vm);
+
+	for (i = 1; i &lt;= 8; i++) {
+		switch ((u16 >> ((i - 1) * 2)) &amp; 3) {
+		case 0: max_idx = 7; break;
+		case 1: max_idx = 8; break;
+		case 2: max_idx = 9; break;
+		default: continue;
+		}
+
+		mcs_idx = ucv_array_new_length(vm, max_idx + 1);
+
+		for (j = 0; j &lt;= max_idx; j++)
+			ucv_array_push(mcs_idx, ucv_uint64_new(j));
+
+		mcs_entry = ucv_object_new(vm);
+
+		ucv_object_add(mcs_entry, "streams", ucv_uint64_new(i));
+		ucv_object_add(mcs_entry, "mcs_indexes", mcs_idx);
+
+		ucv_array_push(mcs_set, mcs_entry);
+	}
+
+	ucv_object_add(mcs_obj, "tx_mcs_set", mcs_set);
+	ucv_object_add(mcs_obj, "tx_highest_data_rate", ucv_uint64_new((mcs[6] | (mcs[7] &lt;&lt; 8)) &amp; 0x1fff));
+
+	return mcs_obj;
+}
+
+static uc_value_t *
+uc_nl_convert_rta_he_mcs(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, struct nlattr *phy_attr, uc_vm_t *vm)
+{
+	uint8_t bw_support_mask[] = { (1 &lt;&lt; 1) | (1 &lt;&lt; 2), (1 &lt;&lt; 3), (1 &lt;&lt; 4) };
+	uc_value_t *mcs_set, *mcs_bw, *mcs_dir, *mcs_entry, *mcs_idx;
+	uint16_t bw[] = { 80, 160, 8080 }, mcs[6];
+	uint16_t u16, phy_cap_0 = 0;
+	size_t i, j, k, l, max_idx;
+
+	if (!nla_check_len(attr, sizeof(mcs)))
+		return NULL;
+
+	if (nla_check_len(phy_attr, sizeof(phy_cap_0)))
+		phy_cap_0 = nla_get_u16(phy_attr);
+
+	memcpy(mcs, nla_data(attr), sizeof(mcs));
+
+	mcs_set = ucv_array_new_length(vm, 3);
+
+	for (i = 0; i &lt; ARRAY_SIZE(bw); i++) {
+		if (!(phy_cap_0 &amp; (bw_support_mask[i] &lt;&lt; 8)))
+			continue;
+
+		mcs_bw = ucv_object_new(vm);
+
+		for (j = 0; j &lt; 2; j++) {
+			mcs_dir = ucv_array_new_length(vm, 8);
+
+			for (k = 0; k &lt; 8; k++) {
+				u16 = mcs[(i * 2) + j];
+				u16 >>= k * 2;
+				u16 &amp;= 0x3;
+
+				switch (u16) {
+				case 0: max_idx = 7; break;
+				case 1: max_idx = 9; break;
+				case 2: max_idx = 11; break;
+				case 3: continue;
+				}
+
+				mcs_idx = ucv_array_new_length(vm, max_idx + 1);
+
+				for (l = 0; l &lt;= max_idx; l++)
+					ucv_array_push(mcs_idx, ucv_uint64_new(l));
+
+				mcs_entry = ucv_object_new(vm);
+
+				ucv_object_add(mcs_entry, "streams", ucv_uint64_new(k + 1));
+				ucv_object_add(mcs_entry, "mcs_indexes", mcs_idx);
+
+				ucv_array_push(mcs_dir, mcs_entry);
+			}
+
+			if (ucv_array_length(mcs_dir))
+				ucv_object_add(mcs_bw, j ? "tx_mcs_set" : "rx_mcs_set", mcs_dir);
+			else
+				ucv_put(mcs_dir);
+		}
+
+		if (ucv_object_length(mcs_bw)) {
+			ucv_object_add(mcs_bw, "bandwidth", ucv_uint64_new(bw[i]));
+			ucv_array_push(mcs_set, mcs_bw);
+		}
+		else {
+			ucv_put(mcs_bw);
+		}
+	}
+
+	return mcs_set;
+}
+
+static uc_value_t *
+uc_nl_convert_rta_ie(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr *attr, uc_vm_t *vm)
+{
+	uc_value_t *ie_arr, *ie_obj;
+	uint8_t *ie;
+	size_t len;
+
+	len = nla_len(attr);
+	ie = nla_data(attr);
+
+	if (len &lt; 2)
+		return NULL;
+
+	ie_arr = ucv_array_new(vm);
+
+	while (len >= 2 &amp;&amp; len - 2 >= ie[1]) {
+		ie_obj = ucv_object_new(vm);
+
+		ucv_object_add(ie_obj, "type", ucv_uint64_new(ie[0]));
+		ucv_object_add(ie_obj, "data", ucv_string_new_length((char *)&amp;ie[2], ie[1]));
+
+		ucv_array_push(ie_arr, ie_obj);
+
+		len -= ie[1] + 2;
+		ie += ie[1] + 2;
+	}
+
+	return ie_arr;
+}
+
+
+static bool
+uc_nl_parse_numval(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, uc_vm_t *vm, uc_value_t *val, void *dst)
+{
+	uint64_t u64;
+	uint32_t u32;
+	uint16_t u16;
+	uint8_t u8;
+
+	switch (spec->type) {
+	case DT_U8:
+		if (!uc_nl_parse_u32(val, &amp;u32) || u32 > 255)
+			return nla_parse_error(spec, vm, val, "not an integer or out of range 0-255");
+
+		u8 = (uint8_t)u32;
+
+		memcpy(dst, &amp;u8, sizeof(u8));
+		break;
+
+	case DT_U16:
+		if (!uc_nl_parse_u32(val, &amp;u32) || u32 > 65535)
+			return nla_parse_error(spec, vm, val, "not an integer or out of range 0-65535");
+
+		u16 = (uint16_t)u32;
+
+		memcpy(dst, &amp;u16, sizeof(u16));
+		break;
+
+	case DT_S32:
+	case DT_U32:
+		if (spec->type == DT_S32 &amp;&amp; !uc_nl_parse_s32(val, &amp;u32))
+			return nla_parse_error(spec, vm, val, "not an integer or out of range -2147483648-2147483647");
+		else if (spec->type == DT_U32 &amp;&amp; !uc_nl_parse_u32(val, &amp;u32))
+			return nla_parse_error(spec, vm, val, "not an integer or out of range 0-4294967295");
+
+		memcpy(dst, &amp;u32, sizeof(u32));
+		break;
+
+	case DT_U64:
+		if (!uc_nl_parse_u64(val, &amp;u64))
+			return nla_parse_error(spec, vm, val, "not an integer or negative");
+
+		memcpy(dst, &amp;u64, sizeof(u64));
+		break;
+
+	default:
+		return false;
+	}
+
+	return true;
+}
+
+static const uint8_t dt_sizes[] = {
+	[DT_U8] = sizeof(uint8_t),
+	[DT_S8] = sizeof(int8_t),
+	[DT_U16] = sizeof(uint16_t),
+	[DT_U32] = sizeof(uint32_t),
+	[DT_S32] = sizeof(int32_t),
+	[DT_U64] = sizeof(uint64_t),
+};
+
+static bool
+uc_nl_parse_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, uc_vm_t *vm, uc_value_t *val, size_t idx)
+{
+	char buf[sizeof(uint64_t)];
+	struct in_addr in = { 0 };
+	struct ether_addr *ea;
+	struct nlattr *nla;
+	uc_value_t *item;
+	size_t attr, i;
+	uint32_t u32;
+	char *s;
+
+	if (spec->flags &amp; DF_MULTIPLE)
+		attr = idx;
+	else
+		attr = spec->attr;
+
+	switch (spec->type) {
+	case DT_U8:
+	case DT_U16:
+	case DT_U32:
+	case DT_S32:
+	case DT_U64:
+		if (spec->flags &amp; DF_ARRAY) {
+			assert(spec->attr != 0);
+
+			if (ucv_type(val) != UC_ARRAY)
+				return nla_parse_error(spec, vm, val, "not an array");
+
+			nla = nla_reserve(msg, spec->attr, ucv_array_length(val) * dt_sizes[spec->type]);
+			s = nla_data(nla);
+
+			for (i = 0; i &lt; ucv_array_length(val); i++) {
+				item = ucv_array_get(val, i);
+
+				if (!uc_nl_parse_numval(spec, msg, base, vm, item, buf))
+					return false;
+
+				memcpy(s, buf, dt_sizes[spec->type]);
+
+				s += dt_sizes[spec->type];
+			}
+		}
+		else {
+			if (!uc_nl_parse_numval(spec, msg, base, vm, val, buf))
+				return false;
+
+			if (spec->attr == 0)
+				uc_nl_put_struct_member(base, spec->auxdata, dt_sizes[spec->type], buf);
+			else
+				nla_put(msg, attr, dt_sizes[spec->type], buf);
+		}
+
+		break;
+
+	case DT_BOOL:
+		u32 = (uint32_t)ucv_is_truish(val);
+
+		if (spec->attr == 0)
+			uc_nl_put_struct_member_u8(base, spec->auxdata, u32);
+		else
+			nla_put_u8(msg, attr, u32);
+
+		break;
+
+	case DT_FLAG:
+		u32 = (uint32_t)ucv_is_truish(val);
+
+		if (spec->attr == 0)
+			uc_nl_put_struct_member_u8(base, spec->auxdata, u32);
+		else if (u32 == 1)
+			nla_put_flag(msg, attr);
+
+		break;
+
+	case DT_STRING:
+		assert(spec->attr != 0);
+
+		if (ucv_type(val) == UC_STRING) {
+			nla_put(msg, attr,
+			        ucv_string_length(val) + !(spec->flags &amp; DF_BINARY),
+					ucv_string_get(val));
+		}
+		else {
+			s = ucv_to_string(vm, val);
+
+			if (!s)
+				return nla_parse_error(spec, vm, val, "out of memory");
+
+			nla_put(msg, attr, strlen(s) + !(spec->flags &amp; DF_BINARY), s);
+			free(s);
+		}
+
+		break;
+
+	case DT_NETDEV:
+		if (ucv_type(val) == UC_INTEGER) {
+			if (ucv_int64_get(val) &lt; 0 ||
+			    ucv_int64_get(val) > UINT32_MAX)
+				return nla_parse_error(spec, vm, val, "interface index out of range 0-4294967295");
+
+			u32 = (uint32_t)ucv_int64_get(val);
+		}
+		else {
+			s = ucv_to_string(vm, val);
+
+			if (!s)
+				return nla_parse_error(spec, vm, val, "out of memory");
+
+			u32 = if_nametoindex(s);
+
+			free(s);
+		}
+
+		if (spec->attr == 0)
+			uc_nl_put_struct_member_u32(base, spec->auxdata, u32);
+		else
+			nla_put_u32(msg, attr, u32);
+
+		break;
+
+	case DT_LLADDR:
+		assert(spec->attr != 0);
+
+		s = ucv_to_string(vm, val);
+
+		if (!s)
+			return nla_parse_error(spec, vm, val, "out of memory");
+
+		ea = ether_aton(s);
+
+		free(s);
+
+		if (!ea)
+			return nla_parse_error(spec, vm, val, "invalid MAC address");
+
+		nla_put(msg, attr, sizeof(*ea), ea);
+
+		break;
+
+	case DT_INADDR:
+		assert(spec->attr != 0);
+
+		if (!uc_nl_parse_ipaddr(vm, val, &amp;in))
+			return nla_parse_error(spec, vm, val, "invalid IP address");
+
+		nla_put(msg, attr, sizeof(in), &amp;in);
+
+		break;
+
+	case DT_NESTED:
+		if (spec->flags &amp; DF_ARRAY) {
+			const uc_nl_nested_spec_t *nested = spec->auxdata;
+
+			assert(nested != NULL);
+			assert(nested->headsize > 0);
+
+			if (ucv_type(val) != UC_ARRAY)
+				return nla_parse_error(spec, vm, val, "not an array");
+
+			nla = nla_reserve(msg, spec->attr, ucv_array_length(val) * nested->headsize);
+			s = nla_data(nla);
+
+			for (i = 0; i &lt; ucv_array_length(val); i++) {
+				item = ucv_array_get(val, i);
+
+				if (!uc_nl_parse_attrs(msg, s, nested->attrs, nested->nattrs, vm, item))
+					return false;
+
+				s += nested->headsize;
+			}
+
+			return true;
+		}
+
+		if (!uc_nl_parse_rta_nested(spec, msg, base, vm, val))
+			return false;
+
+		break;
+
+	default:
+		assert(0);
+	}
+
+	return true;
+}
+
+static uc_value_t *
+uc_nl_convert_numval(const uc_nl_attr_spec_t *spec, char *base)
+{
+	union { uint8_t *u8; uint16_t *u16; uint32_t *u32; uint64_t *u64; char *base; } t = { .base = base };
+
+	switch (spec->type) {
+	case DT_U8:
+		return ucv_uint64_new(t.u8[0]);
+
+	case DT_S8:
+		return ucv_int64_new((int8_t)t.u8[0]);
+
+	case DT_U16:
+		return ucv_uint64_new(t.u16[0]);
+
+	case DT_U32:
+		return ucv_uint64_new(t.u32[0]);
+
+	case DT_S32:
+		return ucv_int64_new((int32_t)t.u32[0]);
+
+	case DT_U64:
+		return ucv_uint64_new(t.u64[0]);
+
+	default:
+		return NULL;
+	}
+}
+
+static uc_value_t *
+uc_nl_convert_attr(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *base, struct nlattr *attr, struct nlattr *attr2, uc_vm_t *vm)
+{
+	union { uint8_t u8; uint16_t u16; uint32_t u32; uint64_t u64; size_t sz; } t = { 0 };
+	char buf[sizeof("FF:FF:FF:FF:FF:FF")];
+	struct ether_addr *ea;
+	uc_value_t *v;
+	int i;
+
+	switch (spec->type) {
+	case DT_U8:
+	case DT_S8:
+	case DT_U16:
+	case DT_U32:
+	case DT_S32:
+	case DT_U64:
+		if (spec->flags &amp; DF_ARRAY) {
+			assert(spec->attr != 0);
+			assert((nla_len(attr) % dt_sizes[spec->type]) == 0);
+
+			v = ucv_array_new_length(vm, nla_len(attr) / dt_sizes[spec->type]);
+
+			for (i = 0; i &lt; nla_len(attr); i += dt_sizes[spec->type])
+				ucv_array_push(v, uc_nl_convert_numval(spec, nla_data(attr) + i));
+
+			return v;
+		}
+		else if (spec->attr == 0) {
+			return uc_nl_convert_numval(spec, base + (uintptr_t)spec->auxdata);
+		}
+		else if (nla_check_len(attr, dt_sizes[spec->type])) {
+			return uc_nl_convert_numval(spec, nla_data(attr));
+		}
+
+		return NULL;
+
+	case DT_BOOL:
+		if (spec->attr == 0)
+			t.u8 = uc_nl_get_struct_member_u8(base, spec->auxdata);
+		else if (nla_check_len(attr, sizeof(t.u8)))
+			t.u8 = nla_get_u8(attr);
+
+		return ucv_boolean_new(t.u8 != 0);
+
+	case DT_FLAG:
+		if (spec->attr == 0)
+			t.u8 = uc_nl_get_struct_member_u8(base, spec->auxdata);
+		else if (attr != NULL)
+			t.u8 = 1;
+
+		return ucv_boolean_new(t.u8 != 0);
+
+	case DT_STRING:
+		assert(spec->attr != 0);
+
+		if (!nla_check_len(attr, 1))
+			return NULL;
+
+		t.sz = nla_len(attr);
+
+		if (!(spec->flags &amp; DF_BINARY))
+			t.sz -= 1;
+
+		return ucv_string_new_length(nla_data(attr), t.sz);
+
+	case DT_NETDEV:
+		if (spec->attr == 0)
+			t.u32 = uc_nl_get_struct_member_u32(base, spec->auxdata);
+		else if (nla_check_len(attr, sizeof(t.u32)))
+			t.u32 = nla_get_u32(attr);
+
+		if (if_indextoname(t.u32, buf))
+			return ucv_string_new(buf);
+
+		return NULL;
+
+	case DT_LLADDR:
+		assert(spec->attr != 0);
+
+		if (!nla_check_len(attr, sizeof(*ea)))
+			return NULL;
+
+		ea = nla_data(attr);
+
+		snprintf(buf, sizeof(buf), "%02x:%02x:%02x:%02x:%02x:%02x",
+			ea->ether_addr_octet[0], ea->ether_addr_octet[1],
+			ea->ether_addr_octet[2], ea->ether_addr_octet[3],
+			ea->ether_addr_octet[4], ea->ether_addr_octet[5]);
+
+		return ucv_string_new(buf);
+
+	case DT_INADDR:
+		assert(spec->attr != 0);
+
+		if (!nla_check_len(attr, sizeof(struct in_addr)) ||
+		    !inet_ntop(AF_INET, nla_data(attr), buf, sizeof(buf)))
+			return NULL;
+
+		return ucv_string_new(buf);
+
+	case DT_NESTED:
+		if (spec->flags &amp; DF_ARRAY) {
+			const uc_nl_nested_spec_t *nested = spec->auxdata;
+
+			assert(nested != NULL);
+			assert(nested->headsize > 0);
+			assert((nla_len(attr) % nested->headsize) == 0);
+
+			v = ucv_array_new_length(vm, nla_len(attr) / nested->headsize);
+
+			for (i = 0; i &lt; nla_len(attr); i += nested->headsize) {
+				uc_value_t *item = ucv_object_new(vm);
+
+				ucv_array_push(v, item);
+
+				bool rv = uc_nl_convert_attrs(msg,
+					nla_data(attr) + i, nla_len(attr) - i, nested->headsize,
+					nested->attrs, nested->nattrs, vm, item);
+
+				if (!rv) {
+					ucv_put(v);
+
+					return NULL;
+				}
+			}
+
+			return v;
+		}
+
+		return uc_nl_convert_rta_nested(spec, msg, attr, vm);
+
+	case DT_HT_MCS:
+		return uc_nl_convert_rta_ht_mcs(spec, msg, attr, vm);
+
+	case DT_HT_CAP:
+		return uc_nl_convert_rta_ht_cap(spec, msg, attr, vm);
+
+	case DT_VHT_MCS:
+		return uc_nl_convert_rta_vht_mcs(spec, msg, attr, vm);
+
+	case DT_HE_MCS:
+		return uc_nl_convert_rta_he_mcs(spec, msg, attr, attr2, vm);
+
+	case DT_IE:
+		return uc_nl_convert_rta_ie(spec, msg, attr, vm);
+
+	default:
+		assert(0);
+	}
+
+	return NULL;
+}
+
+
+static struct {
+	struct nl_sock *sock;
+	struct nl_sock *evsock;
+	struct nl_cache *cache;
+	struct uloop_fd evsock_fd;
+	struct nl_cb *evsock_cb;
+} nl80211_conn;
+
+typedef enum {
+	STATE_UNREPLIED,
+	STATE_CONTINUE,
+	STATE_REPLIED,
+	STATE_ERROR
+} reply_state_t;
+
+typedef struct {
+	reply_state_t state;
+	uc_vm_t *vm;
+	uc_value_t *res;
+	bool merge_phy_info;
+	bool single_phy_info;
+	const uc_nl_nested_spec_t *spec;
+} request_state_t;
+
+
+/**
+ * Get the last error information
+ *
+ * This function returns information about the last error that occurred
+ * in nl80211 operations. It provides both error code and error message.
+ *
+ * @returns {Object|null} Object with 'code' and 'msg' properties containing
+ *                       the error information, or null if no error occurred
+ * @example
+ * // Send a request that might fail
+ * let result = request(const.SOME_COMMAND, 0, invalid_params);
+ * if (!result) {
+ *     let error = error();
+ *     print('Error occurred:', error.code, error.msg);
+ * }
+ */
+static uc_value_t *
+uc_nl_error(uc_vm_t *vm, size_t nargs)
+{
+	uc_stringbuf_t *buf;
+	const char *s;
+
+	if (last_error.code == 0)
+		return NULL;
+
+	buf = ucv_stringbuf_new();
+
+	if (last_error.code == NLE_FAILURE &amp;&amp; last_error.msg) {
+		ucv_stringbuf_addstr(buf, last_error.msg, strlen(last_error.msg));
+	}
+	else {
+		s = nl_geterror(last_error.code);
+
+		ucv_stringbuf_addstr(buf, s, strlen(s));
+
+		if (last_error.msg)
+			ucv_stringbuf_printf(buf, ": %s", last_error.msg);
+	}
+
+	set_error(0, NULL);
+
+	return ucv_stringbuf_finish(buf);
+}
+
+static int
+cb_done(struct nl_msg *msg, void *arg)
+{
+	request_state_t *s = arg;
+
+	s->state = STATE_REPLIED;
+
+	return NL_STOP;
+}
+
+static void
+deep_merge_array(uc_value_t *dest, uc_value_t *src);
+
+static void
+deep_merge_object(uc_value_t *dest, uc_value_t *src);
+
+static void
+deep_merge_array(uc_value_t *dest, uc_value_t *src)
+{
+	uc_value_t *e, *v;
+	size_t i;
+
+	if (ucv_type(dest) == UC_ARRAY &amp;&amp; ucv_type(src) == UC_ARRAY) {
+		for (i = 0; i &lt; ucv_array_length(src); i++) {
+			e = ucv_array_get(dest, i);
+			v = ucv_array_get(src, i);
+
+			if (!e)
+				ucv_array_set(dest, i, ucv_get(v));
+			else if (ucv_type(v) == UC_ARRAY)
+				deep_merge_array(e, v);
+			else if (ucv_type(v) == UC_OBJECT)
+				deep_merge_object(e, v);
+		}
+	}
+}
+
+static void
+deep_merge_object(uc_value_t *dest, uc_value_t *src)
+{
+	uc_value_t *e;
+	bool exists;
+
+	if (ucv_type(dest) == UC_OBJECT &amp;&amp; ucv_type(src) == UC_OBJECT) {
+		ucv_object_foreach(src, k, v) {
+			e = ucv_object_get(dest, k, &amp;exists);
+
+			if (!exists)
+				ucv_object_add(dest, k, ucv_get(v));
+			else if (ucv_type(v) == UC_ARRAY)
+				deep_merge_array(e, v);
+			else if (ucv_type(v) == UC_OBJECT)
+				deep_merge_object(e, v);
+		}
+	}
+}
+
+static int
+cb_reply(struct nl_msg *msg, void *arg)
+{
+	struct nlmsghdr *hdr = nlmsg_hdr(msg);
+	struct genlmsghdr *gnlh = nlmsg_data(hdr);
+	request_state_t *s = arg;
+	uc_value_t *o, *idx;
+	int64_t i;
+	bool rv;
+
+	o = ucv_object_new(s->vm);
+
+	rv = uc_nl_convert_attrs(msg,
+		genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0),
+		0, s->spec->attrs, s->spec->nattrs, s->vm, o);
+
+	if (rv) {
+		if (hdr->nlmsg_flags &amp; NLM_F_MULTI) {
+			if (s->merge_phy_info &amp;&amp; s->single_phy_info) {
+				if (!s->res) {
+					s->res = o;
+				}
+				else {
+					deep_merge_object(s->res, o);
+					ucv_put(o);
+				}
+			}
+			else if (s->merge_phy_info) {
+				idx = ucv_object_get(o, "wiphy", NULL);
+				i = idx ? ucv_int64_get(idx) : -1;
+
+				if (i >= 0) {
+					if (!s->res)
+						s->res = ucv_array_new(s->vm);
+
+					idx = ucv_array_get(s->res, i);
+
+					if (idx) {
+						deep_merge_object(idx, o);
+						ucv_put(o);
+					}
+					else {
+						ucv_array_set(s->res, i, o);
+					}
+				}
+			}
+			else {
+				if (!s->res)
+					s->res = ucv_array_new(s->vm);
+
+				ucv_array_push(s->res, o);
+			}
+		}
+		else {
+			s->res = o;
+		}
+	}
+	else {
+		ucv_put(o);
+	}
+
+	s->state = STATE_CONTINUE;
+
+	return NL_SKIP;
+}
+
+static bool
+uc_nl_connect_sock(struct nl_sock **sk, bool nonblocking)
+{
+	int err, fd;
+
+	if (*sk)
+		return true;
+
+	*sk = nl_socket_alloc();
+
+	if (!*sk) {
+		set_error(NLE_NOMEM, NULL);
+		goto err;
+	}
+
+	err = genl_connect(*sk);
+
+	if (err != 0) {
+		set_error(err, NULL);
+		goto err;
+	}
+
+	fd = nl_socket_get_fd(*sk);
+
+	if (fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC) &lt; 0) {
+		set_error(NLE_FAILURE, "unable to set FD_CLOEXEC flag on socket: %s", strerror(errno));
+		goto err;
+	}
+
+	if (nonblocking) {
+		err = nl_socket_set_nonblocking(*sk);
+
+		if (err != 0) {
+			set_error(err, NULL);
+			goto err;
+		}
+	}
+
+	return true;
+
+err:
+	if (*sk) {
+		nl_socket_free(*sk);
+		*sk = NULL;
+	}
+
+	return false;
+}
+
+static int
+uc_nl_find_family_id(const char *name)
+{
+	struct genl_family *fam;
+
+	if (!nl80211_conn.cache &amp;&amp; genl_ctrl_alloc_cache(nl80211_conn.sock, &amp;nl80211_conn.cache))
+		return -NLE_NOMEM;
+
+	fam = genl_ctrl_search_by_name(nl80211_conn.cache, name);
+
+	if (!fam)
+		return -NLE_OBJ_NOTFOUND;
+
+	return genl_family_get_id(fam);
+}
+
+static int
+cb_errno(struct sockaddr_nl *nla, struct nlmsgerr *err, void *arg)
+{
+	int *ret = arg;
+
+	if (err->error > 0) {
+		set_error(NLE_RANGE,
+			"Illegal error code %d in netlink reply", err->error);
+
+		*ret = -(NLE_MAX + 1);
+	}
+	else {
+		*ret = -nl_syserr2nlerr(err->error);
+	}
+
+	return NL_STOP;
+}
+
+static int
+cb_ack(struct nl_msg *msg, void *arg)
+{
+	int *ret = arg;
+
+	*ret = 0;
+
+	return NL_STOP;
+}
+
+static int
+cb_subscribe(struct nl_msg *msg, void *arg)
+{
+	struct nlattr *nla, *tb[CTRL_ATTR_MAX + 1], *grp[CTRL_ATTR_MCAST_GRP_MAX + 1];
+	struct genlmsghdr *gnlh = nlmsg_data(nlmsg_hdr(msg));
+	struct { int id; const char *group; } *ret = arg;
+	int rem;
+
+	nla_parse(tb, CTRL_ATTR_MAX, genlmsg_attrdata(gnlh, 0), genlmsg_attrlen(gnlh, 0), NULL);
+
+	if (!tb[CTRL_ATTR_MCAST_GROUPS])
+		return NL_SKIP;
+
+	nla_for_each_nested(nla, tb[CTRL_ATTR_MCAST_GROUPS], rem) {
+		nla_parse(grp, CTRL_ATTR_MCAST_GRP_MAX, nla_data(nla), nla_len(nla), NULL);
+
+		if (!grp[CTRL_ATTR_MCAST_GRP_NAME] || !grp[CTRL_ATTR_MCAST_GRP_ID])
+			continue;
+
+		if (strncmp(nla_data(grp[CTRL_ATTR_MCAST_GRP_NAME]),
+		            ret->group, nla_len(grp[CTRL_ATTR_MCAST_GRP_NAME])))
+			continue;
+
+		ret->id = nla_get_u32(grp[CTRL_ATTR_MCAST_GRP_ID]);
+
+		break;
+	}
+
+	return NL_SKIP;
+}
+
+static bool
+uc_nl_subscribe(struct nl_sock *sk, const char *family, const char *group)
+{
+	struct { int id; const char *group; } grp = { -NLE_OBJ_NOTFOUND, group };
+	struct nl_msg *msg;
+	struct nl_cb *cb;
+	int id, ret;
+
+	if (!uc_nl_connect_sock(&amp;nl80211_conn.sock, false))
+		return NULL;
+
+	msg = nlmsg_alloc();
+
+	if (!msg)
+		err_return(NLE_NOMEM, NULL);
+
+	id = uc_nl_find_family_id("nlctrl");
+
+	if (id &lt; 0)
+		err_return(-id, NULL);
+
+	genlmsg_put(msg, 0, 0, id, 0, 0, CTRL_CMD_GETFAMILY, 0);
+	nla_put_string(msg, CTRL_ATTR_FAMILY_NAME, family);
+
+	cb = nl_cb_alloc(NL_CB_DEFAULT);
+
+	if (!cb) {
+		nlmsg_free(msg);
+		err_return(NLE_NOMEM, NULL);
+	}
+
+	nl_send_auto_complete(nl80211_conn.sock, msg);
+
+	ret = 1;
+
+	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_ack, &amp;ret);
+	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &amp;ret);
+	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_subscribe, &amp;grp);
+
+	while (ret > 0)
+		nl_recvmsgs(nl80211_conn.sock, cb);
+
+	nlmsg_free(msg);
+	nl_cb_put(cb);
+
+	if (ret &lt; 0)
+		err_return(ret, NULL);
+
+	if (grp.id &lt; 0)
+		err_return(grp.id, NULL);
+
+	ret = nl_socket_add_membership(sk, grp.id);
+
+	if (ret != 0)
+		err_return(ret, NULL);
+
+	return true;
+}
+
+
+struct waitfor_ctx {
+	uint8_t cmd;
+	uc_vm_t *vm;
+	uc_value_t *res;
+	uint32_t cmds[NL80211_CMDS_BITMAP_SIZE];
+};
+
+static uc_value_t *
+uc_nl_prepare_event(uc_vm_t *vm, struct nl_msg *msg)
+{
+	struct nlmsghdr *hdr = nlmsg_hdr(msg);
+	struct genlmsghdr *gnlh = nlmsg_data(hdr);
+	uc_value_t *o = ucv_object_new(vm);
+	const uc_nl_attr_spec_t *attrs;
+	size_t nattrs;
+
+	if (hdr->nlmsg_type == uc_nl_find_family_id("MAC80211_HWSIM")) {
+		attrs = hwsim_msg.attrs;
+		nattrs = hwsim_msg.nattrs;
+	}
+	else {
+		attrs = nl80211_msg.attrs;
+		nattrs = nl80211_msg.nattrs;
+	}
+
+	if (!uc_nl_convert_attrs(msg, genlmsg_attrdata(gnlh, 0),
+		genlmsg_attrlen(gnlh, 0), 0, attrs, nattrs, vm, o)) {
+		ucv_put(o);
+		return NULL;
+	}
+
+	return o;
+}
+
+static int
+cb_listener_event(struct nl_msg *msg, void *arg)
+{
+	struct nlmsghdr *hdr = nlmsg_hdr(msg);
+	struct genlmsghdr *gnlh = nlmsg_data(hdr);
+	uc_vm_t *vm = listener_vm;
+
+	if (!nl80211_conn.evsock_fd.registered || !vm)
+		return NL_SKIP;
+
+	for (size_t i = 0; i &lt; ucv_array_length(listener_registry); i += 2) {
+		uc_value_t *this = ucv_array_get(listener_registry, i);
+		uc_value_t *func = ucv_array_get(listener_registry, i + 1);
+		uc_nl_listener_t *l;
+		uc_value_t *o, *data;
+
+		l = ucv_resource_data(this, "nl80211.listener");
+		if (!l)
+			continue;
+
+		if (gnlh->cmd > NL80211_CMD_MAX ||
+			!(l->cmds[gnlh->cmd / 32] &amp; (1 &lt;&lt; (gnlh->cmd % 32))))
+			continue;
+
+		if (!ucv_is_callable(func))
+			continue;
+
+		data = uc_nl_prepare_event(vm, msg);
+		if (!data)
+			return NL_SKIP;
+
+		o = ucv_object_new(vm);
+		ucv_object_add(o, "cmd", ucv_int64_new(gnlh->cmd));
+		ucv_object_add(o, "msg", data);
+
+		uc_vm_stack_push(vm, ucv_get(this));
+		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, o);
+
+		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE) {
+			uloop_end();
+			return NL_STOP;
+		}
+
+		ucv_put(uc_vm_stack_pop(vm));
+	}
+
+	return NL_SKIP;
+}
+
+static int
+cb_event(struct nl_msg *msg, void *arg)
+{
+	struct nlmsghdr *hdr = nlmsg_hdr(msg);
+	struct genlmsghdr *gnlh = nlmsg_data(hdr);
+	struct waitfor_ctx *s = arg;
+	uc_value_t *o;
+
+	cb_listener_event(msg, arg);
+
+	if (gnlh->cmd > NL80211_CMD_MAX ||
+	    !(s->cmds[gnlh->cmd / 32] &amp; (1 &lt;&lt; (gnlh->cmd % 32))))
+		return NL_SKIP;
+
+	o = uc_nl_prepare_event(s->vm, msg);
+	if (o)
+		s->res = o;
+
+	s->cmd = gnlh->cmd;
+
+	return NL_SKIP;
+}
+
+static int
+cb_seq(struct nl_msg *msg, void *arg)
+{
+	return NL_OK;
+}
+
+static bool
+uc_nl_fill_cmds(uint32_t *cmd_bits, uc_value_t *cmds)
+{
+	if (ucv_type(cmds) == UC_ARRAY) {
+		for (size_t i = 0; i &lt; ucv_array_length(cmds); i++) {
+			int64_t n = ucv_int64_get(ucv_array_get(cmds, i));
+
+			if (n >= HWSIM_CMD_OFFSET)
+				n -= HWSIM_CMD_OFFSET;
+
+			if (errno || n &lt; 0 || n > NL80211_CMD_MAX)
+				return false;
+
+			cmd_bits[n / 32] |= (1 &lt;&lt; (n % 32));
+		}
+	}
+	else if (ucv_type(cmds) == UC_INTEGER) {
+		int64_t n = ucv_int64_get(cmds);
+
+		if (n >= HWSIM_CMD_OFFSET)
+			n -= HWSIM_CMD_OFFSET;
+
+		if (errno || n &lt; 0 || n > NL80211_CMD_MAX)
+			return false;
+
+		cmd_bits[n / 32] |= (1 &lt;&lt; (n % 32));
+	}
+	else if (!cmds)
+		memset(cmd_bits, 0xff, NL80211_CMDS_BITMAP_SIZE * sizeof(*cmd_bits));
+	else
+		return false;
+
+	return true;
+}
+
+static bool
+uc_nl_evsock_init(void)
+{
+	if (nl80211_conn.evsock)
+		return true;
+
+	if (!uc_nl_connect_sock(&amp;nl80211_conn.evsock, true))
+		return false;
+
+	if (!uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "config") ||
+	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "scan") ||
+	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "regulatory") ||
+	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "mlme") ||
+	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "vendor") ||
+	    !uc_nl_subscribe(nl80211_conn.evsock, "nl80211", "nan")) {
+		nl_socket_free(nl80211_conn.evsock);
+		nl80211_conn.evsock = NULL;
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * Wait for a specific nl80211 event
+ *
+ * This function waits for a specified nl80211 command to be received within
+ * a given timeout period. It's useful for asynchronous event handling.
+ *
+ * @param {Array|number} cmds - Array of command IDs or single command ID to wait for
+ * @param {number} timeout - Timeout in milliseconds (optional, default: -1 for infinite)
+ * @returns {Object|null} Object with 'cmd' and 'msg' properties if event received,
+ *                       null if timeout or error occurs
+ * @example
+ * // Wait for scan results with 5 second timeout
+ * let event = waitfor([const.NL80211_CMD_NEW_SCAN_RESULTS], 5000);
+ * if (event)
+ *     print('Received scan results:', event.msg);
+ */
+static uc_value_t *
+uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
+{
+	struct pollfd pfd = { .events = POLLIN };
+	uc_value_t *cmds = uc_fn_arg(0);
+	uc_value_t *timeout = uc_fn_arg(1);
+	uc_value_t *rv = NULL;
+	struct waitfor_ctx ctx = { .vm = vm };
+	struct nl_cb *cb;
+	int ms = -1, err;
+
+	if (timeout) {
+		int64_t n = ucv_int64_get(timeout);
+
+		if (ucv_type(timeout) != UC_INTEGER || n &lt; INT32_MIN || n > INT32_MAX)
+			err_return(NLE_INVAL, "Invalid timeout specified");
+
+		ms = (int)n;
+	}
+
+	if (!uc_nl_fill_cmds(ctx.cmds, cmds))
+		err_return(NLE_INVAL, "Invalid command ID specified");
+
+	if (!uc_nl_evsock_init())
+		return NULL;
+
+	cb = nl_cb_alloc(NL_CB_DEFAULT);
+
+	if (!cb)
+		err_return(NLE_NOMEM, NULL);
+
+	err = 0;
+
+	nl_cb_set(cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, cb_seq, NULL);
+	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_event, &amp;ctx);
+	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &amp;err);
+
+	pfd.fd = nl_socket_get_fd(nl80211_conn.evsock);
+
+	if (poll(&amp;pfd, 1, ms) == 1) {
+		while (err == 0 &amp;&amp; ctx.cmd == 0)
+			nl_recvmsgs(nl80211_conn.evsock, cb);
+	}
+
+	nl_cb_put(cb);
+
+	if (ctx.cmd) {
+		rv = ucv_object_new(vm);
+
+		ucv_object_add(rv, "cmd", ucv_int64_new(ctx.cmd));
+		ucv_object_add(rv, "msg", ctx.res);
+
+		return rv;
+	}
+	else if (err) {
+		err_return(err, NULL);
+	}
+	else {
+		err_return(NLE_FAILURE, "No event received");
+	}
+}
+
+static uc_value_t *
+uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
+{
+	request_state_t st = { .vm = vm };
+	uc_value_t *cmd = uc_fn_arg(0);
+	uc_value_t *flags = uc_fn_arg(1);
+	uc_value_t *payload = uc_fn_arg(2);
+	uint16_t flagval = 0;
+	struct nl_msg *msg;
+	struct nl_cb *cb;
+	int ret, id, cid;
+
+	if (ucv_type(cmd) != UC_INTEGER || ucv_int64_get(cmd) &lt; 0 ||
+	    (flags != NULL &amp;&amp; ucv_type(flags) != UC_INTEGER) ||
+	    (payload != NULL &amp;&amp; ucv_type(payload) != UC_OBJECT))
+		err_return(NLE_INVAL, NULL);
+
+	if (flags) {
+		if (ucv_int64_get(flags) &lt; 0 || ucv_int64_get(flags) > 0xffff)
+			err_return(NLE_INVAL, NULL);
+		else
+			flagval = (uint16_t)ucv_int64_get(flags);
+	}
+
+	msg = nlmsg_alloc();
+
+	if (!msg)
+		err_return(NLE_NOMEM, NULL);
+
+	cid = ucv_int64_get(cmd);
+
+	if (cid >= HWSIM_CMD_OFFSET) {
+		id = uc_nl_find_family_id("MAC80211_HWSIM");
+		cid -= HWSIM_CMD_OFFSET;
+		st.spec = &amp;hwsim_msg;
+	}
+	else if (cid == NL80211_CMD_GET_WIPHY) {
+		id = uc_nl_find_family_id("nl80211");
+		st.spec = &amp;nl80211_msg;
+		st.merge_phy_info = true;
+
+		if (ucv_object_get(payload, "wiphy", NULL) != NULL)
+			st.single_phy_info = true;
+
+		if (ucv_is_truish(ucv_object_get(payload, "split_wiphy_dump", NULL)))
+			flagval |= NLM_F_DUMP;
+	}
+	else {
+		id = uc_nl_find_family_id("nl80211");
+		st.spec = &amp;nl80211_msg;
+	}
+
+	if (id &lt; 0)
+		err_return(-id, NULL);
+
+	genlmsg_put(msg, 0, 0, id, 0, flagval, cid, 0);
+
+	if (!uc_nl_parse_attrs(msg, nlmsg_data(nlmsg_hdr(msg)), st.spec->attrs, st.spec->nattrs, vm, payload)) {
+		nlmsg_free(msg);
+
+		return NULL;
+	}
+
+	cb = nl_cb_alloc(NL_CB_DEFAULT);
+
+	if (!cb) {
+		nlmsg_free(msg);
+		err_return(NLE_NOMEM, NULL);
+	}
+
+	ret = 1;
+
+	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_reply, &amp;st);
+	nl_cb_set(cb, NL_CB_FINISH, NL_CB_CUSTOM, cb_done, &amp;st);
+	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_done, &amp;st);
+	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &amp;ret);
+
+	nl_send_auto_complete(sock, msg);
+
+	while (ret > 0 &amp;&amp; st.state &lt; STATE_REPLIED)
+		nl_recvmsgs(sock, cb);
+
+	nlmsg_free(msg);
+	nl_cb_put(cb);
+
+	if (ret &lt; 0)
+		err_return(ret, NULL);
+
+	switch (st.state) {
+	case STATE_REPLIED:
+		return st.res;
+
+	case STATE_UNREPLIED:
+		return ucv_boolean_new(true);
+
+	default:
+		set_error(NLE_FAILURE, "Interrupted reply");
+
+		return ucv_boolean_new(false);
+	}
+}
+
+/**
+ * Send a nl80211 request
+ *
+ * This function sends a nl80211 netlink request to the kernel and processes
+ * the response. It's the main interface for interacting with wireless devices.
+ *
+ * @param {number} cmd - The nl80211 command ID to execute
+ * @param {number} flags - Netlink flags (optional, default: 0)
+ * @param {Object} payload - Request payload object with attributes (optional)
+ * @returns {Object|boolean} Response object from the kernel, or true for
+ *                           successful acknowledgment without data
+ * @example
+ * // Get wireless device information
+ * let response = request(const.NL80211_CMD_GET_WIPHY, 0, { wiphy: 0 });
+ * print('Wireless device info:', response);
+ *
+ * // Set wireless interface mode
+ * let result = request(const.NL80211_CMD_SET_INTERFACE, 0, {
+ *     ifindex: 1,
+ *     iftype: const.NL80211_IFTYPE_AP
+ * });
+ */
+static uc_value_t *
+uc_nl_request(uc_vm_t *vm, size_t nargs)
+{
+	if (!uc_nl_connect_sock(&amp;nl80211_conn.sock, false))
+		return NULL;
+
+	return uc_nl_request_common(nl80211_conn.sock, vm, nargs);
+}
+
+
+/**
+ * Represents a netlink listener resource.
+ *
+ * @class module:nl80211.listener
+ * @hideconstructor
+ *
+ * @see {@link module:nl80211#listener|listener()}
+ *
+ * @example
+ * const nlListener = listener((msg) => {
+ *     print('Received netlink message:', msg, '\n');
+ * }, [const.NL80211_CMD_NEW_INTERFACE, const.NL80211_CMD_DEL_INTERFACE]);
+ *
+ * nlListener.set_commands([const.NL80211_CMD_GET_WIPHY, const.NL80211_CMD_SET_INTERFACE]);
+ *
+ * nlListener.close();
+ */
+
+static void
+uc_nl_listener_cb(struct uloop_fd *fd, unsigned int events)
+{
+	nl_recvmsgs(nl80211_conn.evsock, nl80211_conn.evsock_cb);
+}
+
+/**
+ * Create a listener for nl80211 events
+ *
+ * This function creates a listener that will receive nl80211 events matching
+ * the specified command IDs. The listener runs asynchronously and calls the
+ * provided callback function when events are received.
+ *
+ * @param {Function} callback - Function to call when an event is received
+ * @param {Array|number} cmds - Array of command IDs or single command ID to listen for
+ * @returns {Object} Listener resource object that can be used to manage the listener
+ * @example
+ * // Listen for interface changes
+ * let listener = listener((msg) => {
+ *     print('Interface event:', msg.cmd, msg.msg);
+ * }, [const.NL80211_CMD_NEW_INTERFACE, const.NL80211_CMD_DEL_INTERFACE]);
+ *
+ * // Listen for scan results
+ * let scanListener = listener((msg) => {
+ *     print('Scan completed:', msg.msg);
+ * }, const.NL80211_CMD_NEW_SCAN_RESULTS);
+ */
+static uc_value_t *
+uc_nl_listener(uc_vm_t *vm, size_t nargs)
+{
+	struct uloop_fd *fd = &amp;nl80211_conn.evsock_fd;
+	uc_nl_listener_t *l;
+	uc_value_t *cb_func = uc_fn_arg(0);
+	uc_value_t *cmds = uc_fn_arg(1);
+	uc_value_t *rv;
+	size_t i;
+
+	if (!ucv_is_callable(cb_func)) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid callback");
+		return NULL;
+	}
+
+	if (!uc_nl_evsock_init())
+		return NULL;
+
+	if (!fd->registered) {
+		fd->fd = nl_socket_get_fd(nl80211_conn.evsock);
+		fd->cb = uc_nl_listener_cb;
+		uloop_fd_add(fd, ULOOP_READ);
+	}
+
+	if (!nl80211_conn.evsock_cb) {
+		struct nl_cb *cb = nl_cb_alloc(NL_CB_DEFAULT);
+
+		if (!cb)
+			err_return(NLE_NOMEM, NULL);
+
+		nl_cb_set(cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, cb_seq, NULL);
+		nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, cb_listener_event, NULL);
+		nl80211_conn.evsock_cb = cb;
+	}
+
+	for (i = 0; i &lt; ucv_array_length(listener_registry); i += 2) {
+		if (!ucv_array_get(listener_registry, i))
+			break;
+	}
+
+	ucv_array_set(listener_registry, i + 1, ucv_get(cb_func));
+	l = xalloc(sizeof(*l));
+	l->index = i;
+	if (!uc_nl_fill_cmds(l->cmds, cmds)) {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid command ID");
+		free(l);
+		return NULL;
+	}
+
+	rv = uc_resource_new(listener_type, l);
+	ucv_array_set(listener_registry, i, ucv_get(rv));
+	listener_vm = vm;
+
+	return rv;
+}
+
+static void
+uc_nl_listener_free(void *arg)
+{
+	uc_nl_listener_t *l = arg;
+
+	ucv_array_set(listener_registry, l->index, NULL);
+	ucv_array_set(listener_registry, l->index + 1, NULL);
+	free(l);
+}
+
+/**
+ * Set the commands this listener should listen for
+ *
+ * This method updates the command IDs that the listener will respond to.
+ * It allows dynamic modification of which events the listener handles.
+ *
+ * @param {number[]|number} cmds - Array of command IDs or single command ID to listen for
+ * @returns {void}
+ * @example
+ * // Create a listener initially for interface events
+ * let listener = listener(callback, [const.NL80211_CMD_NEW_INTERFACE]);
+ *
+ * // Later, make it also listen for scan events
+ * listener.set_commands([const.NL80211_CMD_NEW_INTERFACE, const.NL80211_CMD_NEW_SCAN_RESULTS]);
+ */
+static uc_value_t *
+uc_nl_listener_set_commands(uc_vm_t *vm, size_t nargs)
+{
+	uc_nl_listener_t *l = uc_fn_thisval("nl80211.listener");
+	uc_value_t *cmds = uc_fn_arg(0);
+
+	if (!l)
+		return NULL;
+
+	memset(l->cmds, 0, sizeof(l->cmds));
+	if (!uc_nl_fill_cmds(l->cmds, cmds))
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid command ID");
+
+	return NULL;
+}
+
+/**
+ * Send a nl80211 request from the listener
+ *
+ * This method allows the listener to send its own nl80211 requests
+ * using the same connection used for event listening.
+ *
+ * @param {number} cmd - The nl80211 command ID to execute
+ * @param {number} flags - Netlink flags (optional, default: 0)
+ * @param {Object} payload - Request payload object with attributes (optional)
+ * @returns {Object|boolean} Response object from the kernel, or true for
+ *                           successful acknowledgment without data
+ * @example
+ * // Listener sends its own request
+ * let response = listener.request(const.NL80211_CMD_GET_STATION, 0, {
+ *     ifindex: 1,
+ *     mac: "00:11:22:33:44:55"
+ * });
+ */
+static uc_value_t *
+uc_nl_listener_request(uc_vm_t *vm, size_t nargs)
+{
+	return uc_nl_request_common(nl80211_conn.evsock, vm, nargs);
+}
+
+/**
+ * Close and remove the listener
+ *
+ * This method stops the listener from receiving further events and
+ * cleans up all associated resources. The listener becomes invalid
+ * after this method is called.
+ *
+ * @returns {void}
+ * @example
+ * // Create and use a listener
+ * let listener = listener(callback, [const.NL80211_CMD_NEW_INTERFACE]);
+ *
+ * // Later, clean it up
+ * listener.close();
+ */
+static uc_value_t *
+uc_nl_listener_close(uc_vm_t *vm, size_t nargs)
+{
+	uc_nl_listener_t **lptr = uc_fn_this("nl80211.listener");
+	uc_nl_listener_t *l;
+
+	if (!lptr)
+		return NULL;
+
+	l = *lptr;
+	if (!l)
+		return NULL;
+
+	*lptr = NULL;
+	uc_nl_listener_free(l);
+
+	return NULL;
+}
+
+
+static void
+register_constants(uc_vm_t *vm, uc_value_t *scope)
+{
+	uc_value_t *c = ucv_object_new(vm);
+
+#define ADD_CONST(x) ucv_object_add(c, #x, ucv_int64_new(x))
+
+	/**
+	 * @typedef
+	 * @name Netlink message flags
+	 * @property {number} NLM_F_ACK - Request for acknowledgment
+	 * @property {number} NLM_F_ACK_TLVS - Request for acknowledgment with TLVs
+	 * @property {number} NLM_F_APPEND - Append to existing list
+	 * @property {number} NLM_F_ATOMIC - Atomic operation
+	 * @property {number} NLM_F_CAPPED - Request capped
+	 * @property {number} NLM_F_CREATE - Create if not exists
+	 * @property {number} NLM_F_DUMP - Dump request
+	 * @property {number} NLM_F_DUMP_FILTERED - Dump filtered request
+	 * @property {number} NLM_F_DUMP_INTR - Dump interrupted
+	 * @property {number} NLM_F_ECHO - Echo request
+	 * @property {number} NLM_F_EXCL - Exclusive creation
+	 * @property {number} NLM_F_MATCH - Match request
+	 * @property {number} NLM_F_MULTI - Multi-part message
+	 * @property {number} NLM_F_NONREC - Non-recursive operation
+	 * @property {number} NLM_F_REPLACE - Replace existing
+	 * @property {number} NLM_F_REQUEST - Request message
+	 * @property {number} NLM_F_ROOT - Root operation
+	 */
+	ADD_CONST(NLM_F_ACK);
+	ADD_CONST(NLM_F_ACK_TLVS);
+	ADD_CONST(NLM_F_APPEND);
+	ADD_CONST(NLM_F_ATOMIC);
+	ADD_CONST(NLM_F_CAPPED);
+	ADD_CONST(NLM_F_CREATE);
+	ADD_CONST(NLM_F_DUMP);
+	ADD_CONST(NLM_F_DUMP_FILTERED);
+	ADD_CONST(NLM_F_DUMP_INTR);
+	ADD_CONST(NLM_F_ECHO);
+	ADD_CONST(NLM_F_EXCL);
+	ADD_CONST(NLM_F_MATCH);
+	ADD_CONST(NLM_F_MULTI);
+	ADD_CONST(NLM_F_NONREC);
+	ADD_CONST(NLM_F_REPLACE);
+	ADD_CONST(NLM_F_REQUEST);
+	ADD_CONST(NLM_F_ROOT);
+
+	/**
+	 * @typedef
+	 * @name nl80211 commands
+	 * @property {number} NL80211_CMD_GET_WIPHY - Get wireless PHY attributes
+	 * @property {number} NL80211_CMD_SET_WIPHY - Set wireless PHY attributes
+	 * @property {number} NL80211_CMD_NEW_WIPHY - Create new wireless PHY
+	 * @property {number} NL80211_CMD_DEL_WIPHY - Delete wireless PHY
+	 * @property {number} NL80211_CMD_GET_INTERFACE - Get interface information
+	 * @property {number} NL80211_CMD_SET_INTERFACE - Set interface attributes
+	 * @property {number} NL80211_CMD_NEW_INTERFACE - Create new interface
+	 * @property {number} NL80211_CMD_DEL_INTERFACE - Delete interface
+	 * @property {number} NL80211_CMD_GET_KEY - Get key
+	 * @property {number} NL80211_CMD_SET_KEY - Set key
+	 * @property {number} NL80211_CMD_NEW_KEY - Add new key
+	 * @property {number} NL80211_CMD_DEL_KEY - Delete key
+	 * @property {number} NL80211_CMD_GET_BEACON - Get beacon
+	 * @property {number} NL80211_CMD_SET_BEACON - Set beacon
+	 * @property {number} NL80211_CMD_NEW_BEACON - Set beacon (alias)
+	 * @property {number} NL80211_CMD_STOP_AP - Stop AP operation
+	 * @property {number} NL80211_CMD_DEL_BEACON - Delete beacon
+	 * @property {number} NL80211_CMD_GET_STATION - Get station information
+	 * @property {number} NL80211_CMD_SET_STATION - Set station attributes
+	 * @property {number} NL80211_CMD_NEW_STATION - Add new station
+	 * @property {number} NL80211_CMD_DEL_STATION - Delete station
+	 * @property {number} NL80211_CMD_GET_MPATH - Get mesh path
+	 * @property {number} NL80211_CMD_SET_MPATH - Set mesh path
+	 * @property {number} NL80211_CMD_NEW_MPATH - Add new mesh path
+	 * @property {number} NL80211_CMD_DEL_MPATH - Delete mesh path
+	 * @property {number} NL80211_CMD_SET_BSS - Set BSS attributes
+	 * @property {number} NL80211_CMD_SET_REG - Set regulatory domain
+	 * @property {number} NL80211_CMD_REQ_SET_REG - Request regulatory domain change
+	 * @property {number} NL80211_CMD_GET_MESH_CONFIG - Get mesh configuration
+	 * @property {number} NL80211_CMD_SET_MESH_CONFIG - Set mesh configuration
+	 * @property {number} NL80211_CMD_GET_REG - Get regulatory domain
+	 * @property {number} NL80211_CMD_GET_SCAN - Get scan results
+	 * @property {number} NL80211_CMD_TRIGGER_SCAN - Trigger scan
+	 * @property {number} NL80211_CMD_NEW_SCAN_RESULTS - New scan results available
+	 * @property {number} NL80211_CMD_SCAN_ABORTED - Scan aborted
+	 * @property {number} NL80211_CMD_REG_CHANGE - Regulatory domain change
+	 * @property {number} NL80211_CMD_AUTHENTICATE - Authenticate
+	 * @property {number} NL80211_CMD_ASSOCIATE - Associate
+	 * @property {number} NL80211_CMD_DEAUTHENTICATE - Deauthenticate
+	 * @property {number} NL80211_CMD_DISASSOCIATE - Disassociate
+	 * @property {number} NL80211_CMD_MICHAEL_MIC_FAILURE - Michael MIC failure
+	 * @property {number} NL80211_CMD_REG_BEACON_HINT - Beacon regulatory hint
+	 * @property {number} NL80211_CMD_JOIN_IBSS - Join IBSS
+	 * @property {number} NL80211_CMD_LEAVE_IBSS - Leave IBSS
+	 * @property {number} NL80211_CMD_TESTMODE - Test mode
+	 * @property {number} NL80211_CMD_CONNECT - Connect
+	 * @property {number} NL80211_CMD_ROAM - Roam
+	 * @property {number} NL80211_CMD_DISCONNECT - Disconnect
+	 * @property {number} NL80211_CMD_SET_WIPHY_NETNS - Set wireless PHY network namespace
+	 * @property {number} NL80211_CMD_GET_SURVEY - Get survey data
+	 * @property {number} NL80211_CMD_NEW_SURVEY_RESULTS - New survey results
+	 * @property {number} NL80211_CMD_SET_PMKSA - Set PMKSA
+	 * @property {number} NL80211_CMD_DEL_PMKSA - Delete PMKSA
+	 * @property {number} NL80211_CMD_FLUSH_PMKSA - Flush PMKSA
+	 * @property {number} NL80211_CMD_REMAIN_ON_CHANNEL - Remain on channel
+	 * @property {number} NL80211_CMD_CANCEL_REMAIN_ON_CHANNEL - Cancel remain on channel
+	 * @property {number} NL80211_CMD_SET_TX_BITRATE_MASK - Set TX bitrate mask
+	 * @property {number} NL80211_CMD_REGISTER_FRAME - Register frame
+	 * @property {number} NL80211_CMD_REGISTER_ACTION - Register action frame
+	 * @property {number} NL80211_CMD_FRAME - Frame
+	 * @property {number} NL80211_CMD_ACTION - Action frame
+	 * @property {number} NL80211_CMD_FRAME_TX_STATUS - Frame TX status
+	 * @property {number} NL80211_CMD_ACTION_TX_STATUS - Action TX status
+	 * @property {number} NL80211_CMD_SET_POWER_SAVE - Set power save
+	 * @property {number} NL80211_CMD_GET_POWER_SAVE - Get power save
+	 * @property {number} NL80211_CMD_SET_CQM - Set CQM
+	 * @property {number} NL80211_CMD_NOTIFY_CQM - Notify CQM
+	 * @property {number} NL80211_CMD_SET_CHANNEL - Set channel
+	 * @property {number} NL80211_CMD_SET_WDS_PEER - Set WDS peer
+	 * @property {number} NL80211_CMD_FRAME_WAIT_CANCEL - Cancel frame wait
+	 * @property {number} NL80211_CMD_JOIN_MESH - Join mesh
+	 * @property {number} NL80211_CMD_LEAVE_MESH - Leave mesh
+	 * @property {number} NL80211_CMD_UNPROT_DEAUTHENTICATE - Unprotected deauthenticate
+	 * @property {number} NL80211_CMD_UNPROT_DISASSOCIATE - Unprotected disassociate
+	 * @property {number} NL80211_CMD_NEW_PEER_CANDIDATE - New peer candidate
+	 * @property {number} NL80211_CMD_GET_WOWLAN - Get WoWLAN
+	 * @property {number} NL80211_CMD_SET_WOWLAN - Set WoWLAN
+	 * @property {number} NL80211_CMD_START_SCHED_SCAN - Start scheduled scan
+	 * @property {number} NL80211_CMD_STOP_SCHED_SCAN - Stop scheduled scan
+	 * @property {number} NL80211_CMD_SCHED_SCAN_RESULTS - Scheduled scan results
+	 * @property {number} NL80211_CMD_SCHED_SCAN_STOPPED - Scheduled scan stopped
+	 * @property {number} NL80211_CMD_SET_REKEY_OFFLOAD - Set rekey offload
+	 * @property {number} NL80211_CMD_PMKSA_CANDIDATE - PMKSA candidate
+	 * @property {number} NL80211_CMD_TDLS_OPER - TDLS operation
+	 * @property {number} NL80211_CMD_TDLS_MGMT - TDLS management
+	 * @property {number} NL80211_CMD_UNEXPECTED_FRAME - Unexpected frame
+	 * @property {number} NL80211_CMD_PROBE_CLIENT - Probe client
+	 * @property {number} NL80211_CMD_REGISTER_BEACONS - Register beacons
+	 * @property {number} NL80211_CMD_UNEXPECTED_4ADDR_FRAME - Unexpected 4-address frame
+	 * @property {number} NL80211_CMD_SET_NOACK_MAP - Set no-ack map
+	 * @property {number} NL80211_CMD_CH_SWITCH_NOTIFY - Channel switch notify
+	 * @property {number} NL80211_CMD_START_P2P_DEVICE - Start P2P device
+	 * @property {number} NL80211_CMD_STOP_P2P_DEVICE - Stop P2P device
+	 * @property {number} NL80211_CMD_CONN_FAILED - Connection failed
+	 * @property {number} NL80211_CMD_SET_MCAST_RATE - Set multicast rate
+	 * @property {number} NL80211_CMD_SET_MAC_ACL - Set MAC ACL
+	 * @property {number} NL80211_CMD_RADAR_DETECT - Radar detect
+	 * @property {number} NL80211_CMD_GET_PROTOCOL_FEATURES - Get protocol features
+	 * @property {number} NL80211_CMD_UPDATE_FT_IES - Update FT IEs
+	 * @property {number} NL80211_CMD_FT_EVENT - FT event
+	 * @property {number} NL80211_CMD_CRIT_PROTOCOL_START - Start critical protocol
+	 * @property {number} NL80211_CMD_CRIT_PROTOCOL_STOP - Stop critical protocol
+	 * @property {number} NL80211_CMD_GET_COALESCE - Get coalesce
+	 * @property {number} NL80211_CMD_SET_COALESCE - Set coalesce
+	 * @property {number} NL80211_CMD_CHANNEL_SWITCH - Channel switch
+	 * @property {number} NL80211_CMD_VENDOR - Vendor command
+	 * @property {number} NL80211_CMD_SET_QOS_MAP - Set QoS map
+	 * @property {number} NL80211_CMD_ADD_TX_TS - Add TX TS
+	 * @property {number} NL80211_CMD_DEL_TX_TS - Delete TX TS
+	 * @property {number} NL80211_CMD_GET_MPP - Get MPP
+	 * @property {number} NL80211_CMD_JOIN_OCB - Join OCB
+	 * @property {number} NL80211_CMD_LEAVE_OCB - Leave OCB
+	 * @property {number} NL80211_CMD_CH_SWITCH_STARTED_NOTIFY - Channel switch started notify
+	 * @property {number} NL80211_CMD_TDLS_CHANNEL_SWITCH - TDLS channel switch
+	 * @property {number} NL80211_CMD_TDLS_CANCEL_CHANNEL_SWITCH - Cancel TDLS channel switch
+	 */
+	ADD_CONST(NL80211_CMD_GET_WIPHY);
+	ADD_CONST(NL80211_CMD_SET_WIPHY);
+	ADD_CONST(NL80211_CMD_NEW_WIPHY);
+	ADD_CONST(NL80211_CMD_DEL_WIPHY);
+	ADD_CONST(NL80211_CMD_GET_INTERFACE);
+	ADD_CONST(NL80211_CMD_SET_INTERFACE);
+	ADD_CONST(NL80211_CMD_NEW_INTERFACE);
+	ADD_CONST(NL80211_CMD_DEL_INTERFACE);
+	ADD_CONST(NL80211_CMD_GET_KEY);
+	ADD_CONST(NL80211_CMD_SET_KEY);
+	ADD_CONST(NL80211_CMD_NEW_KEY);
+	ADD_CONST(NL80211_CMD_DEL_KEY);
+	ADD_CONST(NL80211_CMD_GET_BEACON);
+	ADD_CONST(NL80211_CMD_SET_BEACON);
+	ADD_CONST(NL80211_CMD_START_AP);
+	ADD_CONST(NL80211_CMD_NEW_BEACON);
+	ADD_CONST(NL80211_CMD_STOP_AP);
+	ADD_CONST(NL80211_CMD_DEL_BEACON);
+	ADD_CONST(NL80211_CMD_GET_STATION);
+	ADD_CONST(NL80211_CMD_SET_STATION);
+	ADD_CONST(NL80211_CMD_NEW_STATION);
+	ADD_CONST(NL80211_CMD_DEL_STATION);
+	ADD_CONST(NL80211_CMD_GET_MPATH);
+	ADD_CONST(NL80211_CMD_SET_MPATH);
+	ADD_CONST(NL80211_CMD_NEW_MPATH);
+	ADD_CONST(NL80211_CMD_DEL_MPATH);
+	ADD_CONST(NL80211_CMD_SET_BSS);
+	ADD_CONST(NL80211_CMD_SET_REG);
+	ADD_CONST(NL80211_CMD_REQ_SET_REG);
+	ADD_CONST(NL80211_CMD_GET_MESH_CONFIG);
+	ADD_CONST(NL80211_CMD_SET_MESH_CONFIG);
+	ADD_CONST(NL80211_CMD_GET_REG);
+	ADD_CONST(NL80211_CMD_GET_SCAN);
+	ADD_CONST(NL80211_CMD_TRIGGER_SCAN);
+	ADD_CONST(NL80211_CMD_NEW_SCAN_RESULTS);
+	ADD_CONST(NL80211_CMD_SCAN_ABORTED);
+	ADD_CONST(NL80211_CMD_REG_CHANGE);
+	ADD_CONST(NL80211_CMD_AUTHENTICATE);
+	ADD_CONST(NL80211_CMD_ASSOCIATE);
+	ADD_CONST(NL80211_CMD_DEAUTHENTICATE);
+	ADD_CONST(NL80211_CMD_DISASSOCIATE);
+	ADD_CONST(NL80211_CMD_MICHAEL_MIC_FAILURE);
+	ADD_CONST(NL80211_CMD_REG_BEACON_HINT);
+	ADD_CONST(NL80211_CMD_JOIN_IBSS);
+	ADD_CONST(NL80211_CMD_LEAVE_IBSS);
+	ADD_CONST(NL80211_CMD_TESTMODE);
+	ADD_CONST(NL80211_CMD_CONNECT);
+	ADD_CONST(NL80211_CMD_ROAM);
+	ADD_CONST(NL80211_CMD_DISCONNECT);
+	ADD_CONST(NL80211_CMD_SET_WIPHY_NETNS);
+	ADD_CONST(NL80211_CMD_GET_SURVEY);
+	ADD_CONST(NL80211_CMD_NEW_SURVEY_RESULTS);
+	ADD_CONST(NL80211_CMD_SET_PMKSA);
+	ADD_CONST(NL80211_CMD_DEL_PMKSA);
+	ADD_CONST(NL80211_CMD_FLUSH_PMKSA);
+	ADD_CONST(NL80211_CMD_REMAIN_ON_CHANNEL);
+	ADD_CONST(NL80211_CMD_CANCEL_REMAIN_ON_CHANNEL);
+	ADD_CONST(NL80211_CMD_SET_TX_BITRATE_MASK);
+	ADD_CONST(NL80211_CMD_REGISTER_FRAME);
+	ADD_CONST(NL80211_CMD_REGISTER_ACTION);
+	ADD_CONST(NL80211_CMD_FRAME);
+	ADD_CONST(NL80211_CMD_ACTION);
+	ADD_CONST(NL80211_CMD_FRAME_TX_STATUS);
+	ADD_CONST(NL80211_CMD_ACTION_TX_STATUS);
+	ADD_CONST(NL80211_CMD_SET_POWER_SAVE);
+	ADD_CONST(NL80211_CMD_GET_POWER_SAVE);
+	ADD_CONST(NL80211_CMD_SET_CQM);
+	ADD_CONST(NL80211_CMD_NOTIFY_CQM);
+	ADD_CONST(NL80211_CMD_SET_CHANNEL);
+	ADD_CONST(NL80211_CMD_SET_WDS_PEER);
+	ADD_CONST(NL80211_CMD_FRAME_WAIT_CANCEL);
+	ADD_CONST(NL80211_CMD_JOIN_MESH);
+	ADD_CONST(NL80211_CMD_LEAVE_MESH);
+	ADD_CONST(NL80211_CMD_UNPROT_DEAUTHENTICATE);
+	ADD_CONST(NL80211_CMD_UNPROT_DISASSOCIATE);
+	ADD_CONST(NL80211_CMD_NEW_PEER_CANDIDATE);
+	ADD_CONST(NL80211_CMD_GET_WOWLAN);
+	ADD_CONST(NL80211_CMD_SET_WOWLAN);
+	ADD_CONST(NL80211_CMD_START_SCHED_SCAN);
+	ADD_CONST(NL80211_CMD_STOP_SCHED_SCAN);
+	ADD_CONST(NL80211_CMD_SCHED_SCAN_RESULTS);
+	ADD_CONST(NL80211_CMD_SCHED_SCAN_STOPPED);
+	ADD_CONST(NL80211_CMD_SET_REKEY_OFFLOAD);
+	ADD_CONST(NL80211_CMD_PMKSA_CANDIDATE);
+	ADD_CONST(NL80211_CMD_TDLS_OPER);
+	ADD_CONST(NL80211_CMD_TDLS_MGMT);
+	ADD_CONST(NL80211_CMD_UNEXPECTED_FRAME);
+	ADD_CONST(NL80211_CMD_PROBE_CLIENT);
+	ADD_CONST(NL80211_CMD_REGISTER_BEACONS);
+	ADD_CONST(NL80211_CMD_UNEXPECTED_4ADDR_FRAME);
+	ADD_CONST(NL80211_CMD_SET_NOACK_MAP);
+	ADD_CONST(NL80211_CMD_CH_SWITCH_NOTIFY);
+	ADD_CONST(NL80211_CMD_START_P2P_DEVICE);
+	ADD_CONST(NL80211_CMD_STOP_P2P_DEVICE);
+	ADD_CONST(NL80211_CMD_CONN_FAILED);
+	ADD_CONST(NL80211_CMD_SET_MCAST_RATE);
+	ADD_CONST(NL80211_CMD_SET_MAC_ACL);
+	ADD_CONST(NL80211_CMD_RADAR_DETECT);
+	ADD_CONST(NL80211_CMD_GET_PROTOCOL_FEATURES);
+	ADD_CONST(NL80211_CMD_UPDATE_FT_IES);
+	ADD_CONST(NL80211_CMD_FT_EVENT);
+	ADD_CONST(NL80211_CMD_CRIT_PROTOCOL_START);
+	ADD_CONST(NL80211_CMD_CRIT_PROTOCOL_STOP);
+	ADD_CONST(NL80211_CMD_GET_COALESCE);
+	ADD_CONST(NL80211_CMD_SET_COALESCE);
+	ADD_CONST(NL80211_CMD_CHANNEL_SWITCH);
+	ADD_CONST(NL80211_CMD_VENDOR);
+	ADD_CONST(NL80211_CMD_SET_QOS_MAP);
+	ADD_CONST(NL80211_CMD_ADD_TX_TS);
+	ADD_CONST(NL80211_CMD_DEL_TX_TS);
+	ADD_CONST(NL80211_CMD_GET_MPP);
+	ADD_CONST(NL80211_CMD_JOIN_OCB);
+	ADD_CONST(NL80211_CMD_LEAVE_OCB);
+	ADD_CONST(NL80211_CMD_CH_SWITCH_STARTED_NOTIFY);
+	ADD_CONST(NL80211_CMD_TDLS_CHANNEL_SWITCH);
+	ADD_CONST(NL80211_CMD_TDLS_CANCEL_CHANNEL_SWITCH);
+
+	/**
+	 * @typedef
+	 * @name HWSIM commands
+	 * @property {number} HWSIM_CMD_REGISTER - Register radio
+	 * @property {number} HWSIM_CMD_FRAME - Send frame
+	 * @property {number} HWSIM_CMD_TX_INFO_FRAME - Send TX info frame
+	 * @property {number} HWSIM_CMD_NEW_RADIO - Create new radio
+	 * @property {number} HWSIM_CMD_DEL_RADIO - Delete radio
+	 * @property {number} HWSIM_CMD_GET_RADIO - Get radio information
+	 * @property {number} HWSIM_CMD_ADD_MAC_ADDR - Add MAC address
+	 * @property {number} HWSIM_CMD_DEL_MAC_ADDR - Delete MAC address
+	 * @property {number} HWSIM_CMD_START_PMSR - Start peer measurement
+	 * @property {number} HWSIM_CMD_ABORT_PMSR - Abort peer measurement
+	 * @property {number} HWSIM_CMD_REPORT_PMSR - Report peer measurement
+	 */
+	ADD_CONST(HWSIM_CMD_REGISTER),
+	ADD_CONST(HWSIM_CMD_FRAME),
+	ADD_CONST(HWSIM_CMD_TX_INFO_FRAME),
+	ADD_CONST(HWSIM_CMD_NEW_RADIO),
+	ADD_CONST(HWSIM_CMD_DEL_RADIO),
+	ADD_CONST(HWSIM_CMD_GET_RADIO),
+	ADD_CONST(HWSIM_CMD_ADD_MAC_ADDR),
+	ADD_CONST(HWSIM_CMD_DEL_MAC_ADDR),
+	ADD_CONST(HWSIM_CMD_START_PMSR),
+	ADD_CONST(HWSIM_CMD_ABORT_PMSR),
+	ADD_CONST(HWSIM_CMD_REPORT_PMSR),
+
+	/**
+	 * @typedef
+	 * @name Interface types
+	 * @property {number} NL80211_IFTYPE_ADHOC - IBSS/ad-hoc interface
+	 * @property {number} NL80211_IFTYPE_STATION - Station interface
+	 * @property {number} NL80211_IFTYPE_AP - Access point interface
+	 * @property {number} NL80211_IFTYPE_AP_VLAN - AP VLAN interface
+	 * @property {number} NL80211_IFTYPE_WDS - WDS interface
+	 * @property {number} NL80211_IFTYPE_MONITOR - Monitor interface
+	 * @property {number} NL80211_IFTYPE_MESH_POINT - Mesh point interface
+	 * @property {number} NL80211_IFTYPE_P2P_CLIENT - P2P client interface
+	 * @property {number} NL80211_IFTYPE_P2P_GO - P2P group owner interface
+	 * @property {number} NL80211_IFTYPE_P2P_DEVICE - P2P device interface
+	 * @property {number} NL80211_IFTYPE_OCB - Outside context of BSS (OCB) interface
+	 */
+	ADD_CONST(NL80211_IFTYPE_ADHOC);
+	ADD_CONST(NL80211_IFTYPE_STATION);
+	ADD_CONST(NL80211_IFTYPE_AP);
+	ADD_CONST(NL80211_IFTYPE_AP_VLAN);
+	ADD_CONST(NL80211_IFTYPE_WDS);
+	ADD_CONST(NL80211_IFTYPE_MONITOR);
+	ADD_CONST(NL80211_IFTYPE_MESH_POINT);
+	ADD_CONST(NL80211_IFTYPE_P2P_CLIENT);
+	ADD_CONST(NL80211_IFTYPE_P2P_GO);
+	ADD_CONST(NL80211_IFTYPE_P2P_DEVICE);
+	ADD_CONST(NL80211_IFTYPE_OCB);
+
+	ucv_object_add(scope, "const", c);
+};
+
+static const uc_function_list_t global_fns[] = {
+	{ "error",		uc_nl_error },
+	{ "request",	uc_nl_request },
+	{ "waitfor",	uc_nl_waitfor },
+	{ "listener",	uc_nl_listener },
+};
+
+
+static const uc_function_list_t listener_fns[] = {
+	{ "set_commands",	uc_nl_listener_set_commands },
+	{ "request",		uc_nl_listener_request },
+	{ "close",			uc_nl_listener_close },
+};
+
+void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
+{
+	uc_function_list_register(scope, global_fns);
+
+	listener_type = uc_type_declare(vm, "nl80211.listener", listener_fns, uc_nl_listener_free);
+	listener_registry = ucv_array_new(vm);
+
+	uc_vm_registry_set(vm, "nl80211.registry", listener_registry);
+
+	register_constants(vm, scope);
+}
+</code></pre></article></section></div></div></div><div class="search-container" id="PkfLWpAbet" style="display:none"><div class="wrapper" id="iCxFxjkHbP"><button class="icon-button search-close-button" id="VjLlGakifb" aria-label="close search"><svg><use xlink:href="#close-icon"></use></svg></button><div class="search-box-c"><svg><use xlink:href="#search-icon"></use></svg> <input type="text" id="vpcKVYIppa" class="search-input" placeholder="Search..." autofocus></div><div class="search-result-c" id="fWwVHRuDuN"><span class="search-result-c-text">Type anything to view search result</span></div></div></div><div class="mobile-menu-icon-container"><button class="icon-button" id="mobile-menu" data-isopen="false" aria-label="menu"><svg><use xlink:href="#menu-icon"></use></svg></button> <button class="icon-button" id="mobile-toc" data-isopen="false" aria-label="toc"><svg><use xlink:href="#toc-icon"></use></svg></button></div><div id="mobile-sidebar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><a href="/" class="sidebar-title sidebar-title-anchor">ucode Documentation</a><div class="mobile-nav-links"><div class="github-home navbar-item"><a id="" href="https://github.com/jow-/ucode" target="">GitHub Project Page</a></div></div><div class="mobile-sidebar-items-c"><div class="sidebar-section-title with-arrow" data-isopen="false" id="fP1xmZdg7FupIkxjBK7Cf"><div>Tutorials</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="tutorial-01-usage.html">Usage</a></div><div class="sidebar-section-children"><a href="tutorial-02-syntax.html">Syntax</a></div><div class="sidebar-section-children"><a href="tutorial-03-memory.html">Memory Management</a></div><div class="sidebar-section-children"><a href="tutorial-04-arrays.html">Working with Arrays</a></div><div class="sidebar-section-children"><a href="tutorial-05-dictionaries.html">Working with Dictionaries</a></div></div><div class="sidebar-section-title with-arrow" data-isopen="false" id="vCjzIDHDHkD5qTZNpkR3a"><div>Modules</div><svg><use xlink:href="#down-icon"></use></svg></div><div class="sidebar-section-children-container"><div class="sidebar-section-children"><a href="module-core.html">core</a></div><div class="sidebar-section-children"><a href="module-debug.html">debug</a></div><div class="sidebar-section-children"><a href="module-digest.html">digest</a></div><div class="sidebar-section-children"><a href="module-fs.html">fs</a></div><div class="sidebar-section-children"><a href="module-io.html">io</a></div><div class="sidebar-section-children"><a href="module-log.html">log</a></div><div class="sidebar-section-children"><a href="module-math.html">math</a></div><div class="sidebar-section-children"><a href="module-nl80211.html">nl80211</a></div><div class="sidebar-section-children"><a href="module-resolv.html">resolv</a></div><div class="sidebar-section-children"><a href="module-rtnl.html">rtnl</a></div><div class="sidebar-section-children"><a href="module-socket.html">socket</a></div><div class="sidebar-section-children"><a href="module-struct.html">struct</a></div><div class="sidebar-section-children"><a href="module-uci.html">uci</a></div><div class="sidebar-section-children"><a href="module-uloop.html">uloop</a></div><div class="sidebar-section-children"><a href="module-zlib.html">zlib</a></div></div></div><div class="mobile-navbar-actions"><div class="navbar-right-item"><button class="icon-button search-button" aria-label="open-search"><svg><use xlink:href="#search-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button theme-toggle" aria-label="toggle-theme"><svg><use class="theme-svg-use" xlink:href="#dark-theme-icon"></use></svg></button></div><div class="navbar-right-item"><button class="icon-button font-size" aria-label="change-font-size"><svg><use xlink:href="#font-size-icon"></use></svg></button></div><div class="navbar-right-item toc-item"><button class="icon-button toc" aria-label="open-table-of-contents"><svg><use xlink:href="#toc-icon"></use></svg></button></div></div></div></div><div id="mobile-tocbar" class="mobile-sidebar-container"><div class="mobile-sidebar-wrapper"><span class="sidebar-title">Table of Contents</span><div class="toc-contents"></div></div></div><script type="text/javascript" src="scripts/core.min.js"></script><script src="scripts/search.min.js" defer="defer"></script><script src="scripts/third-party/fuse.js" defer="defer"></script><script type="text/javascript">var tocbotInstance=tocbot.init({tocSelector:"#mobile-tocbar > .mobile-sidebar-wrapper > .toc-contents",contentSelector:".main-content",headingSelector:"h1, h2, h3",hasInnerContainers:!0,scrollContainer:".main-content",headingsOffset:130,onClick:(...e)=>{hideMobileMenu(),bringLinkToView(...e)},includeHtml:!0})</script></body></html>
