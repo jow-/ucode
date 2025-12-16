@@ -14,6 +14,48 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+/**
+ * # Routing Netlink
+ *
+ * The `rtnl` module provides functions for interacting with the routing netlink interface.
+ *
+ * Functions can be individually imported and directly accessed using the
+ * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+ * syntax:
+ *
+ *   ```javascript
+ *   import { error, request, listener, RTM_GETROUTE, RTM_NEWROUTE, RTM_DELROUTE, AF_INET } from 'rtnl';
+ *
+ *   // Send a netlink request
+ *   let response = request(RTM_GETROUTE, 0, { family: AF_INET });
+ *
+ *   // Create a listener for route changes
+ *   let routeListener = listener((msg) => {
+ *       print('Received route message:', msg, '\n');
+ *   }, [RTM_NEWROUTE, RTM_DELROUTE]);
+ *   ```
+ *
+ * Alternatively, the module namespace can be imported
+ * using a wildcard import statement:
+ *
+ *   ```javascript
+ *   import * as rtnl from 'rtnl';
+ *
+ *   // Send a netlink request
+ *   let response = rtnl.request(rtnl.RTM_GETROUTE, 0, { family: rtnl.AF_INET });
+ *
+ *   // Create a listener for route changes
+ *   let listener = rtnl.listener((msg) => {
+ *       print('Received route message:', msg, '\n');
+ *   }, [rtnl.RTM_NEWROUTE, rtnl.RTM_DELROUTE]);
+ *   ```
+ *
+ * Additionally, the rtnl module namespace may also be imported by invoking
+ * the `ucode` interpreter with the `-lrtnl` switch.
+ *
+ * @module rtnl
+ */
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -3248,6 +3290,23 @@ typedef struct {
 } request_state_t;
 
 
+/**
+ * Query error information.
+ *
+ * Returns a string containing a description of the last occurred error or
+ * `null` if there is no error information.
+ *
+ * @function module:rtnl#error
+ *
+ * @returns {?string}
+ *
+ * @example
+ * // Trigger rtnl error
+ * request('invalid_command', {}, {});
+ *
+ * // Print error (should yield error description)
+ * print(error(), "\n");
+ */
 static uc_value_t *
 uc_nl_error(uc_vm_t *vm, size_t nargs)
 {
@@ -3363,6 +3422,23 @@ static const struct {
 	{ RTM_FAM(RTM_GETNETCONF), &netconf_msg },
 };
 
+/**
+ * Send a netlink request.
+ *
+ * Sends a netlink request with the specified command, flags, and payload.
+ *
+ * @function module:rtnl#request
+ *
+ * @param {string} cmd - The netlink command to send
+ * @param {number} flags - The netlink flags for the request
+ * @param {*} payload - The payload data for the request
+ *
+ * @returns {?*} - The response data or null on error
+ *
+ * @example
+ * // Send a route request
+ * let response = request('RTM_GETROUTE', 0, { family: AF_INET });
+ */
 static uc_value_t *
 uc_nl_request(uc_vm_t *vm, size_t nargs)
 {
@@ -3689,6 +3765,44 @@ free:
 	return false;
 }
 
+/**
+ * Represents a netlink listener resource.
+ *
+ * @class module:rtnl.listener
+ * @hideconstructor
+ *
+ * @see {@link module:rtnl#listener|listener()}
+ *
+ * @example
+ * const nlListener = listener((msg) => {
+ *     print('Received netlink message:', msg, '\n');
+ * }, [RTM_NEWROUTE, RTM_DELROUTE]);
+ *
+ * nlListener.set_commands([RTM_GETLINK, RTM_SETLINK]);
+ *
+ * nlListener.close();
+ */
+
+/**
+ * Create a netlink listener.
+ *
+ * Creates a new netlink listener that will receive messages matching the specified
+ * commands and multicast groups.
+ *
+ * @function module:rtnl#listener
+ *
+ * @param {function} callback - The callback function to invoke when a message is received
+ * @param {Array<string>} [commands] - Array of netlink commands to listen for (optional)
+ * @param {Array<number>} [groups] - Array of multicast groups to join (optional)
+ *
+ * @returns {module:rtnl.listener} - A listener object with methods to control the listener
+ *
+ * @example
+ * // Create a listener for route changes
+ * let routeListener = listener((msg) => {
+ *     print('Received route message:', msg, '\n');
+ * }, [RTM_NEWROUTE, RTM_DELROUTE]);
+ */
 static uc_value_t *
 uc_nl_listener(uc_vm_t *vm, size_t nargs)
 {
@@ -3754,6 +3868,21 @@ uc_nl_listener_free(void *arg)
 	free(l);
 }
 
+/**
+ * Set the commands for a netlink listener.
+ *
+ * Updates the set of netlink commands that the listener will receive.
+ *
+ * @function module:rtnl.listener#set_commands
+ *
+ * @param {Array<string>} commands - Array of netlink commands to listen for
+ *
+ * @returns {boolean} - true if successful, false on error
+ *
+ * @example
+ * // Update listener to only receive route messages
+ * listener.set_commands([RTM_NEWROUTE, RTM_DELROUTE]);
+ */
 static uc_value_t *
 uc_nl_listener_set_commands(uc_vm_t *vm, size_t nargs)
 {
@@ -3770,6 +3899,19 @@ uc_nl_listener_set_commands(uc_vm_t *vm, size_t nargs)
 	return NULL;
 }
 
+/**
+ * Close a netlink listener.
+ *
+ * Closes the netlink listener and stops receiving messages.
+ *
+ * @function module:rtnl.listener#close
+ *
+ * @returns {boolean} - true if successful, false on error
+ *
+ * @example
+ * // Close the listener
+ * listener.close();
+ */
 static uc_value_t *
 uc_nl_listener_close(uc_vm_t *vm, size_t nargs)
 {
@@ -3797,6 +3939,29 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 
 #define ADD_CONST(x) ucv_object_add(c, #x, ucv_int64_new(x))
 
+	/**
+	 * @typedef
+	 * @name Netlink message flags
+	 * @property {number} NLM_F_ACK - Request for acknowledgment
+	 * @property {number} NLM_F_ACK_TLVS - Request for acknowledgment with TLVs
+	 * @property {number} NLM_F_APPEND - Append to existing list
+	 * @property {number} NLM_F_ATOMIC - Atomic operation
+	 * @property {number} NLM_F_CAPPED - Request capped
+	 * @property {number} NLM_F_CREATE - Create if not exists
+	 * @property {number} NLM_F_DUMP - Dump request
+	 * @property {number} NLM_F_DUMP_FILTERED - Dump filtered request
+	 * @property {number} NLM_F_DUMP_INTR - Dump interrupted
+	 * @property {number} NLM_F_ECHO - Echo request
+	 * @property {number} NLM_F_EXCL - Exclusive creation
+	 * @property {number} NLM_F_MATCH - Match request
+	 * @property {number} NLM_F_MULTI - Multi-part message
+	 * @property {number} NLM_F_NONREC - Non-recursive operation
+	 * @property {number} NLM_F_REPLACE - Replace existing
+	 * @property {number} NLM_F_REQUEST - Request message
+	 * @property {number} NLM_F_ROOT - Root operation
+	 * @property {number} NLM_F_STRICT_CHK - Strict checking
+	 */
+	ADD_CONST(NLM_F_ACK);
 	ADD_CONST(NLM_F_ACK);
 	ADD_CONST(NLM_F_ACK_TLVS);
 	ADD_CONST(NLM_F_APPEND);
@@ -3816,57 +3981,143 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(NLM_F_ROOT);
 	ADD_CONST(NLM_F_STRICT_CHK); /* custom */
 
+	/**
+	 * @typedef
+	 * @name IPv6 address generation modes
+	 * @property {number} IN6_ADDR_GEN_MODE_EUI64 - EUI-64 mode
+	 * @property {number} IN6_ADDR_GEN_MODE_NONE - No mode
+	 * @property {number} IN6_ADDR_GEN_MODE_STABLE_PRIVACY - Stable privacy mode
+	 * @property {number} IN6_ADDR_GEN_MODE_RANDOM - Random mode
+	 */
 	ADD_CONST(IN6_ADDR_GEN_MODE_EUI64);
 	ADD_CONST(IN6_ADDR_GEN_MODE_NONE);
 	ADD_CONST(IN6_ADDR_GEN_MODE_STABLE_PRIVACY);
 	ADD_CONST(IN6_ADDR_GEN_MODE_RANDOM);
 
-	ADD_CONST(BRIDGE_MODE_UNSPEC);
-	ADD_CONST(BRIDGE_MODE_HAIRPIN);
-
+	/**
+	 * @typedef
+	 * @name MACVLAN modes
+	 * @property {number} MACVLAN_MODE_PRIVATE - Private mode
+	 * @property {number} MACVLAN_MODE_VEPA - VEPA mode
+	 * @property {number} MACVLAN_MODE_BRIDGE - Bridge mode
+	 * @property {number} MACVLAN_MODE_PASSTHRU - Pass-through mode
+	 * @property {number} MACVLAN_MODE_SOURCE - Source mode
+	 */
 	ADD_CONST(MACVLAN_MODE_PRIVATE);
 	ADD_CONST(MACVLAN_MODE_VEPA);
 	ADD_CONST(MACVLAN_MODE_BRIDGE);
 	ADD_CONST(MACVLAN_MODE_PASSTHRU);
 	ADD_CONST(MACVLAN_MODE_SOURCE);
 
+	/**
+	 * @typedef
+	 * @name MACVLAN MAC address commands
+	 * @property {number} MACVLAN_MACADDR_ADD - Add MAC address
+	 * @property {number} MACVLAN_MACADDR_DEL - Delete MAC address
+	 * @property {number} MACVLAN_MACADDR_FLUSH - Flush MAC addresses
+	 * @property {number} MACVLAN_MACADDR_SET - Set MAC address
+	 */
 	ADD_CONST(MACVLAN_MACADDR_ADD);
 	ADD_CONST(MACVLAN_MACADDR_DEL);
 	ADD_CONST(MACVLAN_MACADDR_FLUSH);
 	ADD_CONST(MACVLAN_MACADDR_SET);
 
+	/**
+	 * @typedef
+	 * @name MACsec validation levels
+	 * @property {number} MACSEC_VALIDATE_DISABLED - Disabled validation
+	 * @property {number} MACSEC_VALIDATE_CHECK - Check validation
+	 * @property {number} MACSEC_VALIDATE_STRICT - Strict validation
+	 * @property {number} MACSEC_VALIDATE_MAX - Maximum validation
+	 */
 	ADD_CONST(MACSEC_VALIDATE_DISABLED);
 	ADD_CONST(MACSEC_VALIDATE_CHECK);
 	ADD_CONST(MACSEC_VALIDATE_STRICT);
 	ADD_CONST(MACSEC_VALIDATE_MAX);
 
+	/**
+	 * @typedef
+	 * @name MACsec offload modes
+	 * @property {number} MACSEC_OFFLOAD_OFF - Offload off
+	 * @property {number} MACSEC_OFFLOAD_PHY - Physical offload
+	 * @property {number} MACSEC_OFFLOAD_MAC - MAC offload
+	 * @property {number} MACSEC_OFFLOAD_MAX - Maximum offload
+	 */
 	ADD_CONST(MACSEC_OFFLOAD_OFF);
 	ADD_CONST(MACSEC_OFFLOAD_PHY);
 	ADD_CONST(MACSEC_OFFLOAD_MAC);
 	ADD_CONST(MACSEC_OFFLOAD_MAX);
 
+	/**
+	 * @typedef
+	 * @name IPVLAN modes
+	 * @property {number} IPVLAN_MODE_L2 - Layer 2 mode
+	 * @property {number} IPVLAN_MODE_L3 - Layer 3 mode
+	 * @property {number} IPVLAN_MODE_L3S - Layer 3 symmetric mode
+	 */
 	ADD_CONST(IPVLAN_MODE_L2);
 	ADD_CONST(IPVLAN_MODE_L3);
 	ADD_CONST(IPVLAN_MODE_L3S);
 
+	/**
+	 * @typedef
+	 * @name VXLAN data frame flags
+	 * @property {number} VXLAN_DF_UNSET - Data frame unset
+	 * @property {number} VXLAN_DF_SET - Data frame set
+	 * @property {number} VXLAN_DF_INHERIT - Data frame inherit
+	 * @property {number} VXLAN_DF_MAX - Maximum data frame
+	 */
 	ADD_CONST(VXLAN_DF_UNSET);
 	ADD_CONST(VXLAN_DF_SET);
 	ADD_CONST(VXLAN_DF_INHERIT);
 	ADD_CONST(VXLAN_DF_MAX);
 
+	/**
+	 * @typedef
+	 * @name Geneve data frame flags
+	 * @property {number} GENEVE_DF_UNSET - Data frame unset
+	 * @property {number} GENEVE_DF_SET - Data frame set
+	 * @property {number} GENEVE_DF_INHERIT - Data frame inherit
+	 * @property {number} GENEVE_DF_MAX - Maximum data frame
+	 */
 	ADD_CONST(GENEVE_DF_UNSET);
 	ADD_CONST(GENEVE_DF_SET);
 	ADD_CONST(GENEVE_DF_INHERIT);
 	ADD_CONST(GENEVE_DF_MAX);
 
+	/**
+	 * @typedef
+	 * @name GTP roles
+	 * @property {number} GTP_ROLE_GGSN - GGSN role
+	 * @property {number} GTP_ROLE_SGSN - SGSN role
+	 */
 	ADD_CONST(GTP_ROLE_GGSN);
 	ADD_CONST(GTP_ROLE_SGSN);
 
+	/**
+	 * @typedef
+	 * @name Port request types
+	 * @property {number} PORT_REQUEST_PREASSOCIATE - Pre-associate request
+	 * @property {number} PORT_REQUEST_PREASSOCIATE_RR - Pre-associate round-robin request
+	 * @property {number} PORT_REQUEST_ASSOCIATE - Associate request
+	 * @property {number} PORT_REQUEST_DISASSOCIATE - Disassociate request
+	 */
 	ADD_CONST(PORT_REQUEST_PREASSOCIATE);
 	ADD_CONST(PORT_REQUEST_PREASSOCIATE_RR);
 	ADD_CONST(PORT_REQUEST_ASSOCIATE);
 	ADD_CONST(PORT_REQUEST_DISASSOCIATE);
 
+	/**
+	 * @typedef
+	 * @name Port VDP responses
+	 * @property {number} PORT_VDP_RESPONSE_SUCCESS - Success response
+	 * @property {number} PORT_VDP_RESPONSE_INVALID_FORMAT - Invalid format response
+	 * @property {number} PORT_VDP_RESPONSE_INSUFFICIENT_RESOURCES - Insufficient resources response
+	 * @property {number} PORT_VDP_RESPONSE_UNUSED_VTID - Unused VTID response
+	 * @property {number} PORT_VDP_RESPONSE_VTID_VIOLATION - VTID violation response
+	 * @property {number} PORT_VDP_RESPONSE_VTID_VERSION_VIOALTION - VTID version violation response
+	 * @property {number} PORT_VDP_RESPONSE_OUT_OF_SYNC - Out of sync response
+	 */
 	ADD_CONST(PORT_VDP_RESPONSE_SUCCESS);
 	ADD_CONST(PORT_VDP_RESPONSE_INVALID_FORMAT);
 	ADD_CONST(PORT_VDP_RESPONSE_INSUFFICIENT_RESOURCES);
@@ -3874,6 +4125,17 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(PORT_VDP_RESPONSE_VTID_VIOLATION);
 	ADD_CONST(PORT_VDP_RESPONSE_VTID_VERSION_VIOALTION);
 	ADD_CONST(PORT_VDP_RESPONSE_OUT_OF_SYNC);
+
+	/**
+	 * @typedef
+	 * @name Port profile responses
+	 * @property {number} PORT_PROFILE_RESPONSE_SUCCESS - Success response
+	 * @property {number} PORT_PROFILE_RESPONSE_INPROGRESS - In progress response
+	 * @property {number} PORT_PROFILE_RESPONSE_INVALID - Invalid response
+	 * @property {number} PORT_PROFILE_RESPONSE_BADSTATE - Bad state response
+	 * @property {number} PORT_PROFILE_RESPONSE_INSUFFICIENT_RESOURCES - Insufficient resources response
+	 * @property {number} PORT_PROFILE_RESPONSE_ERROR - Error response
+	 */
 	ADD_CONST(PORT_PROFILE_RESPONSE_SUCCESS);
 	ADD_CONST(PORT_PROFILE_RESPONSE_INPROGRESS);
 	ADD_CONST(PORT_PROFILE_RESPONSE_INVALID);
@@ -3881,25 +4143,126 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(PORT_PROFILE_RESPONSE_INSUFFICIENT_RESOURCES);
 	ADD_CONST(PORT_PROFILE_RESPONSE_ERROR);
 
+	/**
+	 * @typedef
+	 * @name IPoIB modes
+	 * @property {number} IPOIB_MODE_DATAGRAM - Datagram mode
+	 * @property {number} IPOIB_MODE_CONNECTED - Connected mode
+	 */
 	ADD_CONST(IPOIB_MODE_DATAGRAM);
 	ADD_CONST(IPOIB_MODE_CONNECTED);
 
+	/**
+	 * @typedef
+	 * @name HSR protocols
+	 * @property {number} HSR_PROTOCOL_HSR - HSR protocol
+	 * @property {number} HSR_PROTOCOL_PRP - PRP protocol
+	 */
 	ADD_CONST(HSR_PROTOCOL_HSR);
 	ADD_CONST(HSR_PROTOCOL_PRP);
 
+	/**
+	 * @typedef
+	 * @name Link extended statistics types
+	 * @property {number} LINK_XSTATS_TYPE_UNSPEC - Unspecified type
+	 * @property {number} LINK_XSTATS_TYPE_BRIDGE - Bridge type
+	 * @property {number} LINK_XSTATS_TYPE_BOND - Bond type
+	 */
 	ADD_CONST(LINK_XSTATS_TYPE_UNSPEC);
 	ADD_CONST(LINK_XSTATS_TYPE_BRIDGE);
 	ADD_CONST(LINK_XSTATS_TYPE_BOND);
 
+	/**
+	 * @typedef
+	 * @name XDP attach types
+	 * @property {number} XDP_ATTACHED_NONE - Not attached
+	 * @property {number} XDP_ATTACHED_DRV - Driver attached
+	 * @property {number} XDP_ATTACHED_SKB - SKB attached
+	 * @property {number} XDP_ATTACHED_HW - Hardware attached
+	 * @property {number} XDP_ATTACHED_MULTI - Multi attached
+	 */
 	ADD_CONST(XDP_ATTACHED_NONE);
 	ADD_CONST(XDP_ATTACHED_DRV);
 	ADD_CONST(XDP_ATTACHED_SKB);
 	ADD_CONST(XDP_ATTACHED_HW);
 	ADD_CONST(XDP_ATTACHED_MULTI);
 
+	/**
+	 * @typedef
+	 * @name FDB notification bits
+	 * @property {number} FDB_NOTIFY_BIT - Notify bit
+	 * @property {number} FDB_NOTIFY_INACTIVE_BIT - Inactive notify bit
+	 */
+
 	ADD_CONST(FDB_NOTIFY_BIT);
 	ADD_CONST(FDB_NOTIFY_INACTIVE_BIT);
 
+	/**
+	 * @typedef
+	 * @name Route commands
+	 * @property {number} RTM_BASE - Base command
+	 * @property {number} RTM_NEWLINK - New link
+	 * @property {number} RTM_DELLINK - Delete link
+	 * @property {number} RTM_GETLINK - Get link
+	 * @property {number} RTM_SETLINK - Set link
+	 * @property {number} RTM_NEWADDR - New address
+	 * @property {number} RTM_DELADDR - Delete address
+	 * @property {number} RTM_GETADDR - Get address
+	 * @property {number} RTM_NEWROUTE - New route
+	 * @property {number} RTM_DELROUTE - Delete route
+	 * @property {number} RTM_GETROUTE - Get route
+	 * @property {number} RTM_NEWRULE - New rule
+	 * @property {number} RTM_DELRULE - Delete rule
+	 * @property {number} RTM_GETRULE - Get rule
+	 * @property {number} RTM_NEWQDISC - New queue discipline
+	 * @property {number} RTM_DELQDISC - Delete queue discipline
+	 * @property {number} RTM_GETQDISC - Get queue discipline
+	 * @property {number} RTM_NEWTCLASS - New traffic class
+	 * @property {number} RTM_DELTCLASS - Delete traffic class
+	 * @property {number} RTM_GETTCLASS - Get traffic class
+	 * @property {number} RTM_NEWTFILTER - New traffic filter
+	 * @property {number} RTM_DELTFILTER - Delete traffic filter
+	 * @property {number} RTM_GETTFILTER - Get traffic filter
+	 * @property {number} RTM_NEWACTION - New action
+	 * @property {number} RTM_DELACTION - Delete action
+	 * @property {number} RTM_GETACTION - Get action
+	 * @property {number} RTM_NEWPREFIX - New prefix
+	 * @property {number} RTM_GETMULTICAST - Get multicast
+	 * @property {number} RTM_GETANYCAST - Get anycast
+	 * @property {number} RTM_NEWNEIGHTBL - New neighbor table
+	 * @property {number} RTM_GETNEIGHTBL - Get neighbor table
+	 * @property {number} RTM_SETNEIGHTBL - Set neighbor table
+	 * @property {number} RTM_NEWNDUSEROPT - New neighbor user option
+	 * @property {number} RTM_NEWADDRLABEL - New address label
+	 * @property {number} RTM_DELADDRLABEL - Delete address label
+	 * @property {number} RTM_GETADDRLABEL - Get address label
+	 * @property {number} RTM_GETDCB - Get DCB
+	 * @property {number} RTM_SETDCB - Set DCB
+	 * @property {number} RTM_NEWNETCONF - New network configuration
+	 * @property {number} RTM_DELNETCONF - Delete network configuration
+	 * @property {number} RTM_GETNETCONF - Get network configuration
+	 * @property {number} RTM_NEWMDB - New multicast database
+	 * @property {number} RTM_DELMDB - Delete multicast database
+	 * @property {number} RTM_GETMDB - Get multicast database
+	 * @property {number} RTM_NEWNSID - New network namespace ID
+	 * @property {number} RTM_DELNSID - Delete network namespace ID
+	 * @property {number} RTM_GETNSID - Get network namespace ID
+	 * @property {number} RTM_NEWSTATS - New statistics
+	 * @property {number} RTM_GETSTATS - Get statistics
+	 * @property {number} RTM_NEWCACHEREPORT - New cache report
+	 * @property {number} RTM_NEWCHAIN - New chain
+	 * @property {number} RTM_DELCHAIN - Delete chain
+	 * @property {number} RTM_GETCHAIN - Get chain
+	 * @property {number} RTM_NEWNEXTHOP - New next hop
+	 * @property {number} RTM_DELNEXTHOP - Delete next hop
+	 * @property {number} RTM_GETNEXTHOP - Get next hop
+	 * @property {number} RTM_NEWLINKPROP - New link property
+	 * @property {number} RTM_DELLINKPROP - Delete link property
+	 * @property {number} RTM_GETLINKPROP - Get link property
+	 * @property {number} RTM_NEWVLAN - New VLAN
+	 * @property {number} RTM_DELVLAN - Delete VLAN
+	 * @property {number} RTM_GETVLAN - Get VLAN
+	 */
 	ADD_CONST(RTM_BASE);
 	ADD_CONST(RTM_NEWLINK);
 	ADD_CONST(RTM_DELLINK);
@@ -3966,6 +4329,22 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(RTM_DELVLAN);
 	ADD_CONST(RTM_GETVLAN);
 
+	/**
+	 * @typedef
+	 * @name Route types
+	 * @property {number} RTN_UNSPEC - Unspecified route
+	 * @property {number} RTN_UNICAST - Unicast route
+	 * @property {number} RTN_LOCAL - Local route
+	 * @property {number} RTN_BROADCAST - Broadcast route
+	 * @property {number} RTN_ANYCAST - Anycast route
+	 * @property {number} RTN_MULTICAST - Multicast route
+	 * @property {number} RTN_BLACKHOLE - Blackhole route
+	 * @property {number} RTN_UNREACHABLE - Unreachable route
+	 * @property {number} RTN_PROHIBIT - Prohibited route
+	 * @property {number} RTN_THROW - Throw route
+	 * @property {number} RTN_NAT - NAT route
+	 * @property {number} RTN_XRESOLVE - External resolve route
+	 */
 	ADD_CONST(RTN_UNSPEC);
 	ADD_CONST(RTN_UNICAST);
 	ADD_CONST(RTN_LOCAL);
@@ -3979,12 +4358,31 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(RTN_NAT);
 	ADD_CONST(RTN_XRESOLVE);
 
+	/**
+	 * @typedef
+	 * @name Route scopes
+	 * @property {number} RT_SCOPE_UNIVERSE - Universe scope
+	 * @property {number} RT_SCOPE_SITE - Site scope
+	 * @property {number} RT_SCOPE_LINK - Link scope
+	 * @property {number} RT_SCOPE_HOST - Host scope
+	 * @property {number} RT_SCOPE_NOWHERE - Nowhere scope
+	 */
 	ADD_CONST(RT_SCOPE_UNIVERSE);
 	ADD_CONST(RT_SCOPE_SITE);
 	ADD_CONST(RT_SCOPE_LINK);
 	ADD_CONST(RT_SCOPE_HOST);
 	ADD_CONST(RT_SCOPE_NOWHERE);
 
+	/**
+	 * @typedef
+	 * @name Route tables
+	 * @property {number} RT_TABLE_UNSPEC - Unspecified table
+	 * @property {number} RT_TABLE_COMPAT - Compatibility table
+	 * @property {number} RT_TABLE_DEFAULT - Default table
+	 * @property {number} RT_TABLE_MAIN - Main table
+	 * @property {number} RT_TABLE_LOCAL - Local table
+	 * @property {number} RT_TABLE_MAX - Maximum table
+	 */
 	ADD_CONST(RT_TABLE_UNSPEC);
 	ADD_CONST(RT_TABLE_COMPAT);
 	ADD_CONST(RT_TABLE_DEFAULT);
@@ -3992,6 +4390,25 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(RT_TABLE_LOCAL);
 	ADD_CONST(RT_TABLE_MAX);
 
+	/**
+	 * @typedef
+	 * @name Route metrics
+	 * @property {number} RTAX_MTU - Maximum transmission unit
+	 * @property {number} RTAX_HOPLIMIT - Hop limit
+	 * @property {number} RTAX_ADVMSS - Advertised MSS
+	 * @property {number} RTAX_REORDERING - Reordering
+	 * @property {number} RTAX_RTT - Round trip time
+	 * @property {number} RTAX_WINDOW - Window size
+	 * @property {number} RTAX_CWND - Congestion window
+	 * @property {number} RTAX_INITCWND - Initial congestion window
+	 * @property {number} RTAX_INITRWND - Initial receive window
+	 * @property {number} RTAX_FEATURES - Features
+	 * @property {number} RTAX_QUICKACK - Quick acknowledgment
+	 * @property {number} RTAX_CC_ALGO - Congestion control algorithm
+	 * @property {number} RTAX_RTTVAR - RTT variance
+	 * @property {number} RTAX_SSTHRESH - Slow start threshold
+	 * @property {number} RTAX_FASTOPEN_NO_COOKIE - Fast open no cookie
+	 */
 	/* required to construct RTAX_LOCK */
 	ADD_CONST(RTAX_MTU);
 	ADD_CONST(RTAX_HOPLIMIT);
@@ -4009,13 +4426,64 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(RTAX_SSTHRESH);
 	ADD_CONST(RTAX_FASTOPEN_NO_COOKIE);
 
+	/**
+	 * @typedef
+	 * @name Prefix types
+	 * @property {number} PREFIX_UNSPEC - Unspecified prefix
+	 * @property {number} PREFIX_ADDRESS - Address prefix
+	 * @property {number} PREFIX_CACHEINFO - Cache info prefix
+	 */
 	ADD_CONST(PREFIX_UNSPEC);
 	ADD_CONST(PREFIX_ADDRESS);
 	ADD_CONST(PREFIX_CACHEINFO);
 
+	/**
+	 * @typedef
+	 * @name Neighbor discovery user option types
+	 * @property {number} NDUSEROPT_UNSPEC - Unspecified option
+	 * @property {number} NDUSEROPT_SRCADDR - Source address option
+	 */
 	ADD_CONST(NDUSEROPT_UNSPEC);
 	ADD_CONST(NDUSEROPT_SRCADDR);
 
+	/**
+	 * @typedef
+	 * @name Multicast groups
+	 * @property {number} RTNLGRP_NONE - No group
+	 * @property {number} RTNLGRP_LINK - Link group
+	 * @property {number} RTNLGRP_NOTIFY - Notify group
+	 * @property {number} RTNLGRP_NEIGH - Neighbor group
+	 * @property {number} RTNLGRP_TC - Traffic control group
+	 * @property {number} RTNLGRP_IPV4_IFADDR - IPv4 interface address group
+	 * @property {number} RTNLGRP_IPV4_MROUTE - IPv4 multicast route group
+	 * @property {number} RTNLGRP_IPV4_ROUTE - IPv4 route group
+	 * @property {number} RTNLGRP_IPV4_RULE - IPv4 rule group
+	 * @property {number} RTNLGRP_IPV6_IFADDR - IPv6 interface address group
+	 * @property {number} RTNLGRP_IPV6_MROUTE - IPv6 multicast route group
+	 * @property {number} RTNLGRP_IPV6_ROUTE - IPv6 route group
+	 * @property {number} RTNLGRP_IPV6_IFINFO - IPv6 interface info group
+	 * @property {number} RTNLGRP_DECnet_IFADDR - DECnet interface address group
+	 * @property {number} RTNLGRP_NOP2 - No operation 2
+	 * @property {number} RTNLGRP_DECnet_ROUTE - DECnet route group
+	 * @property {number} RTNLGRP_DECnet_RULE - DECnet rule group
+	 * @property {number} RTNLGRP_NOP4 - No operation 4
+	 * @property {number} RTNLGRP_IPV6_PREFIX - IPv6 prefix group
+	 * @property {number} RTNLGRP_IPV6_RULE - IPv6 rule group
+	 * @property {number} RTNLGRP_ND_USEROPT - Neighbor discovery user option group
+	 * @property {number} RTNLGRP_PHONET_IFADDR - Phonet interface address group
+	 * @property {number} RTNLGRP_PHONET_ROUTE - Phonet route group
+	 * @property {number} RTNLGRP_DCB - Data Center Bridging group
+	 * @property {number} RTNLGRP_IPV4_NETCONF - IPv4 network configuration group
+	 * @property {number} RTNLGRP_IPV6_NETCONF - IPv6 network configuration group
+	 * @property {number} RTNLGRP_MDB - Multicast database group
+	 * @property {number} RTNLGRP_MPLS_ROUTE - MPLS route group
+	 * @property {number} RTNLGRP_NSID - Network namespace ID group
+	 * @property {number} RTNLGRP_MPLS_NETCONF - MPLS network configuration group
+	 * @property {number} RTNLGRP_IPV4_MROUTE_R - IPv4 multicast route reverse group
+	 * @property {number} RTNLGRP_IPV6_MROUTE_R - IPv6 multicast route reverse group
+	 * @property {number} RTNLGRP_NEXTHOP - Next hop group
+	 * @property {number} RTNLGRP_BRVLAN - Bridge VLAN group
+	 */
 	ADD_CONST(RTNLGRP_NONE);
 	ADD_CONST(RTNLGRP_LINK);
 	ADD_CONST(RTNLGRP_NOTIFY);
@@ -4051,6 +4519,16 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(RTNLGRP_NEXTHOP);
 	ADD_CONST(RTNLGRP_BRVLAN);
 
+	/**
+	 * @typedef
+	 * @name Route flags
+	 * @property {number} RTM_F_CLONED - Cloned route
+	 * @property {number} RTM_F_EQUALIZE - Equalize route
+	 * @property {number} RTM_F_FIB_MATCH - FIB match
+	 * @property {number} RTM_F_LOOKUP_TABLE - Lookup table
+	 * @property {number} RTM_F_NOTIFY - Notify
+	 * @property {number} RTM_F_PREFIX - Prefix
+	 */
 	ADD_CONST(RTM_F_CLONED);
 	ADD_CONST(RTM_F_EQUALIZE);
 	ADD_CONST(RTM_F_FIB_MATCH);
@@ -4058,12 +4536,32 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(RTM_F_NOTIFY);
 	ADD_CONST(RTM_F_PREFIX);
 
+	/**
+	 * @typedef
+	 * @name Address families
+	 * @property {number} AF_UNSPEC - Unspecified address family
+	 * @property {number} AF_INET - IPv4 address family
+	 * @property {number} AF_INET6 - IPv6 address family
+	 * @property {number} AF_MPLS - MPLS address family
+	 * @property {number} AF_BRIDGE - Bridge address family
+	 */
 	ADD_CONST(AF_UNSPEC);
 	ADD_CONST(AF_INET);
 	ADD_CONST(AF_INET6);
 	ADD_CONST(AF_MPLS);
 	ADD_CONST(AF_BRIDGE);
 
+	/**
+	 * @typedef
+	 * @name Generic Routing Encapsulation flags
+	 * @property {number} GRE_CSUM - Checksum flag
+	 * @property {number} GRE_ROUTING - Routing flag
+	 * @property {number} GRE_KEY - Key flag
+	 * @property {number} GRE_SEQ - Sequence flag
+	 * @property {number} GRE_STRICT - Strict flag
+	 * @property {number} GRE_REC - Record flag
+	 * @property {number} GRE_ACK - Acknowledgment flag
+	 */
 	ADD_CONST(GRE_CSUM);
 	ADD_CONST(GRE_ROUTING);
 	ADD_CONST(GRE_KEY);
@@ -4072,15 +4570,41 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(GRE_REC);
 	ADD_CONST(GRE_ACK);
 
+	/**
+	 * @typedef
+	 * @name Tunnel encapsulation types
+	 * @property {number} TUNNEL_ENCAP_NONE - No encapsulation
+	 * @property {number} TUNNEL_ENCAP_FOU - Foo over UDP
+	 * @property {number} TUNNEL_ENCAP_GUE - Generic UDP Encapsulation
+	 * @property {number} TUNNEL_ENCAP_MPLS - MPLS encapsulation
+	 */
 	ADD_CONST(TUNNEL_ENCAP_NONE);
 	ADD_CONST(TUNNEL_ENCAP_FOU);
 	ADD_CONST(TUNNEL_ENCAP_GUE);
 	ADD_CONST(TUNNEL_ENCAP_MPLS);
 
+	/**
+	 * @typedef
+	 * @name Tunnel encapsulation flags
+	 * @property {number} TUNNEL_ENCAP_FLAG_CSUM - Checksum flag
+	 * @property {number} TUNNEL_ENCAP_FLAG_CSUM6 - IPv6 checksum flag
+	 * @property {number} TUNNEL_ENCAP_FLAG_REMCSUM - Remote checksum flag
+	 */
 	ADD_CONST(TUNNEL_ENCAP_FLAG_CSUM);
 	ADD_CONST(TUNNEL_ENCAP_FLAG_CSUM6);
 	ADD_CONST(TUNNEL_ENCAP_FLAG_REMCSUM);
 
+	/**
+	 * @typedef
+	 * @name IPv6 tunnel flags
+	 * @property {number} IP6_TNL_F_ALLOW_LOCAL_REMOTE - Allow local remote
+	 * @property {number} IP6_TNL_F_IGN_ENCAP_LIMIT - Ignore encapsulation limit
+	 * @property {number} IP6_TNL_F_MIP6_DEV - Mobile IPv6 device
+	 * @property {number} IP6_TNL_F_RCV_DSCP_COPY - Receive DSCP copy
+	 * @property {number} IP6_TNL_F_USE_ORIG_FLOWLABEL - Use original flow label
+	 * @property {number} IP6_TNL_F_USE_ORIG_FWMARK - Use original firewall mark
+	 * @property {number} IP6_TNL_F_USE_ORIG_TCLASS - Use original traffic class
+	 */
 	ADD_CONST(IP6_TNL_F_ALLOW_LOCAL_REMOTE);
 	ADD_CONST(IP6_TNL_F_IGN_ENCAP_LIMIT);
 	ADD_CONST(IP6_TNL_F_MIP6_DEV);
@@ -4089,6 +4613,18 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(IP6_TNL_F_USE_ORIG_FWMARK);
 	ADD_CONST(IP6_TNL_F_USE_ORIG_TCLASS);
 
+	/**
+	 * @typedef
+	 * @name Interface flags
+	 * @property {number} NTF_EXT_LEARNED - Externally learned
+	 * @property {number} NTF_MASTER - Master interface
+	 * @property {number} NTF_OFFLOADED - Offloaded
+	 * @property {number} NTF_PROXY - Proxy
+	 * @property {number} NTF_ROUTER - Router
+	 * @property {number} NTF_SELF - Self
+	 * @property {number} NTF_STICKY - Sticky
+	 * @property {number} NTF_USE - Use
+	 */
 	ADD_CONST(NTF_EXT_LEARNED);
 	ADD_CONST(NTF_MASTER);
 	ADD_CONST(NTF_OFFLOADED);
@@ -4098,6 +4634,19 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(NTF_STICKY);
 	ADD_CONST(NTF_USE);
 
+	/**
+	 * @typedef
+	 * @name Neighbor states
+	 * @property {number} NUD_DELAY - Delay state
+	 * @property {number} NUD_FAILED - Failed state
+	 * @property {number} NUD_INCOMPLETE - Incomplete state
+	 * @property {number} NUD_NOARP - No ARP
+	 * @property {number} NUD_NONE - No state
+	 * @property {number} NUD_PERMANENT - Permanent state
+	 * @property {number} NUD_PROBE - Probe state
+	 * @property {number} NUD_REACHABLE - Reachable state
+	 * @property {number} NUD_STALE - Stale state
+	 */
 	ADD_CONST(NUD_DELAY);
 	ADD_CONST(NUD_FAILED);
 	ADD_CONST(NUD_INCOMPLETE);
@@ -4108,6 +4657,23 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(NUD_REACHABLE);
 	ADD_CONST(NUD_STALE);
 
+	/**
+	 * @typedef
+	 * @name Address flags
+	 * @property {number} IFA_F_DADFAILED - DAD failed
+	 * @property {number} IFA_F_DEPRECATED - Deprecated
+	 * @property {number} IFA_F_HOMEADDRESS - Home address
+	 * @property {number} IFA_F_MANAGETEMPADDR - Manage temporary address
+	 * @property {number} IFA_F_MCAUTOJOIN - Multicast auto join
+	 * @property {number} IFA_F_NODAD - No DAD
+	 * @property {number} IFA_F_NOPREFIXROUTE - No prefix route
+	 * @property {number} IFA_F_OPTIMISTIC - Optimistic
+	 * @property {number} IFA_F_PERMANENT - Permanent
+	 * @property {number} IFA_F_SECONDARY - Secondary
+	 * @property {number} IFA_F_STABLE_PRIVACY - Stable privacy
+	 * @property {number} IFA_F_TEMPORARY - Temporary
+	 * @property {number} IFA_F_TENTATIVE - Tentative
+	 */
 	ADD_CONST(IFA_F_DADFAILED);
 	ADD_CONST(IFA_F_DEPRECATED);
 	ADD_CONST(IFA_F_HOMEADDRESS);
@@ -4122,6 +4688,16 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(IFA_F_TEMPORARY);
 	ADD_CONST(IFA_F_TENTATIVE);
 
+	/**
+	 * @typedef
+	 * @name FIB rule flags
+	 * @property {number} FIB_RULE_PERMANENT - Permanent rule
+	 * @property {number} FIB_RULE_INVERT - Invert rule
+	 * @property {number} FIB_RULE_UNRESOLVED - Unresolved rule
+	 * @property {number} FIB_RULE_IIF_DETACHED - Interface detached
+	 * @property {number} FIB_RULE_DEV_DETACHED - Device detached
+	 * @property {number} FIB_RULE_OIF_DETACHED - Output interface detached
+	 */
 	ADD_CONST(FIB_RULE_PERMANENT);
 	ADD_CONST(FIB_RULE_INVERT);
 	ADD_CONST(FIB_RULE_UNRESOLVED);
@@ -4129,6 +4705,16 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(FIB_RULE_DEV_DETACHED);
 	ADD_CONST(FIB_RULE_OIF_DETACHED);
 
+	/**
+	 * @typedef
+	 * @name FIB rule actions
+	 * @property {number} FR_ACT_TO_TBL - To table action
+	 * @property {number} FR_ACT_GOTO - Goto action
+	 * @property {number} FR_ACT_NOP - No operation action
+	 * @property {number} FR_ACT_BLACKHOLE - Blackhole action
+	 * @property {number} FR_ACT_UNREACHABLE - Unreachable action
+	 * @property {number} FR_ACT_PROHIBIT - Prohibit action
+	 */
 	ADD_CONST(FR_ACT_TO_TBL);
 	ADD_CONST(FR_ACT_GOTO);
 	ADD_CONST(FR_ACT_NOP);
@@ -4136,16 +4722,49 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(FR_ACT_UNREACHABLE);
 	ADD_CONST(FR_ACT_PROHIBIT);
 
+	/**
+	 * @typedef
+	 * @name Network configuration indices
+	 * @property {number} NETCONFA_IFINDEX_ALL - All interfaces
+	 * @property {number} NETCONFA_IFINDEX_DEFAULT - Default interface
+	 */
 	ADD_CONST(NETCONFA_IFINDEX_ALL);
 	ADD_CONST(NETCONFA_IFINDEX_DEFAULT);
 
+	/**
+	 * @typedef
+	 * @name Bridge flags
+	 * @property {number} BRIDGE_FLAGS_MASTER - Master flag
+	 * @property {number} BRIDGE_FLAGS_SELF - Self flag
+	 */
 	ADD_CONST(BRIDGE_FLAGS_MASTER);
 	ADD_CONST(BRIDGE_FLAGS_SELF);
 
+	/**
+	 * @typedef
+	 * @name Bridge modes
+	 * @property {number} BRIDGE_MODE_VEB - Virtual Ethernet Bridge mode
+	 * @property {number} BRIDGE_MODE_VEPA - Virtual Ethernet Port Aggregator mode
+	 * @property {number} BRIDGE_MODE_UNDEF - Undefined mode
+	 * @property {number} BRIDGE_MODE_UNSPEC - Unspecified mode
+	 * @property {number} BRIDGE_MODE_HAIRPIN - Hairpin mode
+	 */
 	ADD_CONST(BRIDGE_MODE_VEB);
 	ADD_CONST(BRIDGE_MODE_VEPA);
 	ADD_CONST(BRIDGE_MODE_UNDEF);
+	ADD_CONST(BRIDGE_MODE_UNSPEC);
+	ADD_CONST(BRIDGE_MODE_HAIRPIN);
 
+	/**
+	 * @typedef
+	 * @name Bridge VLAN information flags
+	 * @property {number} BRIDGE_VLAN_INFO_MASTER - Master VLAN info
+	 * @property {number} BRIDGE_VLAN_INFO_PVID - Primary VLAN ID
+	 * @property {number} BRIDGE_VLAN_INFO_UNTAGGED - Untagged VLAN
+	 * @property {number} BRIDGE_VLAN_INFO_RANGE_BEGIN - Range begin
+	 * @property {number} BRIDGE_VLAN_INFO_RANGE_END - Range end
+	 * @property {number} BRIDGE_VLAN_INFO_BRENTRY - Bridge entry
+	 */
 	ADD_CONST(BRIDGE_VLAN_INFO_MASTER);
 	ADD_CONST(BRIDGE_VLAN_INFO_PVID);
 	ADD_CONST(BRIDGE_VLAN_INFO_UNTAGGED);
