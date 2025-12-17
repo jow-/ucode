@@ -1,0 +1,73 @@
+A few test vectors from SigGen15_186-2.txt in 186-2rsatestvectors.zip
+
+-- Testcase --
+{%
+	import { pk as pk_mbedtls } from 'crypto_mbedtls';
+	import { test_rsa } from './files/rsa.uc';
+
+	const pubkeyPem = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4LFLmc1hzT25wgdmaIQT
+JPoxdPM85m/9UUOU00F40ppJSTJ2tndyM+fUaj5ovHyn6JnpAdVPbe4HScPkjd9o
+aFhn7irmbfiOtWP22xN6n2sXWhEuDtqDaOiORe/hzhS8YBbVJjlicGavGHLHL2C5
+FhwdI37rNLD4QbPwiW+f4OFrD3Q1LRASksxGSn54YbvrhvbfYVHLJlQXxmxWXtiX
+S9j8mE1d39TrkaPVI0zhtUZ/Ot43X4AuwHKT8SNu+jBovJGxWFUch1xdwKnW+jIb
++UIfCN6skQ41wcKFSe6O7YMwz3BZX/cLlLSZB+J2mKnZEfesBwavyxpKOf6ziwqA
+SQIDAQAB
+-----END PUBLIC KEY-----`;
+
+	const pubkeyLines = split(pubkeyPem, '\n');
+	const pubkeyB64 = join('', splice(splice(pubkeyLines, length(pubkeyLines)-1), 0, 1));
+	const pubkey = b64dec(pubkeyB64);
+
+	const msg1 = '544be0a4044edcdc1240f2182109f826d784ea613486dfd5221d3ba44d1525a934c13c5a81f885f3955da8d168e35d1b909121a89f832d1db232a85647f51c084fc727a4854a737efd0ce72e00091f3617721ae666ad337d3b9d5391e72364b1cde50948b84e8cc472d618f8928328bf95af3fe3300dda3de5e7a21dd5a9e7ec';
+	const s1 = 'd0d03ccb3b30b7c9c4d6eeee2ec26d069246e019fb8fa2f3a9b72c9bbe231d93ce053df805a045e2ef6bd8d08bfb0c36922e5a6f10b947b2607f596b6cbd3c9eefef56f5396805e8b28b1ca182c78c0b12b9796aa856af69c35504f8acc7afa74bc0f77a1d61da94944057a9ee72d2f0a96cbaa2f64676f5318b71e56f519d0da1ce8f42db0ebe5045fcc726e39fb0032f2287918f9190f3fb3d4de542030441f6736c6205a2bcd2450eb411085311c7320baa4268fd2fd8bcc8ebfddbb60740cff0b3b00f618777ebcfb3468f309d923c957c8170727a5458ac2c9070f93cfc37d31cf9f1a35d0cc3abf25af8dc9e1590ce59ab39d01cf0c154ab8d0635c5e9';
+
+	const msg256 = '6504921a97cd57aa8f3863dc32e1f2d0b57aff63106e59f6afc3f9726b459388bae16b3e224f6aa7f4f471f13606eda6e1f1ac2b4df9ef8de921c07c2f4c8598d7a3d6ec4b368cb85ce61a74338221118a303e821c0f277b591af6795f50c40226127a2efacce4662fd7076c109eb59b18005e7165f6294a6976436ee397774e';
+	const s256 = '335ffadc0b1b8bd2b1eb670dd246e76dcccdc955a1687a15f74aa3e1596ebd43e607c640525f89dda95809cfd065f1be4e4a249477d24f400d4d4c9438a0af95b26b28b416e42aa950e2a52851b52132048f1b1ce944322fc99c1aabb49b7fae4c2f0fef674b50adee3bbb5c6c33822b608e4b9577275ca20c710af9fc41b1c01d9c0ff6f0d8324dc08e1a76e232d8feaa06c73bbf64053bea35f1c528b2722764822ef1ff06246e75a9a22a10da4ea84fc2441bea24b35506f8447fcf69093c5d21ab0305cce2c7ea9ffac357c664b491fc55f2919ec490c38accbab378c252ac2df3845acff575ec7524cd2f586cca1497c74f24b299d6d6254c8cdb1d227d';
+
+	const msg384 = 'db2e9fbefd9832d29e6015b976734ff15a5c1177a9153b38e61d22c8a6ca9056ade10de054645da32eab4ad6eab6a4977bc28526771ad951bd301e2f5bec6911af44aab6cc0d30be1e1170615261026170edec3d4a5123a81af24f39674acf642880fda92c3cb30bb9b90ec4741c71378004cd26ea622025458b3c4f918bca37';
+	const s384 = '211398c068e60ae49ee2b8b7cd96171373f4664cf45b62415d9bcf119184c03274aec2b3f04c598043d1d8642d53edad68d0e0bc33fdc65ed69334ab52303c839cbbaf0586508007dcf4ad5d297f568039dc16a1e6c08108a0050d5dcf47523e4868e4be72f20d789b06bcb92484efa2fcd903ae280f42a509dadbe62dce1c6d3aef6e4ff78a745c8500ff0572748abb1a220495c1c103a72c940206347c16ae6082dd1e4624525aa8ed8f118d09be2b8535d042b29ea3e2c6ab3c990b4b59501c3bb9d602c7813a55f4efc129f4dfd0fabe0cf6b8c8c1d9126c5440cbec5405722927389b3ca80a0872711388b5b099cce6effedfbd9befc9646ea8a258fdd0';
+
+	const msg512 = 'e4dba4692a6628b501f776fec7fe973d655154268f669bfd47c624aba3be5311d158619c588ab71aa0ac9accb52f0dbc488df350f77c7520ce67a3050d1e5e722bcd75081c2b0e64d0f3483cfc981eaa1c358fc7b9c2fb7ce78ed19513e96717fb2129d4feb1f63c96b4c77623a092b0ea306eb35da2f7ba9d23f4843d8837a8';
+	const s512 = 'dfe58c84ec3ee5f11b265e8e7d99b416d8e7b166a38d2b0f9027be73887fad28947994a2bc227dafcb272d2d410af31afe16b96f51c9ddf62b417d03e2af63ea4a58d41e4649712177c85788d837fadd223c4ea7f635237a93b181fe1c0fd3bf2d8a7997cc9bb6ca099a0a36c4b9e91aa780a3d5edbc283cc316a153a101fc8c33d0035e6c1e1aca731ea765a1e5fe1406ef7ba8bb8f335b8d2e6ce0b9fee2f5416e4536b280fdc40860c17e9da6bb361128ee53754bf68f54c2878a4ac4d349703066a6fb96220e15285fcb41b398b4567c0c167762eb6ceb4f0537c7fb7103487c78a98093209771fc4f4a9821cc8eb11f15a0e35c54f6d5d31d8e8646c229';
+
+	// Test signature (from 04_keygen) against wrong key.
+	const s256_fail = '3f602377b1702ba2f8e67f39c5856341512ef0ad4fb9091017c5561b1041d9b6b351218ec457700a0a51b0829a34bb027126d95a2af373313d6026d840d98300f1a1d08c9343403a0e8d765fce97743dfbbaa8c57285e3d1d1d06eb9e7da16a9196908dc87cf1c615535cf7ae7c9c98fced8f1a4a188f1ec1490785076f923ad2f58f655c08de1083cfb6dea21f01cb822b7fd42ba57405a771b487b8aa50db6cd08fc00830c2e5833c0dd471f8280f9a0582870af365848e3d8f42145883c28cea10f401a7e008c497f73595ba8d6787bd21f89b7995a290b31014df281928fbbea4a73bb2989234167d3487ccb919f21993577006519a88a6208b4f70d91b2';
+
+	test_rsa(pk_mbedtls(), pubkey, 'SHA1', msg1, s1);
+	test_rsa(pk_mbedtls(), pubkey, 'SHA256', msg256, s256);
+	test_rsa(pk_mbedtls(), pubkey, 'SHA384', msg384, s384);
+	test_rsa(pk_mbedtls(), pubkey, 'SHA512', msg512, s512);
+	test_rsa(pk_mbedtls(), pubkey, 'SHA256', hexenc('Message'), s256_fail);
+%}
+-- End --
+
+-- Expect stdout --
+true
+true
+true
+true
+exception
+-- End --
+
+-- Expect stderr --
+-- End --
+
+-- File rsa.uc --
+export
+function test_rsa(pk, pubkey, mdAlg, msg, s)
+{
+	const data = hexdec(msg);
+	const signature = hexdec(s);
+	pk.set_public_key(pubkey);
+	const pkey = pk.get_public_key();
+	assert(pkey == pubkey);
+	let verify = 'undefined';
+	try {
+		verify = pk.verify(mdAlg, data, signature);
+	} catch {
+		verify = 'exception'
+	}
+	print(verify, '\n');
+};
+-- End --
