@@ -2683,8 +2683,33 @@ uc_loadfile(uc_vm_t *vm, size_t nargs);
 static uc_value_t *
 uc_callfunc(uc_vm_t *vm, size_t nargs);
 
+static uc_value_t *
+uc_require_imports(uc_vm_t *vm, uc_value_t *closure)
+{
+	uc_function_t *fn = ((uc_closure_t *)closure)->function;
+	uc_source_t *src = uc_program_function_source(fn);
+	uc_value_t *ns = ucv_object_new(vm);
+	size_t i = 0;
+
+	uc_vector_foreach(&src->exports, sym) {
+		if (i >= fn->program->exports.count)
+			break;
+
+		if (ucv_type(*sym) == UC_STRING)
+			ucv_object_add(ns, ucv_string_get(*sym),
+				ucv_get(&fn->program->exports.entries[i++]->header));
+		else if (ucv_type(*sym) == UC_NULL)
+			ucv_object_add(ns, "default",
+				ucv_get(&fn->program->exports.entries[i++]->header));
+	}
+
+	ucv_set_constant(ns, true);
+
+	return ns;
+}
+
 static bool
-uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **res, bool raw_mode)
+uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **res, bool raw_mode, bool module_mode)
 {
 	uc_parse_config_t config = *vm->config, *prev_config = vm->config;
 	uc_value_t *closure;
@@ -2694,6 +2719,7 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 		return false;
 
 	config.raw_mode = raw_mode;
+	config.compile_module = module_mode;
 	vm->config = &config;
 
 	uc_vm_stack_push(vm, ucv_string_new(path));
@@ -2709,9 +2735,16 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 
 		*res = uc_callfunc(vm, 3);
 
-		uc_vm_stack_pop(vm);
-		uc_vm_stack_pop(vm);
-		uc_vm_stack_pop(vm);
+		if (vm->exception.type != EXCEPTION_EXIT) {
+			if (module_mode) {
+				ucv_put(*res);
+				*res = uc_require_imports(vm, closure);
+			}
+
+			uc_vm_stack_pop(vm);
+			uc_vm_stack_pop(vm);
+			uc_vm_stack_pop(vm);
+		}
 	}
 
 	vm->config = prev_config;
@@ -2720,7 +2753,8 @@ uc_require_ucode(uc_vm_t *vm, const char *path, uc_value_t *scope, uc_value_t **
 }
 
 static bool
-uc_require_path(uc_vm_t *vm, const char *path_template, const char *name, uc_value_t **res, bool so_only)
+uc_require_path(uc_vm_t *vm, const char *path_template, const char *name,
+                uc_value_t **res, bool module_mode)
 {
 	uc_stringbuf_t *buf = xprintbuf_new();
 	const char *p, *q, *last;
@@ -2761,8 +2795,8 @@ uc_require_path(uc_vm_t *vm, const char *path_template, const char *name, uc_val
 
 	if (!strcmp(p + 1, ".so"))
 		rv = uc_require_so(vm, buf->buf, res);
-	else if (!strcmp(p + 1, ".uc") && !so_only)
-		rv = uc_require_ucode(vm, buf->buf, NULL, res, true);
+	else if (!strcmp(p + 1, ".uc"))
+		rv = uc_require_ucode(vm, buf->buf, NULL, res, true, module_mode);
 
 	if (rv)
 		ucv_object_add(modtable, name, ucv_get(*res));
@@ -2774,7 +2808,7 @@ out:
 }
 
 uc_value_t *
-uc_require_library(uc_vm_t *vm, uc_value_t *nameval, bool so_only)
+uc_require_library(uc_vm_t *vm, uc_value_t *nameval, bool module_mode)
 {
 	uc_value_t *search, *se, *res;
 	size_t arridx, arrlen;
@@ -2799,7 +2833,7 @@ uc_require_library(uc_vm_t *vm, uc_value_t *nameval, bool so_only)
 		if (ucv_type(se) != UC_STRING)
 			continue;
 
-		if (uc_require_path(vm, ucv_string_get(se), name, &res, so_only))
+		if (uc_require_path(vm, ucv_string_get(se), name, &res, module_mode))
 			return res;
 	}
 
@@ -3720,7 +3754,7 @@ uc_include_common(uc_vm_t *vm, size_t nargs, bool raw_mode)
 		sc = ucv_get(uc_vm_scope_get(vm));
 	}
 
-	if (uc_require_ucode(vm, p, sc, &rv, raw_mode))
+	if (uc_require_ucode(vm, p, sc, &rv, raw_mode, false))
 		ucv_put(rv);
 
 	ucv_put(sc);
