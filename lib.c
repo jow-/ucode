@@ -3464,7 +3464,7 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 		if (eof && !trail) {
 			ucv_put(rbuf);
 
-			/* Didn't parse a complete object yet, possibly a non-delimitted atomic value
+			/* Didn't parse a complete object yet, possibly a non-delimited atomic value
 			   such as `null`, `true` etc. - nudge parser by sending final zero byte.
 			   See json-c issue #681 <https://github.com/json-c/json-c/issues/681> */
 			if (json_tokener_get_error(tok) == json_tokener_continue)
@@ -3764,7 +3764,7 @@ uc_include_common(uc_vm_t *vm, size_t nargs, bool raw_mode)
  * // Execute the "untrusted.ucode" in a sandboxed scope and make the "foo" and
  * // "bar" variables as well as the "print" function available to it.
  * // By assigning an empty prototype object to the scope, included code has no
- * // access to other global values anymore.
+ * // access to other global values any more.
  * include("./untrusted.uc", proto({
  *   foo: true,
  *   bar: 123,
@@ -4191,7 +4191,7 @@ uc_sleep(uc_vm_t *vm, size_t nargs)
 
 /**
  * Raise an exception with the given message parameter when the value in `cond`
- * is not truish.
+ * is not truthy.
  *
  * When `message` is omitted, the default value is `Assertion failed`.
  *
@@ -5131,7 +5131,7 @@ uc_timegm(uc_vm_t *vm, size_t nargs)
  * Reads the current second and microsecond value of the system clock.
  *
  * By default, the realtime clock is queried which might skew forwards or
- * backwards due to NTP changes, system sleep modes etc. If a truish value is
+ * backwards due to NTP changes, system sleep modes etc. If a truthy value is
  * passed as argument, the monotonic system clock is queried instead, which will
  * return the monotonically increasing time since some arbitrary point in the
  * past (usually the system boot time).
