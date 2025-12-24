@@ -908,9 +908,28 @@ static const uc_nl_nested_spec_t nl80211_wiphy_radio_nla = {
 	}
 };
 
+
+static const uc_nl_nested_spec_t nl80211_mlo_link_nla = {
+	.headsize = 0,
+	.nattrs = 11,
+	.attrs = {
+		{ NL80211_ATTR_MLO_LINK_ID, "link_id", DT_U8, 0, NULL },
+		{ NL80211_ATTR_MAC, "mac", DT_LLADDR, 0, NULL },
+		{ NL80211_ATTR_WIPHY_FREQ, "wiphy_freq", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CHANNEL_WIDTH, "channel_width", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CENTER_FREQ1, "center_freq1", DT_U32, 0, NULL },
+		{ NL80211_ATTR_CENTER_FREQ2, "center_freq2", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_TX_POWER_LEVEL, "wiphy_tx_power_level", DT_U32, 0, NULL },
+		{ NL80211_ATTR_WIPHY_CHANNEL_TYPE, "wiphy_channel_type", DT_U32, 0, NULL },
+		{ NL80211_ATTR_MLO_LINK_DISABLED, "mlo_link_disabled", DT_FLAG, 0, NULL },
+		{ NL80211_ATTR_MLO_TTLM_DLINK, "mlo_ttlm_dlink", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_MLO_TTLM_ULINK, "mlo_ttlm_ulink", DT_STRING, DF_BINARY, NULL },
+	}
+};
+
 static const uc_nl_nested_spec_t nl80211_msg = {
 	.headsize = 0,
-	.nattrs = 130,
+	.nattrs = 131,
 	.attrs = {
 		{ NL80211_ATTR_4ADDR, "4addr", DT_U8, 0, NULL },
 		{ NL80211_ATTR_AIRTIME_WEIGHT, "airtime_weight", DT_U16, 0, NULL },
@@ -1039,6 +1058,7 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_SUPPORTED_IFTYPES, "supported_iftypes", DT_NESTED, 0, &nl80211_ifcomb_limit_types_nla },
 		{ NL80211_ATTR_SOFTWARE_IFTYPES, "software_iftypes", DT_NESTED, 0, &nl80211_ifcomb_limit_types_nla },
 		{ NL80211_ATTR_MAX_AP_ASSOC_STA, "max_ap_assoc", DT_U16, 0, NULL },
+		{ NL80211_ATTR_MLO_LINKS, "mlo_links", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &nl80211_mlo_link_nla },
 		{ NL80211_ATTR_SURVEY_INFO, "survey_info", DT_NESTED, 0, &nl80211_survey_info_nla },
 		{ NL80211_ATTR_WIPHY_RADIOS, "radios", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &nl80211_wiphy_radio_nla },
 		{ NL80211_ATTR_VIF_RADIO_MASK, "vif_radio_mask", DT_U32, 0, NULL },
