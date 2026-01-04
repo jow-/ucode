@@ -2310,6 +2310,9 @@ uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
 
 	conn_get(vm, &c);
 
+#ifdef HAVE_UBUS_FLUSH_REQUESTS
+	ubus_flush_requests(&c->ctx);
+#endif
 	ubus_shutdown(&c->ctx);
 	c->ctx.sock.fd = -1;
 	uc_ubus_put_res(&c->res);
