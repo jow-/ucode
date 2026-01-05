@@ -198,6 +198,7 @@ if(UBUS_SUPPORT)
   try_compile(HAVE_NEW_UBUS_STATUS_CODES
     ${CMAKE_BINARY_DIR}
     "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/test.c")
+  check_function_exists(ubus_flush_requests HAVE_UBUS_FLUSH_REQUESTS)
   check_function_exists(uloop_timeout_remaining64 REMAINING64_FUNCTION_EXISTS)
   check_function_exists(ubus_channel_connect HAVE_CHANNEL_SUPPORT)
   file(WRITE "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/test2.c" "
@@ -215,6 +216,9 @@ if(UBUS_SUPPORT)
   endif()
   if(HAVE_NEW_UBUS_STATUS_CODES)
     add_definitions(-DHAVE_NEW_UBUS_STATUS_CODES)
+  endif()
+  if(HAVE_UBUS_FLUSH_REQUESTS)
+    add_definitions(-DHAVE_UBUS_FLUSH_REQUESTS)
   endif()
   if (HAVE_UBUS_NEW_OBJ_CB)
     target_compile_definitions(ubus_lib PUBLIC HAVE_UBUS_NEW_OBJ_CB)
