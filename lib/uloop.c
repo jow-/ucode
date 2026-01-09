@@ -791,7 +791,7 @@ get_fd(uc_vm_t *vm, uc_value_t *val)
  *
  * @function module:uloop#handle
  *
- * @param {number|module:fs.file|module:fs.proc|module:socket.socket} handle
+ * @param {number|module:fs.file|module:fs.proc|module:socket.socket|module:io.handle} handle
  * The file handle (descriptor number, file or socket instance).
  *
  * @param {Function} callback
