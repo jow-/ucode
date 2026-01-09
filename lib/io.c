@@ -50,9 +50,11 @@
 
 #include <stdio.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <termios.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <limits.h>
@@ -158,6 +160,290 @@ uc_io_error(uc_vm_t *vm, size_t nargs)
 	uc_vm_registry_set(vm, "io.last_error", ucv_int64_new(0));
 
 	return ucv_string_new(strerror(last_error));
+}
+
+/**
+ * Gets the name of the pseudo-terminal slave.
+ *
+ * Returns the name of the pseudo-terminal slave device associated with
+ * the master file descriptor.
+ *
+ * Returns a string containing the slave device name.
+ *
+ * Returns `null` if an error occurred or if the descriptor is not a
+ * pseudo-terminal master.
+ *
+ * @function module:io.handle#ptsname
+ *
+ * @returns {?string}
+ *
+ * @example
+ * const master = io.open('/dev/ptmx', O_RDWR);
+ * const slave_name = master.ptsname();
+ * print(slave_name, "\n");
+ */
+static uc_value_t *
+uc_io_ptsname(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle;
+	char *name;
+	int fd;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd < 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	name = ptsname(fd);
+
+	if (!name)
+		err_return(errno);
+
+	return ucv_string_new(name);
+}
+
+/**
+ * Gets terminal attributes.
+ *
+ * Retrieves the terminal attributes for the file descriptor.
+ *
+ * Returns an object containing terminal attributes (iflag, oflag, cflag, lflag,
+ * ispeed, ospeed, and cc array).
+ *
+ * Returns `null` if an error occurred or if the descriptor is not a terminal.
+ *
+ * @function module:io.handle#tcgetattr
+ *
+ * @returns {?object}
+ *
+ * @example
+ * const handle = io.open('/dev/tty', O_RDWR);
+ * const attrs = handle.tcgetattr();
+ * if (attrs)
+ *     print("Input flags: ", attrs.iflag, "\n");
+ */
+static uc_value_t *
+uc_io_tcgetattr(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle;
+	struct termios tios;
+	uc_value_t *attrs;
+	int fd;
+	int i;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd < 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	if (tcgetattr(fd, &tios) < 0)
+		err_return(errno);
+
+	attrs = ucv_object_new(vm);
+
+	ucv_object_add(attrs, "iflag", ucv_uint64_new(tios.c_iflag));
+	ucv_object_add(attrs, "oflag", ucv_uint64_new(tios.c_oflag));
+	ucv_object_add(attrs, "cflag", ucv_uint64_new(tios.c_cflag));
+	ucv_object_add(attrs, "lflag", ucv_uint64_new(tios.c_lflag));
+	ucv_object_add(attrs, "ispeed", ucv_uint64_new(cfgetispeed(&tios)));
+	ucv_object_add(attrs, "ospeed", ucv_uint64_new(cfgetospeed(&tios)));
+
+	uc_value_t *cc_array = ucv_array_new(vm);
+	for (i = 0; i < NCCS; i++) {
+		ucv_array_push(cc_array, ucv_int64_new((unsigned char)tios.c_cc[i]));
+	}
+	ucv_object_add(attrs, "cc", cc_array);
+
+	return attrs;
+}
+
+/**
+ * Sets terminal attributes.
+ *
+ * Sets the terminal attributes for the file descriptor.
+ *
+ * The attrs parameter should be an object with properties:
+ * - iflag: input flags
+ * - oflag: output flags
+ * - cflag: control flags
+ * - lflag: local flags
+ * - ispeed: input speed
+ * - ospeed: output speed
+ * - cc: array of control characters (optional)
+ *
+ * Returns `true` on success.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#tcsetattr
+ *
+ * @param {object} attrs
+ * The terminal attributes to set.
+ *
+ * @param {number} [when=0]
+ * When to apply the changes (TCSANOW, TCSADRAIN, TCSAFLUSH).
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const handle = io.open('/dev/tty', O_RDWR);
+ * const attrs = handle.tcgetattr();
+ * attrs.lflag &= ~0x0000008; // Disable ECHO
+ * handle.tcsetattr(attrs, TCSANOW);
+ */
+static uc_value_t *
+uc_io_tcsetattr(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *attrs_arg = uc_fn_arg(0);
+	uc_value_t *when_arg = uc_fn_arg(1);
+	uc_io_handle_t *handle;
+	struct termios tios;
+	uc_value_t *cc_array, *cc_val;
+	int when = TCSANOW;
+	int fd;
+	size_t i, cc_len;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd < 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	if (!attrs_arg || ucv_type(attrs_arg) != UC_OBJECT)
+		err_return(EINVAL);
+
+	if (when_arg && ucv_type(when_arg) == UC_INTEGER)
+		when = (int)ucv_int64_get(when_arg);
+
+	/* Update flags from the attrs object */
+	uc_value_t *iflag = ucv_property_get(attrs_arg, "iflag");
+	if (iflag && ucv_type(iflag) == UC_INTEGER)
+		tios.c_iflag = (tcflag_t)ucv_uint64_get(iflag);
+
+	uc_value_t *oflag = ucv_property_get(attrs_arg, "oflag");
+	if (oflag && ucv_type(oflag) == UC_INTEGER)
+		tios.c_oflag = (tcflag_t)ucv_uint64_get(oflag);
+
+	uc_value_t *cflag = ucv_property_get(attrs_arg, "cflag");
+	if (cflag && ucv_type(cflag) == UC_INTEGER)
+		tios.c_cflag = (tcflag_t)ucv_uint64_get(cflag);
+
+	uc_value_t *lflag = ucv_property_get(attrs_arg, "lflag");
+	if (lflag && ucv_type(lflag) == UC_INTEGER)
+		tios.c_lflag = (tcflag_t)ucv_uint64_get(lflag);
+
+	uc_value_t *ispeed = ucv_property_get(attrs_arg, "ispeed");
+	if (ispeed && ucv_type(ispeed) == UC_INTEGER)
+		cfsetispeed(&tios, (speed_t)ucv_uint64_get(ispeed));
+
+	uc_value_t *ospeed = ucv_property_get(attrs_arg, "ospeed");
+	if (ospeed && ucv_type(ospeed) == UC_INTEGER)
+		cfsetospeed(&tios, (speed_t)ucv_uint64_get(ospeed));
+
+	/* Update control characters */
+	cc_array = ucv_property_get(attrs_arg, "cc");
+	if (cc_array && ucv_type(cc_array) == UC_ARRAY) {
+		cc_len = ucv_array_length(cc_array);
+		for (i = 0; i < cc_len && i < NCCS; i++) {
+			cc_val = ucv_array_get(cc_array, i);
+			if (cc_val && ucv_type(cc_val) == UC_INTEGER) {
+				tios.c_cc[i] = (cc_t)ucv_uint64_get(cc_val);
+			}
+		}
+	}
+
+	if (tcsetattr(fd, when, &tios) < 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Grants access to a pseudo-terminal slave device.
+ *
+ * Allows the owner of the pseudo-terminal master device to grant the
+ * appropriate permissions on the corresponding slave device so that it
+ * may be opened.
+ *
+ * This function is typically called before opening the slave device.
+ *
+ * Returns `true` on success.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#grantpt
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const master = io.open('/dev/ptmx', O_RDWR);
+ * if (master.grantpt()) {
+ *     print("Granted access to slave device\n");
+ * }
+ */
+static uc_value_t *
+uc_io_grantpt(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle;
+	int fd;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd < 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	if (grantpt(fd) < 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Unlocks a pseudo-terminal slave device.
+ *
+ * Unlocks the pseudo-terminal slave device associated with the master device
+ * referred to by the file descriptor. This function is typically called after
+ * grantpt() and before opening the slave device.
+ *
+ * Returns `true` on success.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:io.handle#unlockpt
+ *
+ * @returns {?boolean}
+ *
+ * @example
+ * const master = io.open('/dev/ptmx', O_RDWR);
+ * master.grantpt();
+ * if (master.unlockpt()) {
+ *     print("Unlocked slave device\n");
+ * }
+ */
+static uc_value_t *
+uc_io_unlockpt(uc_vm_t *vm, size_t nargs)
+{
+	uc_io_handle_t *handle;
+	int fd;
+
+	handle = uc_fn_thisval("io.handle");
+
+	if (!handle || handle->fd < 0)
+		err_return(EBADF);
+
+	fd = handle->fd;
+
+	if (unlockpt(fd) < 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
 }
 
 /**
@@ -1076,6 +1362,11 @@ static const uc_function_list_t io_handle_fns[] = {
 	{ "isatty",		uc_io_isatty },
 	{ "close",		uc_io_close },
 	{ "error",		uc_io_error },
+	{ "ptsname",	uc_io_ptsname },
+	{ "tcgetattr",  uc_io_tcgetattr },
+	{ "tcsetattr",  uc_io_tcsetattr },
+	{ "grantpt",	uc_io_grantpt },
+	{ "unlockpt",	uc_io_unlockpt },
 };
 
 static const uc_function_list_t io_fns[] = {
@@ -1129,6 +1420,10 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(F_SETOWN);
 
 	ADD_CONST(FD_CLOEXEC);
+
+	ADD_CONST(TCSANOW);
+	ADD_CONST(TCSADRAIN);
+	ADD_CONST(TCSAFLUSH);
 
 #ifdef HAS_IOCTL
 	ADD_CONST(IOC_DIR_NONE);
