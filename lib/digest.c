@@ -196,11 +196,11 @@ uc_digest_sha384(uc_vm_t *vm, size_t nargs)
 }
 
 /**
- * Calculates the SHA384 hash of string and returns that hash.
+ * Calculates the SHA512 hash of string and returns that hash.
  *
  * Returns `null` if a non-string argument is given.
  *
- * @function module:digest#sha384
+ * @function module:digest#sha512
  *
  * @param {string} str
  * The string to hash.
