@@ -39,7 +39,16 @@
  * for inflate(). If the memory is available, buffers sizes on the order of
  * 128K or 256K bytes should be used.
  */
-#define CHUNK 16384
+#ifndef UC_ZLIB_CHUNK
+#define UC_ZLIB_CHUNK 16384
+#endif
+
+#ifdef CHUNK
+#undef CHUNK
+#endif
+#define CHUNK (UC_ZLIB_CHUNK)
+
+static const __attribute__((unused)) unsigned int _chunk_check = CHUNK;
 
 static uc_resource_type_t *zstrmd_type, *zstrmi_type;
 
