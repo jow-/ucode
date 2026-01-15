@@ -2,16 +2,52 @@ cmake_minimum_required(VERSION 3.13)
 
 project(ucode C)
 
+add_library(uc_defines INTERFACE)
+
 include(CheckFunctionExists)
 include(CheckSymbolExists)
 include(CheckCSourceCompiles)
 include(GNUInstallDirs)
 
-add_definitions(-Os -Wall -Werror --std=gnu99 -ffunction-sections -fwrapv -D_GNU_SOURCE)
+option(BUILD_OPTIMIZE_SIZE "Optimize for size" ON)
+if(BUILD_OPTIMIZE_SIZE)
+  add_compile_options(
+    -Os
+  )
+endif()
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS ON)
+
+add_compile_definitions( _GNU_SOURCE )
+add_compile_options(
+  -Wall
+  -Werror
+  -Wmissing-declarations
+)
 
 if(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
-	add_definitions(-Wextra -Werror=implicit-function-declaration)
-	add_definitions(-Wformat -Werror=format-security -Werror=format-nonliteral)
+  add_compile_options(
+    -Wextra
+    -Wformat
+    -Werror=implicit-function-declaration
+    -Werror=format-security
+    -Werror=format-nonliteral
+  )
+endif()
+
+add_compile_options(
+  -Wno-unused-parameter
+  -Wno-error=unused-variable
+)
+
+# signed overflow semantics are defined AND expected
+add_compile_options(-fwrapv)
+
+option(BUILD_FUNCTION_SECTIONS "Compile with -ffunction-sections" ON)
+if(BUILD_FUNCTION_SECTIONS)
+  add_compile_options(-ffunction-sections)
 endif()
 
 check_c_source_compiles("
@@ -24,17 +60,14 @@ int main() {
 " DEFAULT_FORTIFY_SOURCE)
 
 if(NOT DEFAULT_FORTIFY_SOURCE)
-	add_definitions(-D_FORTIFY_SOURCE=2)
+  add_compile_definitions( FORTIFY_SOURCE=2 )
 endif()
-
-add_definitions(-Wmissing-declarations -Wno-error=unused-variable -Wno-unused-parameter)
 
 include_directories(include)
 
 option(COMPILE_SUPPORT "Support compilation from source" ON)
-
 if(NOT COMPILE_SUPPORT)
-  add_definitions(-DNO_COMPILE)
+  target_compile_definitions(uc_defines INTERFACE NO_COMPILE)
 endif()
 
 find_library(libuci NAMES uci)
@@ -91,19 +124,36 @@ option(DIGEST_SUPPORT_EXTENDED "Enable additional hash algorithms" ${DEFAULT_DIG
 
 set(LIB_SEARCH_PATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/ucode/*.so:${CMAKE_INSTALL_PREFIX}/share/ucode/*.uc:./*.so:./*.uc" CACHE STRING "Default library search path")
 string(REPLACE ":" "\", \"" LIB_SEARCH_DEFINE "${LIB_SEARCH_PATH}")
-add_definitions(-DLIB_SEARCH_PATH="${LIB_SEARCH_DEFINE}")
+target_compile_definitions(uc_defines INTERFACE LIB_SEARCH_PATH="${LIB_SEARCH_DEFINE}")
 
 if(APPLE)
   set(UCODE_MODULE_LINK_OPTIONS "LINKER:-undefined,dynamic_lookup")
-  add_definitions(-DBIND_8_COMPAT)
+  # TODO: localize target(s) and switch to target_compile_definitions()
+  add_compile_definitions( BIND_8_COMPAT )
+endif()
+
+if(APPLE)
+  set(DEFAULT_LINK_GC_SECTIONS OFF)
 else()
-  set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "-Wl,--gc-sections")
+  set(DEFAULT_LINK_GC_SECTIONS ON)
+endif()
+option(LINK_GC_SECTIONS "Link with --gc-sections" ${DEFAULT_LINK_GC_SECTIONS})
+if(LINK_GC_SECTIONS)
+  if(UNIT_TESTING)
+    message(WARNING "Unit testing **MAY** conflict with --gc-sections")
+  else()
+    add_link_options("LINKER:--gc-sections")
+  endif()
 endif()
 
 if(DEBUG)
-  add_definitions(-DDEBUG -g3 -Og)
+  add_compile_definitions( DEBUG )
+  add_compile_options(
+    -Og
+    -g3
+  )
 else()
-  add_definitions(-DNDEBUG)
+  add_compile_definitions( NDEBUG )
 endif()
 
 include(FindPkgConfig)
@@ -114,11 +164,11 @@ set(UCODE_SOURCES lexer.c lib.c vm.c chunk.c vallist.c compiler.c source.c types
 add_library(libucode SHARED ${UCODE_SOURCES})
 set(SOVERSION 0 CACHE STRING "Override ucode library version")
 set_target_properties(libucode PROPERTIES OUTPUT_NAME ucode SOVERSION ${SOVERSION})
-target_link_libraries(libucode ${JSONC_LINK_LIBRARIES})
+target_link_libraries(libucode uc_defines ${JSONC_LINK_LIBRARIES})
 
 set(CLI_SOURCES main.c)
 add_executable(ucode ${CLI_SOURCES})
-target_link_libraries(ucode libucode ${JSONC_LINK_LIBRARIES})
+target_link_libraries(ucode uc_defines libucode)
 
 check_function_exists(dlopen DLOPEN_FUNCTION_EXISTS)
 if(NOT DLOPEN_FUNCTION_EXISTS)
@@ -134,15 +184,15 @@ list(APPEND CMAKE_REQUIRED_INCLUDES ${JSONC_INCLUDE_DIRS})
 list(APPEND CMAKE_REQUIRED_LIBRARIES ${JSONC_LINK_LIBRARIES})
 check_symbol_exists(json_tokener_get_parse_end "json-c/json.h" HAVE_PARSE_END)
 if(HAVE_PARSE_END)
-  add_definitions(-DHAVE_PARSE_END)
+  target_compile_definitions(uc_defines INTERFACE HAVE_PARSE_END)
 endif()
 check_symbol_exists(json_object_new_array_ext "json-c/json.h" HAVE_ARRAY_EXT)
 if(HAVE_ARRAY_EXT)
-  add_definitions(-DHAVE_ARRAY_EXT)
+  target_compile_definitions(uc_defines INTERFACE HAVE_ARRAY_EXT)
 endif()
 check_symbol_exists(json_object_new_uint64 "json-c/json.h" HAVE_JSON_UINT64)
 if(HAVE_JSON_UINT64)
-  add_definitions(-DHAVE_JSON_UINT64)
+  target_compile_definitions(uc_defines INTERFACE HAVE_JSON_UINT64)
 endif()
 
 set(LIBRARIES "")
@@ -156,7 +206,7 @@ if(DEBUG_SUPPORT)
     find_path(uloop_include_dir NAMES libubox/uloop.h)
     include_directories(${uloop_include_dir})
     target_link_libraries(debug_lib ${libubox} ${libucode})
-    set_target_properties(debug_lib PROPERTIES COMPILE_DEFINITIONS HAVE_ULOOP)
+    target_compile_definitions(debug_lib PRIVATE HAVE_ULOOP)
   endif()
 endif()
 
@@ -212,19 +262,19 @@ if(UBUS_SUPPORT)
     ${CMAKE_BINARY_DIR}
     "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/test2.c")
   if(REMAINING64_FUNCTION_EXISTS)
-    target_compile_definitions(ubus_lib PUBLIC HAVE_ULOOP_TIMEOUT_REMAINING64)
+    target_compile_definitions(ubus_lib PRIVATE HAVE_ULOOP_TIMEOUT_REMAINING64)
   endif()
   if(HAVE_CHANNEL_SUPPORT)
-    target_compile_definitions(ubus_lib PUBLIC HAVE_UBUS_CHANNEL_SUPPORT)
+    target_compile_definitions(ubus_lib PRIVATE HAVE_UBUS_CHANNEL_SUPPORT)
   endif()
   if(HAVE_NEW_UBUS_STATUS_CODES)
-    add_definitions(-DHAVE_NEW_UBUS_STATUS_CODES)
+    target_compile_definitions(ubus_lib PRIVATE HAVE_NEW_UBUS_STATUS_CODES)
   endif()
   if(HAVE_UBUS_FLUSH_REQUESTS)
-    add_definitions(-DHAVE_UBUS_FLUSH_REQUESTS)
+    target_compile_definitions(ubus_lib PRIVATE HAVE_UBUS_FLUSH_REQUESTS)
   endif()
   if (HAVE_UBUS_NEW_OBJ_CB)
-    target_compile_definitions(ubus_lib PUBLIC HAVE_UBUS_NEW_OBJ_CB)
+    target_compile_definitions(ubus_lib PRIVATE HAVE_UBUS_NEW_OBJ_CB)
   endif()
 endif()
 
@@ -236,7 +286,7 @@ if(UCI_SUPPORT)
   list(APPEND CMAKE_REQUIRED_LIBRARIES ${libubox} ${libuci})
   check_function_exists(uci_set_conf2dir HAVE_UCI_CONF2DIR)
   if (HAVE_UCI_CONF2DIR)
-    target_compile_definitions(uci_lib PUBLIC HAVE_UCI_CONF2DIR)
+    target_compile_definitions(uci_lib PRIVATE HAVE_UCI_CONF2DIR)
   endif()
   set_target_properties(uci_lib PROPERTIES OUTPUT_NAME uci PREFIX "")
   target_link_options(uci_lib PRIVATE ${UCODE_MODULE_LINK_OPTIONS})
@@ -302,13 +352,13 @@ if(ULOOP_SUPPORT)
   check_function_exists(uloop_interval_set INTERVAL_FUNCTION_EXISTS)
   check_function_exists(uloop_signal_add SIGNAL_FUNCTION_EXISTS)
   if(REMAINING64_FUNCTION_EXISTS)
-    target_compile_definitions(uloop_lib PUBLIC HAVE_ULOOP_TIMEOUT_REMAINING64)
+    target_compile_definitions(uloop_lib PRIVATE HAVE_ULOOP_TIMEOUT_REMAINING64)
   endif()
   if(INTERVAL_FUNCTION_EXISTS)
-    target_compile_definitions(uloop_lib PUBLIC HAVE_ULOOP_INTERVAL)
+    target_compile_definitions(uloop_lib PRIVATE HAVE_ULOOP_INTERVAL)
   endif()
   if(SIGNAL_FUNCTION_EXISTS)
-    target_compile_definitions(uloop_lib PUBLIC HAVE_ULOOP_SIGNAL)
+    target_compile_definitions(uloop_lib PRIVATE HAVE_ULOOP_SIGNAL)
   endif()
   target_link_libraries(uloop_lib ${libubox})
 endif()
@@ -322,7 +372,7 @@ if(LOG_SUPPORT)
     find_path(ulog_include_dir NAMES libubox/ulog.h)
     include_directories(${ulog_include_dir})
     target_link_libraries(log_lib ${libubox})
-    set_target_properties(log_lib PROPERTIES COMPILE_DEFINITIONS HAVE_ULOG)
+    target_compile_definitions(log_lib PRIVATE HAVE_ULOG)
   endif()
 endif()
 
@@ -348,7 +398,7 @@ if(DIGEST_SUPPORT)
   add_library(digest_lib MODULE lib/digest.c)
   set_target_properties(digest_lib PROPERTIES OUTPUT_NAME digest PREFIX "")
   if(DIGEST_SUPPORT_EXTENDED)
-    target_compile_definitions(digest_lib PUBLIC HAVE_DIGEST_EXTENDED)
+    target_compile_definitions(digest_lib PRIVATE HAVE_DIGEST_EXTENDED)
   endif()
   target_link_options(digest_lib PRIVATE ${UCODE_MODULE_LINK_OPTIONS})
   target_link_libraries(digest_lib ${libmd})
@@ -356,14 +406,14 @@ endif()
 
 if(UNIT_TESTING)
   enable_testing()
-  add_definitions(-DUNIT_TESTING)
+  add_compile_definitions( UNIT_TESTING )
   add_subdirectory(tests)
   list(APPEND CMAKE_CTEST_ARGUMENTS "--output-on-failure")
 
   if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     add_executable(ucode-san ${CLI_SOURCES} ${UCODE_SOURCES})
     set_property(TARGET ucode-san PROPERTY ENABLE_EXPORTS 1)
-    target_link_libraries(ucode-san ${JSONC_LINK_LIBRARIES})
+    target_link_libraries(ucode-san uc_defines ${JSONC_LINK_LIBRARIES})
     target_compile_options(ucode-san PRIVATE -g -fno-omit-frame-pointer -fsanitize=undefined,address,leak -fno-sanitize-recover=all)
     target_link_options(ucode-san PRIVATE -fsanitize=undefined,address,leak)
   endif()
