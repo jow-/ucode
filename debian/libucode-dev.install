@@ -1,2 +1,2 @@
 usr/include/ucode
-usr/lib/libucode.so
+usr/lib/*/libucode.so

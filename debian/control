@@ -2,9 +2,12 @@ Source: ucode
 Maintainer: Paul Spooren <mail@aparcar.org>
 Section: interpreters
 Priority: optional
-Standards-Version: 4.5.0
+Standards-Version: 4.7.2
 Rules-Requires-Root: no
-Build-Depends: debhelper-compat (= 12), cmake, pkgconf, libjson-c-dev
+Build-Depends: debhelper-compat (= 13),
+               cmake,
+               pkgconf,
+               libjson-c-dev,
 Homepage: https://github.com/jow-/ucode
 Vcs-Browser: https://github.com/jow-/ucode
 Vcs-Git: https://github.com/jow-/ucode.git

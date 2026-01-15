@@ -1,1 +1,1 @@
-usr/lib/ucode/*.so
+usr/lib/*/ucode/*.so
