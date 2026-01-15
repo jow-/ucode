@@ -8,6 +8,8 @@ Build-Depends: debhelper-compat (= 13),
                cmake,
                pkgconf,
                libjson-c-dev,
+               libmd-dev,
+               zlib1g-dev,
 Homepage: https://github.com/jow-/ucode
 Vcs-Browser: https://github.com/jow-/ucode
 Vcs-Git: https://github.com/jow-/ucode.git

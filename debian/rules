@@ -29,6 +29,7 @@ override_dh_auto_configure:
 	dh_auto_configure -- \
 		-D SOVERSION=$(SOVERSION) \
 		-D BUILD_OPTIMIZE_SIZE=OFF \
+		-D ZLIB_CHUNK_SIZE=131072 \
 		-D NL80211_SUPPORT=OFF \
 		-D RTNL_SUPPORT=OFF \
 		-D UBUS_SUPPORT=OFF \
