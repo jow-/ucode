@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.13)
+
+project(ucode C)
+
 include(CheckFunctionExists)
 include(CheckSymbolExists)
 include(CheckCSourceCompiles)
+include(GNUInstallDirs)
 
-project(ucode C)
 add_definitions(-Os -Wall -Werror --std=gnu99 -ffunction-sections -fwrapv -D_GNU_SOURCE)
 
 if(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
@@ -86,7 +89,7 @@ option(ZLIB_SUPPORT "Zlib plugin support" ${DEFAULT_ZLIB_SUPPORT})
 option(DIGEST_SUPPORT "Digest plugin support" ${DEFAULT_DIGEST_SUPPORT})
 option(DIGEST_SUPPORT_EXTENDED "Enable additional hash algorithms" ${DEFAULT_DIGEST_SUPPORT})
 
-set(LIB_SEARCH_PATH "${CMAKE_INSTALL_PREFIX}/lib/ucode/*.so:${CMAKE_INSTALL_PREFIX}/share/ucode/*.uc:./*.so:./*.uc" CACHE STRING "Default library search path")
+set(LIB_SEARCH_PATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/ucode/*.so:${CMAKE_INSTALL_PREFIX}/share/ucode/*.uc:./*.so:./*.uc" CACHE STRING "Default library search path")
 string(REPLACE ":" "\", \"" LIB_SEARCH_DEFINE "${LIB_SEARCH_PATH}")
 add_definitions(-DLIB_SEARCH_PATH="${LIB_SEARCH_DEFINE}")
 
@@ -366,16 +369,16 @@ if(UNIT_TESTING)
   endif()
 endif()
 
-install(TARGETS ucode RUNTIME DESTINATION bin)
-install(TARGETS libucode LIBRARY DESTINATION lib)
-install(TARGETS ${LIBRARIES} LIBRARY DESTINATION lib/ucode)
+install(TARGETS ucode RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS libucode LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS ${LIBRARIES} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/ucode)
 
 add_custom_target(utpl ALL COMMAND ${CMAKE_COMMAND} -E create_symlink ucode utpl)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/utpl DESTINATION bin)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/utpl DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(COMPILE_SUPPORT)
   add_custom_target(ucc ALL COMMAND ${CMAKE_COMMAND} -E create_symlink ucode ucc)
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ucc DESTINATION bin)
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ucc DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 file(GLOB UCODE_HEADERS "include/ucode/*.h")
