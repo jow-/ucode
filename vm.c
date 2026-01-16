@@ -2614,22 +2614,8 @@ uc_vm_insn_dynload(uc_vm_t *vm, uc_vm_insn_t insn)
 	uint32_t cidx;
 	bool found;
 
-	/* instruction is followed by u32 containing the constant index of the
-	 * module name string to import and `count` times u32 values containing
-	 * the import name constant indexes */
-
-	cidx = (
-		frame->ip[0] * 0x1000000UL +
-		frame->ip[1] * 0x10000UL +
-		frame->ip[2] * 0x100UL +
-		frame->ip[3]
-	);
-
-	frame->ip += 4;
-
-	/* push module name onto stack, then attempt to load module and pop
-	 * name value again. Will raise exception on error */
-	name = uc_program_get_constant(uc_vm_current_program(vm), cidx);
+	/* Attempt to load module. Will raise exception on error */
+	name = uc_vm_stack_pop(vm);
 	modscope = uc_require_library(vm, name, true);
 	ucv_put(name);
 
@@ -2651,6 +2637,8 @@ uc_vm_insn_dynload(uc_vm_t *vm, uc_vm_insn_t insn)
 
 	/* ... otherwise we're importing a specific list of names */
 	else {
+		/* Instruction is followed by `count` times u32 values containing
+		 * the import name constant indexes */
 		while (count > 0) {
 			cidx = (
 				frame->ip[0] * 0x1000000UL +

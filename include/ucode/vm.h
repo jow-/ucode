@@ -26,7 +26,7 @@
 #include "types.h"
 #include "program.h"
 
-#define UCODE_BYTECODE_VERSION 0x01
+#define UCODE_BYTECODE_VERSION 0x02
 
 #define __insns \
 __insn(NOOP) \
