@@ -1,10 +1,35 @@
 #!/usr/bin/make -f
+
+ifeq (,$(filter terse,$(DEB_BUILD_OPTIONS)))
+  export DH_VERBOSE := 1
+endif
+
+include /usr/share/dpkg/default.mk
+
+SOVERSION = $(word 3,$(subst ., ,$(DEB_VERSION_UPSTREAM)))
+
+export DEB_BUILD_MAINT_OPTIONS :=hardening=+all optimize=-lto
+
+arch_lto := amd64 armel armhf arm64 i386 powerpc ppc64 ppc64el s390x
+with_lto := $(if $(findstring $(DEB_HOST_ARCH),$(arch_lto)),yes)
+with_lto := $(if $(filter nolto,$(DEB_BUILD_OPTIONS)),no,$(with_lto))
+with_lto := $(if $(filter noopt,$(DEB_BUILD_OPTIONS)),no,$(with_lto))
+
+ifeq ($(with_lto),yes)
+  lto_flags := -g -flto=2 -fuse-linker-plugin -ffat-lto-objects -flto-partition=none -gdescribe-dies -ginline-points
+
+  export DEB_CFLAGS_MAINT_APPEND   += $(lto_flags)
+  export DEB_LDFLAGS_MAINT_APPEND  += $(lto_flags)
+endif
+
 %:
 	dh $@
 
 override_dh_auto_configure:
 	dh_auto_configure -- \
-		-D SOVERSION=$(shell dpkg-parsechangelog | sed -rne 's/^Version: 0\.0\.([0-9]+).*$$/\1/p') \
+		-D SOVERSION=$(SOVERSION) \
+		-D BUILD_OPTIMIZE_SIZE=OFF \
+		-D ZLIB_CHUNK_SIZE=131072 \
 		-D NL80211_SUPPORT=OFF \
 		-D RTNL_SUPPORT=OFF \
 		-D UBUS_SUPPORT=OFF \
