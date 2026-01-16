@@ -567,7 +567,7 @@ uv_to_sockaddr(uc_value_t *addr, struct sockaddr_storage *ss, socklen_t *slen)
 				err_return(EINVAL, "Invalid IPv6 address");
 
 			memcpy(addrstr, s, p - s);
-			addrstr[(p - s) + 1] = 0;
+			addrstr[p - s] = 0;
 
 			ss->ss_family = AF_INET6;
 			len -= ((p - s) + 1);
@@ -579,7 +579,7 @@ uv_to_sockaddr(uc_value_t *addr, struct sockaddr_storage *ss, socklen_t *slen)
 				err_return(EINVAL, "Invalid IP address");
 
 			memcpy(addrstr, s, p - s);
-			addrstr[p - s + 1] = 0;
+			addrstr[p - s] = 0;
 
 			ss->ss_family = AF_INET;
 			len -= (p - s);
