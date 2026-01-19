@@ -77,6 +77,7 @@
 #include "ucode/platform.h"
 
 #if defined(__linux__)
+# include <linux/in6.h>
 # include <linux/if_packet.h>
 # include <linux/filter.h>
 
