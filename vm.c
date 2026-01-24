@@ -29,6 +29,7 @@
 #include "ucode/program.h"
 #include "ucode/lib.h" /* uc_error_context_format() */
 #include "ucode/platform.h"
+#include "ucode/async.h"
 
 #undef __insn
 #define __insn(_name) #_name,
@@ -976,7 +977,7 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 					name = "[anonymous function]";
 			}
 			else {
-				name = frame->cfunction->name;
+				name = (char *)uvc_cfunction_get_name( frame->cfunction );
 			}
 
 			ucv_object_add(entry, "function", ucv_string_new(name));
@@ -3122,6 +3123,8 @@ uc_vm_execute(uc_vm_t *vm, uc_program_t *program, uc_value_t **retval)
 	uc_vm_stack_push(vm, NULL);
 
 	status = uc_vm_execute_chunk(vm);
+
+	status = uc_async_finish( vm, status, UINT_MAX );
 
 	switch (status) {
 	case STATUS_OK:

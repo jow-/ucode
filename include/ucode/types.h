@@ -192,6 +192,17 @@ typedef struct {
 	char name[];
 } uc_cfunction_t;
 
+// feedback will be called on destroy of uc_cfunction_ex_t  
+typedef void (*uc_cfn_feedback_t)( uc_value_t * );
+
+typedef struct {
+	uc_value_t header;
+	uc_cfn_ptr_t cfn;
+	intptr_t magic;
+	uc_cfn_feedback_t feedback;
+	char name[];
+} uc_cfunction_ex_t;
+
 typedef struct {
 	const char *name;
 	uc_value_t *proto;
@@ -289,7 +300,26 @@ typedef struct {
 	uc_list_t object_iterators;
 } uc_thread_context_t;
 
-__hidden uc_thread_context_t *uc_thread_context_get(void);
+/* Do not call uc_thread_context_helper() directly, use one of the helper functions below */
+uc_thread_context_t *uc_thread_context_helper( int cmd, void * );
+
+static inline uc_thread_context_t *
+uc_thread_context_get(void)
+{
+	return uc_thread_context_helper( 0, 0 );
+}
+
+static inline uc_thread_context_t *
+uc_thread_context_peek(void)
+{
+	return uc_thread_context_helper( 1, 0 );
+}
+
+static inline uc_thread_context_t *
+uc_thread_context_exchange( uc_thread_context_t *tc )
+{
+	return uc_thread_context_helper( 2, tc );
+}
 
 
 /* VM definitions */
@@ -437,6 +467,58 @@ size_t ucv_object_length(uc_value_t *);
 	     entry##key = entry_next##key)
 
 uc_value_t *ucv_cfunction_new(const char *, uc_cfn_ptr_t);
+
+// Do not call ucv_cfunction_ex_helper() directly, use one of the helper functions below
+bool 
+ucv_cfunction_ex_helper( int, void * );
+
+static inline uc_value_t *
+ucv_cfunction_ex_new( const char *name, uc_cfn_ptr_t fn, uc_cfn_feedback_t fb, size_t extra_user_bytes )
+{
+	void *args[ 4 ] = { (void *)name, fn, fb, (void *)extra_user_bytes };
+	if( ucv_cfunction_ex_helper( 0, args ) )
+		return args[ 0 ];
+	return 0;
+}
+
+static inline intptr_t 
+ucv_cfunction_ex_get_magic()
+{
+	intptr_t ret;
+	if( ucv_cfunction_ex_helper( 1, &ret ) )
+		return ret;
+	return -1;
+}
+
+static inline bool
+ucv_is_cfunction_ex( uc_value_t *uv )
+{
+	if( NULL == uv )
+		return false;
+	if( ucv_type(uv) != UC_CFUNCTION )
+		return false;
+	const char *magic = 0;
+	if( !ucv_cfunction_ex_helper( 2, &magic ) || NULL == magic )
+		return false;
+	return 0 == strcmp( ((uc_cfunction_t *)uv)->name, magic );
+}
+
+static inline const char *
+uvc_cfunction_get_name( uc_cfunction_t *uv )
+{
+	if( ucv_is_cfunction_ex( &uv->header ) )
+		return( ((uc_cfunction_ex_t *)uv)->name );
+	return uv->name;
+}
+
+static inline void *
+ucv_cfunction_ex_get_user( uc_value_t *uv )
+{
+	if( !ucv_is_cfunction_ex( uv ) )
+		return 0;
+	uc_cfunction_ex_t *fn = (uc_cfunction_ex_t *)uv;
+	return (fn->name + ALIGN( strlen(fn->name)+1) );
+}
 
 uc_value_t *ucv_closure_new(uc_vm_t *, uc_function_t *, bool);
 
