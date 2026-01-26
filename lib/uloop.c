@@ -1023,7 +1023,22 @@ uc_uloop_process(uc_vm_t *vm, size_t nargs)
 
 	if (pid == 0) {
 		argp = calloc(ucv_array_length(arguments) + 2, sizeof(char *));
-		envp = calloc(ucv_object_length(env_arg) + 1, sizeof(char *));
+		envp = environ;
+
+		if (env_arg) {
+			envp = calloc(ucv_object_length(env_arg) + 1, sizeof(char *));
+			i = 0;
+			ucv_object_foreach(env_arg, envk, envv) {
+				buf = xprintbuf_new();
+
+				ucv_stringbuf_printf(buf, "%s=", envk);
+				ucv_to_stringbuf(vm, buf, envv, false);
+
+				envp[i++] = buf->buf;
+
+				free(buf);
+			}
+		}
 
 		if (!argp || !envp)
 			_exit(-1);
@@ -1032,19 +1047,6 @@ uc_uloop_process(uc_vm_t *vm, size_t nargs)
 
 		for (i = 0; i < ucv_array_length(arguments); i++)
 			argp[i+1] = ucv_to_string(vm, ucv_array_get(arguments, i));
-
-		i = 0;
-
-		ucv_object_foreach(env_arg, envk, envv) {
-			buf = xprintbuf_new();
-
-			ucv_stringbuf_printf(buf, "%s=", envk);
-			ucv_to_stringbuf(vm, buf, envv, false);
-
-			envp[i++] = buf->buf;
-
-			free(buf);
-		}
 
 		execvpe((const char *)ucv_string_get(executable),
 		        (char * const *)argp, (char * const *)envp);
