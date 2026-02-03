@@ -596,7 +596,7 @@ static const uc_nl_nested_spec_t nl80211_wiphy_bands_freqs_wmm_nla = {
 
 static const uc_nl_nested_spec_t nl80211_wiphy_bands_freqs_nla = {
 	.headsize = 0,
-	.nattrs = 25,
+	.nattrs = 28,
 	.attrs = {
 		{ NL80211_FREQUENCY_ATTR_FREQ, "freq", DT_U32, 0, NULL },
 		{ NL80211_FREQUENCY_ATTR_DISABLED, "disabled", DT_FLAG, 0, NULL },
@@ -623,6 +623,9 @@ static const uc_nl_nested_spec_t nl80211_wiphy_bands_freqs_nla = {
 		{ NL80211_FREQUENCY_ATTR_4MHZ, "4mhz", DT_FLAG, 0, NULL },
 		{ NL80211_FREQUENCY_ATTR_8MHZ, "8mhz", DT_FLAG, 0, NULL },
 		{ NL80211_FREQUENCY_ATTR_16MHZ, "16mhz", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_NO_320MHZ, "no_320mhz", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_NO_EHT, "no_eht", DT_FLAG, 0, NULL },
+		{ NL80211_FREQUENCY_ATTR_PSD, "psd", DT_S8, 0, NULL },
 	}
 };
 
@@ -637,7 +640,7 @@ static const uc_nl_nested_spec_t nl80211_wiphy_bands_rates_nla = {
 
 static const uc_nl_nested_spec_t nl80211_wiphy_bands_iftype_data_nla = {
 	.headsize = 0,
-	.nattrs = 9,
+	.nattrs = 11,
 	.attrs = {
 		{ NL80211_BAND_IFTYPE_ATTR_IFTYPES, "iftypes", DT_NESTED, 0, &nl80211_ifcomb_limit_types_nla },
 		{ NL80211_BAND_IFTYPE_ATTR_HE_CAP_MAC, "he_cap_mac", DT_U8, DF_ARRAY, NULL },
@@ -648,6 +651,8 @@ static const uc_nl_nested_spec_t nl80211_wiphy_bands_iftype_data_nla = {
 		{ NL80211_BAND_IFTYPE_ATTR_VENDOR_ELEMS, "vendor_elems", DT_STRING, DF_BINARY, NULL },
 		{ NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MAC, "eht_cap_mac", DT_U8, DF_ARRAY, NULL },
 		{ NL80211_BAND_IFTYPE_ATTR_EHT_CAP_PHY, "eht_cap_phy", DT_U8, DF_ARRAY, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_EHT_CAP_MCS_SET, "eht_cap_mcs_set", DT_U8, DF_ARRAY, NULL },
+		{ NL80211_BAND_IFTYPE_ATTR_EHT_CAP_PPE, "eht_cap_ppe", DT_U8, DF_ARRAY, NULL },
 	}
 };
 
@@ -725,7 +730,7 @@ static const uc_nl_nested_spec_t nl80211_coalesce_rule_nla = {
 
 static const uc_nl_nested_spec_t nl80211_bss_nla = {
 	.headsize = 0,
-	.nattrs = 12,
+	.nattrs = 13,
 	.attrs = {
 		{ NL80211_BSS_BSSID, "bssid", DT_LLADDR, 0, NULL },
 		{ NL80211_BSS_STATUS, "status", DT_U32, 0, NULL },
@@ -739,12 +744,13 @@ static const uc_nl_nested_spec_t nl80211_bss_nla = {
 		{ NL80211_BSS_SEEN_MS_AGO, "seen_ms_ago", DT_S32, 0, NULL },
 		{ NL80211_BSS_INFORMATION_ELEMENTS, "information_elements", DT_IE, 0, NULL },
 		{ NL80211_BSS_BEACON_IES, "beacon_ies", DT_IE, 0, NULL },
+		{ NL80211_BSS_MLD_ADDR, "mld_addr", DT_LLADDR, 0, NULL },
 	}
 };
 
 static const uc_nl_nested_spec_t nl80211_sta_info_bitrate_nla = {
 	.headsize = 0,
-	.nattrs = 22,
+	.nattrs = 23,
 	.attrs = {
 		{ NL80211_RATE_INFO_BITRATE, "bitrate", DT_U16, 0, NULL },
 		{ NL80211_RATE_INFO_BITRATE32, "bitrate32", DT_U32, 0, NULL },
@@ -761,6 +767,7 @@ static const uc_nl_nested_spec_t nl80211_sta_info_bitrate_nla = {
 		{ NL80211_RATE_INFO_EHT_MCS, "eht_mcs", DT_U8, 0, NULL },
 		{ NL80211_RATE_INFO_EHT_NSS, "eht_nss", DT_U8, 0, NULL },
 		{ NL80211_RATE_INFO_EHT_GI, "eht_gi", DT_U8, 0, NULL },
+		{ NL80211_RATE_INFO_EHT_RU_ALLOC, "eht_ru_alloc", DT_U8, 0, NULL },
 		{ NL80211_RATE_INFO_40_MHZ_WIDTH, "width_40", DT_FLAG, 0, NULL },
 		{ NL80211_RATE_INFO_80_MHZ_WIDTH, "width_80", DT_FLAG, 0, NULL },
 		{ NL80211_RATE_INFO_80P80_MHZ_WIDTH, "width_80p80", DT_FLAG, 0, NULL },
@@ -911,7 +918,7 @@ static const uc_nl_nested_spec_t nl80211_wiphy_radio_nla = {
 
 static const uc_nl_nested_spec_t nl80211_mlo_link_nla = {
 	.headsize = 0,
-	.nattrs = 11,
+	.nattrs = 12,
 	.attrs = {
 		{ NL80211_ATTR_MLO_LINK_ID, "link_id", DT_U8, 0, NULL },
 		{ NL80211_ATTR_MAC, "mac", DT_LLADDR, 0, NULL },
@@ -924,12 +931,13 @@ static const uc_nl_nested_spec_t nl80211_mlo_link_nla = {
 		{ NL80211_ATTR_MLO_LINK_DISABLED, "mlo_link_disabled", DT_FLAG, 0, NULL },
 		{ NL80211_ATTR_MLO_TTLM_DLINK, "mlo_ttlm_dlink", DT_STRING, DF_BINARY, NULL },
 		{ NL80211_ATTR_MLO_TTLM_ULINK, "mlo_ttlm_ulink", DT_STRING, DF_BINARY, NULL },
+		{ NL80211_ATTR_PUNCT_BITMAP, "punct_bitmap", DT_U32, 0, NULL },
 	}
 };
 
 static const uc_nl_nested_spec_t nl80211_msg = {
 	.headsize = 0,
-	.nattrs = 131,
+	.nattrs = 137,
 	.attrs = {
 		{ NL80211_ATTR_4ADDR, "4addr", DT_U8, 0, NULL },
 		{ NL80211_ATTR_AIRTIME_WEIGHT, "airtime_weight", DT_U16, 0, NULL },
@@ -956,6 +964,7 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_DFS_REGION, "dfs_region", DT_U8, 0, NULL },
 		{ NL80211_ATTR_DTIM_PERIOD, "dtim_period", DT_U32, 0, NULL },
 		{ NL80211_ATTR_DURATION, "duration", DT_U32, 0, NULL },
+		{ NL80211_ATTR_EPCS, "epcs", DT_FLAG, 0, NULL },
 		{ NL80211_ATTR_EXT_FEATURES, "extended_features", DT_U8, DF_ARRAY, NULL },
 		{ NL80211_ATTR_FEATURE_FLAGS, "feature_flags", DT_U32, 0, NULL },
 		{ NL80211_ATTR_FRAME, "frame", DT_STRING, DF_BINARY, NULL },
@@ -997,6 +1006,7 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_PID, "pid", DT_U32, 0, NULL },
 		{ NL80211_ATTR_PMK, "pmk", DT_STRING, DF_BINARY, NULL },
 		{ NL80211_ATTR_PRIVACY, "privacy", DT_FLAG, 0, NULL },
+		{ NL80211_ATTR_PUNCT_BITMAP, "punct_bitmap", DT_U32, 0, NULL },
 		{ NL80211_ATTR_PROTOCOL_FEATURES, "protocol_features", DT_U32, 0, NULL },
 		{ NL80211_ATTR_PS_STATE, "ps_state", DT_U32, 0, NULL },
 		{ NL80211_ATTR_RADAR_EVENT, "radar_event", DT_U32, 0, NULL },
@@ -1059,6 +1069,10 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_SOFTWARE_IFTYPES, "software_iftypes", DT_NESTED, 0, &nl80211_ifcomb_limit_types_nla },
 		{ NL80211_ATTR_MAX_AP_ASSOC_STA, "max_ap_assoc", DT_U16, 0, NULL },
 		{ NL80211_ATTR_MLO_LINKS, "mlo_links", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &nl80211_mlo_link_nla },
+		{ NL80211_ATTR_MLD_ADDR, "mld_addr", DT_LLADDR, 0, NULL },
+		{ NL80211_ATTR_EML_CAPABILITY, "eml_capability", DT_U16, 0, NULL },
+		{ NL80211_ATTR_MLD_CAPA_AND_OPS, "mld_capa_and_ops", DT_U16, 0, NULL },
+		{ NL80211_ATTR_MLO_LINK_ID, "mlo_link_id", DT_U8, 0, NULL },
 		{ NL80211_ATTR_SURVEY_INFO, "survey_info", DT_NESTED, 0, &nl80211_survey_info_nla },
 		{ NL80211_ATTR_WIPHY_RADIOS, "radios", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &nl80211_wiphy_radio_nla },
 		{ NL80211_ATTR_VIF_RADIO_MASK, "vif_radio_mask", DT_U32, 0, NULL },
