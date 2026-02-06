@@ -2395,10 +2395,10 @@ uc_ubus_channel_req_cb(struct ubus_context *ctx, struct ubus_object *obj,
 
 	args = blob_array_to_ucv(c->vm, blob_data(msg), blob_len(msg), true);
 	reqproto = ucv_object_new(c->vm);
-	ucv_object_add(reqproto, "args", ucv_get(args));
+	ucv_object_add(reqproto, "args", args);
 
 	if (method)
-		ucv_object_add(reqproto, "type", ucv_get(ucv_string_new(method)));
+		ucv_object_add(reqproto, "type", ucv_string_new(method));
 
 	return uc_ubus_handle_reply_common(ctx, req, c->vm, c->res, func, reqproto);
 }
