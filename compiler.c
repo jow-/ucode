@@ -3302,8 +3302,14 @@ uc_compiler_compile_export(uc_compiler_t *compiler)
 		uc_compiler_compile_declexpr(compiler, false);
 	else if (uc_compiler_parse_match(compiler, TK_CONST))
 		uc_compiler_compile_declexpr(compiler, true);
-	else if (uc_compiler_parse_match(compiler, TK_FUNC))
+	else if (uc_compiler_parse_match(compiler, TK_FUNC)) {
 		uc_compiler_compile_funcdecl(compiler);
+
+		for (; off < locals->count; off++)
+			uc_compiler_export_add(compiler, locals->entries[off].name, off);
+
+		return;
+	}
 	else if (uc_compiler_parse_match(compiler, TK_DEFAULT))
 		uc_compiler_compile_expression(compiler);
 	else
