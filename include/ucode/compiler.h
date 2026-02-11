@@ -83,6 +83,7 @@ typedef struct {
 	size_t from;
 	bool captured;
 	bool constant;
+	bool funcstub;
 } uc_local_t;
 
 typedef struct {
