@@ -1469,6 +1469,11 @@ uc_ubus_object_call_args(struct ubus_object *obj, const char *ubus_method_name,
 			return UBUS_STATUS_INVALID_ARGUMENT;
 
 		hdr = blob_data(attr);
+
+		/* skip ubus_rpc_session, it's automatically added by rpcd/uhttpd */
+		if (!strcmp((char *)hdr->name, "ubus_rpc_session"))
+			continue;
+
 		found = false;
 
 		for (i = 0; i < method->n_policy; i++) {

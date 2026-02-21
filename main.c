@@ -38,6 +38,14 @@ static FILE *stdin_unused;
 static void
 print_usage(const char *app)
 {
+	bool default_raw_mode = strcmp(app, "utpl");
+	const char *default_mode_desc = default_raw_mode
+		? "Process source file(s) as raw script code (default)."
+		: "Process source file(s) as raw script code.";
+	const char *template_mode_desc = default_raw_mode
+		? "Process the source file(s) as templates, not as raw script code."
+		: "Process the source file(s) as templates (default).";
+
 	printf(
 	"Usage:\n"
 	"  %1$s -h\n"
@@ -65,10 +73,10 @@ print_usage(const char *app)
 	"  Enable strict mode.\n\n"
 
 	"-R\n"
-	"  Process source file(s) as raw script code (default).\n\n"
+	"  %2$s\n\n"
 
 	"-T[flag,flag,...]\n"
-	"  Process the source file(s) as templates, not as raw script code.\n"
+	"  %3$s\n"
 	"  Supported flags: no-lstrip (don't strip leading whitespace before\n"
 	"  block tags), no-rtrim (don't strip trailing newline after block tags).\n\n"
 
@@ -108,7 +116,7 @@ print_usage(const char *app)
 	"-s\n"
 	"  Omit (strip) debug information when compiling files.\n"
 	"  Only meaningful in conjunction with `-c`.\n\n",
-		app);
+		app, default_mode_desc, template_mode_desc);
 }
 
 
