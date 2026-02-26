@@ -1624,13 +1624,13 @@ uc_fs_readlink(uc_vm_t *vm, size_t nargs)
  * @property {boolean} perm.setgid - Whether the setgid bit is set.
  * @property {boolean} perm.sticky - Whether the sticky bit is set.
  * @property {boolean} perm.user_read - Whether the file is readable by the owner.
- * @property {boolean} perm.user_write - Whether the file is writable by the owner.
+ * @property {boolean} perm.user_write - Whether the file is writeable by the owner.
  * @property {boolean} perm.user_exec - Whether the file is executable by the owner.
  * @property {boolean} perm.group_read - Whether the file is readable by the group.
- * @property {boolean} perm.group_write - Whether the file is writable by the group.
+ * @property {boolean} perm.group_write - Whether the file is writeable by the group.
  * @property {boolean} perm.group_exec - Whether the file is executable by the group.
  * @property {boolean} perm.other_read - Whether the file is readable by others.
- * @property {boolean} perm.other_write - Whether the file is writable by others.
+ * @property {boolean} perm.other_write - Whether the file is writeable by others.
  * @property {boolean} perm.other_exec - Whether the file is executable by others.
  * @property {number} inode - The inode number.
  * @property {number} mode - The file mode.
@@ -1784,7 +1784,7 @@ uc_fs_lstat(uc_vm_t *vm, size_t nargs)
  *
  * Returns `true` if the directory was successfully created.
  *
- * Returns `null` if an error occurred, e.g. due to inexistent path.
+ * Returns `null` if an error occurred, e.g. due to non-existent path.
  *
  * @function module:fs#mkdir
  *
@@ -2618,7 +2618,7 @@ uc_fs_mkdtemp(uc_vm_t *vm, size_t nargs)
  * | Mode | Description                           |
  * |------|---------------------------------------|
  * | "r"  | Tests whether the file is readable.   |
- * | "w"  | Tests whether the file is writable.   |
+ * | "w"  | Tests whether the file is writeable.  |
  * | "x"  | Tests whether the file is executable. |
  * | "f"  | Tests whether the file exists.        |
  *

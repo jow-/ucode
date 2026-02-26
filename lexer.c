@@ -1296,7 +1296,7 @@ uc_lexer_is_keyword(uc_value_t *label)
 
 /*
  * Stores the given codepoint as a utf8 multibyte sequence into the given
- * output buffer and substracts the required amount of bytes from  the given
+ * output buffer and subtracts the required amount of bytes from  the given
  * length pointer.
  *
  * Returns false if the multibyte sequence would not fit into the buffer,

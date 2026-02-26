@@ -552,7 +552,7 @@ uc_vm_call_native(uc_vm_t *vm, uc_value_t *ctx, uc_cfunction_t *fptr, bool mcall
 
 	res = fptr->cfn(vm, nargs);
 
-	/* Reset stack, check for callframe depth since an uncatched exception in managed
+	/* Reset stack, check for callframe depth since an uncaught exception in managed
 	 * code executed by fptr->cfn() could've reset the callframe stack already. */
 	if (vm->callframes.count > 0)
 		ucv_put(uc_vm_callframe_pop(vm));
@@ -604,7 +604,7 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 			tmp = frame->ip[0] * 0x100 + frame->ip[1];
 			frame->ip += 2;
 
-			/* push each preceeding non-spread value to the stack */
+			/* push each preceding non-spread value to the stack */
 			for (j = slot; j > tmp + 1UL; j--)
 				uc_vm_stack_push(vm, ucv_get(ucv_array_get(ellip, j - 1)));
 
@@ -898,7 +898,7 @@ uc_vm_handle_exception(uc_vm_t *vm)
 
 	/* iterate the known exception ranges, see if the current ip falls into any of them */
 	for (i = 0; i < chunk->ehranges.count; i++) {
-		/* skip nonmatching ranges */
+		/* skip non-matching ranges */
 		if (pos < chunk->ehranges.entries[i].from ||
 		    pos >= chunk->ehranges.entries[i].to)
 			continue;
