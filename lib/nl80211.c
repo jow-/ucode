@@ -3221,6 +3221,7 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	 * @property {number} NL80211_CMD_CH_SWITCH_STARTED_NOTIFY - Channel switch started notify
 	 * @property {number} NL80211_CMD_TDLS_CHANNEL_SWITCH - TDLS channel switch
 	 * @property {number} NL80211_CMD_TDLS_CANCEL_CHANNEL_SWITCH - Cancel TDLS channel switch
+	 * @property {number} NL80211_CMD_ABORT_SCAN - Abort scan
 	 */
 	ADD_CONST(NL80211_CMD_GET_WIPHY);
 	ADD_CONST(NL80211_CMD_SET_WIPHY);
@@ -3338,6 +3339,69 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(NL80211_CMD_CH_SWITCH_STARTED_NOTIFY);
 	ADD_CONST(NL80211_CMD_TDLS_CHANNEL_SWITCH);
 	ADD_CONST(NL80211_CMD_TDLS_CANCEL_CHANNEL_SWITCH);
+	ADD_CONST(NL80211_CMD_ABORT_SCAN);
+
+	/**
+	 * @typedef
+	 * @name Scan flags
+	 * @description Constants for NL80211_ATTR_SCAN_FLAGS bitmask.
+	 * @property {number} NL80211_SCAN_FLAG_LOW_PRIORITY - Low priority scan
+	 * @property {number} NL80211_SCAN_FLAG_FLUSH - Flush scan results before returning
+	 * @property {number} NL80211_SCAN_FLAG_AP - Force AP mode scan
+	 * @property {number} NL80211_SCAN_FLAG_RANDOM_ADDR - Randomize source MAC address
+	 * @property {number} NL80211_SCAN_FLAG_FILS_MAX_CHANNEL_TIME - FILS max channel time
+	 * @property {number} NL80211_SCAN_FLAG_ACCEPT_BCAST_PROBE_RESP - Accept broadcast probe responses
+	 * @property {number} NL80211_SCAN_FLAG_OCE_PROBE_REQ_HIGH_TX_RATE - OCE high TX rate probe requests
+	 * @property {number} NL80211_SCAN_FLAG_OCE_PROBE_REQ_DEFERRAL_SUPPRESSION - OCE probe request deferral suppression
+	 * @property {number} NL80211_SCAN_FLAG_LOW_SPAN - Low span scan
+	 * @property {number} NL80211_SCAN_FLAG_LOW_POWER - Low power scan
+	 * @property {number} NL80211_SCAN_FLAG_HIGH_ACCURACY - High accuracy scan
+	 * @property {number} NL80211_SCAN_FLAG_RANDOM_SN - Randomize sequence number
+	 * @property {number} NL80211_SCAN_FLAG_MIN_PREQ_CONTENT - Minimize probe request content
+	 * @property {number} NL80211_SCAN_FLAG_FREQ_KHZ - Report scan results with frequency in KHz
+	 * @property {number} NL80211_SCAN_FLAG_COLOCATED_6GHZ - Scan colocated 6GHz BSS
+	 */
+	ADD_CONST(NL80211_SCAN_FLAG_LOW_PRIORITY);
+	ADD_CONST(NL80211_SCAN_FLAG_FLUSH);
+	ADD_CONST(NL80211_SCAN_FLAG_AP);
+	ADD_CONST(NL80211_SCAN_FLAG_RANDOM_ADDR);
+	ADD_CONST(NL80211_SCAN_FLAG_FILS_MAX_CHANNEL_TIME);
+	ADD_CONST(NL80211_SCAN_FLAG_ACCEPT_BCAST_PROBE_RESP);
+	ADD_CONST(NL80211_SCAN_FLAG_OCE_PROBE_REQ_HIGH_TX_RATE);
+	ADD_CONST(NL80211_SCAN_FLAG_OCE_PROBE_REQ_DEFERRAL_SUPPRESSION);
+	ADD_CONST(NL80211_SCAN_FLAG_LOW_SPAN);
+	ADD_CONST(NL80211_SCAN_FLAG_LOW_POWER);
+	ADD_CONST(NL80211_SCAN_FLAG_HIGH_ACCURACY);
+	ADD_CONST(NL80211_SCAN_FLAG_RANDOM_SN);
+	ADD_CONST(NL80211_SCAN_FLAG_MIN_PREQ_CONTENT);
+	ADD_CONST(NL80211_SCAN_FLAG_FREQ_KHZ);
+	ADD_CONST(NL80211_SCAN_FLAG_COLOCATED_6GHZ);
+
+	/**
+	 * @typedef
+	 * @name BSS status constants
+	 * @description Constants for BSS status values.
+	 * @property {number} NL80211_BSS_STATUS_AUTHENTICATED - Authenticated with BSS
+	 * @property {number} NL80211_BSS_STATUS_ASSOCIATED - Associated with BSS
+	 * @property {number} NL80211_BSS_STATUS_IBSS_JOINED - Joined IBSS
+	 */
+	ADD_CONST(NL80211_BSS_STATUS_AUTHENTICATED);
+	ADD_CONST(NL80211_BSS_STATUS_ASSOCIATED);
+	ADD_CONST(NL80211_BSS_STATUS_IBSS_JOINED);
+
+	/**
+	 * @typedef
+	 * @name BSS use-for and cannot-use-reasons constants
+	 * @description Constants for BSS use-for and cannot-use-reasons bitmasks.
+	 * @property {number} NL80211_BSS_USE_FOR_NORMAL - Use BSS for normal connection
+	 * @property {number} NL80211_BSS_USE_FOR_MLD_LINK - Use BSS as MLD link
+	 * @property {number} NL80211_BSS_CANNOT_USE_NSTR_NONPRIMARY - NSTR nonprimary link not usable
+	 * @property {number} NL80211_BSS_CANNOT_USE_6GHZ_PWR_MISMATCH - 6GHz power mode mismatch
+	 */
+	ADD_CONST(NL80211_BSS_USE_FOR_NORMAL);
+	ADD_CONST(NL80211_BSS_USE_FOR_MLD_LINK);
+	ADD_CONST(NL80211_BSS_CANNOT_USE_NSTR_NONPRIMARY);
+	ADD_CONST(NL80211_BSS_CANNOT_USE_6GHZ_PWR_MISMATCH);
 
 	/**
 	 * @typedef
