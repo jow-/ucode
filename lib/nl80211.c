@@ -74,6 +74,7 @@ limitations under the License.
 #include <assert.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <time.h>
 
 #include <net/if.h>
 #include <netinet/ether.h>
@@ -2558,6 +2559,19 @@ cb_listener_event(struct nl_msg *msg, void *arg)
 }
 
 static int
+cb_evsock_msg(struct nl_msg *msg, void *arg)
+{
+	struct nlmsghdr *hdr = nlmsg_hdr(msg);
+
+	if (hdr->nlmsg_seq == 0) {
+		cb_listener_event(msg, NULL);
+		return NL_SKIP;
+	}
+
+	return NL_OK;
+}
+
+static int
 cb_event(struct nl_msg *msg, void *arg)
 {
 	struct nlmsghdr *hdr = nlmsg_hdr(msg);
@@ -2572,10 +2586,11 @@ cb_event(struct nl_msg *msg, void *arg)
 		return NL_SKIP;
 
 	o = uc_nl_prepare_event(s->vm, msg);
-	if (o)
+	if (o) {
+		ucv_put(s->res);
 		s->res = o;
-
-	s->cmd = gnlh->cmd;
+		s->cmd = gnlh->cmd;
+	}
 
 	return NL_SKIP;
 }
@@ -2699,9 +2714,24 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 
 	pfd.fd = nl_socket_get_fd(nl80211_conn.evsock);
 
-	if (poll(&pfd, 1, ms) == 1) {
-		while (err == 0 && ctx.cmd == 0)
-			nl_recvmsgs(nl80211_conn.evsock, cb);
+	while (err == 0 && ctx.cmd == 0) {
+		struct timespec start, end;
+
+		if (ms > 0)
+			clock_gettime(CLOCK_MONOTONIC, &start);
+
+		if (poll(&pfd, 1, ms) != 1)
+			break;
+
+		nl_recvmsgs(nl80211_conn.evsock, cb);
+
+		if (ms > 0) {
+			clock_gettime(CLOCK_MONOTONIC, &end);
+			ms -= (end.tv_sec - start.tv_sec) * 1000 +
+			      (end.tv_nsec - start.tv_nsec) / 1000000;
+			if (ms <= 0)
+				break;
+		}
 	}
 
 	nl_cb_put(cb);
@@ -2798,6 +2828,11 @@ uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 	nl_cb_set(cb, NL_CB_FINISH, NL_CB_CUSTOM, cb_done, &st);
 	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_done, &st);
 	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &ret);
+
+	if (sock == nl80211_conn.evsock) {
+		nl_cb_set(cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, cb_seq, NULL);
+		nl_cb_set(cb, NL_CB_MSG_IN, NL_CB_CUSTOM, cb_evsock_msg, NULL);
+	}
 
 	nl_send_auto_complete(sock, msg);
 
