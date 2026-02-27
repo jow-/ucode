@@ -74,6 +74,7 @@ limitations under the License.
 #include <assert.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <time.h>
 
 #include <net/if.h>
 #include <netinet/ether.h>
@@ -2712,9 +2713,24 @@ uc_nl_waitfor(uc_vm_t *vm, size_t nargs)
 
 	pfd.fd = nl_socket_get_fd(nl80211_conn.evsock);
 
-	if (poll(&pfd, 1, ms) == 1) {
-		while (err == 0 && ctx.cmd == 0)
-			nl_recvmsgs(nl80211_conn.evsock, cb);
+	while (err == 0 && ctx.cmd == 0) {
+		struct timespec start, end;
+
+		if (ms > 0)
+			clock_gettime(CLOCK_MONOTONIC, &start);
+
+		if (poll(&pfd, 1, ms) != 1)
+			break;
+
+		nl_recvmsgs(nl80211_conn.evsock, cb);
+
+		if (ms > 0) {
+			clock_gettime(CLOCK_MONOTONIC, &end);
+			ms -= (end.tv_sec - start.tv_sec) * 1000 +
+			      (end.tv_nsec - start.tv_nsec) / 1000000;
+			if (ms <= 0)
+				break;
+		}
 	}
 
 	nl_cb_put(cb);
