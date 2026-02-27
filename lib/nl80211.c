@@ -2586,8 +2586,10 @@ cb_event(struct nl_msg *msg, void *arg)
 		return NL_SKIP;
 
 	o = uc_nl_prepare_event(s->vm, msg);
-	if (o)
+	if (o) {
+		ucv_put(s->res);
 		s->res = o;
+	}
 
 	s->cmd = gnlh->cmd;
 
