@@ -874,6 +874,13 @@ uc_compiler_declare_local(uc_compiler_t *compiler, uc_value_t *name, bool consta
 		len2 = ucv_string_length(locals->entries[i - 1].name);
 
 		if (len1 == len2 && !strcmp(str1, str2)) {
+			if (locals->entries[i - 1].funcstub) {
+				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+					"Variable '%s' redeclared", str2);
+
+				return -1;
+			}
+
 			if (uc_compiler_is_strict(compiler)) {
 				uc_compiler_syntax_error(compiler, 0, "Variable '%s' redeclared", str2);
 
@@ -932,6 +939,31 @@ uc_compiler_resolve_local(uc_compiler_t *compiler, uc_value_t *name, bool *const
 		*constant = locals->entries[i - 1].constant;
 
 		return i - 1;
+	}
+
+	return -1;
+}
+
+static ssize_t
+uc_compiler_resolve_funcstub(uc_compiler_t *compiler, uc_value_t *name)
+{
+	uc_locals_t *locals = &compiler->locals;
+	const char *str1, *str2;
+	size_t i, len1, len2;
+
+	str1 = ucv_string_get(name);
+	len1 = ucv_string_length(name);
+
+	for (i = locals->count; i > 0; i--) {
+		if (locals->entries[i - 1].depth != -1 &&
+		    locals->entries[i - 1].depth < (ssize_t)compiler->scope_depth)
+			break;
+
+		str2 = ucv_string_get(locals->entries[i - 1].name);
+		len2 = ucv_string_length(locals->entries[i - 1].name);
+
+		if (len1 == len2 && !strcmp(str1, str2))
+			return locals->entries[i - 1].funcstub ? (ssize_t)(i - 1) : -1;
 	}
 
 	return -1;
@@ -1890,13 +1922,48 @@ uc_compiler_compile_funcexpr_common(uc_compiler_t *compiler, bool require_name)
 	if (uc_compiler_parse_match(compiler, TK_LABEL)) {
 		name = compiler->parser->prev.uv;
 
-		/* Named functions are syntactic sugar for local variable declaration
-		 * with function value assignment. If a name token was encountered,
-		 * initialize a local variable for it... */
-		slot = uc_compiler_declare_local(compiler, name, false);
+		if (require_name && uc_compiler_parse_check(compiler, TK_SCOL)) {
+			slot = uc_compiler_resolve_funcstub(compiler, name);
 
-		if (slot == -1)
+			if (slot > -1) {
+				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+					"Function '%s' redeclared", ucv_string_get(name));
+
+				return;
+			}
+
+			slot = uc_compiler_declare_local(compiler, name, true);
+
+			if (slot > -1) {
+				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+					"Variable '%s' redeclared", ucv_string_get(name));
+
+				return;
+			}
+
+			compiler->locals.entries[compiler->locals.count - 1].funcstub = true;
+			uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_LNULL);
 			uc_compiler_initialize_local(compiler);
+			uc_compiler_parse_consume(compiler, TK_SCOL);
+
+			return;
+		}
+
+		slot = uc_compiler_resolve_funcstub(compiler, name);
+
+		if (slot > -1) {
+			compiler->locals.entries[slot].funcstub = false;
+		}
+		else {
+			slot = uc_compiler_declare_local(compiler, name, false);
+
+			if (slot == -1)
+				uc_compiler_initialize_local(compiler);
+			else if (compiler->locals.entries[slot].constant)
+				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+					"Redeclaration of constant '%s'",
+					ucv_string_get(name));
+		}
 	}
 	else if (require_name) {
 		uc_compiler_syntax_error(compiler, compiler->parser->curr.pos, "Expecting function name");
@@ -3302,8 +3369,14 @@ uc_compiler_compile_export(uc_compiler_t *compiler)
 		uc_compiler_compile_declexpr(compiler, false);
 	else if (uc_compiler_parse_match(compiler, TK_CONST))
 		uc_compiler_compile_declexpr(compiler, true);
-	else if (uc_compiler_parse_match(compiler, TK_FUNC))
+	else if (uc_compiler_parse_match(compiler, TK_FUNC)) {
 		uc_compiler_compile_funcdecl(compiler);
+
+		for (; off < locals->count; off++)
+			uc_compiler_export_add(compiler, locals->entries[off].name, off);
+
+		return;
+	}
 	else if (uc_compiler_parse_match(compiler, TK_DEFAULT))
 		uc_compiler_compile_expression(compiler);
 	else

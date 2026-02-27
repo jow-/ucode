@@ -4,7 +4,7 @@ automatically export the function.
 -- File test-func-decl.uc --
 export function func() {
 	print("Hello, world!\n");
-};
+}
 -- End --
 
 -- Testcase --
