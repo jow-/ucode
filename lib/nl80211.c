@@ -2558,6 +2558,19 @@ cb_listener_event(struct nl_msg *msg, void *arg)
 }
 
 static int
+cb_evsock_msg(struct nl_msg *msg, void *arg)
+{
+	struct nlmsghdr *hdr = nlmsg_hdr(msg);
+
+	if (hdr->nlmsg_seq == 0) {
+		cb_listener_event(msg, NULL);
+		return NL_SKIP;
+	}
+
+	return NL_OK;
+}
+
+static int
 cb_event(struct nl_msg *msg, void *arg)
 {
 	struct nlmsghdr *hdr = nlmsg_hdr(msg);
@@ -2798,6 +2811,11 @@ uc_nl_request_common(struct nl_sock *sock, uc_vm_t *vm, size_t nargs)
 	nl_cb_set(cb, NL_CB_FINISH, NL_CB_CUSTOM, cb_done, &st);
 	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, cb_done, &st);
 	nl_cb_err(cb, NL_CB_CUSTOM, cb_errno, &ret);
+
+	if (sock == nl80211_conn.evsock) {
+		nl_cb_set(cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, cb_seq, NULL);
+		nl_cb_set(cb, NL_CB_MSG_IN, NL_CB_CUSTOM, cb_evsock_msg, NULL);
+	}
 
 	nl_send_auto_complete(sock, msg);
 
