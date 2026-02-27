@@ -60,8 +60,10 @@
 #include <fnmatch.h>
 #include <limits.h>
 #include <fcntl.h>
+#include <sys/statvfs.h>  /* statvfs(3) */
 
 #if defined(__linux__)
+#include <sys/statfs.h>   /* statfs() for f_type */
 #define HAS_IOCTL
 #endif
 
@@ -1780,6 +1782,89 @@ uc_fs_lstat(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * @typedef {Object} module:fs.StatVFSResult
+ * @property {number} bsize file system block size
+ * @property {number} frsize fragment size
+ * @property {number} blocks total blocks
+ * @property {number} bfree free blocks
+ * @property {number} bavail free blocks available to unprivileged users
+ * @property {number} files total file nodes (inodes)
+ * @property {number} ffree free file nodes
+ * @property {number} favail free nodes available to unprivileged users
+ * @property {number} fsid file system id
+ * @property {module:fs.ST_FLAGS} flag mount flags
+ * @property {number} namemax maximum filename length
+ * @property {number} freesize free space in bytes (calculated as `frsize * bfree`)
+ * @property {number} totalsize total size of the filesystem (calculated as `frsize * blocks`)
+ * @property {number} type (Linux only) magic number of the filesystem, obtained from `statfs`
+ */
+
+/**
+ * Query filesystem statistics for a given pathname.
+ *
+ * The returned object mirrors the members of `struct statvfs`.
+ * Convenience properties `freesize` and `totalsize` are added,
+ * which are calculated as:
+ * - `frsize * bfree` to provide the free space in bytes and
+ * - `frsize * blocks` to provide the total size of the filesystem.
+ *
+ * On Linux an additional `type` field (magic number from `statfs`) is
+ * provided if the call succeeds.
+ *
+ * Returns `null` on failure (and sets `fs.last_error`).
+ *
+ * @function module:fs#statvfs
+ *
+ * @param {string} path
+ * The path to the directory or file with which to query the filesystem.
+ *
+ * @returns {?module:fs.StatVFSResult}
+ *
+ * @example
+ * // Get filesystem statistics for a path
+ * const stats = statvfs('path/to/directory');
+ * print(stats.bsize); // file system block size
+ */
+static uc_value_t *
+uc_fs_statvfs(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *path = uc_fn_arg(0);
+	struct statvfs sv;
+
+	if (ucv_type(path) != UC_STRING)
+		err_return(EINVAL);
+
+	if (statvfs(ucv_string_get(path), &sv) == -1)
+		err_return(errno);
+
+	uc_value_t *o = ucv_object_new(vm);
+
+	ucv_object_add(o, "bsize",    ucv_int64_new(sv.f_bsize));
+	ucv_object_add(o, "frsize",   ucv_int64_new(sv.f_frsize));
+	ucv_object_add(o, "blocks",   ucv_int64_new(sv.f_blocks));
+	ucv_object_add(o, "bfree",    ucv_int64_new(sv.f_bfree));
+	ucv_object_add(o, "bavail",   ucv_int64_new(sv.f_bavail));
+	ucv_object_add(o, "files",    ucv_int64_new(sv.f_files));
+	ucv_object_add(o, "ffree",    ucv_int64_new(sv.f_ffree));
+	ucv_object_add(o, "favail",   ucv_int64_new(sv.f_favail));
+	ucv_object_add(o, "fsid",     ucv_int64_new(sv.f_fsid));
+	ucv_object_add(o, "flag",     ucv_int64_new(sv.f_flag));
+	ucv_object_add(o, "namemax",  ucv_int64_new(sv.f_namemax));
+	ucv_object_add(o, "freesize", ucv_int64_new(sv.f_frsize * sv.f_bfree));
+	ucv_object_add(o, "totalsize",ucv_int64_new(sv.f_frsize * sv.f_blocks));
+
+#ifdef __linux__
+	/* Call statfs to expose the magic number (`f_type`) */
+	struct statfs sf;
+	if (statfs(ucv_string_get(path), &sf) == 0) {
+		ucv_object_add(o, "type", ucv_int64_new(sf.f_type));
+	}
+#endif
+
+	return o;
+}
+
+/**
  * Creates a new directory.
  *
  * Returns `true` if the directory was successfully created.
@@ -3024,6 +3109,7 @@ static const uc_function_list_t global_fns[] = {
 	{ "popen",		uc_fs_popen },
 	{ "readlink",	uc_fs_readlink },
 	{ "stat",		uc_fs_stat },
+    { "statvfs",    uc_fs_statvfs },
 	{ "lstat",		uc_fs_lstat },
 	{ "mkdir",		uc_fs_mkdir },
 	{ "rmdir",		uc_fs_rmdir },
@@ -3078,6 +3164,53 @@ static void close_dir(void *ud)
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
+	#define ADD_CONST(x) ucv_object_add(scope, #x, ucv_int64_new(x))
+
+	/**
+	 * @typedef
+	 * @name module:fs.ST_FLAGS
+	 * @description Bitmask flags used at volume mount time (¹ - Linux only).
+	 * @property {number} ST_MANDLOCK - Mandatory locking.¹
+	 * @property {number} ST_NOATIME - Do not update access times.¹
+	 * @property {number} ST_NODEV - Do not allow device files.¹
+	 * @property {number} ST_NODIRATIME - Do not update directory access times.¹
+	 * @property {number} ST_NOEXEC - Do not allow execution of binaries.¹
+	 * @property {number} ST_NOSUID - Do not allow set-user-identifier or set-group-identifier bits.
+	 * @property {number} ST_RDONLY - Read-only filesystem.
+	 * @property {number} ST_RELATIME - Update access times relative to modification time.¹
+	 * @property {number} ST_SYNCHRONOUS - Synchronous writes.¹
+	 * @property {number} ST_NOSYMFOLLOW - Do not follow symbolic links.¹
+	 */
+	#ifdef ST_MANDLOCK
+	ADD_CONST(ST_MANDLOCK);
+	#endif
+	#ifdef ST_NOATIME
+	ADD_CONST(ST_NOATIME);
+	#endif
+	#ifdef ST_NODEV
+	ADD_CONST(ST_NODEV);
+	#endif
+	#ifdef ST_NODIRATIME
+	ADD_CONST(ST_NODIRATIME);
+	#endif
+	#ifdef ST_NOEXEC
+	ADD_CONST(ST_NOEXEC);
+	#endif
+	#ifdef ST_NOSUID
+	ADD_CONST(ST_NOSUID);
+	#endif
+	#ifdef ST_RDONLY
+	ADD_CONST(ST_RDONLY);
+	#endif
+	#ifdef ST_RELATIME
+	ADD_CONST(ST_RELATIME);
+	#endif
+	#ifdef ST_SYNCHRONOUS
+	ADD_CONST(ST_SYNCHRONOUS);
+	#endif
+	#ifdef ST_NOSYMFOLLOW
+	ADD_CONST(ST_NOSYMFOLLOW);
+	#endif
 
 	uc_type_declare(vm, "fs.proc", proc_fns, close_proc);
 	uc_type_declare(vm, "fs.dir", dir_fns, close_dir);
@@ -3089,7 +3222,6 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ucv_object_add(scope, "stderr", uc_resource_new(file_type, stderr));
 
 #ifdef HAS_IOCTL
-#define ADD_CONST(x) ucv_object_add(scope, #x, ucv_int64_new(x))
 	ADD_CONST(IOC_DIR_NONE);
 	ADD_CONST(IOC_DIR_READ);
 	ADD_CONST(IOC_DIR_WRITE);
