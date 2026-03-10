@@ -3672,16 +3672,17 @@ out:
 static char *
 include_path(const char *curpath, const char *incpath)
 {
+	const char *slash;
 	char *dup, *res;
 	int len;
 
 	if (*incpath == '/')
 		return realpath(incpath, NULL);
 
-	dup = curpath ? strrchr(curpath, '/') : NULL;
+	slash = curpath ? strrchr(curpath, '/') : NULL;
 
-	if (dup)
-		len = asprintf(&res, "%.*s/%s", (int)(dup - curpath), curpath, incpath);
+	if (slash)
+		len = asprintf(&res, "%.*s/%s", (int)(slash - curpath), curpath, incpath);
 	else
 		len = asprintf(&res, "./%s", incpath);
 
