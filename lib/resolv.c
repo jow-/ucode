@@ -626,40 +626,41 @@ parse_reply(uc_vm_t *vm, uc_value_t *res_obj, const unsigned char *msg, size_t l
 static int
 parse_nsaddr(const char *addrstr, addr_t *lsa)
 {
-	char *eptr, *hash, ifname[IFNAMSIZ], ipaddr[INET6_ADDRSTRLEN] = { 0 };
+	char *eptr, ifname[IFNAMSIZ], ipaddr[INET6_ADDRSTRLEN] = { 0 };
 	unsigned int port = default_port;
 	unsigned int scope = 0;
+	const char *sep, *p;
 
-	hash = strchr(addrstr, '#');
+	sep = strchr(addrstr, '#');
 
-	if (hash) {
-		port = strtoul(hash + 1, &eptr, 10);
+	if (sep) {
+		port = strtoul(sep + 1, &eptr, 10);
 
-		if ((size_t)(hash - addrstr) >= sizeof(ipaddr) ||
-		    eptr == hash + 1 || *eptr != '\0' || port > 65535) {
+		if ((size_t)(sep - addrstr) >= sizeof(ipaddr) ||
+		    eptr == sep + 1 || *eptr != '\0' || port > 65535) {
 			errno = EINVAL;
 			return -1;
 		}
 
-		memcpy(ipaddr, addrstr, hash - addrstr);
+		memcpy(ipaddr, addrstr, sep - addrstr);
 	}
 	else {
 		strncpy(ipaddr, addrstr, sizeof(ipaddr) - 1);
 	}
 
-	hash = strchr(addrstr, '%');
+	sep = strchr(addrstr, '%');
 
-	if (hash) {
-		for (eptr = ++hash; *eptr != '\0' && *eptr != '#'; eptr++) {
-			if ((eptr - hash) >= IFNAMSIZ) {
+	if (sep) {
+		for (p = ++sep; *p != '\0' && *p != '#'; p++) {
+			if ((p - sep) >= IFNAMSIZ) {
 				errno = ENODEV;
 				return -1;
 			}
 
-			ifname[eptr - hash] = *eptr;
+			ifname[p - sep] = *p;
 		}
 
-		ifname[eptr - hash] = '\0';
+		ifname[p - sep] = '\0';
 		scope = if_nametoindex(ifname);
 
 		if (scope == 0) {
@@ -974,8 +975,9 @@ out:
 static ns_t *
 add_ns(resolve_ctx_t *ctx, const char *addr)
 {
-	char portstr[sizeof("65535")], *p;
+	char portstr[sizeof("65535")];
 	addr_t a = { };
+	const char *p;
 	struct addrinfo *ai, *aip, hints = {
 		.ai_flags = AI_NUMERICSERV,
 		.ai_socktype = SOCK_DGRAM

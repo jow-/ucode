@@ -3497,11 +3497,12 @@ static char *
 uc_compiler_canonicalize_path(const char *path, const char *runpath)
 {
 	char *p, *resolved;
+	const char *slash;
 
 	if (*path == '/')
 		xasprintf(&p, "%s", path);
-	else if (runpath && (p = strrchr(runpath, '/')) != NULL)
-		xasprintf(&p, "%.*s/%s", (int)(p - runpath), runpath, path);
+	else if (runpath && (slash = strrchr(runpath, '/')) != NULL)
+		xasprintf(&p, "%.*s/%s", (int)(slash - runpath), runpath, path);
 	else
 		xasprintf(&p, "./%s", path);
 
@@ -3516,17 +3517,18 @@ static char *
 uc_compiler_expand_module_path(const char *name, const char *runpath, const char *template)
 {
 	int namelen, prefixlen;
+	const char *asterix;
 	char *path, *p;
 
-	p = strchr(template, '*');
+	asterix = strchr(template, '*');
 
-	if (!p)
+	if (!asterix)
 		return NULL;
 
-	prefixlen = p - template;
+	prefixlen = asterix - template;
 	namelen = strlen(name);
 
-	xasprintf(&path, "%.*s%.*s%s", prefixlen, template, namelen, name, p + 1);
+	xasprintf(&path, "%.*s%.*s%s", prefixlen, template, namelen, name, asterix + 1);
 
 	for (p = path + prefixlen; namelen > 0; namelen--, p++)
 		if (*p == '.')
@@ -3572,8 +3574,8 @@ static bool
 uc_compiler_is_dynlink_module(uc_compiler_t *compiler, const char *name, const char *path)
 {
 	uc_search_path_t *dynlink_list = &compiler->parser->config->force_dynlink_list;
+	const char *dot;
 	size_t i;
-	char *p;
 
 	for (i = 0; i < dynlink_list->count; i++)
 		if (!strcmp(dynlink_list->entries[i], name))
@@ -3582,9 +3584,9 @@ uc_compiler_is_dynlink_module(uc_compiler_t *compiler, const char *name, const c
 	if (!path)
 		return false;
 
-	p = strrchr(path, '.');
+	dot = strrchr(path, '.');
 
-	return (p && !strcmp(p, ".so"));
+	return (dot && !strcmp(dot, ".so"));
 }
 
 static bool
