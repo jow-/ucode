@@ -4042,7 +4042,9 @@ uc_system(uc_vm_t *vm, size_t nargs)
 		goto fail;
 
 	case 0:
-		execvp(arglist[0], (char * const *)arglist);
+		if (tms <= 0 || sigprocmask(SIG_SETMASK, &sigomask, NULL) == 0)
+			execvp(arglist[0], (char * const *)arglist);
+
 		exit(-1);
 
 		break;
