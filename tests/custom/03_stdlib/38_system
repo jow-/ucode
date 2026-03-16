@@ -146,3 +146,29 @@ In line 2, byte 23:
 
 
 -- End --
+
+
+When a timeout is specified, the child process must not inherit the blocked
+SIGCHLD signal mask. If it did, the shell's `wait` builtin would hang, as the
+shell could not receive SIGCHLD notifications for its own subprocesses.
+
+-- Testcase --
+{%
+	// Run a shell that backgrounds a child and waits for it; if SIGCHLD is
+	// blocked in the child, the wait hangs and the timeout kills the process.
+	let rc = system([ '/bin/sh', TESTFILES_PATH + '/testscripts/wait.sh' ], 5000);
+
+	print(rc == 0 ? "wait completed\n" : "wait failed\n");
+%}
+-- End --
+
+-- File testscripts/wait.sh --
+#!/bin/sh
+
+sleep 0 &
+wait
+-- End --
+
+-- Expect stdout --
+wait completed
+-- End --
