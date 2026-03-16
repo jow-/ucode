@@ -2319,6 +2319,32 @@ uc_fs_rename(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * Takes an arbitrary number of glob patterns and
+ * resolves matching files for each one. In case of multiple patterns,
+ * no efforts are made to remove duplicates or to globally sort the combined
+ * match list. The list of matches for each individual pattern is sorted.
+ * Returns an array containing all matched file paths.
+ *
+ * @function module:fs#glob
+ *
+ * @param {...Arguments} pattern
+ *
+ * @returns {?string[]}
+ *
+ * @example
+ *
+ * import { chdir, glob } from 'fs';
+ * chdir('/etc/ssl/certs/');
+ * for (let cert in glob('*.crt', '*.pem')) {
+ * 	if (cert != null)
+ * 		print(cert, '\n');
+ * }
+ * // ACCVRAIZ1.crt
+ * // AC_RAIZ_FNMT-RCM.crt
+ * // AC_RAIZ_FNMT-RCM_SERVIDORES_SEGUROS.crt
+ * // ...
+ */
 static uc_value_t *
 uc_fs_glob(uc_vm_t *vm, size_t nargs)
 {
@@ -3109,7 +3135,7 @@ static const uc_function_list_t global_fns[] = {
 	{ "popen",		uc_fs_popen },
 	{ "readlink",	uc_fs_readlink },
 	{ "stat",		uc_fs_stat },
-    { "statvfs",    uc_fs_statvfs },
+	{ "statvfs",	uc_fs_statvfs },
 	{ "lstat",		uc_fs_lstat },
 	{ "mkdir",		uc_fs_mkdir },
 	{ "rmdir",		uc_fs_rmdir },
