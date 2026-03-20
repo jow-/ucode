@@ -4272,6 +4272,11 @@ uc_assert(uc_vm_t *vm, size_t nargs)
  * Construct a regular expression instance from the given `source` pattern
  * string and any flags optionally specified by the `flags` argument.
  *
+ * Supported flags:
+ *  - `i`: Case-insensitive matching
+ *  - `s`: DotAll - makes `.` match newline characters (default: `.` does not match newlines)
+ *  - `g`: Global matching (for match() function)
+ *
  *  - Throws a type error exception if `flags` is not a string or if the string
  *    in `flags` contains unrecognized regular expression flag characters.
  *  - Throws a syntax error when the pattern in `source` cannot be compiled into
@@ -4285,7 +4290,7 @@ uc_assert(uc_vm_t *vm, size_t nargs)
  * The pattern string.
  *
  * @param {string} [flags]
- * The optional regular expression flags.
+ * The optional regular expression flags (i=ignore case, s=dotAll, g=global).
  *
  * @returns {RegExp}
  *
@@ -4293,6 +4298,14 @@ uc_assert(uc_vm_t *vm, size_t nargs)
  * regexp('foo.*bar', 'is');   // equivalent to /foo.*bar/is
  * regexp('foo.*bar', 'x');    // throws a "Type error: Unrecognized flag character 'x'" exception
  * regexp('foo.*(');           // throws a "Syntax error: Unmatched ( or \( exception"
+ *
+ * @example
+ * // Without 's' flag, . does not match newlines
+ * match("hello\nworld", /hello.world/);    // null
+ *
+ * @example
+ * // With 's' flag, . matches newlines (dotAll behavior)
+ * match("hello\nworld", /hello.world/s);   // matches
  */
 static uc_value_t *
 uc_regexp(uc_vm_t *vm, size_t nargs)
