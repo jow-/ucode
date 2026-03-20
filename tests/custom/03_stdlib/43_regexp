@@ -18,7 +18,7 @@ Returns the compiled regexp object.
 	printf("%.J\n", [
 		match("BEGIN this is some text END", re1),
 		match("This is a group of words", re2),
-		match("Dots now\ndon't\nmatch\ntext\nwith newlines", re3)
+		match("Dots now\nmatch\ntext\nwith newlines", re3)
 	]);
 %}
 -- End --
@@ -49,7 +49,10 @@ Returns the compiled regexp object.
 			"words"
 		]
 	],
-	null
+	[
+		"Dots now\nmatch\ntext\nwith newlines",
+		"now\nmatch\ntext\nwith"
+	]
 ]
 -- End --
 

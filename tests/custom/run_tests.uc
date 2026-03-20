@@ -56,13 +56,13 @@ function parse_testcases(file, dir) {
 		else if (line == '-- Testcase --\n') {
 			section = [ 'code', '' ];
 		}
-		else if ((m = match(line, /^-- Expect (stdout|stderr|exitcode) --$/s)) != null) {
+		else if ((m = match(line, /^-- Expect (stdout|stderr|exitcode) --$/)) != null) {
 			section = [ m[1], '' ];
 		}
-		else if ((m = match(line, /^-- File (.*)--$/s)) != null) {
+		else if ((m = match(line, /^-- File (.*)--$/)) != null) {
 			section = [ 'file', `${dir}/files/${trim(m[1]) || 'file'}`, '' ];
 		}
-		else if ((m = match(line, /^-- End( \(no-eol\))? --$/s)) != null) {
+		else if ((m = match(line, /^-- End( \(no-eol\))? --$/)) != null) {
 			if (m[1] != null && type(section[-1]) == 'string')
 				section[-1] = substr(section[-1], 0, -1);
 
@@ -100,7 +100,7 @@ function parse_testcases(file, dir) {
 				break;
 
 			case 'env':
-				if ((m = match(line, /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s)) != null)
+				if ((m = match(line, /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/)) != null)
 					section[1][m[1]] = m[2];
 				break;
 

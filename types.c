@@ -1409,7 +1409,7 @@ ucv_regexp_new(const char *pattern, bool icase, bool newline, bool global, char 
 	if (icase)
 		cflags |= REG_ICASE;
 
-	if (newline)
+	if (!newline)
 		cflags |= REG_NEWLINE;
 
 	res = regcomp(&re->regexp, pattern, cflags);
