@@ -253,10 +253,13 @@ void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 	uc_vm_trace_set(vm, 0);
 
 	uc_vm_signal_handlers_setup(vm);
+
+	uc_thread_context_get()->refcount++;
 }
 
 void uc_vm_free(uc_vm_t *vm)
 {
+	uc_thread_context_t *ctx;
 	uc_upvalref_t *ref;
 	size_t i;
 
@@ -287,6 +290,13 @@ void uc_vm_free(uc_vm_t *vm)
 		free(vm->restypes.entries[i]);
 
 	uc_vector_clear(&vm->restypes);
+
+	ctx = uc_thread_context_get();
+
+	assert(ctx->refcount > 0);
+
+	if (--ctx->refcount == 0)
+		uc_thread_context_free();
 }
 
 static uc_chunk_t *
