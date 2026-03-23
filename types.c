@@ -2631,3 +2631,10 @@ uc_thread_context_get(void)
 
 	return tls_ctx;
 }
+
+void
+uc_thread_context_free(void)
+{
+	free(tls_ctx);
+	tls_ctx = NULL;
+}

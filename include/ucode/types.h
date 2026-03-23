@@ -285,12 +285,16 @@ typedef struct {
 	/* VM owning installed signal handlers */
 	uc_vm_t *signal_handler_vm;
 
+	/* Reference counter of this thread context for deallocation purposes */
+	size_t refcount;
+
 	/* Object iteration */
 	uc_list_t object_iterators;
 } uc_thread_context_t;
 
 __hidden uc_thread_context_t *uc_thread_context_get(void);
 
+__hidden void uc_thread_context_free(void);
 
 /* VM definitions */
 
