@@ -2570,9 +2570,11 @@ uc_socket_nameinfo(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_socket_addrinfo(uc_vm_t *vm, size_t nargs)
 {
+	char hostbuf[sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255%2147483648")];
 	struct addrinfo *ai_hints = NULL, *ai_res;
 	uc_value_t *host, *serv, *hints, *rv;
-	char *servstr;
+	char *hostname, *servstr;
+	size_t hostlen;
 	int ret;
 
 	args_get(vm, nargs, NULL,
@@ -2587,8 +2589,18 @@ uc_socket_addrinfo(uc_vm_t *vm, size_t nargs)
 			return NULL;
 	}
 
+	hostname = ucv_string_get(host);
+	hostlen = ucv_string_length(host);
+
+	if (hostlen > 2 && hostname[0] == '[' && hostname[hostlen - 1] == ']'
+	    && hostlen - 2 < sizeof(hostbuf)) {
+		memcpy(hostbuf, hostname + 1, hostlen - 2);
+		hostbuf[hostlen - 2] = '\0';
+		hostname = hostbuf;
+	}
+
 	servstr = (serv && ucv_type(serv) != UC_STRING) ? ucv_to_string(vm, serv) : NULL;
-	ret = getaddrinfo(ucv_string_get(host),
+	ret = getaddrinfo(hostname,
 		servstr ? servstr : ucv_string_get(serv),
 		ai_hints, &ai_res);
 
@@ -2611,7 +2623,6 @@ uc_socket_addrinfo(uc_vm_t *vm, size_t nargs)
 
 	ok_return(rv);
 }
-
 /**
  * Represents a poll state serving as input parameter and return value type for
  * {@link module:socket#poll|`poll()`}.
