@@ -1,0 +1,122 @@
+Shorthand method declarations in object literals.
+
+-- Expect stdout --
+42
+3
+15
+Hello, test
+nested
+2
+bar
+-- End --
+
+-- Testcase --
+{%
+	// Basic method shorthand
+	obj1 = {
+		foo() { return 42; }
+	};
+	print(obj1.foo(), "\n");
+
+	// Method with parameters
+	obj2 = {
+		add(a, b) { return a + b; }
+	};
+	print(obj2.add(1, 2), "\n");
+
+	// Method with rest parameters
+	obj3 = {
+		sum(...args) { 
+			let total = 0;
+			for (let x in args) total += x;
+			return total;
+		}
+	};
+	print(obj3.sum(1, 2, 3, 4, 5), "\n");
+
+	// Mixed object with methods and properties
+	obj4 = {
+		name: "test",
+		greet() { return "Hello, " + this.name; },
+		value: 123
+	};
+	print(obj4.greet(), "\n");
+
+	// Nested methods
+	obj5 = {
+		outer() {
+			return {
+				inner() { return "nested"; }
+			};
+		}
+	};
+	print(obj5.outer().inner(), "\n");
+
+	// Method alongside spread operator
+	base = { x: 1 };
+	obj6 = {
+		...base,
+		y: 2,
+		get_y() { return this.y; }
+	};
+	print(obj6.get_y(), "\n");
+
+	// Computed method name
+	key = "foo";
+	obj7 = {
+		[key]() { return "bar"; },
+		baz: 123
+	};
+	print(obj7.foo(), "\n");
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: Unexpected token
+Expecting '{'
+In line 2, byte 16:
+
+ `    obj = { foo() };`
+  Near here --------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	obj = { foo() };
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: Unexpected token
+Expecting Label
+In line 2, byte 14:
+
+ `    obj = { foo(123) { return 1; } };`
+  Near here ------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	obj = { foo(123) { return 1; } };
+%}
+-- End --
+
+-- Expect stderr --
+Syntax error: Invalid identifier
+In line 2, byte 16:
+
+ `    obj = { return() { } };`
+  Near here --------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	obj = { return() { } };
+%}
+-- End --
