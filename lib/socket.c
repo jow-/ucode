@@ -528,7 +528,7 @@ parse_addr(char *addr, struct sockaddr_storage *ss)
 static bool
 uv_to_sockaddr(uc_value_t *addr, struct sockaddr_storage *ss, socklen_t *slen)
 {
-	char *s, *p, addrstr[sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255%2147483648")];
+	char *s, *p, addrstr[sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255%interface012345")];
 	struct sockaddr_in6 *s6 = (struct sockaddr_in6 *)ss;
 	struct sockaddr_in *s4 = (struct sockaddr_in *)ss;
 	struct sockaddr_un *su = (struct sockaddr_un *)ss;
@@ -2570,7 +2570,7 @@ uc_socket_nameinfo(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_socket_addrinfo(uc_vm_t *vm, size_t nargs)
 {
-	char hostbuf[sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255%2147483648")];
+	char hostbuf[sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255%interface012345")];
 	struct addrinfo *ai_hints = NULL, *ai_res;
 	uc_value_t *host, *serv, *hints, *rv;
 	char *hostname, *servstr;
