@@ -2195,6 +2195,79 @@ uc_compiler_compile_array(uc_compiler_t *compiler)
 }
 
 static void
+uc_compiler_compile_method(uc_compiler_t *compiler, uc_value_t *method_name)
+{
+	uc_compiler_t fncompiler = { 0 };
+	uc_function_t *fn;
+	size_t i, load_off;
+	ssize_t slot;
+
+	uc_compiler_init(&fncompiler, method_name ? ucv_string_get(method_name) : NULL,
+	                 uc_compiler_current_source(compiler),
+	                 compiler->parser->prev.pos,
+	                 compiler->program,
+	                 uc_compiler_is_strict(compiler));
+
+	fncompiler.parent = compiler;
+	fncompiler.parser = compiler->parser;
+	fncompiler.exprstack = compiler->exprstack;
+
+	fn = (uc_function_t *)fncompiler.function;
+
+	/* parse parameters - '(' is already consumed, expect parameters or ')' */
+	uc_compiler_enter_scope(&fncompiler);
+
+	while (true) {
+		if (uc_compiler_parse_check(&fncompiler, TK_RPAREN))
+			break;
+
+		if (uc_compiler_parse_match(&fncompiler, TK_ELLIP))
+			fn->vararg = true;
+
+		uc_compiler_parse_consume(&fncompiler, TK_LABEL);
+		fn->nargs++;
+
+		uc_compiler_declare_local(&fncompiler,
+			fncompiler.parser->prev.uv, false);
+		uc_compiler_initialize_local(&fncompiler);
+
+		if (fn->vararg ||
+		    !uc_compiler_parse_match(&fncompiler, TK_COMMA))
+			break;
+	}
+
+	uc_compiler_parse_consume(&fncompiler, TK_RPAREN);
+
+	/* parse function body - must be a block */
+	uc_compiler_parse_consume(&fncompiler, TK_LBRACE);
+
+	while (!uc_compiler_parse_check(&fncompiler, TK_RBRACE) &&
+	       !uc_compiler_parse_check(&fncompiler, TK_EOF))
+		uc_compiler_compile_declaration(&fncompiler);
+
+	uc_compiler_parse_consume(&fncompiler, TK_RBRACE);
+
+	/* emit load instruction for method */
+	uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_CLFN);
+	load_off = uc_compiler_emit_u32(compiler, 0, 0);
+
+	/* encode upvalue information */
+	for (i = 0; i < fn->nupvals; i++)
+		uc_compiler_emit_s32(compiler, 0,
+			fncompiler.upvals.entries[i].local
+				? -(fncompiler.upvals.entries[i].index + 1)
+				: fncompiler.upvals.entries[i].index);
+
+	/* finalize function compiler */
+	fn = uc_compiler_finish(&fncompiler, TK_RETURN);
+
+	if (fn)
+		uc_compiler_set_u32(compiler, load_off,
+			uc_program_function_id(compiler->program, fn));
+}
+
+
+static void
 uc_compiler_compile_object(uc_compiler_t *compiler)
 {
 	size_t hint_off, hint_count = 0, len = 0;
@@ -2228,46 +2301,60 @@ uc_compiler_compile_object(uc_compiler_t *compiler)
 			continue;
 		}
 
-		/* Computed property name */
+		/* Computed property/method name */
 		if (uc_compiler_parse_match(compiler, TK_LBRACK)) {
 			/* parse property name expression */
 			uc_compiler_parse_precedence(compiler, P_ASSIGN);
-
-			/* cosume closing bracket and colon */
 			uc_compiler_parse_consume(compiler, TK_RBRACK);
-			uc_compiler_parse_consume(compiler, TK_COLON);
 
-			/* parse value expression */
-			uc_compiler_parse_precedence(compiler, P_ASSIGN);
+			/* Check if this is a computed method: [expr]() { ... } */
+			if (uc_compiler_parse_match(compiler, TK_LPAREN)) {
+				/* compile method - key is already on stack from [expr] */
+				uc_compiler_compile_method(compiler, NULL);
+			}
+			else {
+				/* regular computed property: [expr]: value */
+				uc_compiler_parse_consume(compiler, TK_COLON);
+				uc_compiler_parse_precedence(compiler, P_ASSIGN);
+			}
 		}
 
-		/* Property/value tuple or property shorthand */
+		/* Property/method declaration or property shorthand */
 		else {
 			/* parse key expression */
+			uc_tokentype_t key_type = compiler->parser->curr.type;
 			if (!uc_compiler_parse_match(compiler, TK_LABEL) &&
 			    !uc_compiler_parse_match(compiler, TK_STRING))
 				uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
 					"Expecting label");
 
+			/* save the key value before potentially advancing */
+			uc_value_t *key = compiler->parser->prev.uv;
+
 			/* load label */
 			uc_compiler_emit_constant(compiler, compiler->parser->prev.pos,
-				compiler->parser->prev.uv);
+				key);
 
-			/* If the property name is a plain label followed by a comma or
-			 * closing curly brace, treat it as ES2015 property shorthand
-			 * notation... */
-			if (compiler->parser->prev.type == TK_LABEL &&
-			    (uc_compiler_parse_check(compiler, TK_COMMA) ||
-			     uc_compiler_parse_check(compiler, TK_RBRACE))) {
-				/* disallow keywords in this case */
-				if (uc_lexer_is_keyword(compiler->parser->prev.uv))
+			/* Check if this is a shorthand method: foo() { ... } */
+			if (uc_compiler_parse_match(compiler, TK_LPAREN)) {
+				/* disallow keywords as method names */
+				if (uc_lexer_is_keyword(key))
 					uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
 						"Invalid identifier");
 
-				uc_compiler_emit_variable_rw(compiler,
-					compiler->parser->prev.uv, 0);
+				uc_compiler_compile_method(compiler, key);
 			}
+			/* Check if this is property shorthand: foo */
+			else if (key_type == TK_LABEL &&
+			         (uc_compiler_parse_check(compiler, TK_COMMA) ||
+			          uc_compiler_parse_check(compiler, TK_RBRACE))) {
+				/* disallow keywords in this case */
+				if (uc_lexer_is_keyword(key))
+					uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+						"Invalid identifier");
 
+				uc_compiler_emit_variable_rw(compiler, key, 0);
+			}
 			/* ... otherwise treat it as ordinary `key: value` tuple */
 			else {
 				uc_compiler_parse_consume(compiler, TK_COLON);
