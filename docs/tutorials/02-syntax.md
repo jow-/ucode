@@ -417,6 +417,32 @@ keyword:
 <h1>{{ printgreeting("Alice") }}</h1>
 ```
 
+#### 4.2. Forward declarations
+
+Ucode supports forward-declaring a function name before providing its definition
+using the `function name;` syntax. This is primarily useful for enabling
+mutual recursion between functions at the same scope level:
+
+```javascript
+{%
+	function is_even;
+	function is_odd;
+
+	function is_even(n) {
+		if (n == 0) return true;
+		return is_odd(n - 1);
+	}
+
+	function is_odd(n) {
+		if (n == 0) return false;
+		return is_even(n - 1);
+	}
+
+	print(is_even(10), "\n"); // true
+%}
+```
+
+
 
 ### 5. Operators
 
