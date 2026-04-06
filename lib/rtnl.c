@@ -3863,6 +3863,9 @@ uc_nl_listener_free(void *arg)
 {
 	uc_nl_listener_t *l = arg;
 
+	if (!l)
+		return;
+
 	ucv_array_set(listener_registry, l->index, NULL);
 	ucv_array_set(listener_registry, l->index + 1, NULL);
 	free(l);
