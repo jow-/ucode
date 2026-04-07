@@ -1668,6 +1668,34 @@ ucv_to_json(uc_value_t *uv)
 	return NULL;
 }
 
+static int
+utf8_seq_len(const char *s, size_t remain)
+{
+	unsigned char c = (unsigned char)*s;
+	int expect;
+
+	if (c < 0x80)
+		return 1;
+
+	if (c >= 0xc0 && c <= 0xdf)
+		expect = 2;
+	else if (c >= 0xe0 && c <= 0xef)
+		expect = 3;
+	else if (c >= 0xf0 && c <= 0xf7)
+		expect = 4;
+	else
+		return 0;
+
+	if (remain < (size_t)expect)
+		return 0;
+
+	for (int j = 1; j < expect; j++)
+		if ((unsigned char)s[j] < 0x80 || (unsigned char)s[j] > 0xbf)
+			return 0;
+
+	return expect;
+}
+
 static void
 ucv_to_string_json_encoded(uc_stringbuf_t *pb, const char *s, size_t len, bool regexp)
 {
@@ -1711,10 +1739,24 @@ ucv_to_string_json_encoded(uc_stringbuf_t *pb, const char *s, size_t len, bool r
 			break;
 
 		default:
-			if ((unsigned char)*s < 0x20)
+			if ((unsigned char)*s < 0x20) {
 				ucv_stringbuf_printf(pb, "\\u%04x", (unsigned char)*s);
-			else
+			}
+			else if ((unsigned char)*s >= 0x80) {
+				int seqlen = utf8_seq_len(s, len - i);
+
+				if (seqlen > 1) {
+					ucv_stringbuf_addstr(pb, s, seqlen);
+					s += seqlen - 1;
+					i += seqlen - 1;
+				}
+				else {
+					ucv_stringbuf_printf(pb, "\\u%04x", (unsigned char)*s);
+				}
+			}
+			else {
 				ucv_stringbuf_addstr(pb, s, 1);
+			}
 
 			break;
 		}
