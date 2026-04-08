@@ -61,12 +61,15 @@
 #include <assert.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <errno.h>
 #include <limits.h>
 #include <dlfcn.h>
 #include <fnmatch.h>
 #include <regex.h>
 #include <termios.h>
+
+#include "debug_remote.h"
 
 #ifdef HAVE_ULOOP
 #include <libubox/uloop.h>
@@ -78,6 +81,7 @@
 #include "ucode/module.h"
 #include "ucode/platform.h"
 #include "ucode/compiler.h"
+#include "ucode/vm.h"
 
 
 static char *memdump_signal = "USR2";
@@ -593,6 +597,30 @@ static struct {
 	uc_vm_t *vm;
 } signal_handle;
 
+static struct {
+	struct uloop_fd ufd;
+	uc_vm_t *vm;
+} break_handle;
+
+static bool debug_attach_mode = false;
+
+typedef enum {
+	BK_ONCE,
+	BK_USER,
+	BK_STEP,
+	BK_CATCH,
+} debug_breakpoint_kind_t;
+
+typedef struct debug_breakpoint {
+	uc_breakpoint_t bk;
+	uc_function_t *fn;
+	size_t depth;
+	debug_breakpoint_kind_t kind;
+} debug_breakpoint_t;
+
+static void bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk);
+static uc_callframe_t *uc_debug_curr_frame(uc_vm_t *vm, size_t off);
+
 static void
 uc_uloop_signal_cb(struct uloop_fd *ufd, unsigned int events)
 {
@@ -601,21 +629,87 @@ uc_uloop_signal_cb(struct uloop_fd *ufd, unsigned int events)
 }
 
 static void
+uc_uloop_break_cb(struct uloop_fd *ufd, unsigned int events)
+{
+	char c;
+	while (read(break_handle.ufd.fd, &c, 1) > 0) {
+		/* break requested */
+	}
+
+	/* In attach mode, launch the debugger CLI immediately */
+	if (debug_attach_mode) {
+		uc_vm_t *vm = break_handle.vm;
+		uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+
+		if (frame) {
+			debug_breakpoint_t dbk = {
+				.bk = { .ip = frame->ip },
+				.fn = frame->closure->function,
+				.kind = BK_USER
+			};
+
+			bk_enter_cli(vm, &dbk.bk);
+		}
+	}
+}
+
+static void
 debug_setup_uloop(uc_vm_t *vm)
 {
 	int signal_fd = uc_vm_signal_notifyfd(vm);
+	int break_fd = uc_vm_break_notifyfd(vm);
 
-	if (signal_fd != -1 && uloop_init() == 0) {
+	if (uloop_init() < 0)
+		return;
+
+	if (signal_fd != -1) {
 		signal_handle.vm = vm;
 		signal_handle.ufd.cb = uc_uloop_signal_cb;
 		signal_handle.ufd.fd = signal_fd;
 
 		uloop_fd_add(&signal_handle.ufd, ULOOP_READ);
 	}
+
+	if (break_fd != -1) {
+		break_handle.vm = vm;
+		break_handle.ufd.cb = uc_uloop_break_cb;
+		break_handle.ufd.fd = break_fd;
+
+		uloop_fd_add(&break_handle.ufd, ULOOP_READ);
+	}
 }
 #else
 static void debug_setup_uloop(uc_vm_t *vm) {}
 #endif
+
+/* Global vm pointer for SIGUSR1 handler */
+static uc_vm_t *debug_break_vm = NULL;
+
+static void
+debug_break_signal_handler(int sig)
+{
+	/* Signal handler - request break via VM API
+	 * The actual break will be processed by uloop or the VM */
+	if (debug_break_vm)
+		uc_vm_break_request(debug_break_vm);
+}
+
+static void
+debug_setup_break_signal(uc_vm_t *vm)
+{
+	struct sigaction sa = { 0 };
+
+	debug_break_vm = vm;
+
+	sa.sa_handler = debug_break_signal_handler;
+	sa.sa_flags = SA_RESTART;
+	sigemptyset(&sa.sa_mask);
+
+	/* Only install if not already handled by debug module */
+	if (sigaction(SIGUSR1, &sa, NULL) == 0) {
+		/* Successfully installed */
+	}
+}
 
 static void
 debug_setup_memdump(uc_vm_t *vm)
@@ -655,6 +749,8 @@ debug_setup(uc_vm_t *vm)
 
 	if (!ev || !strcmp(ev, "1") || !strcmp(ev, "yes") || !strcmp(ev, "true"))
 		debug_setup_memdump(vm);
+
+	debug_setup_break_signal(vm);
 }
 
 
@@ -1667,20 +1763,6 @@ uc_setupval(uc_vm_t *vm, size_t nargs)
 /* Interactive debugger implementation follows                                */
 /* ========================================================================== */
 
-typedef enum {
-	BK_ONCE,
-	BK_USER,
-	BK_STEP,
-	BK_CATCH,
-} debug_breakpoint_kind_t;
-
-typedef struct debug_breakpoint {
-	uc_breakpoint_t bk;
-	uc_function_t *fn;
-	size_t depth;
-	debug_breakpoint_kind_t kind;
-} debug_breakpoint_t;
-
 typedef struct {
 	size_t nesting;
 	size_t off_start, off_end;
@@ -1724,6 +1806,7 @@ typedef struct {
 
 static struct {
 	bool initialized;
+	bool interactive;    /* true if stdin is a tty */
 	char data[128];
 	size_t pos, fill;
 	size_t rows, cols, col_offset;
@@ -2557,7 +2640,7 @@ filename_matches_pattern(const char *filename, const char *pattern)
 	if (basename)
 		return (strcmp(basename + 1, pattern) == 0);
 
-	return false;
+	return (strcmp(filename, pattern) == 0);
 }
 
 static bool
@@ -2881,6 +2964,10 @@ term_width(void)
 static void
 term_reset(void)
 {
+	/* Only reset terminal if we're in interactive mode */
+	if (!termstate.interactive)
+		return;
+	
 	if (tcsetattr(STDOUT_FILENO, TCSAFLUSH, &termstate.orig_settings) == -1)
 		fprintf(stderr, "tcsetattr(): %m\n");
 
@@ -2899,6 +2986,10 @@ term_reset(void)
 static bool
 term_raw(void)
 {
+	/* Don't set raw mode in non-interactive mode */
+	if (!termstate.interactive)
+		return true;
+	
 	if (tcgetattr(STDOUT_FILENO, &termstate.orig_settings) == -1) {
 		fprintf(stderr, "tcgetattr(): %m\n");
 
@@ -2927,6 +3018,10 @@ term_raw(void)
 static bool
 term_isig(bool enable)
 {
+	/* Skip signal settings in non-interactive mode */
+	if (!termstate.interactive)
+		return true;
+	
 	struct termios t;
 
 	if (tcgetattr(STDOUT_FILENO, &t) == -1) {
@@ -2973,6 +3068,10 @@ term_getc_raw(void)
 {
 	ssize_t rlen;
 
+	/* In non-interactive mode, return -1 to signal EOF immediately */
+	if (!termstate.interactive)
+		return -1;
+
 	if (termstate.pos >= termstate.fill) {
 		while (true) {
 			rlen = read(STDIN_FILENO, termstate.data, sizeof(termstate.data));
@@ -2985,7 +3084,7 @@ term_getc_raw(void)
 			}
 
 			if (rlen == 0)
-				continue;
+				return -1;
 
 			termstate.fill = rlen;
 			termstate.pos = 0;
@@ -3006,6 +3105,10 @@ term_getc(void)
 {
 	int chr = term_getc_raw();
 	int seq[5];
+
+	/* EOF - propagate */
+	if (chr == -1)
+		return -1;
 
 	/* escape sequence */
 	if (chr == '\033') {
@@ -3760,11 +3863,85 @@ term_line_tabcomplete(termline_t *line, const char *prompt,
 	free(argv);
 }
 
+/* Simple line reader for non-interactive mode (piped input) */
+static ssize_t
+term_getline_fallback(const char *prompt, arg_t **argv, bool *eof)
+{
+	char buf[4096];
+	char *line, *p, *arg_start;
+	size_t len, argc = 0;
+	arg_t *args = NULL;
+
+	*eof = false;
+
+	/* Print prompt without color codes */
+	if (prompt != NULL)
+		fprintf(stderr, "%s", prompt);
+
+	/* Read a line from stdin */
+	line = fgets(buf, sizeof(buf), stdin);
+	if (line == NULL) {
+		*eof = true;
+		return -1;
+	}
+
+	/* Remove trailing newline */
+	len = strlen(line);
+	if (len > 0 && line[len-1] == '\n')
+		line[--len] = '\0';
+
+	/* Skip empty lines */
+	if (len == 0)
+		return 0;
+
+	/* Parse arguments (simple whitespace splitting) */
+	p = line;
+	while (*p) {
+		/* Skip leading whitespace */
+		while (*p && (*p == ' ' || *p == '\t'))
+			p++;
+
+		if (*p == '\0')
+			break;
+
+		arg_start = p;
+
+		/* Find end of argument */
+		while (*p && *p != ' ' && *p != '\t')
+			p++;
+
+		/* Save argument */
+		if (*p)
+			*p++ = '\0';
+
+		args = xrealloc(args, (argc + 1) * sizeof(arg_t));
+		args[argc] = (arg_t){
+			.type = ARGTYPE_STRING,
+			.sv = xstrdup(arg_start),
+			.off = 0,
+			.nv = 0
+		};
+		argc++;
+	}
+
+	*argv = args;
+	return argc;
+}
+
 static ssize_t
 term_getline(const char *prompt, arg_t **argv,
              void (*completion_cb)(size_t, arg_t *, suggestions_t *, void *),
              void *ud)
 {
+	/* Use simple fallback for non-interactive mode */
+	if (!termstate.interactive) {
+		bool eof;
+		ssize_t argc = term_getline_fallback(prompt, argv, &eof);
+		if (eof && argc < 0)
+			return -1;
+		return argc;
+	}
+
 	termline_t line = { 0 };
 	termline_t *curr_line = &line;
 	termline_t *next_line;
@@ -3779,6 +3956,10 @@ term_getline(const char *prompt, arg_t **argv,
 
 	while (true) {
 		int chr = term_getc();
+
+		/* EOF - return -1 */
+		if (chr == -1)
+			break;
 
 		switch (chr) {
 		case HOME_KEY:
@@ -4500,7 +4681,7 @@ insn_u16(uint8_t *ip)
 static size_t
 insn_length(uint8_t *ip, uc_program_t *prog)
 {
-	if (*ip == I_CALL || *ip == I_QCALL || *ip == I_MCALL || *ip == I_QMCALL)
+	if (*ip == I_CALL)
 		return 5 + insn_u16(ip + 1) * 2;
 
 	if (*ip == I_CLFN || *ip == I_ARFN) {
@@ -4525,39 +4706,7 @@ bk_enter_function(uc_vm_t *vm, uc_breakpoint_t *bk)
 
 	assert(dbk->kind == BK_STEP);
 
-	if (*ip == I_MCALL || *ip == I_QMCALL) {
-		argspec = insn_u32(ip + 1);
-
-		size_t nargs = argspec & 0xffff;
-
-		if (nargs + 2 < vm->stack.count) {
-			uc_value_t *ctx = vm->stack.entries[vm->stack.count - nargs - 2];
-			uc_value_t *key = vm->stack.entries[vm->stack.count - nargs - 1];
-			uc_value_t *fno = ucv_key_get(vm, ctx, key);
-
-			ucv_put(fno); /* ucv_get_get() increases refcount */
-
-			if (ucv_type(fno) == UC_UPVALUE) {
-				uc_upvalref_t *ref = (uc_upvalref_t *)fno;
-
-				if (ref->closed)
-					fno = ref->value;
-				else
-					fno = vm->stack.entries[ref->slot];
-			}
-
-			if (ucv_type(fno) == UC_CLOSURE) {
-				uc_function_t *fn = ((uc_closure_t *)fno)->function;
-
-				dbk->bk.cb = bk_enter_cli;
-				dbk->bk.ip = fn->chunk.entries;
-				dbk->depth = 1;
-				dbk->fn = fn;
-				enter = true;
-			}
-		}
-	}
-	else if (*ip == I_CALL || *ip == I_QCALL) {
+	if (*ip == I_CALL) {
 		argspec = insn_u32(ip + 1);
 
 		size_t nargs = argspec & 0xffff;
@@ -4681,9 +4830,6 @@ next_step(uc_vm_t *vm, uc_function_t **fnp, uint8_t *ip, bool single, size_t *de
 		for (uint8_t *p = ip; p < stmt.ip_end; p += insn_length(p, prog)) {
 			switch (*p) {
 			case I_CALL:
-			case I_QCALL:
-			case I_MCALL:
-			case I_QMCALL:
 				if (single) {
 					update_breakpoint(vm, BK_STEP, bk_enter_function, p, *fnp, 0);
 
@@ -6162,7 +6308,7 @@ cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 				printbuf_strappend(&buf, "\n");
 			}
 		}
-		else if (insn == I_CALL || insn == I_QCALL || insn == I_MCALL || insn == I_QMCALL) {
+		else if (insn == I_CALL) {
 			for (size_t j = 0; j < arg.u32 >> 16; j++) {
 				uint16_t slot = insn_u16(bytecode + i + 5 + j * 2);
 				int off = buf.bpos;
@@ -6199,6 +6345,20 @@ cmd_quit(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 	bool proceed = true;
 	ssize_t c;
 	arg_t *v;
+
+	/* check for force flag (-f) or non-interactive mode */
+	if (argc > 0 && strcmp(argv[0].sv, "-f") == 0) {
+		vm->arg.s32 = -1;
+		uc_vm_raise_exception(vm, EXCEPTION_EXIT, "Terminated");
+		return false;
+	}
+	
+	/* In non-interactive mode, auto-confirm quit */
+	if (!termstate.interactive) {
+		vm->arg.s32 = -1;
+		uc_vm_raise_exception(vm, EXCEPTION_EXIT, "Terminated");
+		return false;
+	}
 
 	while ((c = term_getline("Terminate program? (y/n) > ", &v, NULL, NULL)) != -1) {
 		if (c > 0 && v[0].sv[0] == 'y') {
@@ -6349,13 +6509,56 @@ bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk)
 	debug_breakpoint_t *dbk = (debug_breakpoint_t *)bk;
 	arg_t *argv = NULL;
 	ssize_t argc = 0;
+	int client_fd = -1;
+	int listen_fd = -1;
 
-	term_isig(false);
+	/* In attach mode, create socket and wait for debugger connection */
+	if (debug_attach_mode) {
+		listen_fd = debug_remote_create_attach_socket();
+		if (listen_fd < 0) {
+			fprintf(stderr, "Failed to create attach socket: %s\n", strerror(errno));
+		} else {
+			fd_set readfds;
+			struct timeval tv;
+			int ret;
+
+			FD_ZERO(&readfds);
+			FD_SET(listen_fd, &readfds);
+			tv.tv_sec = 30;
+			tv.tv_usec = 0;
+
+			ret = select(listen_fd + 1, &readfds, NULL, NULL, &tv);
+			if (ret > 0) {
+				client_fd = accept(listen_fd, NULL, NULL);
+				close(listen_fd);
+				if (client_fd < 0) {
+					debug_remote_cleanup_attach_socket();
+				} else {
+					fprintf(stderr, "Connected to ucode debugger\n\n");
+				}
+			} else {
+				close(listen_fd);
+				debug_remote_cleanup_attach_socket();
+				if (ret == 0)
+					fprintf(stderr, "Timeout waiting for debugger connection - continuing execution\n");
+				return;
+			}
+		}
+	}
+
+	/* Only set terminal settings in interactive mode */
+	if (termstate.interactive && client_fd < 0)
+		term_isig(false);
+
 	print_location(vm, "Paused execution in ", dbk);
 
-	while ((argc = term_getline("dbg > ", &argv, cli_tab_complete, vm)) > -1) {
+	while ((argc = term_getline("dbg > ", &argv, cli_tab_complete, vm)) >= 0) {
 		size_t l = (argc > 0) ? strlen(argv[0].sv) : 0, i;
 		bool proceed = true;
+
+		/* EOF or error - exit gracefully */
+		if (argc < 0)
+			break;
 
 		for (i = 0; l > 0 && i < ARRAY_SIZE(commands); i++) {
 			bool match = false;
@@ -6386,10 +6589,126 @@ bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk)
 			break;
 	}
 
-	if (dbk->kind == BK_ONCE)
+	/* Restore terminal settings in interactive mode */
+	if (termstate.interactive && client_fd < 0)
+		term_isig(true);
+
+	if (client_fd >= 0)
+		close(client_fd);
+
+	if (dbk->kind == BK_ONCE || dbk->kind == BK_STEP)
 		free_breakpoint(vm, &dbk->bk);
 
-	term_isig(true);
+	if (client_fd < 0)
+		term_isig(true);
+}
+
+static uc_value_t *
+uc_debug_sigusr1_handler(uc_vm_t *vm, size_t nargs)
+{
+	/* Request break via VM API - the actual debugger will be launched
+	 * by uloop or the VM execution loop */
+	uc_vm_break_request(vm);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *uc_debug_sigint_handler(uc_vm_t *vm, size_t nargs);
+static uc_value_t *uc_debug_sigwinch_handler(uc_vm_t *vm, size_t nargs);
+
+static uc_value_t *
+uc_debug_sigusr1_attach_handler(uc_vm_t *vm, size_t nargs)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+
+	if (!frame)
+		return NULL;
+
+	debug_breakpoint_t dbk = {
+		.bk = { .ip = frame->ip },
+		.fn = frame->closure->function,
+		.kind = BK_USER
+	};
+
+	bk_enter_cli(vm, &dbk.bk);
+
+	return NULL;
+}
+
+static uc_value_t *
+uc_debug_attach(uc_vm_t *vm, size_t nargs)
+{
+	uc_cfn_ptr_t ucsignal = uc_stdlib_function("signal");
+	uc_value_t *mainfn = uc_fn_arg(0);
+
+	debug_attach_mode = true;
+
+	if (termstate.initialized == false) {
+		termstate.interactive = isatty(STDIN_FILENO);
+
+		uc_vm_stack_push(vm, ucv_string_new("SIGINT"));
+		uc_vm_registry_set(vm, "debug.orig_int_signal", ucsignal(vm, 1));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		uc_vm_stack_push(vm, ucv_string_new("SIGINT"));
+		uc_vm_stack_push(vm,
+			ucv_cfunction_new("debug_sigint_handler", uc_debug_sigint_handler));
+		ucv_put(ucsignal(vm, 2));
+		ucv_put(uc_vm_stack_pop(vm));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		uc_vm_stack_push(vm, ucv_string_new("SIGWINCH"));
+		uc_vm_registry_set(vm, "debug.orig_winch_signal", ucsignal(vm, 1));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		uc_vm_stack_push(vm, ucv_string_new("SIGWINCH"));
+		uc_vm_stack_push(vm,
+			ucv_cfunction_new("debug_sigwinch_handler", uc_debug_sigwinch_handler));
+		ucv_put(ucsignal(vm, 2));
+		ucv_put(uc_vm_stack_pop(vm));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		/* For attach mode, SIGUSR1 launches the debugger CLI directly */
+		uc_vm_stack_push(vm, ucv_string_new("SIGUSR1"));
+		uc_vm_stack_push(vm,
+			ucv_cfunction_new("debug_sigusr1_attach_handler", uc_debug_sigusr1_attach_handler));
+		ucv_put(ucsignal(vm, 2));
+		ucv_put(uc_vm_stack_pop(vm));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		if (termstate.interactive) {
+			term_raw();
+			term_isig(true);
+		}
+
+		termstate.initialized = true;
+	}
+
+	if (ucv_type(mainfn) == UC_CLOSURE) {
+		uc_function_t *fn = ((uc_closure_t *)mainfn)->function;
+		update_breakpoint(vm, BK_STEP, bk_enter_cli, fn->chunk.entries, fn, 1);
+	}
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_debug_break(uc_vm_t *vm, size_t nargs)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+
+	if (!frame)
+		return ucv_boolean_new(false);
+
+	debug_breakpoint_t dbk = {
+		.bk = { .ip = frame->ip },
+		.fn = frame->closure->function,
+		.kind = BK_USER
+	};
+
+	bk_enter_cli(vm, &dbk.bk);
+
+	return ucv_boolean_new(true);
 }
 
 static uc_value_t *
@@ -6477,6 +6796,9 @@ uc_debugger(uc_vm_t *vm, size_t nargs)
 	uc_value_t *mainfn = uc_fn_arg(0);
 
 	if (termstate.initialized == false) {
+		/* Detect if we're in interactive mode (tty) */
+		termstate.interactive = isatty(STDIN_FILENO);
+
 		uc_vm_stack_push(vm, ucv_string_new("SIGINT"));
 		uc_vm_registry_set(vm, "debug.orig_int_signal", ucsignal(vm, 1));
 		ucv_put(uc_vm_stack_pop(vm));
@@ -6499,8 +6821,18 @@ uc_debugger(uc_vm_t *vm, size_t nargs)
 		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(uc_vm_stack_pop(vm));
 
-		term_raw();
-		term_isig(true);
+		uc_vm_stack_push(vm, ucv_string_new("SIGUSR1"));
+		uc_vm_stack_push(vm,
+			ucv_cfunction_new("debug_sigusr1_handler", uc_debug_sigusr1_handler));
+		ucv_put(ucsignal(vm, 2));
+		ucv_put(uc_vm_stack_pop(vm));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		/* Only set raw mode if interactive */
+		if (termstate.interactive) {
+			term_raw();
+			term_isig(true);
+		}
 
 		termstate.initialized = true;
 	}
@@ -6537,13 +6869,20 @@ static const uc_function_list_t debug_fns[] = {
 	{ "getupval",	uc_getupval },
 	{ "setupval",	uc_setupval },
 	{ "debugger",	uc_debugger },
+	{ "attach",	uc_debug_attach },
+	{ "break",	uc_debug_break },
+	{ "listen",	uc_debug_listen },
 };
+
+void uc_module_init_remote(uc_vm_t *vm, uc_value_t *scope);
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, debug_fns);
 
 	debug_setup(vm);
+
+	uc_module_init_remote(vm, scope);
 
 	have_highlighting = compile_patterns();
 }
