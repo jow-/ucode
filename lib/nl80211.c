@@ -630,6 +630,18 @@ static const uc_nl_nested_spec_t nl80211_wiphy_bands_freqs_nla = {
 	}
 };
 
+static const uc_nl_nested_spec_t nl80211_iftype_ext_capa_entry_nla = {
+	.headsize = 0,
+	.nattrs = 5,
+	.attrs = {
+		{ NL80211_ATTR_IFTYPE, "iftype", DT_U32, 0, NULL },
+		{ NL80211_ATTR_EXT_CAPA, "ext_capa", DT_U8, DF_ARRAY, NULL },
+		{ NL80211_ATTR_EXT_CAPA_MASK, "ext_capa_mask", DT_U8, DF_ARRAY, NULL },
+		{ NL80211_ATTR_EML_CAPABILITY, "eml_capability", DT_U16, 0, NULL },
+		{ NL80211_ATTR_MLD_CAPA_AND_OPS, "mld_capa_and_ops", DT_U16, 0, NULL },
+	}
+};
+
 static const uc_nl_nested_spec_t nl80211_wiphy_bands_rates_nla = {
 	.headsize = 0,
 	.nattrs = 2,
@@ -941,7 +953,7 @@ static const uc_nl_nested_spec_t nl80211_mlo_link_nla = {
 
 static const uc_nl_nested_spec_t nl80211_msg = {
 	.headsize = 0,
-	.nattrs = 137,
+	.nattrs = 138,
 	.attrs = {
 		{ NL80211_ATTR_4ADDR, "4addr", DT_U8, 0, NULL },
 		{ NL80211_ATTR_AIRTIME_WEIGHT, "airtime_weight", DT_U16, 0, NULL },
@@ -1077,6 +1089,7 @@ static const uc_nl_nested_spec_t nl80211_msg = {
 		{ NL80211_ATTR_EML_CAPABILITY, "eml_capability", DT_U16, 0, NULL },
 		{ NL80211_ATTR_MLD_CAPA_AND_OPS, "mld_capa_and_ops", DT_U16, 0, NULL },
 		{ NL80211_ATTR_MLO_LINK_ID, "mlo_link_id", DT_U8, 0, NULL },
+		{ NL80211_ATTR_IFTYPE_EXT_CAPA, "iftype_ext_capa", DT_NESTED, DF_MULTIPLE|DF_TYPEIDX, &nl80211_iftype_ext_capa_entry_nla },
 		{ NL80211_ATTR_SURVEY_INFO, "survey_info", DT_NESTED, 0, &nl80211_survey_info_nla },
 		{ NL80211_ATTR_WIPHY_RADIOS, "radios", DT_NESTED, DF_MULTIPLE|DF_AUTOIDX, &nl80211_wiphy_radio_nla },
 		{ NL80211_ATTR_VIF_RADIO_MASK, "vif_radio_mask", DT_U32, 0, NULL },
