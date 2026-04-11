@@ -14,6 +14,50 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/**
+ * # ubus module
+ *
+ * The `ubus` module provides functions to access OpenWRT ubus registered
+ * modules and their functions, as well as monitor and pub/sub activity on ubus.
+ *
+ * Functions can be individually imported and directly accessed using the
+ * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import#named_import named import}
+ * syntax:
+ *
+ *   ```
+ *   import { connect } from 'ubus';
+ *
+ *   let ubus = connect();
+ *   let sdat = ubus.call("session", "get", { ubus_rpc_session: sid });
+ *   let sacl = ubus.call("session", "access", { ubus_rpc_session: sid });
+
+ *   if (type(sdat?.values?.token) == 'string' &&
+ *   	(!length(allowed_users) || sdat?.values?.username in allowed_users)) {
+ *    	// uci:set_session_id(sid)
+ *    	return {
+ *    		sid,
+ *    		data: sdat.values,
+ *    		acls: length(sacl) ? sacl : {}
+ *    	};
+ *   }
+ *   ```
+ *
+ * Alternatively, the module namespace can be imported
+ * using a wildcard import statement:
+ *
+ *   ```
+ *   import * as ubus from 'ubus';
+ *
+ *   let ctx = ubus.connect();
+ *   ...
+ *   ```
+ *
+ * Additionally, the ubus module namespace may also be imported by invoking
+ * the `ucode` interpreter with the `-lubus` switch.
+ *
+ * @module ubus
+ */
+
 #include <unistd.h>
 #include <limits.h>
 #include <fnmatch.h>
@@ -194,6 +238,20 @@ typedef struct {
 	uc_value_t *res;
 } uc_ubus_call_res_t;
 
+/**
+ * @function module:ubus#error
+ * @description Return the last ubus error as a string or numeric code.
+ * @param {boolean} [numeric] If truthy, returns numeric error code, otherwise string message.
+ * @returns {?string|?number} Last ubus error code/message or null if no error.
+ * @example
+ *
+ * ubus.error(); // clear previous error
+ *
+ * let res = ubus.call(object, method, args);
+ *
+ * let last_ubus_error = ubus.error(true); // returns numeric error code.
+ *
+ */
 static uc_value_t *
 uc_ubus_error(uc_vm_t *vm, size_t nargs)
 {
@@ -457,6 +515,13 @@ uc_ubus_conn_alloc(uc_vm_t *vm, uc_value_t *timeout, const char *type)
 	return c;
 }
 
+/**
+ * @function module:ubus#connect
+ * @description Open a ubus connection (optionally via socket path) and return a connection object.
+ * @param {string} [socket] Path to ubus socket (e.g. '/var/run/ubus.sock').
+ * @param {number} [timeout] Operation timeout in seconds (default 30).
+ * @returns {?ubus.connection}
+ */
 static uc_value_t *
 uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 {
@@ -554,6 +619,12 @@ out:
 
 #define conn_get(vm, ptr) do { if (!_conn_get(vm, ptr)) return NULL; } while(0)
 
+/**
+ * @function module:ubus#list
+ * @description List ubus objects or methods via a connection.
+ * @param {string} [object_name] Optional object name filter.
+ * @returns {Array<string>|Array<Object>|null}
+ */
 static uc_value_t *
 uc_ubus_list(uc_vm_t *vm, size_t nargs)
 {
@@ -848,6 +919,17 @@ uc_ubus_call_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *re
 	return rv;
 }
 
+/**
+ * @function module:ubus#call
+ * @description Invoke a ubus object method synchronously and return the result.
+ * @param {string|number} object Object name or id.
+ * @param {string} method Method name.
+ * @param {Object} [data] Optional request payload.
+ * @param {string|boolean} [return] Return mode: 'single', 'multiple', 'ignore', true/false.
+ * @param {number|Object} [fd] Optional file descriptor or object with fileno().
+ * @param {function} [fd_cb] Optional file-descriptor callback.
+ * @returns {Object|Array|null}
+ */
 static uc_value_t *
 uc_ubus_call(uc_vm_t *vm, size_t nargs)
 {
@@ -896,6 +978,16 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
 	ok_return(res.res);
 }
 
+/**
+ * @function module:ubus#request
+ * @description Send a request over an open channel.
+ * @param {string} method Method name.
+ * @param {Object} [data] Optional request payload.
+ * @param {function} [return] Completion callback.
+ * @param {number|Object} [fd] Optional fd or object with fileno().
+ * @param {function} [fd_cb] Optional fd callback.
+ * @returns {?ubus.deferred}
+ */
 static uc_value_t *
 uc_ubus_chan_request(uc_vm_t *vm, size_t nargs)
 {
@@ -994,6 +1086,24 @@ uc_ubus_defer_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *r
 	return rv;
 }
 
+/**
+ * @function module:ubus#defer
+ * @description Invoke a ubus object method asynchronously and return a deferred handle.
+ * @param {string} object Object name.
+ * @param {string} method Method name.
+ * @param {Object} [data] Optional request payload.
+ * @param {function} [cb] Completion callback.
+ * @param {function} [data_cb] Data chunk callback.
+ * @param {number|Object} [fd] Optional fd or object with fileno().
+ * @param {function} [fd_cb] Optional fd callback.
+ * @returns {?ubus.deferred}
+ * @example
+ubus.defer("wpa_supplicant", "phy_set_macaddr_list", {
+	phy: phydev.phy,
+	radio: phydev.radio ?? -1,
+	macaddr: macaddr_list
+});
+ */
 static uc_value_t *
 uc_ubus_defer(uc_vm_t *vm, size_t nargs)
 {
@@ -1106,6 +1216,13 @@ uc_ubus_request_timeout(struct uloop_timeout *timeout)
 	uc_ubus_request_finish(callctx, UBUS_STATUS_TIMEOUT);
 }
 
+/**
+ * @function module:ubus#reply
+ * @description Send a reply to a request.
+ * @param {Object} [reply] Reply object.
+ * @param {number} [rcode] Reply code.
+ * @returns {boolean}
+ */
 static uc_value_t *
 uc_ubus_request_reply(uc_vm_t *vm, size_t nargs)
 {
@@ -1154,6 +1271,11 @@ uc_ubus_request_defer(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+/**
+ * @function module:ubus#get_fd
+ * @description Get file descriptor for ubus request.
+ * @returns {number}
+ */
 static uc_value_t *
 uc_ubus_request_get_fd(uc_vm_t *vm, size_t nargs)
 {
@@ -1165,6 +1287,12 @@ uc_ubus_request_get_fd(uc_vm_t *vm, size_t nargs)
 	return ucv_int64_new(ubus_request_get_caller_fd(&callctx->req));
 }
 
+/**
+ * @function module:ubus#set_fd
+ * @description Set file descriptor for ubus request.
+ * @param {number} [fd] File descriptor.
+ * @returns {boolean}
+ */
 static uc_value_t *
 uc_ubus_request_set_fd(uc_vm_t *vm, size_t nargs)
 {
@@ -1885,6 +2013,37 @@ out:
 	err_return(rv, "Unable to add ubus object");
 }
 
+/**
+ * @function module:ubus#publish
+ * @description Publish a ubus object with methods and optional subscribe callback.
+ * @param {string} [object_name] Name of object to publish.
+ * @param {Object} methods Ubus methods definition object.
+ * @param {function} [subscribe_cb] Callback invoked on subscriber events.
+ * @returns {?ubus.object}
+ * @example
+
+const my_args = {
+	device: ""
+};
+
+const ubus_obj = {
+	start: {
+		args: my_args,
+		call: function(req) {
+			...
+
+			return xyz(req, (param) => {
+				param.start();
+				return 0;
+			});
+		}
+	},
+	...
+};
+
+
+my.obj = ubus.publish("foo.bar", ubus_obj);
+ */
 static uc_value_t *
 uc_ubus_publish(uc_vm_t *vm, size_t nargs)
 {
@@ -1969,6 +2128,20 @@ uc_ubus_listener_cb(struct ubus_context *ctx, struct ubus_event_handler *ev,
 		ucv_put(uc_vm_stack_pop(vm));
 }
 
+/**
+ * @function module:ubus#listener
+ * @description Create an event listener object for uevent notifications.
+ * @param {string} [pattern] Event type filter (glob pattern).
+ * @param {function} cb Callback invoked on matching events.
+ * @returns {ubus.listener?}
+ * @example
+sub = ubus.subscriber(my_notify_cb);
+
+ev_listener = ubus.listener("ubus.object.add", (event, msg) => {
+	if (msg.path == "foobar")
+		sub.subscribe(msg.path);
+});
+ */
 static uc_value_t *
 uc_ubus_listener(uc_vm_t *vm, size_t nargs)
 {
@@ -2008,6 +2181,13 @@ uc_ubus_listener(uc_vm_t *vm, size_t nargs)
 	ok_return(ucv_get(res));
 }
 
+/**
+ * @function module:ubus#event
+ * @description Send a ubus event from an active connection.
+ * @param {string} [event_id] Event type.
+ * @param {Object} [event_data] Payload object.
+ * @returns {boolean}
+ */
 static uc_value_t *
 uc_ubus_event(uc_vm_t *vm, size_t nargs)
 {
@@ -2123,12 +2303,31 @@ uc_ubus_subscriber_subunsub_common(uc_vm_t *vm, size_t nargs, bool subscribe)
 	ok_return(ucv_boolean_new(true));
 }
 
+/**
+ * @function module:ubus#subscribe
+ * @description Subscribe to the ubus.
+ * @param {string} name Object name.
+ * @returns {boolean}
+ * @example
+sub = ubus.subscriber(my_notify_cb);
+
+ev_listener = ubus.listener("ubus.object.add", (event, msg) => {
+	if (msg.path == "foobar")
+		sub.subscribe(msg.path);
+});
+ */
 static uc_value_t *
 uc_ubus_subscriber_subscribe(uc_vm_t *vm, size_t nargs)
 {
 	return uc_ubus_subscriber_subunsub_common(vm, nargs, true);
 }
 
+/**
+ * @function module:ubus#unsubscribe
+ * @description Unsubscribe a subscriber from the ubus.
+ * @param {string} name Object name.
+ * @returns {boolean}
+ */
 static uc_value_t *
 uc_ubus_subscriber_unsubscribe(uc_vm_t *vm, size_t nargs)
 {
@@ -2188,6 +2387,21 @@ uc_ubus_subscriber_remove(uc_vm_t *vm, size_t nargs)
 	ok_return(ucv_boolean_new(true));
 }
 
+/**
+ * @function module:ubus#subscriber
+ * @description Register a ubus subscriber for object updates using patterns.
+ * @param {function} notify_cb Callback invoked on notifications.
+ * @param {function} remove_cb Callback invoked on remove events.
+ * @param {Array<string>} subscriptions Pattern list.
+ * @returns {?ubus.subscriber}
+ * @example
+sub = ubus.subscriber(my_notify_cb);
+
+ev_listener = ubus.listener("ubus.object.add", (event, msg) => {
+	if (msg.path == "foobar")
+		sub.subscribe(msg.path);
+});
+ */
 static uc_value_t *
 uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
 {
@@ -2250,6 +2464,12 @@ uc_ubus_subscriber(uc_vm_t *vm, size_t nargs)
  * --------------------------------------------------------------------------
  */
 
+/**
+ * @function module:ubus#remove
+ * @description Remove a ubus resource (subscriber/object/listener) bound to a connection.
+ * @param {ubus.subscriber|ubus.object|ubus.listener} resource Resource handle.
+ * @returns {boolean}
+ */
 static uc_value_t *
 uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 {
@@ -2303,6 +2523,11 @@ uc_ubus_remove(uc_vm_t *vm, size_t nargs)
 }
 
 
+/**
+ * @function module:ubus#disconnect
+ * @description Disconnect and release a ubus connection.
+ * @returns {boolean}
+ */
 static uc_value_t *
 uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
 {
@@ -2320,6 +2545,11 @@ uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
 	ok_return(ucv_boolean_new(true));
 }
 
+/**
+ * @function module:ubus#completed
+ * @description Check whether a deferred ubus request or notify has completed.
+ * @returns {boolean}
+ */
 static uc_value_t *
 uc_ubus_defer_completed(uc_vm_t *vm, size_t nargs)
 {
@@ -2331,6 +2561,11 @@ uc_ubus_defer_completed(uc_vm_t *vm, size_t nargs)
 	ok_return(ucv_boolean_new(d->complete));
 }
 
+/**
+ * @function module:ubus#await
+ * @description Await a deferred ubus request.
+ * @returns {boolean}
+ */
 static uc_value_t *
 uc_ubus_defer_await(uc_vm_t *vm, size_t nargs)
 {
@@ -2354,6 +2589,11 @@ uc_ubus_defer_await(uc_vm_t *vm, size_t nargs)
 	ok_return(ucv_boolean_new(true));
 }
 
+/**
+ * @function module:ubus#abort
+ * @description Abort a deferred ubus request or a notify.
+ * @returns {boolean}
+ */
 static uc_value_t *
 uc_ubus_defer_abort(uc_vm_t *vm, size_t nargs)
 {
@@ -2445,6 +2685,14 @@ uc_ubus_channel_add(uc_ubus_connection_t *c, uc_value_t *cb,
 
 #endif
 
+/**
+ * @function module:ubus#new_channel
+ * @description Create a new ubus channel using optional callbacks.
+ * @param {function} [cb] Request callback for channel creation requests.
+ * @param {function} [disconnect_cb] Callback on disconnect.
+ * @param {number} [timeout] Connection timeout seconds.
+ * @returns {?ubus.channel}
+ */
 static uc_value_t *
 uc_ubus_request_new_channel(uc_vm_t *vm, size_t nargs)
 {
@@ -2481,6 +2729,15 @@ uc_ubus_request_new_channel(uc_vm_t *vm, size_t nargs)
 }
 
 
+/**
+ * @function module:ubus#open_channel
+ * @description Open a ubus channel using an existing file descriptor and optional callbacks.
+ * @param {number|Object} fd File descriptor or object with `fileno()`.
+ * @param {function} [cb] Request callback for channel requests.
+ * @param {function} [disconnect_cb] Callback on disconnect.
+ * @param {number} [timeout] Connection timeout seconds.
+ * @returns {?ubus.channel}
+ */
 static uc_value_t *
 uc_ubus_channel_connect(uc_vm_t *vm, size_t nargs)
 {
@@ -2517,6 +2774,19 @@ uc_ubus_channel_connect(uc_vm_t *vm, size_t nargs)
 }
 
 
+/**
+ * @function module:ubus#guard
+ * @description Set error handler for ubus exceptions (callback) or get current guard.
+ * @param {function} [arg] Exception handler callback.
+ * @returns {boolean|function}
+ * @example
+ * function ex_handler(e)
+ * {
+ * 	print(`Exception: ${e}\n${e.stacktrace[0].context}\n`);
+ * }
+ * 
+ * ubus.guard(ex_handler);
+ */
 static uc_value_t *
 uc_ubus_guard(uc_vm_t *vm, size_t nargs)
 {
@@ -2637,6 +2907,28 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	uc_function_list_register(scope, global_fns);
 	uc_function_list_register(scope, conn_fns);
 
+	/**
+	 * @typedef
+	 * @name ubus constants.
+	 * @description The following constants represent ubus return statuses.
+	 * @property {number} STATUS_OK - Command completed OK.
+	 * @property {number} STATUS_INVALID_COMMAND - Command is invalid.
+	 * @property {number} STATUS_INVALID_ARGUMENT - An argument to a command is invalid.
+	 * @property {number} STATUS_METHOD_NOT_FOUND - The requested method is not found.
+	 * @property {number} STATUS_NOT_FOUND - The object was not found on the ubus.
+	 * @property {number} STATUS_NO_DATA - No data was returned.
+	 * @property {number} STATUS_PERMISSION_DENIED - Permission was denied.
+	 * @property {number} STATUS_TIMEOUT - Command timed out while waiting for it to return.
+	 * @property {number} STATUS_NOT_SUPPORTED - Unsupported operation.
+	 * @property {number} STATUS_UNKNOWN_ERROR - An unknown error occurred.
+	 * @property {number} STATUS_CONNECTION_FAILED - Failed to connect to the bus.
+	 * @property {number} STATUS_NO_MEMORY - Insufficient memory for the operation.
+	 * @property {number} STATUS_PARSE_ERROR - Parse error.
+	 * @property {number} STATUS_SYSTEM_ERROR - System error.
+	 * @property {number} STATUS_CONTINUE - Continuing.
+	 * @example
+	 * return ubus.STATUS_UNKNOWN_ERROR;
+	 */
 #define ADD_CONST(x) ucv_object_add(scope, #x, ucv_int64_new(UBUS_##x))
 	ADD_CONST(STATUS_OK);
 	ADD_CONST(STATUS_INVALID_COMMAND);
@@ -2660,6 +2952,14 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 #define UBUS_STATUS_CONTINUE -1
 	ADD_CONST(STATUS_CONTINUE);
 
+	/**
+	 * @typedef
+	 * @name ubus constants.
+	 * @description The following constants represent the ubus ACL object.
+	 * @property {number} SYSTEM_OBJECT_ACL - ACL object.
+	 * @example
+	 * ubus.call(ubus.SYSTEM_OBJECT_ACL, "query");
+	 */
 	ADD_CONST(SYSTEM_OBJECT_ACL);
 
 	uc_type_declare(vm, "ubus.connection", conn_fns, free_connection);
