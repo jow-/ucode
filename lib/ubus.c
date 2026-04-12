@@ -17,9 +17,10 @@
 /**
  * # Ubus IPC
  *
- * The `ubus` module provides functions for OpenWRT inter-process
+ * The `ubus` module provides functions for OpenWrt inter-process
  * communication, including access to ubus registered modules and their
- * functions, as well as monitoring and pub/sub activity on ubus.
+ * methods, as well as monitoring and publish/subscribe activity on the
+ * ubus message bus.
  *
  * Functions can be individually imported using named import syntax:
  *
