@@ -1869,7 +1869,7 @@ uc_fs_statvfs(uc_vm_t *vm, size_t nargs)
  *
  * Returns `true` if the directory was successfully created.
  *
- * Returns `null` if an error occurred, e.g. due to inexistent path.
+ * Returns `null` if an error occurred, e.g. due to non-existent path.
  *
  * @function module:fs#mkdir
  *
@@ -1903,7 +1903,7 @@ uc_fs_mkdir(uc_vm_t *vm, size_t nargs)
  *
  * Returns `true` if the directory was successfully removed.
  *
- * Returns `null` if an error occurred, e.g. due to inexistent path.
+ * Returns `null` if an error occurred, e.g. due to non-existent path.
  *
  * @function module:fs#rmdir
  *
@@ -1935,7 +1935,7 @@ uc_fs_rmdir(uc_vm_t *vm, size_t nargs)
  *
  * Returns `true` if the symlink was successfully created.
  *
- * Returns `null` if an error occurred, e.g. due to inexistent path.
+ * Returns `null` if an error occurred, e.g. due to non-existent path.
  *
  * @function module:fs#symlink
  *
@@ -1972,7 +1972,7 @@ uc_fs_symlink(uc_vm_t *vm, size_t nargs)
  *
  * Returns `true` if the unlink operation was successful.
  *
- * Returns `null` if an error occurred, e.g. due to inexistent path.
+ * Returns `null` if an error occurred, e.g. due to non-existent path.
  *
  * @function module:fs#unlink
  *

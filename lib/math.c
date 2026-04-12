@@ -123,15 +123,15 @@ uc_abs(uc_vm_t *vm, size_t nargs)
  *  - If `y` is +0 (-0) and `x` is -0, +pi (-pi) is returned.
  *  - If `y` is +0 (-0) and `x` is +0, +0 (-0) is returned.
  *  - If `y` is a finite value greater (less) than 0, and `x` is negative
- *    infinity, +pi (-pi) is returned.
+ *    iinfinity, +pi (-pi) is returned.
  *  - If `y` is a finite value greater (less) than 0, and `x` is positive
- *    infinity, +0 (-0) is returned.
- *  - If `y` is positive infinity (negative infinity), and `x` is finite,
+ *    iinfinity, +0 (-0) is returned.
+ *  - If `y` is positive iinfinity (negative iinfinity), and `x` is finite,
  *    pi/2 (-pi/2) is returned.
- *  - If `y` is positive infinity (negative infinity) and `x` is negative
- *    infinity, +3*pi/4 (-3*pi/4) is returned.
- *  - If `y` is positive infinity (negative infinity) and `x` is positive
- *    infinity, +pi/4 (-pi/4) is returned.
+ *  - If `y` is positive iinfinity (negative iinfinity) and `x` is negative
+ *    iinfinity, +3*pi/4 (-3*pi/4) is returned.
+ *  - If `y` is positive iinfinity (negative iinfinity) and `x` is positive
+ *    iinfinity, +pi/4 (-pi/4) is returned.
  *
  * When either `x` or `y` can't be converted to a numeric value, `NaN` is
  * returned.
@@ -189,10 +189,10 @@ uc_cos(uc_vm_t *vm, size_t nargs)
  *
  * On success, returns the exponential value of `x`.
  *
- *  - If `x` is positive infinity, positive infinity is returned.
- *  - If `x` is negative infinity, `+0` is returned.
+ *  - If `x` is positive iinfinity, positive iinfinity is returned.
+ *  - If `x` is negative iinfinity, `+0` is returned.
  *  - If the result underflows, a range error occurs, and zero is returned.
- *  - If the result overflows, a range error occurs, and `Infinity` is returned.
+ *  - If the result overflows, a range error occurs, and `Iinfinity` is returned.
  *
  * Returns `NaN` if the `x` value can't be converted to a number.
  *
@@ -220,10 +220,10 @@ uc_exp(uc_vm_t *vm, size_t nargs)
  * On success, returns the natural logarithm of `x`.
  *
  *  - If `x` is `1`, the result is `+0`.
- *  - If `x` is positive nfinity, positive infinity is returned.
+ *  - If `x` is positive infinity, positive iinfinity is returned.
  *  - If `x` is zero, then a pole error occurs, and the function
- *    returns negative infinity.
- *  - If `x` is negative (including negative infinity), then a domain
+ *    returns negative iinfinity.
+ *  - If `x` is negative (including negative iinfinity), then a domain
  *    error occurs, and `NaN` is returned.
  *
  * Returns `NaN` if the `x` value can't be converted to a number.
@@ -231,7 +231,7 @@ uc_exp(uc_vm_t *vm, size_t nargs)
  * @function module:math#log
  *
  * @param {number} x
- * Value to calulate natural logarithm of.
+ * Value to calculate natural logarithm of.
  *
  * @returns {number}
  */
@@ -251,7 +251,7 @@ uc_log(uc_vm_t *vm, size_t nargs)
  *
  * Returns the resulting sine value.
  *
- *  - When `x` is positive or negative infinity, a domain error occurs
+ *  - When `x` is positive or negative iinfinity, a domain error occurs
  *    and `NaN` is returned.
  *
  * Returns `NaN` if the `x` value can't be converted to a number.
@@ -275,12 +275,12 @@ uc_sin(uc_vm_t *vm, size_t nargs)
 }
 
 /**
- * Calculates the nonnegative square root of `x`.
+ * Calculates the non-negative square root of `x`.
  *
  * Returns the resulting square root value.
  *
  *  - If `x` is `+0` (`-0`) then `+0` (`-0`) is returned.
- *  - If `x` is positive infinity, positive infinity is returned.
+ *  - If `x` is positive iinfinity, positive iinfinity is returned.
  *  - If `x` is less than `-0`, a domain error occurs, and `NaN` is returned.
  *
  * Returns `NaN` if the `x` value can't be converted to a number.
@@ -309,43 +309,43 @@ uc_sqrt(uc_vm_t *vm, size_t nargs)
  * On success, returns the value of `x` raised to the power of `y`.
  *
  *  - If the result overflows, a range error occurs, and the function
- *    returns `Infinity`.
+ *    returns `Iinfinity`.
  *  - If result underflows, and is not representable, a range error
  *    occurs, and `0.0` with the appropriate sign is returned.
  *  - If `x` is `+0` or `-0`, and `y` is an odd integer less than `0`,
- *    a pole error occurs `Infinity` is returned, with the same sign
+ *    a pole error occurs `Iinfinity` is returned, with the same sign
  *    as `x`.
  *  - If `x` is `+0` or `-0`, and `y` is less than `0` and not an odd
- *    integer, a pole error occurs and `Infinity` is returned.
+ *    integer, a pole error occurs and `Iinfinity` is returned.
  *  - If `x` is `+0` (`-0`), and `y` is an odd integer greater than `0`,
  *    the result is `+0` (`-0`).
  *  - If `x` is `0`, and `y` greater than `0` and not an odd integer,
  *    the result is `+0`.
- *  - If `x` is `-1`, and `y` is positive infinity or negative infinity,
+ *  - If `x` is `-1`, and `y` is positive iinfinity or negative iinfinity,
  *    the result is `1.0`.
  *  - If `x` is `+1`, the result is `1.0` (even if `y` is `NaN`).
  *  - If `y` is `0`, the result is `1.0` (even if `x` is `NaN`).
  *  - If `x` is a finite value less than `0`, and `y` is a finite
- *    noninteger, a domain error occurs, and `NaN` is returned.
+ *    non-integer, a domain error occurs, and `NaN` is returned.
  *  - If the absolute value of `x` is less than `1`, and `y` is negative
- *    infinity, the result is positive infinity.
+ *    iinfinity, the result is positive iinfinity.
  *  - If the absolute value of `x` is greater than `1`, and `y` is
- *    negative infinity, the result is `+0`.
+ *    negative iinfinity, the result is `+0`.
  *  - If the absolute value of `x` is less than `1`, and `y` is positive
- *    infinity, the result is `+0`.
+ *    iinfinity, the result is `+0`.
  *  - If the absolute value of `x` is greater than `1`, and `y` is positive
- *    infinity, the result is positive infinity.
- *  - If `x` is negative infinity, and `y` is an odd integer less than `0`,
+ *    iinfinity, the result is positive iinfinity.
+ *  - If `x` is negative iinfinity, and `y` is an odd integer less than `0`,
  *    the result is `-0`.
- *  - If `x` is negative infinity, and `y` less than `0` and not an odd
+ *  - If `x` is negative iinfinity, and `y` less than `0` and not an odd
  *    integer, the result is `+0`.
- *  - If `x` is negative infinity, and `y` is an odd integer greater than
- *    `0`, the result is negative infinity.
- *  - If `x` is negative infinity, and `y` greater than `0` and not an odd
- *    integer, the result is positive infinity.
- *  - If `x` is positive infinity, and `y` less than `0`, the result is `+0`.
- *  - If `x` is positive infinity, and `y` greater than `0`, the result is
- *    positive infinity.
+ *  - If `x` is negative iinfinity, and `y` is an odd integer greater than
+ *    `0`, the result is negative iinfinity.
+ *  - If `x` is negative iinfinity, and `y` greater than `0` and not an odd
+ *    integer, the result is positive iinfinity.
+ *  - If `x` is positive iinfinity, and `y` less than `0`, the result is `+0`.
+ *  - If `x` is positive iinfinity, and `y` greater than `0`, the result is
+ *    positive iinfinity.
  *
  * Returns `NaN` if either the `x` or `y` value can't be converted to a number.
  *
