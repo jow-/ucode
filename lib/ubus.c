@@ -166,16 +166,16 @@
  * interface for all ubus operations. Through a connection, you can:
  *
  * - Discover and invoke methods on remote objects
- *   ({@link module:ubus.connection#list|list()},
- *   {@link module:ubus.connection#call|call()})
+ *   ({@link module:ubus#list|list()},
+ *   {@link module:ubus#call|call()})
  * - Publish your own objects to the bus
- *   ({@link module:ubus.connection#publish|publish()})
+ *   ({@link module:ubus#publish|publish()})
  * - Subscribe to notifications from other objects
- *   ({@link module:ubus.connection#subscriber|subscriber()})
+ *   ({@link module:ubus#subscriber|subscriber()})
  * - Register event listeners for pattern-based events
- *   ({@link module:ubus.connection#listener|listener()})
+ *   ({@link module:ubus#listener|listener()})
  * - Send broadcast events to other listeners
- *   ({@link module:ubus.connection#event|event()})
+ *   ({@link module:ubus#event|event()})
  *
  * The connection uses the broker pattern, routing all communication
  * through ubusd. It supports both synchronous (call) and asynchronous
@@ -184,7 +184,7 @@
  * @class module:ubus.connection
  * @hideconstructor
  *
- * @borrows module:ubus#error as module:ubus.connection#error
+ * @borrows module:ubus#error as module:ubus#error
  *
  * @see {@link module:ubus#connect|connect()}
  * @see {@link module:ubus#open_channel|open_channel()}
@@ -220,10 +220,10 @@
  * - Streaming data or multiple requests over a single connection
  * - File descriptor passing between processes
  *
- * @class module:ubus.connection.channel
+ * @class module:ubus.channel
  * @hideconstructor
  *
- * @borrows module:ubus#error as module:ubus.connection.channel#error
+ * @borrows module:ubus#error as module:ubus.channel#error
  *
  * @see {@link module:ubus#open_channel|open_channel()}
  * @see {@link module:ubus.request#new_channel|new_channel()}
@@ -243,28 +243,28 @@
  * Represents a deferred ubus request.
  *
  * A deferred request is created when invoking a method asynchronously
- * using {@link module:ubus.connection#defer|defer()} or
- * {@link module:ubus.connection.channel#defer|defer()}. Instead of
+ * using {@link module:ubus#defer|defer()} or
+ * {@link module:ubus.channel#defer|defer()}. Instead of
  * blocking and waiting for the result, the operation returns immediately
  * with a deferred object that can be used to:
  *
  * - Check if the request has completed
- *   ({@link module:ubus.connection.deferred#completed|completed()})
+ *   ({@link module:ubus.deferred#completed|completed()})
  * - Wait synchronously for completion
- *   ({@link module:ubus.connection.deferred#await|await()})
+ *   ({@link module:ubus.deferred#await|await()})
  * - Abort the pending request if no longer needed
- *   ({@link module:ubus.connection.deferred#abort|abort()})
+ *   ({@link module:ubus.deferred#abort|abort()})
  *
  * This pattern is useful for:
  * - Non-blocking operations in event-driven applications
  * - Timeout handling and request cancellation
  * - Concurrent execution of multiple ubus method calls
  *
- * @class module:ubus.connection.deferred
+ * @class module:ubus.deferred
  * @hideconstructor
  *
- * @see {@link module:ubus.connection#defer|defer()}
- * @see {@link module:ubus.connection.channel#defer|defer()}
+ * @see {@link module:ubus#defer|defer()}
+ * @see {@link module:ubus.channel#defer|defer()}
  *
  * @example
  *
@@ -287,24 +287,24 @@
  *
  * A published object is a service registered with ubusd that provides
  * methods for other processes to call. Objects are created via
- * {@link module:ubus.connection#publish|publish()} and can:
+ * {@link module:ubus#publish|publish()} and can:
  *
  * - Expose multiple methods for remote invocation
  * - Receive notifications from subscribers
- *   ({@link module:ubus.connection.object#subscribed|subscribed()},
- *   {@link module:ubus.connection.object#notify|notify()})
+ *   ({@link module:ubus.object#subscribed|subscribed()},
+ *   {@link module:ubus.object#notify|notify()})
  * - Be removed from the bus when no longer needed
- *   ({@link module:ubus.connection.object#remove|remove()})
+ *   ({@link module:ubus.object#remove|remove()})
  *
  * Objects are identified by their path (e.g., `system`,
  * `network.interface`) and can be discovered by other processes using
- * {@link module:ubus.connection#list|list()}.
+ * {@link module:ubus#list|list()}.
  *
- * @class module:ubus.connection.object
+ * @class module:ubus.object
  * @hideconstructor
  *
- * @see {@link module:ubus.connection#publish|publish()}
- * @see {@link module:ubus.connection#subscriber|subscriber()}
+ * @see {@link module:ubus#publish|publish()}
+ * @see {@link module:ubus#subscriber|subscriber()}
  *
  * @example
  *
@@ -341,7 +341,7 @@
  * @class module:ubus.request
  * @hideconstructor
  *
- * @see {@link module:ubus.connection#publish|publish()}
+ * @see {@link module:ubus#publish|publish()}
  *
  * @example
  *
@@ -357,7 +357,7 @@
  * Represents an asynchronous notification request.
  *
  * A notify object is created when sending a notification to subscribers
- * via {@link module:ubus.connection.object#notify|notify()}. It allows
+ * via {@link module:ubus.object#notify|notify()}. It allows
  * tracking the delivery status of the notification and provides the
  * ability to abort if needed.
  *
@@ -365,11 +365,11 @@
  * subscribe/notify communication scheme. The notify object provides
  * non-blocking status checking and cancellation capabilities.
  *
- * @class module:ubus.connection.notify
+ * @class module:ubus.notify
  * @hideconstructor
  *
- * @see {@link module:ubus.connection.object#notify|notify()}
- * @see {@link module:ubus.connection#subscriber|subscriber()}
+ * @see {@link module:ubus.object#notify|notify()}
+ * @see {@link module:ubus#subscriber|subscriber()}
  *
  * @example
  *
@@ -383,7 +383,7 @@
  * Represents an event listener for pattern-based events.
  *
  * A listener is registered via
- * {@link module:ubus.connection#listener|listener()} to receive events
+ * {@link module:ubus#listener|listener()} to receive events
  * matching a specific pattern. Listeners are part of the event broadcast
  * communication scheme, where events are sent to all registered listeners
  * with matching event patterns.
@@ -392,11 +392,11 @@
  * `` `network.interface.*` ``) allowing flexible event routing and
  * subscription.
  *
- * @class module:ubus.connection.listener
+ * @class module:ubus.listener
  * @hideconstructor
  *
- * @see {@link module:ubus.connection#listener|listener()}
- * @see {@link module:ubus.connection#event|event()}
+ * @see {@link module:ubus#listener|listener()}
+ * @see {@link module:ubus#event|event()}
  *
  * @example
  *
@@ -409,7 +409,7 @@
  * Represents a subscriber to an object's notifications.
  *
  * A subscriber is registered via
- * {@link module:ubus.connection#subscriber|subscriber()} to receive
+ * {@link module:ubus#subscriber|subscriber()} to receive
  * notifications from a specific object. Subscribers are part of the
  * subscribe/notify communication scheme, where the target object can send
  * notifications that are delivered to all registered subscribers.
@@ -418,12 +418,12 @@
  * notification about the new subscription. Similarly, when a subscriber
  * is removed, the target object is notified of the unsubscription.
  *
- * @class module:ubus.connection.subscriber
+ * @class module:ubus.subscriber
  * @hideconstructor
  *
- * @see {@link module:ubus.connection#subscriber|subscriber()}
- * @see {@link module:ubus.connection.object#notify|notify()}
- * @see {@link module:ubus.connection.object#subscribed|subscribed()}
+ * @see {@link module:ubus#subscriber|subscriber()}
+ * @see {@link module:ubus.object#notify|notify()}
+ * @see {@link module:ubus.object#subscribed|subscribed()}
  *
  * @example
  *
@@ -1417,7 +1417,7 @@ uc_ubus_call(uc_vm_t *vm, size_t nargs)
  *
  * Returns `null` if the request failed.
  *
- * @function module:ubus.connection.channel#request
+ * @function module:ubus.channel#request
  *
  * @param {string} method
  * The name of the method to invoke.
@@ -1573,7 +1573,7 @@ uc_ubus_defer_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *r
  * @param {function} [fd_cb]
  * Optional callback function invoked when a file descriptor is received.
  *
- * @returns {?module:ubus.connection.deferred}
+ * @returns {?module:ubus.deferred}
  *
  * @example
  * // Asynchronous call with callback - typical pattern for RPC handlers
@@ -1639,7 +1639,7 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
  *
  * Returns `null` if the deferred call could not be initiated.
  *
- * @function module:ubus.connection.channel#defer
+ * @function module:ubus.channel#defer
  *
  * @param {string} method
  * The name of the method to invoke.
@@ -1659,7 +1659,7 @@ uc_ubus_defer(uc_vm_t *vm, size_t nargs)
  * @param {function} [fd_cb]
  * Optional callback function invoked when a file descriptor is received.
  *
- * @returns {?module:ubus.connection.deferred}
+ * @returns {?module:ubus.deferred}
  *
  * @example
  * const chan = open_channel(…);
@@ -1983,7 +1983,7 @@ uc_ubus_request_error(uc_vm_t *vm, size_t nargs)
  *
  * Returns `false` if the request is still pending.
  *
- * @function module:ubus.connection.notify#completed
+ * @function module:ubus.notify#completed
  *
  * @returns {boolean}
  *
@@ -2010,7 +2010,7 @@ uc_ubus_notify_completed(uc_vm_t *vm, size_t nargs)
  *
  * Returns `false` if the request was already completed.
  *
- * @function module:ubus.connection.notify#abort
+ * @function module:ubus.notify#abort
  *
  * @returns {boolean}
  *
@@ -2115,7 +2115,7 @@ uc_ubus_object_notify_complete_cb(struct ubus_notify_request *req, int idx, int 
  *
  * Returns `null` if the notification could not be sent.
  *
- * @function module:ubus.connection.object#notify
+ * @function module:ubus.object#notify
  *
  * @param {string} type
  * The notification type string.
@@ -2136,7 +2136,7 @@ uc_ubus_object_notify_complete_cb(struct ubus_notify_request *req, int idx, int 
  * Optional timeout in milliseconds. If specified, the operation waits
  * synchronously for completion.
  *
- * @returns {?module:ubus.connection.notify|?number}
+ * @returns {?module:ubus.notify|?number}
  *
  * @example
  * const obj = publish("my.service", {
@@ -2250,7 +2250,7 @@ uc_ubus_object_remove_common(uc_ubus_object_t *uuobj)
  *
  * Returns `null` if the object could not be removed.
  *
- * @function module:ubus.connection.object#remove
+ * @function module:ubus.object#remove
  *
  * @returns {?boolean}
  *
@@ -2288,7 +2288,7 @@ uc_ubus_object_remove(uc_vm_t *vm, size_t nargs)
  *
  * Returns `false` if no subscribers are currently connected.
  *
- * @function module:ubus.connection.object#subscribed
+ * @function module:ubus.object#subscribed
  *
  * @returns {boolean}
  *
@@ -2790,7 +2790,7 @@ out:
  * @param {function} [subscribe_callback]
  * Optional callback invoked when a subscriber connects to the object.
  *
- * @returns {?module:ubus.connection.object}
+ * @returns {?module:ubus.object}
  *
  * @example
  * const conn = connect();
@@ -2862,7 +2862,7 @@ uc_ubus_listener_remove_common(uc_ubus_listener_t *uul)
  *
  * Returns `null` if the listener could not be removed.
  *
- * @function module:ubus.connection.listener#remove
+ * @function module:ubus.listener#remove
  *
  * @returns {?boolean}
  *
@@ -2916,7 +2916,7 @@ uc_ubus_listener_cb(struct ubus_context *ctx, struct ubus_event_handler *ev,
  * pattern are received. The listener receives the event type and data.
  *
  * Returns a listener resource that can be removed via
- * {@link module:ubus.connection.listener#remove|remove()}.
+ * {@link module:ubus.listener#remove|remove()}.
  *
  * Returns `null` if the listener could not be registered.
  *
@@ -2930,7 +2930,7 @@ uc_ubus_listener_cb(struct ubus_context *ctx, struct ubus_event_handler *ev,
  * Callback invoked when a matching event is received. Receives the event
  * type string and event data object as arguments.
  *
- * @returns {?module:ubus.connection.listener}
+ * @returns {?module:ubus.listener}
  *
  * @example
  * const conn = connect();
@@ -3125,7 +3125,7 @@ uc_ubus_subscriber_subunsub_common(uc_vm_t *vm, size_t nargs, bool subscribe)
  *
  * Returns `null` if the subscription failed.
  *
- * @function module:ubus.connection.subscriber#subscribe
+ * @function module:ubus.subscriber#subscribe
  *
  * @param {string} object_name
  * The name of the object to subscribe to.
@@ -3155,7 +3155,7 @@ uc_ubus_subscriber_subscribe(uc_vm_t *vm, size_t nargs)
  *
  * Returns `null` if the unsubscription failed.
  *
- * @function module:ubus.connection.subscriber#unsubscribe
+ * @function module:ubus.subscriber#unsubscribe
  *
  * @param {string} object_name
  * The name of the object to unsubscribe from.
@@ -3219,7 +3219,7 @@ uc_ubus_subscriber_new_object_cb(struct ubus_context *ctx, struct ubus_subscribe
  *
  * Returns `null` if the subscriber could not be removed.
  *
- * @function module:ubus.connection.subscriber#remove
+ * @function module:ubus.subscriber#remove
  *
  * @returns {?boolean}
  *
@@ -3268,7 +3268,7 @@ uc_ubus_subscriber_remove(uc_vm_t *vm, size_t nargs)
  * @param {string[]} [subscription_patterns]
  * Optional array of glob patterns for automatic object subscription.
  *
- * @returns {?module:ubus.connection.subscriber}
+ * @returns {?module:ubus.subscriber}
  *
  * @example
  * const conn = connect();
@@ -3477,7 +3477,7 @@ uc_ubus_disconnect(uc_vm_t *vm, size_t nargs)
  *
  * Returns `false` if the request is still pending.
  *
- * @function module:ubus.connection.deferred#completed
+ * @function module:ubus.deferred#completed
  *
  * @returns {boolean}
  */
@@ -3501,7 +3501,7 @@ uc_ubus_defer_completed(uc_vm_t *vm, size_t nargs)
  *
  * Returns `false` if the request was already completed.
  *
- * @function module:ubus.connection.deferred#await
+ * @function module:ubus.deferred#await
  *
  * @returns {boolean}
  */
@@ -3537,7 +3537,7 @@ uc_ubus_defer_await(uc_vm_t *vm, size_t nargs)
  *
  * Returns `false` if the request was already completed.
  *
- * @function module:ubus.connection.deferred#abort
+ * @function module:ubus.deferred#abort
  *
  * @returns {boolean}
  */
@@ -3654,7 +3654,7 @@ uc_ubus_channel_add(uc_ubus_connection_t *c, uc_value_t *cb,
  * @param {number} [timeout=30]
  * The timeout in seconds for subsequent operations.
  *
- * @returns {?module:ubus.connection.channel}
+ * @returns {?module:ubus.channel}
  */
 static uc_value_t *
 uc_ubus_request_new_channel(uc_vm_t *vm, size_t nargs)
@@ -3717,7 +3717,7 @@ uc_ubus_request_new_channel(uc_vm_t *vm, size_t nargs)
  * @param {number} [timeout=30]
  * The timeout in seconds for subsequent operations.
  *
- * @returns {?module:ubus.connection.channel}
+ * @returns {?module:ubus.channel}
  */
 static uc_value_t *
 uc_ubus_channel_connect(uc_vm_t *vm, size_t nargs)
@@ -3941,7 +3941,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	 * @name Ubus system object IDs
 	 * @property {number} SYSTEM_OBJECT_ACL - System object ACL identifier,
  * used to query ACL data via
- * {@link module:ubus.connection#call|call()} with an integer object ID
+ * {@link module:ubus#call|call()} with an integer object ID
 	 */
 	ADD_CONST(SYSTEM_OBJECT_ACL);
 
