@@ -512,7 +512,7 @@ uc_fs_pfileno(uc_vm_t *vm, size_t nargs)
  * value of the mode argument.
  *
  * The mode argument may be either "r" to open the process for reading (connect
- * to its stdin) or "w" to open the process for writing (connect to its stdout).
+ * to its stdout) or "w" to open the process for writing (connect to its stdin).
  *
  * The mode character "r" or "w" may be optionally followed by "e" to apply the
  * FD_CLOEXEC flag onto the open descriptor.
