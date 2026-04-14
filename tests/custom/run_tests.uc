@@ -6,8 +6,8 @@ let testdir = sourcepath(0, true);
 let topdir = fs.realpath(`${testdir}/../..`);
 
 let line = '........................................';
-let ucode_bin = getenv('UCODE_BIN') || `${topdir}/ucode`;
-let ucode_lib = getenv('UCODE_LIB') || topdir;
+let ucode_bin = getenv('UCODE_BIN') || `${topdir}/build/ucode`;
+let ucode_lib = getenv('UCODE_LIB') || `${topdir}/build`;
 
 function mkdir_p(path) {
 	let parts = split(rtrim(path, '/') || '/', /\/+/);
