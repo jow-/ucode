@@ -48,7 +48,7 @@
 #endif
 #define CHUNK (UC_ZLIB_CHUNK)
 
-static const __attribute__((unused)) unsigned int _chunk_check = CHUNK;
+static unused const unsigned int _chunk_check = CHUNK;
 
 static uc_resource_type_t *zstrmd_type, *zstrmi_type;
 
