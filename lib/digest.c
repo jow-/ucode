@@ -62,6 +62,63 @@ uc_digest_calc_file(uc_value_t *path, char *(fn)(const char *,char *))
 	return NULL;
 }
 
+static char *
+uc_digest_fnv1a64_data_hash(const uint8_t *data, size_t len, char *out)
+{
+	static const char hex[] = "0123456789abcdef";
+	uint64_t hash = 0xCBF29CE484222325;
+
+	for (size_t i = 0; i < len; i++) {
+		hash ^= data[i];
+		hash *= 0x00000100000001B3;
+	}
+
+	for (int i = 0; i < 8; i++) {
+		uint8_t byte = (hash >> ((7 - i) * 8)) & 0xFF;
+		out[i * 2]     = hex[byte >> 4];
+		out[i * 2 + 1] = hex[byte & 0xF];
+	}
+
+	out[16] = '\0';
+	return out;
+}
+
+static char *
+uc_digest_fnv1a64_file_hash(const char *path, char *out)
+{
+	FILE *f = fopen(path, "rb");
+	if (!f)
+		return NULL;
+
+	static const char hex[] = "0123456789abcdef";
+	uint64_t hash = 0xCBF29CE484222325;
+	unsigned char buf[4096];
+	size_t n;
+
+	while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+		for (size_t i = 0; i < n; i++) {
+			hash ^= buf[i];
+			hash *= 0x00000100000001B3;
+		}
+	}
+
+	if (ferror(f)) {
+		fclose(f);
+		return NULL;
+	}
+
+	fclose(f);
+
+	for (int i = 0; i < 8; i++) {
+		uint8_t byte = (hash >> ((7 - i) * 8)) & 0xFF;
+		out[i * 2]     = hex[byte >> 4];
+		out[i * 2 + 1] = hex[byte & 0xF];
+	}
+
+	out[16] = '\0';
+	return out;
+}
+
 /**
  * Calculates the MD5 hash of string and returns that hash.
  *
@@ -126,6 +183,48 @@ static uc_value_t *
 uc_digest_sha256(uc_vm_t *vm, size_t nargs)
 {
 	return uc_digest_calc_data(uc_fn_arg(0), SHA256Data);
+}
+
+/**
+ * Calculates the 64-bit FNV-1a non-cryptographic hash of string and returns
+ * that hash.
+ *
+ * Returns `null` if a non-string argument is given.
+ *
+ * @function module:digest#fnv1a64
+ *
+ * @param {string} str
+ * The string to hash.
+ *
+ * @returns {?string}
+ *
+ * @example
+ * fnv1a64("This is a test");  // Returns "25f0b040ca8b4ce0"
+ * fnv1a64(123);               // Returns null
+ */
+static uc_value_t *
+uc_digest_fnv1a64(uc_vm_t *vm, size_t nargs)
+{
+	return uc_digest_calc_data(uc_fn_arg(0), uc_digest_fnv1a64_data_hash);
+}
+
+/**
+ * Calculates the 64-bit FNV-1a non-cryptographic hash of a given file and
+ * returns that hash.
+ *
+ * Returns `null` if an error occurred.
+ *
+ * @function module:digest#fnv1a64_file
+ *
+ * @param {string} path
+ * The path to the file.
+ *
+ * @returns {?string}
+ */
+static uc_value_t *
+uc_digest_fnv1a64_file(uc_vm_t *vm, size_t nargs)
+{
+	return uc_digest_calc_file(uc_fn_arg(0), uc_digest_fnv1a64_file_hash);
 }
 
 #ifdef HAVE_DIGEST_EXTENDED
@@ -351,9 +450,11 @@ static const uc_function_list_t global_fns[] = {
 	{ "md5",         uc_digest_md5         },
 	{ "sha1",        uc_digest_sha1        },
 	{ "sha256",      uc_digest_sha256      },
+	{ "fnv1a64",     uc_digest_fnv1a64     },
 	{ "md5_file",    uc_digest_md5_file    },
 	{ "sha1_file",   uc_digest_sha1_file   },
 	{ "sha256_file", uc_digest_sha256_file },
+	{ "fnv1a64_file",uc_digest_fnv1a64_file},
 #ifdef HAVE_DIGEST_EXTENDED
 	{ "md2",         uc_digest_md2         },
 	{ "md4",         uc_digest_md4         },
