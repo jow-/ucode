@@ -236,9 +236,27 @@ function use_test(input) {
 		(!length(select_tests) || filter(select_tests, p => p == input)[0]);
 }
 
+function lib_missing(catdir) {
+	let m = match(fs.basename(catdir), /^([0-9][0-9])_lib_(.+)$/);
+
+	if (m == null)
+		return false;
+
+	for (let ext in ['so', 'dylib', 'dll', 'uc'])
+		if (fs.access(`${ucode_lib}/${m[2]}.${ext}`))
+			return false;
+
+	return true;
+}
+
 for (let catdir in fs.glob(`${testdir}/[0-9][0-9]_*`)) {
 	if (fs.stat(catdir)?.type != 'directory')
 		continue;
+
+	if (lib_missing(catdir)) {
+		printf('\n##\n## Skipping %s tests (no library found)\n##\n\n', substr(fs.basename(catdir), 3));
+		continue;
+	}
 
 	printf('\n##\n## Running %s tests\n##\n\n', substr(fs.basename(catdir), 3));
 
