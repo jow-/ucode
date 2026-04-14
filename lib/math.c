@@ -52,6 +52,12 @@
 
 #include "ucode/module.h"
 
+#ifndef M_PI
+#define M_PI   3.14159265358979323846264338327950288
+#endif
+#define degToRad(angleInDegrees) ((angleInDegrees) * M_PI / 180.0)
+#define radToDeg(angleInRadians) ((angleInRadians) * 180.0 / M_PI)
+
 
 /**
  * Returns the absolute value of the given numeric value.
@@ -161,7 +167,7 @@ uc_atan2(uc_vm_t *vm, size_t nargs)
 /**
  * Calculates the cosine of `x`, where `x` is given in radians.
  *
- * Returns the resulting consine value.
+ * Returns the resulting cosine value.
  *
  * Returns `NaN` if the `x` value can't be converted to a number.
  *
@@ -477,18 +483,66 @@ uc_isnan(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(ucv_type(v) == UC_DOUBLE && isnan(ucv_double_get(v)));
 }
 
+/**
+ * Returns the radian value of the given degree value.
+ *
+ * @function module:math#deg2rad
+ *
+ * @param {double} number
+ * The number to return the radian value for.
+ *
+ * @returns {number}
+ * Returns the absolute value or `NaN` if the given argument could
+ * not be converted to a number.
+ * @example
+ * deg2rad(180);   // 3.1415926535898
+ * deg2rad("180"); // 3.1415926535898
+ */
+static uc_value_t *
+uc_deg2rad(uc_vm_t *vm, size_t nargs)
+{
+	double d = ucv_to_double(uc_fn_arg(0));
+
+	return ucv_double_new(degToRad(d));
+}
+
+/**
+ * Returns the degree value of the given radian value.
+ *
+ * @function module:math#rad2deg
+ *
+ * @param {double} number
+ * The number to return the degree value for.
+ *
+ * @returns {number}
+ * Returns the absolute value or `NaN` if the given argument could
+ * not be converted to a number.
+ * @example
+ * rad2deg(3.1415926535898);   // 180.0
+ * rad2deg("3.1415926535898"); // 180.0
+ */
+static uc_value_t *
+uc_rad2deg(uc_vm_t *vm, size_t nargs)
+{
+	double d = ucv_to_double(uc_fn_arg(0));
+
+	return ucv_double_new(radToDeg(d));
+}
+
 static const uc_function_list_t math_fns[] = {
-	{ "abs",	uc_abs },
-	{ "atan2",	uc_atan2 },
-	{ "cos",	uc_cos },
-	{ "exp",	uc_exp },
-	{ "log",	uc_log },
-	{ "sin",	uc_sin },
-	{ "sqrt",	uc_sqrt },
-	{ "pow",	uc_pow },
-	{ "rand",	uc_rand },
-	{ "srand",	uc_srand },
-	{ "isnan",	uc_isnan },
+	{ "abs",	 uc_abs },
+	{ "atan2",	 uc_atan2 },
+	{ "cos",	 uc_cos },
+	{ "exp",	 uc_exp },
+	{ "log",	 uc_log },
+	{ "sin",	 uc_sin },
+	{ "sqrt",	 uc_sqrt },
+	{ "pow",	 uc_pow },
+	{ "rand",	 uc_rand },
+	{ "srand",	 uc_srand },
+	{ "isnan",	 uc_isnan },
+	{ "deg2rad", uc_deg2rad },
+	{ "rad2deg", uc_rad2deg },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
