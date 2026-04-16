@@ -30,9 +30,15 @@
 #define __hidden __attribute__((visibility("hidden")))
 #endif
 
+#ifndef unused
+# if defined(__GNUC__) || defined(__clang__)
+#  define unused __attribute__((unused))
+# endif
+#endif
+
 #ifndef localfunc
 # if defined(__GNUC__) || defined(__clang__)
-#  define localfunc static __attribute__((noinline,unused))
+#  define localfunc static unused __attribute__((noinline))
 # else
 #  define localfunc static inline
 # endif

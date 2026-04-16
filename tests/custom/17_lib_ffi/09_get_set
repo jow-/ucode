@@ -1,0 +1,67 @@
+The `cdata.get()` and `cdata.set()` methods read and write struct fields and array elements.
+
+Struct field access with get/set.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef struct { int x; float y; } point;');
+let p = ffi.ctype('point', 0, 0.0);
+
+p.set('x', 100);
+p.set('y', 2.71);
+print("x: ", p.get('x'), " y: ", p.get('y'), "\n");
+-- End --
+
+-- Expect stdout --
+x: 100 y: 2.710000038147
+-- End --
+
+
+Array element access.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[3];');
+let a = ffi.ctype('intarr', 0, 0, 0);
+
+a.set(0, 10);
+a.set(1, 20);
+a.set(2, 30);
+print("array: ", a.get(0), " ", a.get(1), " ", a.get(2), "\n");
+-- End --
+
+-- Expect stdout --
+array: 10 20 30
+-- End --
+
+
+index() returns cdata reference for further manipulation.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[3];');
+let a = ffi.ctype('intarr', 10, 20, 30);
+
+// index() returns cdata, get() converts to value
+let ref = a.index(0);
+print("type: ", type(ref), "\n");
+print("value: ", ref.get(), "\n");
+
+// Chain index().set() for modification
+a.index(1).set(99);
+print("after set: ", a.get(1), "\n");
+-- End --
+
+-- Expect stdout --
+type: resource
+value: 10
+after set: 99
+-- End --
+
+

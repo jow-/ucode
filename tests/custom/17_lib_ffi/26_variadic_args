@@ -1,0 +1,51 @@
+Test calling C functions with variadic arguments (printf-style functions).
+
+printf() with integer argument.
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null);
+let printf = libc.wrap('int printf(const char *, ...)');
+
+printf("value=%d\n", 42);
+-- End --
+
+-- Expect stdout --
+value=42
+-- End --
+
+
+printf() with multiple variadic parameters.
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null);
+let printf = libc.wrap('int printf(const char *, ...)');
+
+printf("%s: %d %f\n", "test", 10, 3.14);
+-- End --
+
+-- Expect stdout --
+test: 10 3.140000
+-- End --
+
+
+sprintf() with array buffer (requires char array to pointer conversion).
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let libc = ffi.dlopen(null);
+let sprintf = libc.wrap('int sprintf(char *, const char *, ...)');
+
+let buf = ffi.ctype('char[256]');
+sprintf(buf, "value=%d", 42);
+
+print("sprintf result: ", ffi.string(buf), "\n");
+-- End --
+
+-- Expect stdout --
+sprintf result: value=42
+-- End --

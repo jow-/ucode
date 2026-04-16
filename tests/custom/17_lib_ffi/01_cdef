@@ -1,0 +1,20 @@
+The `ffi.cdef()` function parses C declaration strings and registers types
+and function prototypes with the FFI subsystem.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef(`
+    typedef int myint;
+    typedef struct { int x; } mystruct;
+    int global_var;
+    int func(int a, const char *b);
+`);
+print("cdef OK\n");
+-- End --
+
+-- Expect stdout --
+cdef OK
+-- End --
+
