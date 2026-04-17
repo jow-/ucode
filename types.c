@@ -102,7 +102,7 @@ ucv_resource_values(uc_resource_ext_t *res)
 {
 	void *data;
 
-	if (!ucv_resource_is_extended((uc_value_t *)res) || !res->uvcount)
+	if (!res->uvcount && !res->hasproto)
 		return NULL;
 
 	data = res + 1;
@@ -220,10 +220,11 @@ ucv_gc_mark(uc_value_t *uv)
 				ucv_set_mark(uv);
 
 			values = ucv_resource_values(res);
+
 			if (!values)
 				break;
 
-			for (i = 0; i < res->uvcount; i++)
+			for (i = 0; i < (size_t)res->uvcount + res->hasproto; i++)
 				ucv_gc_mark(values[i]);
 		}
 
@@ -312,19 +313,18 @@ ucv_free(uc_value_t *uv, bool retain)
 	case UC_RESOURCE:
 		if (uv->ext_flag) {
 			uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
+			void *data = res + 1;
 			uc_value_t **values;
 
 			values = ucv_resource_values(res);
+
 			if (values) {
-				for (i = 0; i < res->uvcount; i++)
+				for (i = 0; i < (size_t)res->uvcount + res->hasproto; i++)
 					ucv_put_value(values[i], retain);
 			}
 
-			if (res->type && res->type->free) {
-				void *data = res + 1;
-
+			if (res->type && res->type->free)
 				res->type->free(data);
-			}
 
 			ref = &res->ref;
 		}
@@ -1298,8 +1298,8 @@ ucv_resource_new_ex(uc_vm_t *vm, uc_resource_type_t *type, void **data, size_t u
 	assert(datasize < (8 << 20));
 
 	size = sizeof(*res);
-	size += uvcount * sizeof(uc_value_t *);
 	size += datasize = (datasize + 7) & ~7;
+	size += uvcount * sizeof(uc_value_t *);
 
 	res = xalloc(size);
 	res->header.type = UC_RESOURCE;
@@ -1308,6 +1308,7 @@ ucv_resource_new_ex(uc_vm_t *vm, uc_resource_type_t *type, void **data, size_t u
 	res->type = type;
 	res->uvcount = uvcount;
 	res->datasize = datasize / 8;
+	res->hasproto = 0;
 	if (data)
 		*data = res + 1;
 
@@ -1315,6 +1316,51 @@ ucv_resource_new_ex(uc_vm_t *vm, uc_resource_type_t *type, void **data, size_t u
 		ucv_ref_tail(&vm->values, &res->ref);
 		vm->alloc_refs++;
 	}
+
+	return &res->header;
+}
+
+uc_value_t *
+ucv_resource_new_with_proto(uc_vm_t *vm, uc_resource_type_t *type, void **data, size_t uvcount, size_t datasize, uc_value_t *proto)
+{
+	uc_resource_ext_t *res;
+	size_t size;
+	uc_value_t **values;
+
+	assert(uvcount < (1 << 8));
+	assert(datasize < (8 << 20));
+
+	/* If no proto provided, fall back to type->proto (no instance proto slot) */
+	if (!proto)
+		return ucv_resource_new_ex(vm, type, data, uvcount, datasize);
+
+	size = sizeof(*res);
+	size += datasize = (datasize + 7) & ~7;
+	size += (uvcount + 1) * sizeof(uc_value_t *);
+
+	res = xalloc(size);
+	res->header.type = UC_RESOURCE;
+	res->header.refcount = 1;
+	res->header.ext_flag = 1;
+	res->type = type;
+	res->uvcount = uvcount;
+	res->datasize = datasize / 8;
+	res->hasproto = 1;
+
+	if (data)
+		*data = res + 1;
+
+	if (vm && uvcount) {
+		ucv_ref_tail(&vm->values, &res->ref);
+		vm->alloc_refs++;
+	}
+
+	/* Chain the given proto to type->proto so prototype lookup works correctly */
+	if (type)
+		ucv_prototype_set(proto, ucv_get(type->proto));
+
+	values = (uc_value_t **)((char *)(res + 1) + datasize);
+	values[0] = proto;
 
 	return &res->header;
 }
@@ -1343,8 +1389,9 @@ ucv_resource_data(uc_value_t *uv, const char *name)
 
 	if (uv->ext_flag) {
 		uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
+		void *data = res + 1;
 
-		return res + 1;
+		return data;
 	}
 	else {
 		uc_resource_t *res = (uc_resource_t *)uv;
@@ -1370,10 +1417,20 @@ ucv_resource_value_get(uc_value_t *uv, size_t idx)
 	uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
 	uc_value_t **uvdata = ucv_resource_values(res);
 
-	if (!uvdata || idx >= res->uvcount)
+	if (!uvdata)
 		return NULL;
 
-	return uvdata[idx];
+	if (idx == UCV_RESOURCE_PROTO_IDX) {
+		if (!res->hasproto)
+			return NULL;
+
+		return uvdata[0];
+	}
+
+	if (idx >= res->uvcount)
+		return NULL;
+
+	return uvdata[idx + res->hasproto];
 }
 
 bool
@@ -1382,11 +1439,24 @@ ucv_resource_value_set(uc_value_t *uv, size_t idx, uc_value_t *val)
 	uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
 	uc_value_t **uvdata = ucv_resource_values(res);
 
-	if (!uvdata || idx >= res->uvcount)
-		return NULL;
+	if (!uvdata)
+		return false;
 
-	ucv_put(uvdata[idx]);
-	uvdata[idx] = val;
+	if (idx == UCV_RESOURCE_PROTO_IDX) {
+		if (!res->hasproto)
+			return false;
+
+		ucv_put(uvdata[0]);
+		uvdata[0] = val;
+
+		return true;
+	}
+
+	if (idx >= res->uvcount)
+		return false;
+
+	ucv_put(uvdata[idx + res->hasproto]);
+	uvdata[idx + res->hasproto] = val;
 
 	return true;
 }
@@ -1464,6 +1534,9 @@ ucv_prototype_get(uc_value_t *uv)
 		return object->proto;
 
 	case UC_RESOURCE:
+		if (ucv_resource_hasproto(uv))
+			return ucv_resource_proto_get(uv);
+
 		restype = ucv_resource_type(uv);
 
 		return restype ? restype->proto : NULL;
@@ -1494,6 +1567,26 @@ ucv_prototype_set(uc_value_t *uv, uc_value_t *proto)
 		object->proto = proto;
 
 		return true;
+
+	case UC_RESOURCE:
+		if (uv->ext_flag) {
+			uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
+			uc_value_t **values;
+
+			if (!res->hasproto)
+				return false;
+
+			values = ucv_resource_values(res);
+
+			if (!values)
+				return false;
+
+			values[0] = proto;
+
+			return true;
+		}
+
+		return false;
 
 	default:
 		return false;
