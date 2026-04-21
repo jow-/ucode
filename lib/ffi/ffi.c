@@ -4449,6 +4449,269 @@ uc_ffi_cast(uc_vm_t *vm, size_t nargs)
 	return res;
 }
 
+/**
+ * Cast a cdata to a different C type.
+ *
+ * The `.cast()` method converts a cdata to a specified C type. This is
+ * equivalent to calling `ffi.cast(type, cdata)`. It supports casts to
+ * numbers, enums, and pointers.
+ *
+ * @function module:ffi.CData#cast
+ *
+ * @param {string} type
+ * The target C type declaration.
+ *
+ * @returns {module:ffi.CData}
+ * A cdata of the target type holding the cast value.
+ *
+ * @throws {Error}
+ * Throws an exception if the cast is invalid.
+ *
+ * @example
+ * // Cast pointer to void*
+ * let px = ffi.ctype('int *', ffi.ctype('int', 42).ptr());
+ * let pv = px.cast('void *');
+ *
+ * @example
+ * // Cast pointer to integer
+ * let str = ffi.string("hello");
+ * let addr = str.ptr().cast('uintptr_t');
+ * print(addr.get());
+ *
+ * @see {@link module:ffi#cast|ffi.cast()}
+ */
+static uc_value_t *
+uc_ctype_cast(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *this_arg = _uc_fn_this_res(vm);
+	GCcdata *cd = ucv_resource_data(this_arg, "ffi.ctype");
+
+	if (!cd)
+		return NULL;
+
+	CTState *cts = ctype_cts(vm);
+	CTypeID id = ffi_checkctype(vm, nargs, 0, cts, NULL);
+	CType *d = ctype_raw(cts, id);
+
+	if (!ctype_isnum(d->info) && !ctype_isptr(d->info) && !ctype_isenum(d->info)) {
+		uc_value_t *repr = uc_ctype_repr(vm, id, NULL);
+
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+		                      "invalid cast to type '%s', only casts to "
+							  "numbers, enums or pointers are allowed",
+							  ucv_string_get(repr));
+
+		ucv_put(repr);
+
+		return NULL;
+	}
+
+	if (cd->ctypeid == id)
+		return ucv_get(this_arg);
+
+	uc_value_t *res = uc_cdata_new(vm, id, d->size);
+	uc_value_t *refs = NULL;
+
+	/* when we're casting to pointer, keep references to original memory */
+	if (ctype_isptr(d->info)) {
+		refs = ucv_array_new(vm);
+
+		/* keep reference to original value itself */
+		ucv_array_push(refs, ucv_get(this_arg));
+
+		/* merge original values references */
+		uc_value_t *src_refs = cd->refs;
+
+		for (size_t i = 0; i < ucv_array_length(src_refs); i++)
+			ucv_array_push(refs, ucv_get(ucv_array_get(src_refs, i)));
+	}
+
+	uc_cconv_ct_tv(cts, d, uc_cdata_dataptr(res), this_arg, CCF_CAST, &refs);
+
+	GCcdata *res_cd = ucv_resource_data(res, "ffi.ctype");
+	res_cd->refs = refs;
+
+	return res;
+}
+
+/**
+ * Copy memory to a cdata from a source.
+ *
+ * The `.copy()` method copies memory from a source to this cdata. If the
+ * source is a ucode string, it copies the string including its null
+ * terminator. Otherwise, an explicit length can be provided.
+ *
+ * @function module:ffi.CData#copy
+ *
+ * @param {string|module:ffi.CData} src
+ * Source string or pointer.
+ *
+ * @param {number} [len]
+ * Number of bytes to copy. Required if src is not a string.
+ *
+ * @returns {undefined}
+ * Returns `undefined`.
+ *
+ * @example
+ * // Copy string into buffer
+ * let buf = ffi.ctype('char[10]');
+ * buf.copy("hello");
+ *
+ * @example
+ * // Copy with explicit length
+ * let src = ffi.ctype('char[5]', [1, 2, 3, 4, 5]);
+ * let dst = ffi.ctype('char[5]');
+ * dst.copy(src, 5);
+ *
+ * @see {@link module:ffi#copy|ffi.copy()}
+ */
+static uc_value_t *
+uc_ctype_copy(uc_vm_t *vm, size_t nargs)
+{
+	GCcdata *cd = uc_fn_thisval("ffi.ctype");
+
+	if (!cd)
+		return NULL;
+
+	uc_value_t *sp_arg = uc_fn_arg(0);
+	uc_value_t *len_arg = uc_fn_arg(1);
+	void *dp = cdataptr(cd);
+	void *sp = NULL;
+	size_t len, dp_size, sp_size = SIZE_MAX;
+	CTState *cts = ctype_cts(vm);
+
+	/* Get destination buffer size for bounds checking */
+	dp_size = ffi_cdata_bufsize(cts, (uc_value_t *)cd);
+
+	/* Handle string source: copy directly from the string buffer */
+	if (ucv_type(sp_arg) == UC_STRING) {
+		const char *src = ucv_string_get(sp_arg);
+		size_t src_len = ucv_string_length(sp_arg);
+
+		/* Determine length: use explicit len if provided, else string + null */
+		if (nargs > 1) {
+			len = ucv_uint64_get(len_arg);
+		} else {
+			len = src_len + 1;
+		}
+
+		sp = (void *)src;
+		sp_size = src_len + 1;
+	} else {
+		sp = ffi_checkptr(vm, nargs, 0, CTID_P_CVOID);
+		if (!sp)
+			return NULL;
+
+		/* Get source buffer size for bounds checking */
+		sp_size = ffi_cdata_bufsize(cts, sp_arg);
+
+		if (nargs > 1) {
+			len = ucv_uint64_get(len_arg);
+		} else {
+			len = strnlen((const char *)sp, sp_size);
+		}
+	}
+
+	/* Cap length to destination buffer size */
+	if (len > dp_size)
+		len = dp_size;
+
+	/* Cap length to source buffer size */
+	if (len > sp_size)
+		len = sp_size;
+
+	memcpy(dp, sp, len);
+
+	return NULL;
+}
+
+/**
+ * Convert a cdata to a ucode string.
+ *
+ * The `.string()` method reads a C string from a char* pointer or char[]
+ * array and returns a ucode string. For char* pointers, it reads until the
+ * null terminator. For char[] arrays, it reads up to the array length.
+ * An optional length parameter can limit the bytes read.
+ *
+ * @function module:ffi.CData#string
+ *
+ * @param {number} [len]
+ * Optional maximum length for reading C strings (reads up to `len` bytes
+ * or until null terminator).
+ *
+ * @returns {string}
+ * The extracted ucode string.
+ *
+ * @throws {Error}
+ * Throws an exception if the cdata is not a char* or char[] type.
+ *
+ * @example
+ * // Read from char* pointer
+ * ffi.cdef('char *getenv(char *);');
+ * let ptr = ffi.C.wrap('char *getenv(char *)')("PATH");
+ * let path = ptr.string();
+ * print(path);
+ *
+ * @example
+ * // Read from char[] array
+ * let buf = ffi.ctype('char[10]', "hello");
+ * print(buf.string());  // => "hello"
+ *
+ * @example
+ * // Read fixed-length string
+ * let buf = ffi.ctype('char[10]', "hello world");
+ * print(buf.string(5));  // => "hello"
+ *
+ * @see {@link module:ffi#string|ffi.string()}
+ */
+static uc_value_t *
+uc_ctype_string(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *this_arg = _uc_fn_this_res(vm);
+	GCcdata *cd = ucv_resource_data(this_arg, "ffi.ctype");
+
+	if (!cd)
+		return NULL;
+
+	uc_value_t *len_arg = uc_fn_arg(0);
+	CTState *cts = ctype_cts(vm);
+	CType *cd_ct = ctype_get(cts, cd->ctypeid);
+	void *p = NULL;
+	size_t sz;
+
+	/* Get pointer: arrays contain data directly, pointers contain address */
+	if (ctype_isarray(cd_ct->info)) {
+		/* Array: data is directly in cdata, use array size as limit */
+		p = cdataptr(cd);
+		if (nargs > 0) {
+			size_t max_len = ucv_uint64_get(len_arg);
+			sz = strnlen((const char *)p, max_len);
+		} else {
+			sz = strnlen((const char *)p, cd_ct->size);
+		}
+	} else if (ctype_isptr(cd_ct->info)) {
+		/* Pointer: dereference and read null-terminated string */
+		p = *(void **)cdataptr(cd);
+		if (!p)
+			return ucv_string_new("");
+
+		if (nargs > 0) {
+			size_t max_len = ucv_uint64_get(len_arg);
+			sz = strnlen((const char *)p, max_len);
+		} else {
+			sz = strlen((const char *)p);
+		}
+	} else {
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+			"string() requires char* or char[] type, got %s",
+			ucv_typename(this_arg));
+
+		return NULL;
+	}
+
+	return ucv_string_new_length((const char *)p, sz);
+}
+
 #if UC_TARGET_CYGWIN
 #define CLIB_SOPREFIX "cyg"
 #else
@@ -4905,6 +5168,9 @@ static const uc_function_list_t ctype_fns[] = {
 	{ "itemsize",	uc_ctype_itemsize },
 	{ "slice",		uc_ctype_slice },
 	{ "tostring",	uc_ctype_tostring },
+	{ "cast",		uc_ctype_cast },
+	{ "copy",		uc_ctype_copy },
+	{ "string",		uc_ctype_string },
 };
 
 static const uc_function_list_t global_fns[] = {
