@@ -587,6 +587,38 @@ uc_fmax(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(fmax(x, y));
 }
 
+/**
+ * Clamps `x` to within `upper` and `lower` bounds if `x` exceeds them.
+ *
+ * The operation is effectively: `min(upper, max(x, lower))`.
+ *
+ * @function module:math#clamp
+ *
+ * @param {double} x number to clamp
+ * @param {double} upper upper bound
+ * @param {double} lower lower bound
+ *
+ * @returns {double}
+ * Returns `x` if within `upper` and `lower`, otherwise one of `lower` or `upper`
+ * if `x` exceeds those bounds, or `NaN` if any given argument
+ * could not be converted to a number.
+ * @example
+ * clamp(1000, 200, 180);   // 200.0
+ * clamp(-1000, 200, 180);  // 180.0
+ * clamp(190, 200, 180);    // 190.0
+ */
+static uc_value_t *
+uc_clamp(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double upper = ucv_to_double(uc_fn_arg(1));
+	double lower = ucv_to_double(uc_fn_arg(2));
+
+	if (isnan(x) || isnan(upper) || isnan(lower))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(fmin(upper, fmax(x, lower)));
+}
 
 static const uc_function_list_t math_fns[] = {
 	{ "abs",	 uc_abs },
@@ -604,6 +636,7 @@ static const uc_function_list_t math_fns[] = {
 	{ "rad2deg", uc_rad2deg },
 	{ "fmin",	 uc_fmin },
 	{ "fmax",	 uc_fmax },
+	{ "clamp",	 uc_clamp },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
