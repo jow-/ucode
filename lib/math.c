@@ -620,6 +620,94 @@ uc_clamp(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(fmin(upper, fmax(x, lower)));
 }
 
+/**
+ * Returns -1 or 1 depending on the sign of the given number, or 0 if the given
+ * number itself is zero.
+ *
+ * @function module:math#sign
+ *
+ * @param {double} x number
+ *
+ * @returns {integer}
+ * Returns -1 or 1 for negative and positive inputs respectively, 0 if the given
+ * number is zero, or `NaN` if the given argument could not be converted to a
+ * number.
+ * @example
+ * sign(2);   // 1
+ * sign(-8);  // -1
+ * sign(0);   // 0
+ * sign(-0);  // 0
+ */
+static uc_value_t *
+uc_sign(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_int64_new((x > 0) - (x < 0));
+}
+
+/**
+ * Returns -1 or 1 depending on the sign of the given number, or 0 if the given
+ * number itself is zero. IEEE-754 behaviour.
+ *
+ * @function module:math#signbit
+ *
+ * @param {double} x number
+ *
+ * @returns {integer}
+ * Returns -1 or 1 for negative and positive inputs respectively, 0 if the given
+ * number is zero, -1 for -0.0, or `NaN` if the given argument could not be
+ * converted to a number.
+ * @example
+ * signbit(2);    // 1
+ * signbit(-8);   // -1
+ * signbit(0);    // 0
+ * signbit(-0.0); // -1
+ * signbit(-0);   // 0
+ */
+static uc_value_t *
+uc_signbit(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_int64_new(signbit(x) ? -1 : (x > 0));
+}
+
+/**
+ * Returns -1 or 1 depending on the sign of the given number only (no zero).
+ * (-)Zero effectively becomes 1.
+ *
+ * @function module:math#signnz
+ *
+ * @param {double} x number
+ *
+ * @returns {integer}
+ * Returns -1 or +1 for negative and positive inputs respectively, and zero is
+ * converted to +1, or `NaN` if the given argument could not be converted to a
+ * number.
+ * @example
+ * signnz(2);   // 1
+ * signnz(-8);  // -1
+ * signnz(0);   // 1
+ * signnz(-0);  // 1
+ */
+static uc_value_t *
+uc_signnz(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_int64_new((x >= 0) ? 1 : -1);
+}
+
 static const uc_function_list_t math_fns[] = {
 	{ "abs",	 uc_abs },
 	{ "atan2",	 uc_atan2 },
@@ -637,6 +725,9 @@ static const uc_function_list_t math_fns[] = {
 	{ "fmin",	 uc_fmin },
 	{ "fmax",	 uc_fmax },
 	{ "clamp",	 uc_clamp },
+	{ "sign",	 uc_sign },
+	{ "signbit", uc_signbit },
+	{ "signnz",	 uc_signnz },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
