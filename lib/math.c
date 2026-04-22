@@ -736,6 +736,33 @@ uc_copysign(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(copysign(x, y));
 }
 
+/**
+ * Floors `x` to the largest integer value not greater than `x`.
+ *
+ * @function module:math#floor
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * Returns the largest integer value not greater than `x`, or `NaN` if the given
+ * argument could not be converted to a number.
+ * @example
+ * floor(2.7);        // 2.0
+ * floor(-2.7);       // -3.0
+ * floor(-0.0);       // -0.0
+ * floor(-Infinity);  // -1e309 i.e. -infinity in double type representation.
+ */
+static uc_value_t *
+uc_floor(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(floor(x));
+}
+
 static const uc_function_list_t math_fns[] = {
 	{ "abs",		uc_abs },
 	{ "atan2",		uc_atan2 },
@@ -757,6 +784,7 @@ static const uc_function_list_t math_fns[] = {
 	{ "signbit",	uc_signbit },
 	{ "signnz",		uc_signnz },
 	{ "copysign",	uc_copysign },
+	{ "floor",		uc_floor },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
