@@ -171,6 +171,39 @@ uc_atan2(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Calculates the tangent of `x`, the floating-point value representing the
+ * angle in radians.
+ *
+ * On success, this function returns the tangent of `x`.
+ * 
+ * The relationship is `tan(x) = sin(x) / cos (x)`. A graph of the tangent has
+ * periodic patterns directly related to ratios of pi, where radian values of
+ * whole multiples of (1, 2, 3, ...) pi are 0, and radian values of half
+ * multiples of pi (1/2, 3/2, 5/2, ...) are +/-Infinity.
+ *
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#tan
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ */
+static uc_value_t *
+uc_tan(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(tan(x));
+}
+
+/**
  * Calculates the cosine of `x`, where `x` is given in radians.
  *
  * Returns the resulting cosine value.
@@ -946,6 +979,7 @@ uc_trunc(uc_vm_t *vm, size_t nargs)
 static const uc_function_list_t math_fns[] = {
 	{ "abs",		uc_abs },
 	{ "atan2",		uc_atan2 },
+	{ "tan",		uc_tan },
 	{ "cos",		uc_cos },
 	{ "exp",		uc_exp },
 	{ "log",		uc_log },
