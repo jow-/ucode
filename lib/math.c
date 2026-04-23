@@ -790,6 +790,39 @@ uc_ceil(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(ceil(x));
 }
 
+/**
+ * Returns the integral value nearest to x rounding half-way cases away
+ * from zero, regardless of the current rounding direction.
+ *
+ * @function module:math#round
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * Returns the rounded integer value of `x`, or `NaN` if the given
+ * argument could not be converted to a number.
+ *
+ * @example
+ * round(2.4);        // 2.0
+ * round(2.5);        // 3.0
+ * round(2.7);        // 3.0
+ * round(-2.4);       // -2.0
+ * round(-2.5);       // -3.0
+ * round(-2.7);       // -3.0
+ * round(-0.0);       // -0.0
+ * round(-Infinity);  // -1e309 i.e. -infinity in double type representation.
+ */
+static uc_value_t *
+uc_round(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(round(x));
+}
+
 static const uc_function_list_t math_fns[] = {
 	{ "abs",		uc_abs },
 	{ "atan2",		uc_atan2 },
@@ -813,6 +846,7 @@ static const uc_function_list_t math_fns[] = {
 	{ "copysign",	uc_copysign },
 	{ "floor",		uc_floor },
 	{ "ceil",		uc_ceil },
+	{ "round",		uc_round },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
