@@ -823,6 +823,37 @@ uc_round(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(round(x));
 }
 
+/**
+ * Truncate away the decimal portion to produce the nearest integer not greater
+ * in magnitude than x.
+ *
+ * @function module:math#trunc
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * The integral portion remaining after the decimal portion is truncated, or
+ * `NaN` if the given argument could not be converted to a number.
+ *
+ * @example
+ * trunc(2.4);        // 2.0
+ * trunc(2.5);        // 2.0
+ * trunc(2.7);        // 2.0
+ * trunc(-2.4);       // -2.0
+ * trunc(-2.5);       // -2.0
+ * trunc(-2.7);       // -2.0
+ */
+static uc_value_t *
+uc_trunc(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(trunc(x));
+}
+
 static const uc_function_list_t math_fns[] = {
 	{ "abs",		uc_abs },
 	{ "atan2",		uc_atan2 },
@@ -847,6 +878,7 @@ static const uc_function_list_t math_fns[] = {
 	{ "floor",		uc_floor },
 	{ "ceil",		uc_ceil },
 	{ "round",		uc_round },
+	{ "trunc",		uc_trunc },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
