@@ -224,6 +224,126 @@ uc_arctan(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Calculates the hyperbolic cosine of `x`.
+ *
+ * On success, this function returns the principal value of the hyperbolic
+ * cosine of `x`; the return value is in the range [Infinity, 1].
+ * 
+ * The relationship is: cosh = `((e^x) + (e^-x)) / 2`.
+ *
+ *  - As `x` decreases below -1, the return value exponentiates toward Infinity.
+ *  - If `x` is  0, 1 is returned.
+ *  - As `x` increases above +1, the return value exponentiates toward Infinity.
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#cosh
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * cosh(-10); // 11013.232920103
+ * cosh(-1);  // 1.5430806348152
+ * cosh(0);   // 1.0
+ * cosh(1);   // 1.5430806348152
+ * cosh(10);  // 11013.232920103
+ */
+static uc_value_t *
+uc_cosh(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(cosh(x));
+}
+
+/**
+ * Calculates the hyperbolic sine of `x`.
+ *
+ * On success, this function returns the principal value of the hyperbolic
+ * sine of `x`; the return value is in the range [-Infinity, Infinity].
+ *  
+ * The relationship is: sinh = `((e^x) - (e^-x)) / 2`.
+ *
+ *  - As `x` decreases below -1, the return value exponentiates toward -Infinity.
+ *  - If `x` is  0, 0 is returned.
+ *  - As `x` increases above +1, the return value exponentiates toward Infinity.
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#sinh
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * sinh(-10); // -11013.232920103
+ * sinh(-1);  // -1.1752011936438
+ * sinh(0);   // 0.0
+ * sinh(1);   // 1.1752011936438
+ * sinh(10);  // 11013.232920103
+ */
+static uc_value_t *
+uc_sinh(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(sinh(x));
+}
+
+/**
+ * Calculates the hyperbolic tangent of `x`.
+ *
+ * On success, this function returns the principal value of the hyperbolic
+ * tangent of `x`; the return value is in the range [-1, 1].
+ *
+ * The relationship is: tanh = `((e^x) - (e^-x)) / ((e^x) + (e^-x))`, or
+ * tanh = `sinh(x) / cosh(x)`.
+ *
+ *  - As `x` decreases below -1, the return value asymptotically expands
+ * toward -1.
+ *  - If `x` is  0, 0 is returned.
+ *  - As `x` increases above +1, the return value asymptotically expands
+ * toward 1.
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#tanh
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * atan(-100); // -1.0
+ * atan(-10);  // -0.99999999587769
+ * atan(0);    // 0.0
+ * atan(10);   // 0.99999999587769
+ * atan(100);  // 1.0
+ */
+static uc_value_t *
+uc_tanh(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(tanh(x));
+}
+
+/**
  * Calculates the principal value of the arc tangent of `y`/`x`,
  * using the signs of the two arguments to determine the quadrant
  * of the result.
@@ -1086,6 +1206,9 @@ static const uc_function_list_t math_fns[] = {
 	{ "asin",		uc_arcsin },
 	{ "atan",		uc_arctan },
 	{ "atan2",		uc_atan2 },
+	{ "cosh",		uc_cosh },
+	{ "sinh",		uc_sinh },
+	{ "tanh",		uc_tanh },
 	{ "tan",		uc_tan },
 	{ "cos",		uc_cos },
 	{ "exp",		uc_exp },
