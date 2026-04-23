@@ -253,6 +253,66 @@ uc_log(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Calculate base-10 log of x.
+ *
+ * @function module:math#log10
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * The common (base-10) logarithm of x, or
+ * `NaN` if the given argument could not be converted to a number.
+ *
+ * @example
+ * log10(100);   // 2.0
+ * log10(10);    // 1.0
+ * log10(5);     // 0.69897000433602
+ * log10(1);     // 0.0
+ * log10(0);     // -1e309
+ */
+static uc_value_t *
+uc_log10(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(log10(x));
+}
+
+/**
+ * Calculate base-2 log of x.
+ *
+ * @function module:math#log2
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * The common (base-2) logarithm of x, or
+ * `NaN` if the given argument could not be converted to a number.
+ *
+ * @example
+ * log2(1024);  // 10.0
+ * log2(512);   // 9.0
+ * log2(16);    // 4.0
+ * log2(4);     // 2.0
+ * log2(2);     // 1.0
+ * log2(1);     // 0.0
+ * log2(0);     // -1e309
+ */
+static uc_value_t *
+uc_log2(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(log2(x));
+}
+
+/**
  * Calculates the sine of `x`, where `x` is given in radians.
  *
  * Returns the resulting sine value.
@@ -860,6 +920,8 @@ static const uc_function_list_t math_fns[] = {
 	{ "cos",		uc_cos },
 	{ "exp",		uc_exp },
 	{ "log",		uc_log },
+	{ "log10",		uc_log10 },
+	{ "log2",		uc_log2 },
 	{ "sin",		uc_sin },
 	{ "sqrt",		uc_sqrt },
 	{ "pow",		uc_pow },
