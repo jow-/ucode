@@ -365,7 +365,7 @@ uc_tanh(uc_vm_t *vm, size_t nargs)
  *  - If `y` is positive infinity (negative infinity), and `x` is finite,
  *    pi/2 (-pi/2) is returned.
  *  - If `y` is positive infinity (negative infinity) and `x` is negative
- *    infinity, +3*pi/4 (-3*pi/4) is returned.
+ *    infinity, +3 * pi/4 (-3 * pi/4) is returned.
  *  - If `y` is positive infinity (negative infinity) and `x` is positive
  *    infinity, +pi/4 (-pi/4) is returned.
  *
@@ -849,13 +849,13 @@ uc_pow(uc_vm_t *vm, size_t nargs)
  * With 2 arguments `a, b` it returns a number in the range `a` to `b` inclusive.
  * With a single argument `a` it returns a number in the range `0` to `a` inclusive.
  * 
- * The {@link module:math~srand `srand()`} function sets its argument as the
+ * The {@link module:math#srand `srand()`} function sets its argument as the
  * seed for a new sequence of pseudo-random integers to be returned by `rand()`.
- * These sequences are repeatable by calling {@link module:math~srand `srand()`}
+ * These sequences are repeatable by calling {@link module:math#srand `srand()`}
  * with the same seed value.
  *
  * If no seed value is explicitly set by calling
- * {@link module:math~srand `srand()`} prior to the first call to `rand()`,
+ * {@link module:math#srand `srand()`} prior to the first call to `rand()`,
  * the math module will automatically seed the PRNG once, using the current
  * time of day in milliseconds as seed value.
  *
@@ -897,10 +897,10 @@ uc_rand(uc_vm_t *vm, size_t nargs)
  *
  * This functions seeds the PRNG with the given value and thus affects the
  * pseudo-random integer sequence produced by subsequent calls to
- * {@link module:math~rand `rand()`}.
+ * {@link module:math#rand `rand()`}.
  *
  * Setting the same seed value will result in the same pseudo-random numbers
- * produced by {@link module:math~rand `rand()`}.
+ * produced by {@link module:math#rand `rand()`}.
  *
  * @function module:math#srand
  *
