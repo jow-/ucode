@@ -763,6 +763,33 @@ uc_floor(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(floor(x));
 }
 
+/**
+ * Computes the smallest integer value not less than `x`.
+ *
+ * @function module:math#ceil
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * Returns the smallest integer value not less than `x`, or `NaN` if the given
+ * argument could not be converted to a number.
+ * @example
+ * ceil(2.7);        // 3.0
+ * ceil(-2.7);       // -2.0
+ * ceil(-0.0);       // -0.0
+ * ceil(-Infinity);  // -1e309 i.e. -infinity in double type representation.
+ */
+static uc_value_t *
+uc_ceil(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(ceil(x));
+}
+
 static const uc_function_list_t math_fns[] = {
 	{ "abs",		uc_abs },
 	{ "atan2",		uc_atan2 },
@@ -785,6 +812,7 @@ static const uc_function_list_t math_fns[] = {
 	{ "signnz",		uc_signnz },
 	{ "copysign",	uc_copysign },
 	{ "floor",		uc_floor },
+	{ "ceil",		uc_ceil },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
