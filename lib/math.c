@@ -708,26 +708,55 @@ uc_signnz(uc_vm_t *vm, size_t nargs)
 	return ucv_int64_new((x >= 0) ? 1 : -1);
 }
 
+/**
+ * Returns a double whose magnitude is that of `x`, but whose sign is that of
+ * `y`.
+ *
+ * @function module:math#copysign
+ *
+ * @param {double} x number
+ * @param {double} y number
+ *
+ * @returns {double}
+ * Returns `NaN` if a given argument could not be converted to a number.
+ * @example
+ * copysign(-3, -5);  // -3.0
+ * copysign(8, -5);   // -8.0
+ * copysign(-0, 3);   // 0.0
+ */
+static uc_value_t *
+uc_copysign(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double y = ucv_to_double(uc_fn_arg(1));
+
+	if (isnan(x) || isnan(y))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(copysign(x, y));
+}
+
 static const uc_function_list_t math_fns[] = {
-	{ "abs",	 uc_abs },
-	{ "atan2",	 uc_atan2 },
-	{ "cos",	 uc_cos },
-	{ "exp",	 uc_exp },
-	{ "log",	 uc_log },
-	{ "sin",	 uc_sin },
-	{ "sqrt",	 uc_sqrt },
-	{ "pow",	 uc_pow },
-	{ "rand",	 uc_rand },
-	{ "srand",	 uc_srand },
-	{ "isnan",	 uc_isnan },
-	{ "deg2rad", uc_deg2rad },
-	{ "rad2deg", uc_rad2deg },
-	{ "fmin",	 uc_fmin },
-	{ "fmax",	 uc_fmax },
-	{ "clamp",	 uc_clamp },
-	{ "sign",	 uc_sign },
-	{ "signbit", uc_signbit },
-	{ "signnz",	 uc_signnz },
+	{ "abs",		uc_abs },
+	{ "atan2",		uc_atan2 },
+	{ "cos",		uc_cos },
+	{ "exp",		uc_exp },
+	{ "log",		uc_log },
+	{ "sin",		uc_sin },
+	{ "sqrt",		uc_sqrt },
+	{ "pow",		uc_pow },
+	{ "rand",		uc_rand },
+	{ "srand",		uc_srand },
+	{ "isnan",		uc_isnan },
+	{ "deg2rad",	uc_deg2rad },
+	{ "rad2deg",	uc_rad2deg },
+	{ "fmin",		uc_fmin },
+	{ "fmax",		uc_fmax },
+	{ "clamp",		uc_clamp },
+	{ "sign",		uc_sign },
+	{ "signbit",	uc_signbit },
+	{ "signnz",		uc_signnz },
+	{ "copysign",	uc_copysign },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
