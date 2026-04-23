@@ -120,6 +120,110 @@ uc_abs(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Calculates the arc cosine of `x`.
+ *
+ * On success, this function returns the principal value of the arc
+ * cosine of `x` in radians; the return value is in the range [pi, 0].
+ *
+ *  - If `x` is -1, pi is returned.
+ *  - If `x` is  0, pi/2 is returned.
+ *  - If `x` is +1, 0 is returned.
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#acos
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * acos(-1); // 3.1415926535898 i.e. pi
+ * acos(0);  // 1.5707963267949 i.e. pi/2
+ * acos(1);  // 0.0 i.e. 0 pi
+ */
+static uc_value_t *
+uc_arccos(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(acos(x));
+}
+
+/**
+ * Calculates the arc sine of `x`.
+ *
+ * On success, this function returns the principal value of the arc
+ * sine of `x` in radians; the return value is in the range [-pi/2, pi/2].
+ *
+ *  - If `x` is +0 (-0), 0 is returned.
+ *  - If `x` is +1 (-1), pi/2 (-pi/2) is returned.
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#asin
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * asin(-1); // -1.5707963267949 i.e. -pi/2
+ * asin(0);  // 0.0 i.e. 0 pi
+ * asin(1);  // 1.5707963267949 i.e. pi/2
+ */
+static uc_value_t *
+uc_arcsin(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(asin(x));
+}
+
+/**
+ * Calculates the arc tangent of `x`.
+ *
+ * On success, this function returns the principal value of the arc
+ * tangent of `x` in radians; the return value is in the range [-pi/2, pi/2].
+ *
+ *  - If `x` is +0 (-0), 0 is returned.
+ *  - As `x` tends toward +Infinity (-Infinity), the return value asymptotically
+ * converges toward pi/2 (-pi/2).
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#atan
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * atan(-100000); // -1.5707863267949 i.e. ~ -pi/2
+ * atan(0);       // 0.0 i.e. 0 pi
+ * atan(100000);  // 1.5707863267949 i.e. ~ pi/2
+ */
+static uc_value_t *
+uc_arctan(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(atan(x));
+}
+
+/**
  * Calculates the principal value of the arc tangent of `y`/`x`,
  * using the signs of the two arguments to determine the quadrant
  * of the result.
@@ -978,6 +1082,9 @@ uc_trunc(uc_vm_t *vm, size_t nargs)
 
 static const uc_function_list_t math_fns[] = {
 	{ "abs",		uc_abs },
+	{ "acos",		uc_arccos },
+	{ "asin",		uc_arcsin },
+	{ "atan",		uc_arctan },
 	{ "atan2",		uc_atan2 },
 	{ "tan",		uc_tan },
 	{ "cos",		uc_cos },
