@@ -46,7 +46,8 @@
  * It should be noted that when the ucode interpreter is run as `-p "..."`,
  * values involving Infinity are returned as the max double precision value
  * +/-1e309 (JSON), whereas when run as `-e "print(...)"` Infinity is
- * represented by the string `Infinity`.
+ * represented by the string `Infinity`. The boolean check `isinf()` is
+ * available to determine Infinity values.
  *
  * @module math
  */
@@ -549,6 +550,29 @@ uc_isnan(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Tests whether `x` is double precision `Infinity`.
+ *
+ * This functions checks whether the given argument is of type `double` of
+ * `Infinity` value. Double precision values >= 1.8e308 are considered `Infinity`.
+ *
+ * Returns `true` if the value is `Infinity`, otherwise false.
+ *
+ * @function module:math#isinf
+ *
+ * @param {number} x
+ * The value to test.
+ *
+ * @returns {boolean}
+ */
+static uc_value_t *
+uc_isinf(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *v = uc_fn_arg(0);
+
+	return ucv_boolean_new(ucv_type(v) == UC_DOUBLE && isinf(ucv_double_get(v)));
+}
+
+/**
  * Returns the radian value of the given degree value.
  *
  * @function module:math#deg2rad
@@ -933,6 +957,7 @@ static const uc_function_list_t math_fns[] = {
 	{ "rand",		uc_rand },
 	{ "srand",		uc_srand },
 	{ "isnan",		uc_isnan },
+	{ "isinf",		uc_isinf },
 	{ "deg2rad",	uc_deg2rad },
 	{ "rad2deg",	uc_rad2deg },
 	{ "fmin",		uc_fmin },
