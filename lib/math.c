@@ -576,6 +576,74 @@ uc_log2(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Computes the natural (base e) logarithm of 1 + x. This function is more
+ * precise than the expression {@link module:math#log `log`}(1 + x) if x is
+ * close to zero.
+ *
+ * @function module:math#log1p
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * The natural (base e) logarithm of 1 + x, or
+ * `NaN` if the given argument could not be converted to a number.
+ *
+ * @example
+ * log1p(10);    // 2.3978952727984
+ * log1p(1);     // 0.69314718055995
+ * log1p(0.1);   // 0.095310179804325
+ * log1p(0.001); // 0.00099950033308353
+ * log1p(0);     // 0.0
+ */
+static uc_value_t *
+uc_log1p(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(log1p(x));
+}
+
+/**
+ * Computes the e (Euler's number, 2.7182818) raised to the given power x,
+ * minus 1.0. This function is more accurate than the expression 
+ * {@link module:math#exp `exp(x)`}-1.0
+ * if x is close to zero.
+ *
+ * @function module:math#expm1
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * The e (Euler's number, 2.7182818) raised to the given power x, minus 1.0, or
+ * `NaN` if the given argument could not be converted to a number.
+ *
+ * @example
+ * expm1(10);       // 22025.465794807
+ * expm1(1);        // 1.718281828459
+ * expm1(0.1);      // 0.10517091807565
+ * expm1(0.001);    // 0.0010005001667083
+ * exp(0.001)-1;    // 0.0010005001667084
+ * expm1(0.0001);   // 0.00010000500016667
+ * exp(0.0001)-1;   // 0.00010000500016671
+ * expm1(0.000001); // 1.0000005000002e-06
+ * exp(0.000001)-1; // 1.0000004999622e-06
+ * expm1(0);        // 0.0
+ */
+static uc_value_t *
+uc_expm1(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(expm1(x));
+}
+
+/**
  * Calculates the sine of `x`, where `x` is given in radians.
  *
  * Returns the resulting sine value.
@@ -1282,7 +1350,9 @@ static const uc_function_list_t math_fns[] = {
 	{ "tan",		uc_tan },
 	{ "cos",		uc_cos },
 	{ "exp",		uc_exp },
+	{ "expm1",		uc_expm1 },
 	{ "log",		uc_log },
+	{ "log1p",		uc_log1p },
 	{ "log10",		uc_log10 },
 	{ "log2",		uc_log2 },
 	{ "sin",		uc_sin },
