@@ -42,6 +42,11 @@
  *
  * Additionally, the math module namespace may also be imported by invoking the
  * `ucode` interpreter with the `-lmath` switch.
+ * 
+ * It should be noted that when the ucode interpreter is run as `-p "..."`,
+ * values involving Infinity are returned as the max double precision value
+ * +/-1e309 (JSON), whereas when run as `-e "print(...)"` Infinity is
+ * represented by the string `Infinity`.
  *
  * @module math
  */
