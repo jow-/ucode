@@ -529,6 +529,65 @@ uc_rad2deg(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(radToDeg(d));
 }
 
+/**
+ * Returns the lesser of two values x and y.
+ *
+ * @function module:math#fmin
+ *
+ * @param {double} x first parameter
+ * @param {double} y second parameter
+ *
+ * @returns {double}
+ * Returns the lesser of the two values x or y or `NaN` if a given argument
+ * could not be converted to a number. Use `(-)Infinity` or `NAN` for
+ * comparisons involving said values.
+ * @example
+ * fmin("180", "-180");   // -180.0
+ * fmin(180, -180);       // -180.0
+ * fmin(-Infinity, 0);    // -1e309 i.e. -infinity in double type representation.
+ */
+static uc_value_t *
+uc_fmin(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double y = ucv_to_double(uc_fn_arg(1));
+
+	if (isnan(x) || isnan(y))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(fmin(x, y));
+}
+
+/**
+ * Returns the greater of two values x and y.
+ *
+ * @function module:math#fmax
+ *
+ * @param {double} x first parameter
+ * @param {double} y second parameter
+ *
+ * @returns {double}
+ * Returns the greater of the two values x or y or `NaN` if a given argument
+ * could not be converted to a number. Use `(-)Infinity` or `NAN` for
+ * comparisons involving said values.
+ * @example
+ * fmax("180", "-180");   // 180.0
+ * fmax(180, -180);       // 180.0
+ * fmax(Infinity, 0);     // 1e309 i.e. infinity in double type representation.
+ */
+static uc_value_t *
+uc_fmax(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double y = ucv_to_double(uc_fn_arg(1));
+
+	if (isnan(x) || isnan(y))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(fmax(x, y));
+}
+
+
 static const uc_function_list_t math_fns[] = {
 	{ "abs",	 uc_abs },
 	{ "atan2",	 uc_atan2 },
@@ -543,6 +602,8 @@ static const uc_function_list_t math_fns[] = {
 	{ "isnan",	 uc_isnan },
 	{ "deg2rad", uc_deg2rad },
 	{ "rad2deg", uc_rad2deg },
+	{ "fmin",	 uc_fmin },
+	{ "fmax",	 uc_fmax },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
