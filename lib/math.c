@@ -1226,25 +1226,29 @@ uc_copysign(uc_vm_t *vm, size_t nargs)
  * @function module:math#floor
  *
  * @param {double} x number
+ * @param {boolean} output_type - false is `integer`, true is `double`.
  *
- * @returns {double}
+ * @returns {number}
  * Returns the largest integer value not greater than `x`, or `NaN` if the given
  * argument could not be converted to a number.
  * @example
- * floor(2.7);        // 2.0
- * floor(-2.7);       // -3.0
- * floor(-0.0);       // -0.0
+ * floor(2.7);        // 2
+ * floor(2.7, true);  // 2.0
+ * floor(-2.7);       // -3
+ * floor(-0.0);       // 0
+ * floor(-0.0, true); // -0.0
  * floor(-Infinity);  // -1e309 i.e. -infinity in double type representation.
  */
 static uc_value_t *
 uc_floor(uc_vm_t *vm, size_t nargs)
 {
 	double x = ucv_to_double(uc_fn_arg(0));
+	bool ot = ucv_boolean_get(uc_fn_arg(1));
 
 	if (isnan(x))
 		return ucv_double_new(NAN);
 
-	return ucv_double_new(floor(x));
+	return ot ? ucv_double_new(floor(x)) : ucv_int64_new(floor(x));
 }
 
 /**
@@ -1253,25 +1257,29 @@ uc_floor(uc_vm_t *vm, size_t nargs)
  * @function module:math#ceil
  *
  * @param {double} x number
+ * @param {boolean} output_type - false is `integer`, true is `double`.
  *
- * @returns {double}
+ * @returns {number}
  * Returns the smallest integer value not less than `x`, or `NaN` if the given
  * argument could not be converted to a number.
  * @example
- * ceil(2.7);        // 3.0
- * ceil(-2.7);       // -2.0
- * ceil(-0.0);       // -0.0
+ * ceil(2.7);        // 3
+ * ceil(2.7, true);  // 3.0
+ * ceil(-2.7);       // -2
+ * ceil(-0.0);       // 0
+ * ceil(-0.0, true); // -0.0
  * ceil(-Infinity);  // -1e309 i.e. -infinity in double type representation.
  */
 static uc_value_t *
 uc_ceil(uc_vm_t *vm, size_t nargs)
 {
 	double x = ucv_to_double(uc_fn_arg(0));
+	bool ot = ucv_boolean_get(uc_fn_arg(1));
 
 	if (isnan(x))
 		return ucv_double_new(NAN);
 
-	return ucv_double_new(ceil(x));
+	return ot ? ucv_double_new(ceil(x)) : ucv_int64_new(ceil(x));
 }
 
 /**
@@ -1281,30 +1289,34 @@ uc_ceil(uc_vm_t *vm, size_t nargs)
  * @function module:math#round
  *
  * @param {double} x number
+ * @param {boolean} output_type - false is `integer`, true is `double`.
  *
- * @returns {double}
+ * @returns {number}
  * Returns the rounded integer value of `x`, or `NaN` if the given
  * argument could not be converted to a number.
  *
  * @example
- * round(2.4);        // 2.0
- * round(2.5);        // 3.0
- * round(2.7);        // 3.0
- * round(-2.4);       // -2.0
- * round(-2.5);       // -3.0
- * round(-2.7);       // -3.0
- * round(-0.0);       // -0.0
+ * round(2.4);        // 2
+ * round(2.5);        // 3
+ * round(2.7);        // 3
+ * round(2.7, true);  // 3.0
+ * round(-2.4);       // -2
+ * round(-2.5);       // -3
+ * round(-2.7);       // -3
+ * round(-0.0);       // 0
+ * round(-0.0, true); // -0.0
  * round(-Infinity);  // -1e309 i.e. -infinity in double type representation.
  */
 static uc_value_t *
 uc_round(uc_vm_t *vm, size_t nargs)
 {
 	double x = ucv_to_double(uc_fn_arg(0));
+	bool ot = ucv_boolean_get(uc_fn_arg(1));
 
 	if (isnan(x))
 		return ucv_double_new(NAN);
 
-	return ucv_double_new(round(x));
+	return ot ? ucv_double_new(round(x)) : ucv_int64_new(round(x));
 }
 
 /**
@@ -1313,29 +1325,34 @@ uc_round(uc_vm_t *vm, size_t nargs)
  *
  * @function module:math#trunc
  *
- * @param {double} x number
+ * @param {number} x number
+ * @param {boolean} output_type - false is `integer`, true is `double`.
  *
- * @returns {double}
+ * @returns {number}
  * The integral portion remaining after the decimal portion is truncated, or
  * `NaN` if the given argument could not be converted to a number.
  *
  * @example
- * trunc(2.4);        // 2.0
- * trunc(2.5);        // 2.0
- * trunc(2.7);        // 2.0
- * trunc(-2.4);       // -2.0
- * trunc(-2.5);       // -2.0
- * trunc(-2.7);       // -2.0
+ * trunc(2.4);        // 2
+ * trunc(2.5);        // 2
+ * trunc(2.7);        // 2
+ * trunc(2.7, true);  // 2.0
+ * trunc(-2.4);       // -2
+ * trunc(-2.5);       // -2
+ * trunc(-2.7);       // -2
+ * trunc(-0.0);       // 0
+ * trunc(-0.0, true); // -0.0
  */
 static uc_value_t *
 uc_trunc(uc_vm_t *vm, size_t nargs)
 {
 	double x = ucv_to_double(uc_fn_arg(0));
+	bool ot = ucv_boolean_get(uc_fn_arg(1));
 
 	if (isnan(x))
 		return ucv_double_new(NAN);
 
-	return ucv_double_new(trunc(x));
+	return ot ? ucv_double_new(trunc(x)) : ucv_int64_new(trunc(x));
 }
 
 static const uc_function_list_t math_fns[] = {
