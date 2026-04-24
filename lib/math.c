@@ -633,6 +633,76 @@ uc_sqrt(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Calculates the cube root of `x`.
+ *
+ * Returns the resulting cube root value.
+ *
+ *  - If `x` is `+0` (`-0`) then `+0` (`-0`) is returned.
+ *  - If `x` is (+/-) infinity, (+/-) infinity is returned.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#cbrt
+ *
+ * @param {double} x
+ * Value to calculate cube root for.
+ *
+ * @returns {double}
+ * @example
+ * cbrt(27);  // 3.0
+ * cbrt(0);   // 0.0
+ * cbrt(-27); // -3.0
+ */
+static uc_value_t *
+uc_cbrt(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(cbrt(x));
+}
+
+/**
+ * Computes the square root of the sum of the squares of `x` and `y`, i.e.
+ * the hypotenuse without undue overflow or underflow at intermediate stages of
+ * the computation.
+ *
+ * Returns the result of `sqrt(x^2 + y^2)`.
+ *
+ *  - If `x` and `y` are `+0` (`-0`) then `+0` (`-0`) is returned.
+ *  - If `x` or `y` is `+0` (`-0`) then `+y` or `+x` is returned.
+ *  - If `x` or `y` is (+/-) infinity, (+/-) infinity is returned.
+ *
+ * Returns `NaN` if the `x` or `y` value can't be converted to a number.
+ *
+ * @function module:math#hypot
+ *
+ * @param {double} x base
+ * @param {double} y height
+ *
+ * @returns {double}
+ * @example
+ * hypot(3, 3);   // 4.2426406871193
+ * hypot(2, 2);   // 2.8284271247462
+ * hypot(1, 1);   // 1.4142135623731
+ * hypot(0, 0);   // 0.0
+ * hypot(-1, -1); // -1.4142135623731
+ */
+static uc_value_t *
+uc_hypot(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double y = ucv_to_double(uc_fn_arg(1));
+
+	if (isnan(x) || isnan(y))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(hypot(x, y));
+}
+
+/**
  * Calculates the value of `x` raised to the power of `y`.
  *
  * On success, returns the value of `x` raised to the power of `y`.
@@ -1217,6 +1287,8 @@ static const uc_function_list_t math_fns[] = {
 	{ "log2",		uc_log2 },
 	{ "sin",		uc_sin },
 	{ "sqrt",		uc_sqrt },
+	{ "hypot",		uc_hypot },
+	{ "cbrt",		uc_cbrt },
 	{ "pow",		uc_pow },
 	{ "rand",		uc_rand },
 	{ "srand",		uc_srand },
