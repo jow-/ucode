@@ -63,6 +63,10 @@
 #define HAS_IOCTL
 #endif
 
+#if defined(__APPLE__)
+#define HAS_MAC_IOCTL
+#endif
+
 #ifdef HAS_IOCTL
 #include <sys/ioctl.h>
 
@@ -71,6 +75,38 @@
 #define IOC_DIR_WRITE	(_IOC_WRITE)
 #define IOC_DIR_RW		(_IOC_READ | _IOC_WRITE)
 
+#define IOCTL_CMD(dir, type, num, size) _IOC((dir), (type), (num), (size))
+#endif
+
+#ifdef HAS_MAC_IOCTL
+#include <sys/ioctl.h>
+#include <sys/ioccom.h>
+#define IOC_DIR_NONE	0
+#define IOC_DIR_READ	1
+#define IOC_DIR_WRITE	2
+#define IOC_DIR_RW		(IOC_DIR_READ | IOC_DIR_WRITE)
+
+static unsigned long
+mac_ioctl_cmd(unsigned int dir, unsigned int type, unsigned int num, size_t size)
+{
+	if (num == 0)
+		return type;
+
+	switch (dir) {
+	case IOC_DIR_NONE:
+		return _IO(type, num);
+	case IOC_DIR_READ:
+		return _IOR(type, num, void *);
+	case IOC_DIR_WRITE:
+		return _IOW(type, num, void *);
+	case IOC_DIR_RW:
+		return _IOWR(type, num, void *);
+	default:
+		return 0;
+	}
+}
+
+#define IOCTL_CMD(dir, type, num, size) mac_ioctl_cmd((dir), (type), (num), (size))
 #endif
 
 #include "ucode/module.h"
@@ -902,7 +938,7 @@ uc_io_fcntl(uc_vm_t *vm, size_t nargs)
 	return ucv_int64_new(ret);
 }
 
-#ifdef HAS_IOCTL
+#if defined(HAS_IOCTL) || defined(HAS_MAC_IOCTL)
 
 /**
  * Performs an ioctl operation on the file descriptor.
@@ -1017,9 +1053,10 @@ uc_io_ioctl(uc_vm_t *vm, size_t nargs)
 
 	if (ucv_type(num) == UC_NULL) {
 		req = ty;
-	} else {
+	}
+	else {
 		nr = ucv_uint64_get(num);
-		req = _IOC(dir, ty, nr, sz);
+		req = IOCTL_CMD(dir, ty, nr, sz);
 	}
 
 	ret = ioctl(fd, req, buf);
@@ -1361,7 +1398,7 @@ static const uc_function_list_t io_handle_fns[] = {
 	{ "dup2",		uc_io_dup2 },
 	{ "fileno",		uc_io_fileno },
 	{ "fcntl",		uc_io_fcntl },
-#ifdef HAS_IOCTL
+#if defined(HAS_IOCTL) || defined(HAS_MAC_IOCTL)
 	{ "ioctl",		uc_io_ioctl },
 #endif
 	{ "isatty",		uc_io_isatty },
@@ -1430,7 +1467,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(TCSADRAIN);
 	ADD_CONST(TCSAFLUSH);
 
-#ifdef HAS_IOCTL
+#if defined(HAS_IOCTL) || defined(HAS_MAC_IOCTL)
 	ADD_CONST(IOC_DIR_NONE);
 	ADD_CONST(IOC_DIR_READ);
 	ADD_CONST(IOC_DIR_WRITE);
