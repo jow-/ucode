@@ -170,6 +170,35 @@ set(CLI_SOURCES main.c)
 add_executable(ucode ${CLI_SOURCES})
 target_link_libraries(ucode uc_defines libucode)
 
+# Ensure rpath is used on macOS
+set(CMAKE_MACOSX_RPATH ON)
+
+# Automatically include linked library paths in rpath
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+if(APPLE)
+  set_target_properties(libucode PROPERTIES
+    INSTALL_NAME_DIR "@rpath"
+  )
+  set_target_properties(ucode PROPERTIES
+    INSTALL_RPATH "@loader_path/../${CMAKE_INSTALL_LIBDIR}"
+  )
+endif()
+
+if(APPLE AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  execute_process(
+    COMMAND brew --prefix
+    OUTPUT_VARIABLE HOMEBREW_PREFIX
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+
+  if(HOMEBREW_PREFIX AND EXISTS "${HOMEBREW_PREFIX}")
+    message(STATUS "Using Homebrew prefix: ${HOMEBREW_PREFIX}")
+    set(CMAKE_INSTALL_PREFIX "${HOMEBREW_PREFIX}" CACHE PATH "Install path" FORCE)
+  endif()
+endif()
+
 check_function_exists(dlopen DLOPEN_FUNCTION_EXISTS)
 if(NOT DLOPEN_FUNCTION_EXISTS)
   target_link_libraries(libucode dl)
