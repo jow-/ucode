@@ -3463,17 +3463,17 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 {
 	bool trail = false, eof = false;
 	enum json_tokener_error err;
-	struct json_tokener *tok;
-	uc_value_t *rfn, *rbuf;
+	struct json_tokener *tok = NULL;
+	uc_value_t *rfn, *rbuf = NULL;
 	uc_stringbuf_t *buf;
 
-	rfn = ucv_property_get(obj, "read");
+	rfn = ucv_get(ucv_property_get(obj, "read"));
 
 	if (!ucv_is_callable(rfn)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 		                      "Input object does not implement read() method");
 
-		return NULL;
+		goto out;
 	}
 
 	tok = xjs_new_tokener();
@@ -3483,11 +3483,8 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 		uc_vm_stack_push(vm, ucv_get(rfn));
 		uc_vm_stack_push(vm, ucv_int64_new(1024));
 
-		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE) {
-			json_tokener_free(tok);
-
-			return NULL;
-		}
+		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE)
+			goto fail;
 
 		rbuf = uc_vm_stack_pop(vm);
 
@@ -3496,8 +3493,6 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 
 		/* on EOF, stop parsing unless trailing garbage was detected which handled below */
 		if (eof && !trail) {
-			ucv_put(rbuf);
-
 			/* Didn't parse a complete object yet, possibly a non-delimited atomic value
 			   such as `null`, `true` etc. - nudge parser by sending final zero byte.
 			   See json-c issue #681 <https://github.com/json-c/json-c/issues/681> */
@@ -3511,10 +3506,7 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 			uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
 			                      "Trailing garbage after JSON data");
 
-			json_tokener_free(tok);
-			ucv_put(rbuf);
-
-			return NULL;
+			goto fail;
 		}
 
 		if (ucv_type(rbuf) != UC_STRING) {
@@ -3536,12 +3528,23 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 		}
 
 		ucv_put(rbuf);
+		rbuf = NULL;
 
 		err = json_tokener_get_error(tok);
 
 		if (err != json_tokener_success && err != json_tokener_continue)
 			break;
 	}
+
+	goto out;
+
+fail:
+	json_tokener_free(tok);
+	tok = NULL;
+
+out:
+	ucv_put(rfn);
+	ucv_put(rbuf);
 
 	return tok;
 }
