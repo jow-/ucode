@@ -934,6 +934,7 @@ uc_filter(uc_vm_t *vm, size_t nargs)
 		return NULL;
 
 	arr = ucv_array_new(vm);
+	uc_vm_stack_push(vm, ucv_get(arr));
 
 	for (arrlen = ucv_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
 		uc_vm_ctx_push(vm);
@@ -955,6 +956,8 @@ uc_filter(uc_vm_t *vm, size_t nargs)
 
 		ucv_put(rv);
 	}
+
+	ucv_put(uc_vm_stack_pop(vm));
 
 	return arr;
 }
@@ -1224,6 +1227,7 @@ uc_map(uc_vm_t *vm, size_t nargs)
 		return NULL;
 
 	arr = ucv_array_new(vm);
+	uc_vm_stack_push(vm, ucv_get(arr));
 
 	for (arrlen = ucv_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
 		uc_vm_ctx_push(vm);
@@ -1242,6 +1246,8 @@ uc_map(uc_vm_t *vm, size_t nargs)
 
 		ucv_array_push(arr, rv);
 	}
+
+	ucv_put(uc_vm_stack_pop(vm));
 
 	return arr;
 }
@@ -5741,7 +5747,7 @@ static uc_value_t *
 uc_callfunc(uc_vm_t *vm, size_t nargs)
 {
 	size_t argoff = vm->stack.count - nargs, i;
-	uc_value_t *fn_scope, *prev_scope, *res;
+	uc_value_t *fn_scope, *prev_scope = NULL, *res;
 	uc_value_t *fn = uc_fn_arg(0);
 	uc_value_t *this = uc_fn_arg(1);
 	uc_value_t *scope = uc_fn_arg(2);
@@ -5767,24 +5773,27 @@ uc_callfunc(uc_vm_t *vm, size_t nargs)
 		fn_scope = NULL;
 	}
 
+	if (fn_scope) {
+		prev_scope = ucv_get(uc_vm_scope_get(vm));
+		uc_vm_stack_push(vm, ucv_get(prev_scope));
+		uc_vm_scope_set(vm, fn_scope);
+	}
+
 	uc_vm_stack_push(vm, ucv_get(this));
 	uc_vm_stack_push(vm, ucv_get(fn));
 
 	for (i = 3; i < nargs; i++)
 		uc_vm_stack_push(vm, ucv_get(vm->stack.entries[3 + argoff++]));
 
-	if (fn_scope) {
-		prev_scope = ucv_get(uc_vm_scope_get(vm));
-		uc_vm_scope_set(vm, fn_scope);
-	}
-
 	if (uc_vm_call(vm, true, i - 3) == EXCEPTION_NONE)
 		res = uc_vm_stack_pop(vm);
 	else
 		res = NULL;
 
-	if (fn_scope)
+	if (fn_scope) {
 		uc_vm_scope_set(vm, prev_scope);
+		ucv_put(uc_vm_stack_pop(vm));
+	}
 
 	return res;
 }
