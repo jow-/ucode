@@ -1441,6 +1441,7 @@ uloop_fd_close(struct uloop_fd *fd) {
 	if (fd->fd == -1)
 		return;
 
+	uloop_fd_delete(fd);
 	close(fd->fd);
 	fd->fd = -1;
 }
