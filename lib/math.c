@@ -42,6 +42,12 @@
  *
  * Additionally, the math module namespace may also be imported by invoking the
  * `ucode` interpreter with the `-lmath` switch.
+ * 
+ * It should be noted that when the ucode interpreter is run as `-p "..."`,
+ * values involving Infinity are returned as the max double precision value
+ * +/-1e309 (JSON), whereas when run as `-e "print(...)"` Infinity is
+ * represented by the string `Infinity`. The boolean check `isinf()` is
+ * available to determine Infinity values.
  *
  * @module math
  */
@@ -114,6 +120,230 @@ uc_abs(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Calculates the arc cosine of `x`.
+ *
+ * On success, this function returns the principal value of the arc
+ * cosine of `x` in radians; the return value is in the range [pi, 0].
+ *
+ *  - If `x` is -1, pi is returned.
+ *  - If `x` is  0, pi/2 is returned.
+ *  - If `x` is +1, 0 is returned.
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#acos
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * acos(-1); // 3.1415926535898 i.e. pi
+ * acos(0);  // 1.5707963267949 i.e. pi/2
+ * acos(1);  // 0.0 i.e. 0 pi
+ */
+static uc_value_t *
+uc_arccos(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(acos(x));
+}
+
+/**
+ * Calculates the arc sine of `x`.
+ *
+ * On success, this function returns the principal value of the arc
+ * sine of `x` in radians; the return value is in the range [-pi/2, pi/2].
+ *
+ *  - If `x` is +0 (-0), 0 is returned.
+ *  - If `x` is +1 (-1), pi/2 (-pi/2) is returned.
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#asin
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * asin(-1); // -1.5707963267949 i.e. -pi/2
+ * asin(0);  // 0.0 i.e. 0 pi
+ * asin(1);  // 1.5707963267949 i.e. pi/2
+ */
+static uc_value_t *
+uc_arcsin(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(asin(x));
+}
+
+/**
+ * Calculates the arc tangent of `x`.
+ *
+ * On success, this function returns the principal value of the arc
+ * tangent of `x` in radians; the return value is in the range [-pi/2, pi/2].
+ *
+ *  - If `x` is +0 (-0), 0 is returned.
+ *  - As `x` tends toward +Infinity (-Infinity), the return value asymptotically
+ * converges toward pi/2 (-pi/2).
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#atan
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * atan(-100000); // -1.5707863267949 i.e. ~ -pi/2
+ * atan(0);       // 0.0 i.e. 0 pi
+ * atan(100000);  // 1.5707863267949 i.e. ~ pi/2
+ */
+static uc_value_t *
+uc_arctan(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(atan(x));
+}
+
+/**
+ * Calculates the hyperbolic cosine of `x`.
+ *
+ * On success, this function returns the principal value of the hyperbolic
+ * cosine of `x`; the return value is in the range [Infinity, 1].
+ * 
+ * The relationship is: cosh = `((e^x) + (e^-x)) / 2`.
+ *
+ *  - As `x` decreases below -1, the return value exponentiates toward Infinity.
+ *  - If `x` is  0, 1 is returned.
+ *  - As `x` increases above +1, the return value exponentiates toward Infinity.
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#cosh
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * cosh(-10); // 11013.232920103
+ * cosh(-1);  // 1.5430806348152
+ * cosh(0);   // 1.0
+ * cosh(1);   // 1.5430806348152
+ * cosh(10);  // 11013.232920103
+ */
+static uc_value_t *
+uc_cosh(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(cosh(x));
+}
+
+/**
+ * Calculates the hyperbolic sine of `x`.
+ *
+ * On success, this function returns the principal value of the hyperbolic
+ * sine of `x`; the return value is in the range [-Infinity, Infinity].
+ *  
+ * The relationship is: sinh = `((e^x) - (e^-x)) / 2`.
+ *
+ *  - As `x` decreases below -1, the return value exponentiates toward -Infinity.
+ *  - If `x` is  0, 0 is returned.
+ *  - As `x` increases above +1, the return value exponentiates toward Infinity.
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#sinh
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * sinh(-10); // -11013.232920103
+ * sinh(-1);  // -1.1752011936438
+ * sinh(0);   // 0.0
+ * sinh(1);   // 1.1752011936438
+ * sinh(10);  // 11013.232920103
+ */
+static uc_value_t *
+uc_sinh(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(sinh(x));
+}
+
+/**
+ * Calculates the hyperbolic tangent of `x`.
+ *
+ * On success, this function returns the principal value of the hyperbolic
+ * tangent of `x`; the return value is in the range [-1, 1].
+ *
+ * The relationship is: tanh = `((e^x) - (e^-x)) / ((e^x) + (e^-x))`, or
+ * tanh = `sinh(x) / cosh(x)`.
+ *
+ *  - As `x` decreases below -1, the return value asymptotically expands
+ * toward -1.
+ *  - If `x` is  0, 0 is returned.
+ *  - As `x` increases above +1, the return value asymptotically expands
+ * toward 1.
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#tanh
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ * @example
+ * atan(-100); // -1.0
+ * atan(-10);  // -0.99999999587769
+ * atan(0);    // 0.0
+ * atan(10);   // 0.99999999587769
+ * atan(100);  // 1.0
+ */
+static uc_value_t *
+uc_tanh(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(tanh(x));
+}
+
+/**
  * Calculates the principal value of the arc tangent of `y`/`x`,
  * using the signs of the two arguments to determine the quadrant
  * of the result.
@@ -135,7 +365,7 @@ uc_abs(uc_vm_t *vm, size_t nargs)
  *  - If `y` is positive infinity (negative infinity), and `x` is finite,
  *    pi/2 (-pi/2) is returned.
  *  - If `y` is positive infinity (negative infinity) and `x` is negative
- *    infinity, +3*pi/4 (-3*pi/4) is returned.
+ *    infinity, +3 * pi/4 (-3 * pi/4) is returned.
  *  - If `y` is positive infinity (negative infinity) and `x` is positive
  *    infinity, +pi/4 (-pi/4) is returned.
  *
@@ -162,6 +392,39 @@ uc_atan2(uc_vm_t *vm, size_t nargs)
 		return ucv_double_new(NAN);
 
 	return ucv_double_new(atan2(d1, d2));
+}
+
+/**
+ * Calculates the tangent of `x`, the floating-point value representing the
+ * angle in radians.
+ *
+ * On success, this function returns the tangent of `x`.
+ * 
+ * The relationship is `tan(x) = sin(x) / cos (x)`. A graph of the tangent has
+ * periodic patterns directly related to ratios of pi, where radian values of
+ * whole multiples of (1, 2, 3, ...) pi are 0, and radian values of half
+ * multiples of pi (1/2, 3/2, 5/2, ...) are +/-Infinity.
+ *
+ *
+ * When `x` can't be converted to a numeric value, `NaN` is
+ * returned.
+ *
+ * @function module:math#tan
+ *
+ * @param {double} x
+ * The `x` value.
+ *
+ * @returns {double}
+ */
+static uc_value_t *
+uc_tan(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(tan(x));
 }
 
 /**
@@ -253,6 +516,134 @@ uc_log(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Calculate base-10 log of x.
+ *
+ * @function module:math#log10
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * The common (base-10) logarithm of x, or
+ * `NaN` if the given argument could not be converted to a number.
+ *
+ * @example
+ * log10(100);   // 2.0
+ * log10(10);    // 1.0
+ * log10(5);     // 0.69897000433602
+ * log10(1);     // 0.0
+ * log10(0);     // -1e309
+ */
+static uc_value_t *
+uc_log10(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(log10(x));
+}
+
+/**
+ * Calculate base-2 log of x.
+ *
+ * @function module:math#log2
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * The common (base-2) logarithm of x, or
+ * `NaN` if the given argument could not be converted to a number.
+ *
+ * @example
+ * log2(1024);  // 10.0
+ * log2(512);   // 9.0
+ * log2(16);    // 4.0
+ * log2(4);     // 2.0
+ * log2(2);     // 1.0
+ * log2(1);     // 0.0
+ * log2(0);     // -1e309
+ */
+static uc_value_t *
+uc_log2(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(log2(x));
+}
+
+/**
+ * Computes the natural (base e) logarithm of 1 + x. This function is more
+ * precise than the expression {@link module:math#log `log`}(1 + x) if x is
+ * close to zero.
+ *
+ * @function module:math#log1p
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * The natural (base e) logarithm of 1 + x, or
+ * `NaN` if the given argument could not be converted to a number.
+ *
+ * @example
+ * log1p(10);    // 2.3978952727984
+ * log1p(1);     // 0.69314718055995
+ * log1p(0.1);   // 0.095310179804325
+ * log1p(0.001); // 0.00099950033308353
+ * log1p(0);     // 0.0
+ */
+static uc_value_t *
+uc_log1p(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(log1p(x));
+}
+
+/**
+ * Computes the e (Euler's number, 2.7182818) raised to the given power x,
+ * minus 1.0. This function is more accurate than the expression 
+ * {@link module:math#exp `exp(x)`}-1.0
+ * if x is close to zero.
+ *
+ * @function module:math#expm1
+ *
+ * @param {double} x number
+ *
+ * @returns {double}
+ * The e (Euler's number, 2.7182818) raised to the given power x, minus 1.0, or
+ * `NaN` if the given argument could not be converted to a number.
+ *
+ * @example
+ * expm1(10);       // 22025.465794807
+ * expm1(1);        // 1.718281828459
+ * expm1(0.1);      // 0.10517091807565
+ * expm1(0.001);    // 0.0010005001667083
+ * exp(0.001)-1;    // 0.0010005001667084
+ * expm1(0.0001);   // 0.00010000500016667
+ * exp(0.0001)-1;   // 0.00010000500016671
+ * expm1(0.000001); // 1.0000005000002e-06
+ * exp(0.000001)-1; // 1.0000004999622e-06
+ * expm1(0);        // 0.0
+ */
+static uc_value_t *
+uc_expm1(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(expm1(x));
+}
+
+/**
  * Calculates the sine of `x`, where `x` is given in radians.
  *
  * Returns the resulting sine value.
@@ -307,6 +698,76 @@ uc_sqrt(uc_vm_t *vm, size_t nargs)
 		return ucv_double_new(NAN);
 
 	return ucv_double_new(sqrt(d));
+}
+
+/**
+ * Calculates the cube root of `x`.
+ *
+ * Returns the resulting cube root value.
+ *
+ *  - If `x` is `+0` (`-0`) then `+0` (`-0`) is returned.
+ *  - If `x` is (+/-) infinity, (+/-) infinity is returned.
+ *
+ * Returns `NaN` if the `x` value can't be converted to a number.
+ *
+ * @function module:math#cbrt
+ *
+ * @param {double} x
+ * Value to calculate cube root for.
+ *
+ * @returns {double}
+ * @example
+ * cbrt(27);  // 3.0
+ * cbrt(0);   // 0.0
+ * cbrt(-27); // -3.0
+ */
+static uc_value_t *
+uc_cbrt(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(cbrt(x));
+}
+
+/**
+ * Computes the square root of the sum of the squares of `x` and `y`, i.e.
+ * the hypotenuse without undue overflow or underflow at intermediate stages of
+ * the computation.
+ *
+ * Returns the result of `sqrt(x^2 + y^2)`.
+ *
+ *  - If `x` and `y` are `+0` (`-0`) then `+0` (`-0`) is returned.
+ *  - If `x` or `y` is `+0` (`-0`) then `+y` or `+x` is returned.
+ *  - If `x` or `y` is (+/-) infinity, (+/-) infinity is returned.
+ *
+ * Returns `NaN` if the `x` or `y` value can't be converted to a number.
+ *
+ * @function module:math#hypot
+ *
+ * @param {double} x base
+ * @param {double} y height
+ *
+ * @returns {double}
+ * @example
+ * hypot(3, 3);   // 4.2426406871193
+ * hypot(2, 2);   // 2.8284271247462
+ * hypot(1, 1);   // 1.4142135623731
+ * hypot(0, 0);   // 0.0
+ * hypot(-1, -1); // -1.4142135623731
+ */
+static uc_value_t *
+uc_hypot(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double y = ucv_to_double(uc_fn_arg(1));
+
+	if (isnan(x) || isnan(y))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(hypot(x, y));
 }
 
 /**
@@ -388,13 +849,13 @@ uc_pow(uc_vm_t *vm, size_t nargs)
  * With 2 arguments `a, b` it returns a number in the range `a` to `b` inclusive.
  * With a single argument `a` it returns a number in the range `0` to `a` inclusive.
  * 
- * The {@link module:math~srand `srand()`} function sets its argument as the
+ * The {@link module:math#srand `srand()`} function sets its argument as the
  * seed for a new sequence of pseudo-random integers to be returned by `rand()`.
- * These sequences are repeatable by calling {@link module:math~srand `srand()`}
+ * These sequences are repeatable by calling {@link module:math#srand `srand()`}
  * with the same seed value.
  *
  * If no seed value is explicitly set by calling
- * {@link module:math~srand `srand()`} prior to the first call to `rand()`,
+ * {@link module:math#srand `srand()`} prior to the first call to `rand()`,
  * the math module will automatically seed the PRNG once, using the current
  * time of day in milliseconds as seed value.
  *
@@ -436,10 +897,10 @@ uc_rand(uc_vm_t *vm, size_t nargs)
  *
  * This functions seeds the PRNG with the given value and thus affects the
  * pseudo-random integer sequence produced by subsequent calls to
- * {@link module:math~rand `rand()`}.
+ * {@link module:math#rand `rand()`}.
  *
  * Setting the same seed value will result in the same pseudo-random numbers
- * produced by {@link module:math~rand `rand()`}.
+ * produced by {@link module:math#rand `rand()`}.
  *
  * @function module:math#srand
  *
@@ -481,6 +942,29 @@ uc_isnan(uc_vm_t *vm, size_t nargs)
 	uc_value_t *v = uc_fn_arg(0);
 
 	return ucv_boolean_new(ucv_type(v) == UC_DOUBLE && isnan(ucv_double_get(v)));
+}
+
+/**
+ * Tests whether `x` is double precision `Infinity`.
+ *
+ * This functions checks whether the given argument is of type `double` of
+ * `Infinity` value. Double precision values >= 1.8e308 are considered `Infinity`.
+ *
+ * Returns `true` if the value is `Infinity`, otherwise false.
+ *
+ * @function module:math#isinf
+ *
+ * @param {number} x
+ * The value to test.
+ *
+ * @returns {boolean}
+ */
+static uc_value_t *
+uc_isinf(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *v = uc_fn_arg(0);
+
+	return ucv_boolean_new(ucv_type(v) == UC_DOUBLE && isinf(ucv_double_get(v)));
 }
 
 /**
@@ -529,20 +1013,387 @@ uc_rad2deg(uc_vm_t *vm, size_t nargs)
 	return ucv_double_new(radToDeg(d));
 }
 
+/**
+ * Returns the lesser of two values x and y.
+ *
+ * @function module:math#fmin
+ *
+ * @param {double} x first parameter
+ * @param {double} y second parameter
+ *
+ * @returns {double}
+ * Returns the lesser of the two values x or y or `NaN` if a given argument
+ * could not be converted to a number. Use `(-)Infinity` or `NAN` for
+ * comparisons involving said values.
+ * @example
+ * fmin("180", "-180");   // -180.0
+ * fmin(180, -180);       // -180.0
+ * fmin(-Infinity, 0);    // -1e309 i.e. -infinity in double type representation.
+ */
+static uc_value_t *
+uc_fmin(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double y = ucv_to_double(uc_fn_arg(1));
+
+	if (isnan(x) || isnan(y))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(fmin(x, y));
+}
+
+/**
+ * Returns the greater of two values x and y.
+ *
+ * @function module:math#fmax
+ *
+ * @param {double} x first parameter
+ * @param {double} y second parameter
+ *
+ * @returns {double}
+ * Returns the greater of the two values x or y or `NaN` if a given argument
+ * could not be converted to a number. Use `(-)Infinity` or `NAN` for
+ * comparisons involving said values.
+ * @example
+ * fmax("180", "-180");   // 180.0
+ * fmax(180, -180);       // 180.0
+ * fmax(Infinity, 0);     // 1e309 i.e. infinity in double type representation.
+ */
+static uc_value_t *
+uc_fmax(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double y = ucv_to_double(uc_fn_arg(1));
+
+	if (isnan(x) || isnan(y))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(fmax(x, y));
+}
+
+/**
+ * Clamps `x` to within `upper` and `lower` bounds if `x` exceeds them.
+ *
+ * The operation is effectively: `min(upper, max(x, lower))`.
+ *
+ * @function module:math#clamp
+ *
+ * @param {double} x number to clamp
+ * @param {double} upper upper bound
+ * @param {double} lower lower bound
+ *
+ * @returns {double}
+ * Returns `x` if within `upper` and `lower`, otherwise one of `lower` or `upper`
+ * if `x` exceeds those bounds, or `NaN` if any given argument
+ * could not be converted to a number.
+ * @example
+ * clamp(1000, 200, 180);   // 200.0
+ * clamp(-1000, 200, 180);  // 180.0
+ * clamp(190, 200, 180);    // 190.0
+ */
+static uc_value_t *
+uc_clamp(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double upper = ucv_to_double(uc_fn_arg(1));
+	double lower = ucv_to_double(uc_fn_arg(2));
+
+	if (isnan(x) || isnan(upper) || isnan(lower))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(fmin(upper, fmax(x, lower)));
+}
+
+/**
+ * Returns -1 or 1 depending on the sign of the given number, or 0 if the given
+ * number itself is zero.
+ *
+ * @function module:math#sign
+ *
+ * @param {double} x number
+ *
+ * @returns {integer}
+ * Returns -1 or 1 for negative and positive inputs respectively, 0 if the given
+ * number is zero, or `NaN` if the given argument could not be converted to a
+ * number.
+ * @example
+ * sign(2);   // 1
+ * sign(-8);  // -1
+ * sign(0);   // 0
+ * sign(-0);  // 0
+ */
+static uc_value_t *
+uc_sign(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_int64_new((x > 0) - (x < 0));
+}
+
+/**
+ * Returns -1 or 1 depending on the sign of the given number, or 0 if the given
+ * number itself is zero. IEEE-754 behaviour.
+ *
+ * @function module:math#signbit
+ *
+ * @param {double} x number
+ *
+ * @returns {integer}
+ * Returns -1 or 1 for negative and positive inputs respectively, 0 if the given
+ * number is zero, -1 for -0.0, or `NaN` if the given argument could not be
+ * converted to a number.
+ * @example
+ * signbit(2);    // 1
+ * signbit(-8);   // -1
+ * signbit(0);    // 0
+ * signbit(-0.0); // -1
+ * signbit(-0);   // 0
+ */
+static uc_value_t *
+uc_signbit(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_int64_new(signbit(x) ? -1 : (x > 0));
+}
+
+/**
+ * Returns -1 or 1 depending on the sign of the given number only (no zero).
+ * (-)Zero effectively becomes 1.
+ *
+ * @function module:math#signnz
+ *
+ * @param {double} x number
+ *
+ * @returns {integer}
+ * Returns -1 or +1 for negative and positive inputs respectively, and zero is
+ * converted to +1, or `NaN` if the given argument could not be converted to a
+ * number.
+ * @example
+ * signnz(2);   // 1
+ * signnz(-8);  // -1
+ * signnz(0);   // 1
+ * signnz(-0);  // 1
+ */
+static uc_value_t *
+uc_signnz(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ucv_int64_new((x >= 0) ? 1 : -1);
+}
+
+/**
+ * Returns a double whose magnitude is that of `x`, but whose sign is that of
+ * `y`.
+ *
+ * @function module:math#copysign
+ *
+ * @param {double} x number
+ * @param {double} y number
+ *
+ * @returns {double}
+ * Returns `NaN` if a given argument could not be converted to a number.
+ * @example
+ * copysign(-3, -5);  // -3.0
+ * copysign(8, -5);   // -8.0
+ * copysign(-0, 3);   // 0.0
+ */
+static uc_value_t *
+uc_copysign(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	double y = ucv_to_double(uc_fn_arg(1));
+
+	if (isnan(x) || isnan(y))
+		return ucv_double_new(NAN);
+
+	return ucv_double_new(copysign(x, y));
+}
+
+/**
+ * Floors `x` to the largest integer value not greater than `x`.
+ *
+ * @function module:math#floor
+ *
+ * @param {double} x number
+ * @param {boolean} output_type - false is `integer`, true is `double`.
+ *
+ * @returns {number}
+ * Returns the largest integer value not greater than `x`, or `NaN` if the given
+ * argument could not be converted to a number.
+ * @example
+ * floor(2.7);        // 2
+ * floor(2.7, true);  // 2.0
+ * floor(-2.7);       // -3
+ * floor(-0.0);       // 0
+ * floor(-0.0, true); // -0.0
+ * floor(-Infinity);  // -1e309 i.e. -infinity in double type representation.
+ */
+static uc_value_t *
+uc_floor(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	bool ot = ucv_boolean_get(uc_fn_arg(1));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ot ? ucv_double_new(floor(x)) : ucv_int64_new(floor(x));
+}
+
+/**
+ * Computes the smallest integer value not less than `x`.
+ *
+ * @function module:math#ceil
+ *
+ * @param {double} x number
+ * @param {boolean} output_type - false is `integer`, true is `double`.
+ *
+ * @returns {number}
+ * Returns the smallest integer value not less than `x`, or `NaN` if the given
+ * argument could not be converted to a number.
+ * @example
+ * ceil(2.7);        // 3
+ * ceil(2.7, true);  // 3.0
+ * ceil(-2.7);       // -2
+ * ceil(-0.0);       // 0
+ * ceil(-0.0, true); // -0.0
+ * ceil(-Infinity);  // -1e309 i.e. -infinity in double type representation.
+ */
+static uc_value_t *
+uc_ceil(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	bool ot = ucv_boolean_get(uc_fn_arg(1));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ot ? ucv_double_new(ceil(x)) : ucv_int64_new(ceil(x));
+}
+
+/**
+ * Returns the integral value nearest to x rounding half-way cases away
+ * from zero, regardless of the current rounding direction.
+ *
+ * @function module:math#round
+ *
+ * @param {double} x number
+ * @param {boolean} output_type - false is `integer`, true is `double`.
+ *
+ * @returns {number}
+ * Returns the rounded integer value of `x`, or `NaN` if the given
+ * argument could not be converted to a number.
+ *
+ * @example
+ * round(2.4);        // 2
+ * round(2.5);        // 3
+ * round(2.7);        // 3
+ * round(2.7, true);  // 3.0
+ * round(-2.4);       // -2
+ * round(-2.5);       // -3
+ * round(-2.7);       // -3
+ * round(-0.0);       // 0
+ * round(-0.0, true); // -0.0
+ * round(-Infinity);  // -1e309 i.e. -infinity in double type representation.
+ */
+static uc_value_t *
+uc_round(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	bool ot = ucv_boolean_get(uc_fn_arg(1));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ot ? ucv_double_new(round(x)) : ucv_int64_new(round(x));
+}
+
+/**
+ * Truncate away the decimal portion to produce the nearest integer not greater
+ * in magnitude than x.
+ *
+ * @function module:math#trunc
+ *
+ * @param {number} x number
+ * @param {boolean} output_type - false is `integer`, true is `double`.
+ *
+ * @returns {number}
+ * The integral portion remaining after the decimal portion is truncated, or
+ * `NaN` if the given argument could not be converted to a number.
+ *
+ * @example
+ * trunc(2.4);        // 2
+ * trunc(2.5);        // 2
+ * trunc(2.7);        // 2
+ * trunc(2.7, true);  // 2.0
+ * trunc(-2.4);       // -2
+ * trunc(-2.5);       // -2
+ * trunc(-2.7);       // -2
+ * trunc(-0.0);       // 0
+ * trunc(-0.0, true); // -0.0
+ */
+static uc_value_t *
+uc_trunc(uc_vm_t *vm, size_t nargs)
+{
+	double x = ucv_to_double(uc_fn_arg(0));
+	bool ot = ucv_boolean_get(uc_fn_arg(1));
+
+	if (isnan(x))
+		return ucv_double_new(NAN);
+
+	return ot ? ucv_double_new(trunc(x)) : ucv_int64_new(trunc(x));
+}
+
 static const uc_function_list_t math_fns[] = {
-	{ "abs",	 uc_abs },
-	{ "atan2",	 uc_atan2 },
-	{ "cos",	 uc_cos },
-	{ "exp",	 uc_exp },
-	{ "log",	 uc_log },
-	{ "sin",	 uc_sin },
-	{ "sqrt",	 uc_sqrt },
-	{ "pow",	 uc_pow },
-	{ "rand",	 uc_rand },
-	{ "srand",	 uc_srand },
-	{ "isnan",	 uc_isnan },
-	{ "deg2rad", uc_deg2rad },
-	{ "rad2deg", uc_rad2deg },
+	{ "abs",		uc_abs },
+	{ "acos",		uc_arccos },
+	{ "asin",		uc_arcsin },
+	{ "atan",		uc_arctan },
+	{ "atan2",		uc_atan2 },
+	{ "cosh",		uc_cosh },
+	{ "sinh",		uc_sinh },
+	{ "tanh",		uc_tanh },
+	{ "tan",		uc_tan },
+	{ "cos",		uc_cos },
+	{ "exp",		uc_exp },
+	{ "expm1",		uc_expm1 },
+	{ "log",		uc_log },
+	{ "log1p",		uc_log1p },
+	{ "log10",		uc_log10 },
+	{ "log2",		uc_log2 },
+	{ "sin",		uc_sin },
+	{ "sqrt",		uc_sqrt },
+	{ "hypot",		uc_hypot },
+	{ "cbrt",		uc_cbrt },
+	{ "pow",		uc_pow },
+	{ "rand",		uc_rand },
+	{ "srand",		uc_srand },
+	{ "isnan",		uc_isnan },
+	{ "isinf",		uc_isinf },
+	{ "deg2rad",	uc_deg2rad },
+	{ "rad2deg",	uc_rad2deg },
+	{ "fmin",		uc_fmin },
+	{ "fmax",		uc_fmax },
+	{ "clamp",		uc_clamp },
+	{ "sign",		uc_sign },
+	{ "signbit",	uc_signbit },
+	{ "signnz",		uc_signnz },
+	{ "copysign",	uc_copysign },
+	{ "floor",		uc_floor },
+	{ "ceil",		uc_ceil },
+	{ "round",		uc_round },
+	{ "trunc",		uc_trunc },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
