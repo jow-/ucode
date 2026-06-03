@@ -106,11 +106,16 @@ static void
 uc_uloop_cb_free(uc_uloop_cb_t *cb)
 {
 	uc_value_t *obj = cb->obj;
+	uc_resource_ext_t *ext;
 
 	if (!obj)
 		return;
 
 	cb->obj = NULL;
+
+	ext = (uc_resource_ext_t *)obj;
+	for (size_t i = 0; i < ext->uvcount; i++)
+		ucv_resource_value_set(obj, i, NULL);
 
 	ucv_resource_persistent_set(obj, false);
 	ucv_put(obj);
@@ -1441,6 +1446,7 @@ uloop_fd_close(struct uloop_fd *fd) {
 	if (fd->fd == -1)
 		return;
 
+	uloop_fd_delete(fd);
 	close(fd->fd);
 	fd->fd = -1;
 }

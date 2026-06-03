@@ -673,8 +673,17 @@ static void
 uc_ubus_put_res(uc_value_t **rp)
 {
 	uc_value_t *res = *rp;
+	uc_resource_ext_t *ext;
 
 	*rp = NULL;
+
+	if (!res)
+		return;
+
+	ext = (uc_resource_ext_t *)res;
+	for (size_t i = 0; i < ext->uvcount; i++)
+		ucv_resource_value_set(res, i, NULL);
+
 	ucv_resource_persistent_set(res, false);
 	ucv_put(res);
 }
@@ -3599,12 +3608,15 @@ static void
 uc_ubus_channel_disconnect_cb(struct ubus_context *ctx)
 {
 	uc_ubus_connection_t *c = container_of(ctx, uc_ubus_connection_t, ctx);
-	uc_value_t *func;
+	uc_value_t *res, *func;
 
-	func = ucv_resource_value_get(c->res, CONN_RES_DISCONNECT_CB);
+	/* pin ref across user callback to guard against re-entrant disconnect() */
+	res = ucv_get(c->res);
+
+	func = ucv_resource_value_get(res, CONN_RES_DISCONNECT_CB);
 
 	if (ucv_is_callable(func)) {
-		uc_vm_stack_push(c->vm, ucv_get(c->res));
+		uc_vm_stack_push(c->vm, ucv_get(res));
 		uc_vm_stack_push(c->vm, ucv_get(func));
 
 		if (uc_ubus_vm_call(c->vm, true, 0))
@@ -3623,6 +3635,7 @@ uc_ubus_channel_disconnect_cb(struct ubus_context *ctx)
 	}
 
 	uc_ubus_put_res(&c->res);
+	ucv_put(res);
 }
 
 static uc_value_t *

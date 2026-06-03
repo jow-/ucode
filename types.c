@@ -1485,12 +1485,14 @@ ucv_prototype_set(uc_value_t *uv, uc_value_t *proto)
 	switch (ucv_type(uv)) {
 	case UC_ARRAY:
 		array = (uc_array_t *)uv;
+		ucv_put(array->proto);
 		array->proto = proto;
 
 		return true;
 
 	case UC_OBJECT:
 		object = (uc_object_t *)uv;
+		ucv_put(object->proto);
 		object->proto = proto;
 
 		return true;
