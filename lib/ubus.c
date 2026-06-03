@@ -673,8 +673,17 @@ static void
 uc_ubus_put_res(uc_value_t **rp)
 {
 	uc_value_t *res = *rp;
+	uc_resource_ext_t *ext;
 
 	*rp = NULL;
+
+	if (!res)
+		return;
+
+	ext = (uc_resource_ext_t *)res;
+	for (size_t i = 0; i < ext->uvcount; i++)
+		ucv_resource_value_set(res, i, NULL);
+
 	ucv_resource_persistent_set(res, false);
 	ucv_put(res);
 }
