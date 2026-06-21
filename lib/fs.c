@@ -1004,7 +1004,7 @@ uc_fs_fileno(uc_vm_t *vm, size_t nargs)
  * @param {number} direction
  * The direction of the ioctl operation. Use constants IOC_DIR_*.
  *
- * @param {number} type
+ * @param {number|null} type
  * The ioctl type (see https://www.kernel.org/doc/html/latest/userspace-api/ioctl/ioctl-number.html)
  *
  * @param {number} num
@@ -1042,12 +1042,11 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 		err_return(EBADF);
 
 	if (ucv_type(direction) != UC_INTEGER || ucv_type(type) != UC_INTEGER ||
-	    ucv_type(num) != UC_INTEGER)
+	    (ucv_type(num) != UC_INTEGER && ucv_type(num) != UC_NULL))
 		err_return(EINVAL);
 
 	dir = ucv_uint64_get(direction);
 	ty = ucv_uint64_get(type);
-	nr = ucv_uint64_get(num);
 
 	switch (dir) {
 	case IOC_DIR_NONE:
@@ -1090,7 +1089,13 @@ uc_fs_ioctl(uc_vm_t *vm, size_t nargs)
 		err_return(EINVAL);
 	}
 
-	req = _IOC(dir, ty, nr, sz);
+	if (ucv_type(num) == UC_NULL) {
+		req = ty;
+	} else {
+		nr = ucv_uint64_get(num);
+		req = _IOC(dir, ty, nr, sz);
+	}
+
 	ret = ioctl(fd, req, buf);
 
 	if (ret < 0) {
