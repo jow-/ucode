@@ -94,7 +94,7 @@ def_chunks(zstrm_t * const zstrm)
 
 	/* run deflate() on input until output buffer not full */
 	do {
-		printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
+		printbuf_memset(zstrm->outbuf, -1, 0, CHUNK);
 		zstrm->outbuf->bpos -= CHUNK;
 
 		zstrm->strm.avail_out = CHUNK;
@@ -299,7 +299,7 @@ inf_chunks(zstrm_t * const zstrm)
 
 	/* run inflate() on input until output buffer not full */
 	do {
-		printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
+		printbuf_memset(zstrm->outbuf, -1, 0, CHUNK);
 		zstrm->outbuf->bpos -= CHUNK;
 
 		zstrm->strm.avail_out = CHUNK;
