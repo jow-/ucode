@@ -1,0 +1,39 @@
+Test that `deflate()` and `inflate()` survive the user's `read()`
+callback reassigning `obj.read` between calls. The streaming path caches the read method as a borrowed pointer,
+and reassignment frees the original closure before the next iteration's
+deref.
+
+-- Testcase --
+{%
+	import { deflate, inflate } from 'zlib';
+
+	function make_streaming_reader(chunks) {
+		let idx = 0;
+		let obj = {};
+		obj.read = function(n) {
+			// state-machine pattern: first call swaps in the "real" reader
+			if (idx == 0) {
+				obj.read = function(n) {
+					return idx < length(chunks) ? chunks[idx++] : "";
+				};
+			}
+			return idx < length(chunks) ? chunks[idx++] : "";
+		};
+		return obj;
+	}
+
+	let compressed = deflate(make_streaming_reader([ "hello, ", "world!" ]));
+
+	// slice into 8-byte chunks so inflate() makes multiple read() calls
+	let chunks = [];
+	for (let i = 0; i < length(compressed); i += 8)
+		push(chunks, substr(compressed, i, 8));
+
+	let r = inflate(make_streaming_reader(chunks));
+	printf("%s\n", r);
+%}
+-- End --
+
+-- Expect stdout --
+hello, world!
+-- End --

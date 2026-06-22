@@ -934,6 +934,7 @@ uc_filter(uc_vm_t *vm, size_t nargs)
 		return NULL;
 
 	arr = ucv_array_new(vm);
+	uc_vm_stack_push(vm, ucv_get(arr));
 
 	for (arrlen = ucv_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
 		uc_vm_ctx_push(vm);
@@ -955,6 +956,8 @@ uc_filter(uc_vm_t *vm, size_t nargs)
 
 		ucv_put(rv);
 	}
+
+	ucv_put(uc_vm_stack_pop(vm));
 
 	return arr;
 }
@@ -1224,6 +1227,7 @@ uc_map(uc_vm_t *vm, size_t nargs)
 		return NULL;
 
 	arr = ucv_array_new(vm);
+	uc_vm_stack_push(vm, ucv_get(arr));
 
 	for (arrlen = ucv_array_length(obj), arridx = 0; arridx < arrlen; arridx++) {
 		uc_vm_ctx_push(vm);
@@ -1242,6 +1246,8 @@ uc_map(uc_vm_t *vm, size_t nargs)
 
 		ucv_array_push(arr, rv);
 	}
+
+	ucv_put(uc_vm_stack_pop(vm));
 
 	return arr;
 }
@@ -3463,17 +3469,17 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 {
 	bool trail = false, eof = false;
 	enum json_tokener_error err;
-	struct json_tokener *tok;
-	uc_value_t *rfn, *rbuf;
+	struct json_tokener *tok = NULL;
+	uc_value_t *rfn, *rbuf = NULL;
 	uc_stringbuf_t *buf;
 
-	rfn = ucv_property_get(obj, "read");
+	rfn = ucv_get(ucv_property_get(obj, "read"));
 
 	if (!ucv_is_callable(rfn)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 		                      "Input object does not implement read() method");
 
-		return NULL;
+		goto out;
 	}
 
 	tok = xjs_new_tokener();
@@ -3483,11 +3489,8 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 		uc_vm_stack_push(vm, ucv_get(rfn));
 		uc_vm_stack_push(vm, ucv_int64_new(1024));
 
-		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE) {
-			json_tokener_free(tok);
-
-			return NULL;
-		}
+		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE)
+			goto fail;
 
 		rbuf = uc_vm_stack_pop(vm);
 
@@ -3496,8 +3499,6 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 
 		/* on EOF, stop parsing unless trailing garbage was detected which handled below */
 		if (eof && !trail) {
-			ucv_put(rbuf);
-
 			/* Didn't parse a complete object yet, possibly a non-delimited atomic value
 			   such as `null`, `true` etc. - nudge parser by sending final zero byte.
 			   See json-c issue #681 <https://github.com/json-c/json-c/issues/681> */
@@ -3511,10 +3512,7 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 			uc_vm_raise_exception(vm, EXCEPTION_SYNTAX,
 			                      "Trailing garbage after JSON data");
 
-			json_tokener_free(tok);
-			ucv_put(rbuf);
-
-			return NULL;
+			goto fail;
 		}
 
 		if (ucv_type(rbuf) != UC_STRING) {
@@ -3536,12 +3534,23 @@ uc_json_from_object(uc_vm_t *vm, uc_value_t *obj, json_object **jso)
 		}
 
 		ucv_put(rbuf);
+		rbuf = NULL;
 
 		err = json_tokener_get_error(tok);
 
 		if (err != json_tokener_success && err != json_tokener_continue)
 			break;
 	}
+
+	goto out;
+
+fail:
+	json_tokener_free(tok);
+	tok = NULL;
+
+out:
+	ucv_put(rfn);
+	ucv_put(rbuf);
 
 	return tok;
 }
@@ -5738,7 +5747,7 @@ static uc_value_t *
 uc_callfunc(uc_vm_t *vm, size_t nargs)
 {
 	size_t argoff = vm->stack.count - nargs, i;
-	uc_value_t *fn_scope, *prev_scope, *res;
+	uc_value_t *fn_scope, *prev_scope = NULL, *res;
 	uc_value_t *fn = uc_fn_arg(0);
 	uc_value_t *this = uc_fn_arg(1);
 	uc_value_t *scope = uc_fn_arg(2);
@@ -5764,24 +5773,27 @@ uc_callfunc(uc_vm_t *vm, size_t nargs)
 		fn_scope = NULL;
 	}
 
+	if (fn_scope) {
+		prev_scope = ucv_get(uc_vm_scope_get(vm));
+		uc_vm_stack_push(vm, ucv_get(prev_scope));
+		uc_vm_scope_set(vm, fn_scope);
+	}
+
 	uc_vm_stack_push(vm, ucv_get(this));
 	uc_vm_stack_push(vm, ucv_get(fn));
 
 	for (i = 3; i < nargs; i++)
 		uc_vm_stack_push(vm, ucv_get(vm->stack.entries[3 + argoff++]));
 
-	if (fn_scope) {
-		prev_scope = ucv_get(uc_vm_scope_get(vm));
-		uc_vm_scope_set(vm, fn_scope);
-	}
-
 	if (uc_vm_call(vm, true, i - 3) == EXCEPTION_NONE)
 		res = uc_vm_stack_pop(vm);
 	else
 		res = NULL;
 
-	if (fn_scope)
+	if (fn_scope) {
 		uc_vm_scope_set(vm, prev_scope);
+		ucv_put(uc_vm_stack_pop(vm));
+	}
 
 	return res;
 }

@@ -1,0 +1,28 @@
+Test that uvcount=0 resources are correctly freed when reached via a
+GC sweep. The script builds a self-referential cycle holding a pipe
+(whose io.handle resources are uvcount=0) and forces a collection;
+under the bug the io.handle structs are leaked on every `gc()` call.
+
+This test depends on running under a leak detector.
+
+-- Testcase --
+{%
+	import * as io from 'io';
+	import { stdout } from 'fs';
+
+	for (let i = 0; i < 3; i++) {
+		let cycle = [];
+		cycle[0] = cycle;
+		cycle[1] = io.pipe();
+		cycle = null;
+		gc("collect");
+	}
+
+	print("ok\n");
+	stdout.flush();
+%}
+-- End --
+
+-- Expect stdout --
+ok
+-- End --
