@@ -1,0 +1,20 @@
+The `ffi.copy()` function copies memory between C data objects.
+
+Copy memory between buffers.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef char chararr[5];');
+let src = ffi.ctype('chararr', [104, 101, 108, 108, 111]);  // "hello"
+let dst = ffi.ctype('chararr');
+
+ffi.copy(dst.ptr(), src.ptr(), 5);
+print("copied: ", ffi.string(dst.ptr(), 5), "\n");
+-- End --
+
+-- Expect stdout --
+copied: hello
+-- End --
+

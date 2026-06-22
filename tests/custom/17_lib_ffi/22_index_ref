@@ -1,0 +1,242 @@
+The `cdata.index()` method returns raw cdata references for further manipulation,
+unlike `get()` which returns converted ucode values.
+
+Basic index() returns cdata reference.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[3];');
+let a = ffi.ctype('intarr', 10, 20, 30);
+
+// index() returns cdata reference
+let ref = a.index(0);
+print("type of index: ", type(ref), "\n");
+
+// Can call get() on the reference to convert
+print("value: ", ref.get(), "\n");
+-- End --
+
+-- Expect stdout --
+type of index: resource
+value: 10
+-- End --
+
+
+index() supports chaining with set().
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[3];');
+let a = ffi.ctype('intarr', 10, 20, 30);
+
+// Chain index().set() to modify through reference
+a.index(1).set(99);
+print("array: ", a.get(0), " ", a.get(1), " ", a.get(2), "\n");
+-- End --
+
+-- Expect stdout --
+array: 10 99 30
+-- End --
+
+
+index() works with struct fields.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef struct { int x; int y; } point;');
+let p = ffi.ctype('point', 100, 200);
+
+// index() returns cdata reference to field
+let xref = p.index('x');
+print("type: ", type(xref), "\n");
+print("value: ", xref.get(), "\n");
+
+// Modify through reference
+p.index('y').set(999);
+print("y after set: ", p.get('y'), "\n");
+-- End --
+
+-- Expect stdout --
+type: resource
+value: 100
+y after set: 999
+-- End --
+
+
+index() supports path notation.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('struct point { int x; int y; }; struct rect { struct point min; struct point max; };');
+let r = ffi.ctype('struct rect', {
+    min: {x: 1, y: 2},
+    max: {x: 3, y: 4}
+});
+
+// index() with path returns cdata reference
+let ref = r.index('min.x');
+print("type: ", type(ref), "\n");
+print("value: ", ref.get(), "\n");
+
+// Modify through path reference
+r.index('max.y').set(999);
+print("max.y after set: ", r.get('max.y'), "\n");
+-- End --
+
+-- Expect stdout --
+type: resource
+value: 1
+max.y after set: 999
+-- End --
+
+
+index() works with pointer arithmetic.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[5];');
+let a = ffi.ctype('intarr', 10, 20, 30, 40, 50);
+let ptr = ffi.ctype('int *', a.ptr());
+
+// index() on pointer for arithmetic
+print("ptr[0]: ", ptr.index(0).get(), "\n");
+print("ptr[2]: ", ptr.index(2).get(), "\n");
+print("ptr[4]: ", ptr.index(4).get(), "\n");
+
+// Modify through pointer index
+ptr.index(1).set(99);
+print("after set: ", a.get(1), "\n");
+-- End --
+
+-- Expect stdout --
+ptr[0]: 10
+ptr[2]: 30
+ptr[4]: 50
+after set: 99
+-- End --
+
+
+index() with char* for byte-level access.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('char *strdup(const char *); void free(void *);');
+let strdup = ffi.C.wrap('char *strdup(const char *)');
+let free = ffi.C.wrap('void free(void *)');
+
+let ptr = strdup("hello");
+
+// index() for byte access
+print("ptr[0]: ", ptr.index(0).get(), "\n");
+print("ptr[1]: ", ptr.index(1).get(), "\n");
+print("ptr[4]: ", ptr.index(4).get(), "\n");
+
+// Modify through index
+ptr.index(0).set(65);  // 'A'
+print("after mod: ", ffi.string(ptr), "\n");
+
+free(ptr);
+-- End --
+
+-- Expect stdout --
+ptr[0]: 104
+ptr[1]: 101
+ptr[4]: 111
+after mod: Aello
+-- End --
+
+
+Compare get() vs index() return types.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[3];');
+let a = ffi.ctype('intarr', 10, 20, 30);
+
+// get() returns converted value
+let v1 = a.get(0);
+print("get() type: ", type(v1), " value: ", v1, "\n");
+
+// index() returns cdata reference
+let v2 = a.index(0);
+print("index() type: ", type(v2), "\n");
+
+// Must call get() on index() result
+print("index().get() type: ", type(v2.get()), " value: ", v2.get(), "\n");
+-- End --
+
+-- Expect stdout --
+get() type: int value: 10
+index() type: resource
+index().get() type: int value: 10
+-- End --
+
+
+index() on nested arrays.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr2d[2][3];');
+let m = ffi.ctype('intarr2d', [1, 2, 3], [4, 5, 6]);
+
+// First index returns row cdata
+let row0 = m.index(0);
+print("row0 type: ", type(row0), "\n");
+
+// Second index on row returns element cdata
+let elem = row0.index(1);
+print("elem type: ", type(elem), "\n");
+print("value: ", elem.get(), "\n");
+
+// Chain for modification
+m.index(1).index(2).set(999);
+print("m[1][2]: ", m.get('[1][2]'), "\n");
+-- End --
+
+-- Expect stdout --
+row0 type: resource
+elem type: resource
+value: 2
+m[1][2]: 999
+-- End --
+
+
+index() with const types still returns reference.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[3];');
+let a = ffi.ctype('intarr', 10, 20, 30);
+
+// Get const pointer
+let const_ptr = ffi.ctype('const int *', a.ptr());
+
+// index() on const pointer
+let ref = const_ptr.index(0);
+print("type: ", type(ref), "\n");
+print("value: ", ref.get(), "\n");
+-- End --
+
+-- Expect stdout --
+type: resource
+value: 10
+-- End --
+

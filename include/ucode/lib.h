@@ -86,7 +86,7 @@ uc_resource_new(uc_resource_type_t *type, void *data)
 static inline uc_resource_type_t *
 _uc_type_declare(uc_vm_t *vm, const char *name, const uc_function_list_t *list, size_t len, void (*freefn)(void *))
 {
-	uc_value_t *proto = ucv_object_new(NULL);
+	uc_value_t *proto = ucv_object_new(vm);
 
 	while (len-- > 0)
 		ucv_object_add(proto, list[len].name,

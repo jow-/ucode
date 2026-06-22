@@ -209,7 +209,8 @@ typedef struct {
 	uc_weakref_t ref;
 	uc_resource_type_t *type;
 
-	uint32_t reserved:3;
+	uint32_t reserved:2;
+	uint32_t hasproto:1;
 	uint32_t persistent:1;
 	uint32_t uvcount:8;
 	uint32_t datasize:20;
@@ -449,6 +450,7 @@ uc_resource_type_t *ucv_resource_type_lookup(uc_vm_t *, const char *);
 
 uc_value_t *ucv_resource_new(uc_resource_type_t *, void *);
 uc_value_t *ucv_resource_new_ex(uc_vm_t *, uc_resource_type_t *, void **, size_t, size_t);
+uc_value_t *ucv_resource_new_with_proto(uc_vm_t *, uc_resource_type_t *, void **, size_t, size_t, uc_value_t *);
 void *ucv_resource_data(uc_value_t *uv, const char *);
 void **ucv_resource_dataptr(uc_value_t *, const char *);
 uc_value_t *ucv_resource_value_get(uc_value_t *, size_t);
@@ -491,6 +493,17 @@ ucv_resource_create_ex(uc_vm_t *vm, const char *type, void **data, size_t uvcoun
     return ucv_resource_new_ex(vm, t, data, uvcount, datasize);
 }
 
+static inline uc_value_t *
+ucv_resource_create_with_proto(uc_vm_t *vm, const char *type, void **data, size_t uvcount, size_t datasize, uc_value_t *proto)
+{
+    uc_resource_type_t *t = NULL;
+
+    if (type && (t = ucv_resource_type_lookup(vm, type)) == NULL)
+        return NULL;
+
+    return ucv_resource_new_with_proto(vm, t, data, uvcount, datasize, proto);
+}
+
 static inline bool
 ucv_resource_is_extended(uc_value_t *uv)
 {
@@ -517,6 +530,28 @@ ucv_resource_persistent_set(uc_value_t *uv, bool persistent)
 	res->persistent = persistent;
 
 	return true;
+}
+
+static inline bool
+ucv_resource_hasproto(uc_value_t *uv)
+{
+	uc_resource_ext_t *res = (uc_resource_ext_t *)uv;
+
+	return ucv_resource_is_extended(uv) && res->hasproto;
+}
+
+#define UCV_RESOURCE_PROTO_IDX ((size_t)-1)
+
+static inline uc_value_t *
+ucv_resource_proto_get(uc_value_t *uv)
+{
+	return ucv_resource_value_get(uv, UCV_RESOURCE_PROTO_IDX);
+}
+
+static inline bool
+ucv_resource_proto_set(uc_value_t *uv, uc_value_t *proto)
+{
+	return ucv_resource_value_set(uv, UCV_RESOURCE_PROTO_IDX, proto);
 }
 
 uc_value_t *ucv_regexp_new(const char *, bool, bool, bool, char **);

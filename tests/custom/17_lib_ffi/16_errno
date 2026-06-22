@@ -1,0 +1,27 @@
+The `ffi.errno()` function gets and sets the C errno value.
+
+Get and set errno.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let err1 = ffi.errno();
+ffi.errno(22);
+let err2 = ffi.errno();
+ffi.errno(0);
+
+print("errno before: ", err1, " after: ", err2, "\n");
+
+// Access errno via dlsym without prior cdef declaration
+ffi.errno(42);
+let errno_sym = ffi.C.dlsym("errno");
+print("errno via dlsym: ", errno_sym?.deref("int"), "\n");
+ffi.errno(0);
+-- End --
+
+-- Expect stdout --
+errno before: 0 after: 22
+errno via dlsym: 42
+-- End --
+

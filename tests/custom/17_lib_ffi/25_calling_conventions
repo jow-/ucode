@@ -1,0 +1,23 @@
+Calling conventions specify how functions receive arguments and return values.
+On x86 platforms, ucode supports `__attribute__((stdcall))`, `__attribute__((fastcall))`,
+and `__attribute__((cdecl))` syntax. The keywords `__stdcall`, `__fastcall`, etc. also work.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// Test all calling convention syntaxes in a single multi-line cdef
+ffi.cdef(`
+__attribute__((stdcall)) int atoi(const char *);
+__attribute__((fastcall)) long strtol(const char *, char **, int);
+__attribute__((cdecl)) size_t strlen(const char *);
+__stdcall int abs(int);
+`);
+
+// All declarations parsed successfully
+print("Calling conventions: OK\n");
+-- End --
+
+-- Expect stdout --
+Calling conventions: OK
+-- End --
