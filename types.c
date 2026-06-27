@@ -188,8 +188,16 @@ ucv_gc_mark(uc_value_t *uv)
 
 		ucv_gc_mark(object->proto);
 
-		lh_foreach(object->table, entry)
-			ucv_gc_mark((uc_value_t *)lh_entry_v(entry));
+		if (ucv_is_dict(uv)) {
+			/* dict keys are uc_value_t* and must be GC'd */
+			lh_foreach(object->table, entry) {
+				ucv_gc_mark((uc_value_t *)lh_entry_k(entry));
+				ucv_gc_mark((uc_value_t *)lh_entry_v(entry));
+			}
+		} else {
+			lh_foreach(object->table, entry)
+				ucv_gc_mark((uc_value_t *)lh_entry_v(entry));
+		}
 
 		break;
 
@@ -1193,6 +1201,299 @@ ucv_object_length(uc_value_t *uv)
 }
 
 
+/* ---------------------------------------------------------------------------
+ * Dict (value-key object) implementation
+ *
+ * Dicts are objects where keys are arbitrary ucode values rather than
+ * null-terminated strings.  Uniqueness semantics follow uc_uniq():
+ *   - Scalars (null, bool, int, double, string): value equality
+ *   - Non-scalars (arrays, objects, resources, closures): pointer equality
+ *   - NaN doubles are treated as equal for hashing purposes
+ * --------------------------------------------------------------------------- */
+
+static void
+ucv_free_dict_entry(struct lh_entry *entry)
+{
+	/* update iterator positions affected by entry deletion */
+	uc_list_foreach(item, &uc_thread_context_get()->object_iterators) {
+		uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
+
+		if (iter->u.pos == entry)
+			iter->u.pos = entry->next;
+	}
+
+	/* keys are uc_value_t pointers — release the reference */
+	ucv_put((uc_value_t *)lh_entry_k(entry));
+	ucv_put(lh_entry_v(entry));
+}
+
+static unsigned long
+uc_dict_hash(const void *k)
+{
+	union { double d; int64_t i; uint64_t u; } conv;
+	uc_value_t *uv = (uc_value_t *)k;
+	unsigned int h;
+	uint8_t *u8;
+	size_t len;
+
+	h = ucv_type(uv);
+
+	switch (h) {
+	case UC_STRING:
+		u8 = (uint8_t *)ucv_string_get(uv);
+		len = ucv_string_length(uv);
+		if (!u8)
+			len = 0;
+		break;
+
+	case UC_INTEGER:
+		conv.i = ucv_int64_get(uv);
+
+		if (errno == ERANGE) {
+			h *= 2;
+			conv.u = ucv_uint64_get(uv);
+		}
+
+		u8 = (uint8_t *)&conv.u;
+		len = sizeof(conv.u);
+		break;
+
+	case UC_DOUBLE:
+		conv.d = ucv_double_get(uv);
+
+		u8 = (uint8_t *)&conv.u;
+		len = sizeof(conv.u);
+		break;
+
+	default:
+		u8 = (uint8_t *)&uv;
+		len = sizeof(uv);
+		break;
+	}
+
+	while (len > 0) {
+		h = h * 129 + (*u8++) + LH_PRIME;
+		len--;
+	}
+
+	return h;
+}
+
+int
+uc_dict_equal(const void *k1, const void *k2)
+{
+	uc_value_t *uv1 = (uc_value_t *)k1;
+	uc_value_t *uv2 = (uc_value_t *)k2;
+
+	/* non-scalar keys use pointer equality */
+	if (!ucv_is_scalar(uv1) && !ucv_is_scalar(uv2))
+		return (uv1 == uv2);
+
+	/* treat two NaNs as equal for dict key lookup */
+	if (ucv_type(uv1) == UC_DOUBLE && ucv_type(uv2) == UC_DOUBLE &&
+	    isnan(ucv_double_get(uv1)) && isnan(ucv_double_get(uv2)))
+		return true;
+
+	return ucv_is_equal(uv1, uv2);
+}
+
+uc_value_t *
+ucv_dict_new(uc_vm_t *vm, uc_value_t *src)
+{
+	struct lh_table *table;
+	uc_object_t *dict;
+	unsigned long hash;
+	size_t i;
+
+	table = lh_table_new(16, ucv_free_dict_entry, uc_dict_hash, uc_dict_equal);
+
+	if (!table) {
+		fprintf(stderr, "Out of memory\n");
+		abort();
+	}
+
+	dict = xalloc(sizeof(*dict));
+	dict->header.type = UC_OBJECT;
+	dict->header.refcount = 1;
+	dict->table = table;
+	dict->proto = NULL;
+	dict->ref.prev = NULL;
+	dict->ref.next = NULL;
+
+	/* initialize from source object or dict */
+	if (src) {
+		if (ucv_is_dict(src)) {
+			ucv_dict_foreach(src, k, v) {
+				hash = lh_get_hash(dict->table, k);
+				lh_table_insert_w_hash(dict->table, ucv_get(k), ucv_get(v), hash, 0);
+			}
+		} else if (ucv_type(src) == UC_OBJECT) {
+			ucv_object_foreach(src, k, v) {
+				uc_value_t *key = ucv_string_new(k);
+
+				hash = lh_get_hash(dict->table, key);
+				lh_table_insert_w_hash(dict->table, key, ucv_get(v), hash, 0);
+			}
+		} else if (ucv_type(src) == UC_ARRAY) {
+			for (i = 0; i < ucv_array_length(src); i++) {
+				uc_value_t *key = ucv_int64_new((int64_t)i);
+				uc_value_t *val = ucv_get(ucv_array_get(src, i));
+
+				hash = lh_get_hash(dict->table, key);
+				lh_table_insert_w_hash(dict->table, key, val, hash, 0);
+			}
+		}
+	}
+
+	if (vm) {
+		ucv_ref(&vm->values, &dict->ref);
+		vm->alloc_refs++;
+	}
+
+	return &dict->header;
+}
+
+uc_value_t *
+ucv_dict_get(uc_vm_t *vm, uc_value_t *dict, uc_value_t *key)
+{
+	uc_object_t *obj;
+	uc_value_t *val = NULL;
+	bool found;
+
+	if (!ucv_is_dict(dict))
+		return NULL;
+
+	obj = (uc_object_t *)dict;
+
+	/* try dict itself first */
+	found = lh_table_lookup_ex(obj->table, key, (void **)&val);
+
+	/* walk prototype chain if not found */
+	if (!found) {
+		uc_value_t *proto;
+
+		for (proto = obj->proto; proto; proto = ucv_prototype_get(proto)) {
+			if (ucv_type(proto) != UC_OBJECT)
+				continue;
+
+			if (ucv_is_dict(proto)) {
+				uc_object_t *pro = (uc_object_t *)proto;
+
+				if (lh_table_lookup_ex(pro->table, key, (void **)&val))
+					break;
+			} else {
+				/* convert key to string for regular object lookup */
+				char *s = ucv_to_string(vm, key);
+
+				val = ucv_object_get(proto, s ? s : "", &found);
+				if (found)
+					break;
+				free(s);
+			}
+		}
+	}
+
+	if (!val)
+		return NULL;
+
+	return ucv_get(val);
+}
+
+uc_value_t *
+ucv_dict_set(uc_vm_t *vm, uc_value_t *dict, uc_value_t *key, uc_value_t *val)
+{
+	uc_object_t *obj;
+	struct lh_entry *existing;
+	unsigned long hash;
+	bool rehash;
+	(void)vm;
+
+	if (!ucv_is_dict(dict))
+		return NULL;
+
+	if (ucv_is_constant(dict))
+		return NULL;
+
+	obj = (uc_object_t *)dict;
+	hash = lh_get_hash(obj->table, key);
+	existing = lh_table_lookup_entry_w_hash(obj->table, key, hash);
+
+	if (existing) {
+		ucv_put((uc_value_t *)existing->v);
+		existing->v = val;
+	} else {
+		rehash = (obj->table->count >= obj->table->size * LH_LOAD_FACTOR);
+
+		/* backup iterator states before potential rehash */
+		if (rehash) {
+			uc_list_foreach(item, &uc_thread_context_get()->object_iterators) {
+				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
+
+				if (iter->table != obj->table)
+					continue;
+
+				if (iter->u.pos == NULL)
+					continue;
+
+				iter->u.kh.k = iter->u.pos->k;
+				iter->u.kh.hash = lh_get_hash(iter->table, iter->u.kh.k);
+			}
+		}
+
+		lh_table_insert_w_hash(obj->table, ucv_get(key), val, hash, 0);
+
+		/* restore iterator states after rehash */
+		if (rehash) {
+			uc_list_foreach(item, &uc_thread_context_get()->object_iterators) {
+				uc_object_iterator_t *iter = (uc_object_iterator_t *)item;
+
+				if (iter->table != obj->table)
+					continue;
+
+				if (iter->u.kh.k == NULL)
+					continue;
+
+				iter->u.pos = lh_table_lookup_entry_w_hash(iter->table,
+				                                             iter->u.kh.k,
+				                                             iter->u.kh.hash);
+			}
+		}
+	}
+
+	return ucv_get(val);
+}
+
+bool
+ucv_dict_delete(uc_vm_t *vm, uc_value_t *dict, uc_value_t *key)
+{
+	uc_object_t *obj;
+	(void)vm;
+
+	if (!ucv_is_dict(dict))
+		return false;
+
+	if (ucv_is_constant(dict))
+		return false;
+
+	obj = (uc_object_t *)dict;
+
+	return (lh_table_delete(obj->table, key) == 0);
+}
+
+size_t
+ucv_dict_length(uc_value_t *dict)
+{
+	uc_object_t *obj;
+
+	if (!ucv_is_dict(dict))
+		return 0;
+
+	obj = (uc_object_t *)dict;
+
+	return lh_table_length(obj->table);
+}
+
+
 uc_value_t *
 ucv_cfunction_new(const char *name, uc_cfn_ptr_t fptr)
 {
@@ -1635,8 +1936,17 @@ ucv_to_json(uc_value_t *uv)
 	case UC_OBJECT:
 		jso = json_object_new_object();
 
-		ucv_object_foreach(uv, key, val)
-			json_object_object_add(jso, key, ucv_to_json(val));
+		if (ucv_is_dict(uv)) {
+			ucv_dict_foreach(uv, key, val) {
+				char *s = ucv_to_string(NULL, key);
+
+				json_object_object_add(jso, s ? s : "", ucv_to_json(val));
+				free(s);
+			}
+		} else {
+			ucv_object_foreach(uv, key, val)
+				json_object_object_add(jso, key, ucv_to_json(val));
+		}
 
 		return jso;
 
@@ -1897,14 +2207,37 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		ucv_stringbuf_append(pb, "{");
 
 		i = 0;
-		ucv_object_foreach(uv, key, val) {
-			if (i++)
-				ucv_stringbuf_append(pb, ",");
+		if (ucv_is_dict(uv)) {
+			ucv_dict_foreach(uv, key, val) {
+				if (i++)
+					ucv_stringbuf_append(pb, ",");
 
-			ucv_to_stringbuf_add_padding(pb, pad_char, (depth + 1) * pad_size);
-			ucv_to_string_json_encoded(pb, key, strlen(key), false);
-			ucv_stringbuf_append(pb, ": ");
-			ucv_to_stringbuf_formatted(vm, pb, val, depth + 1, pad_char ? pad_char : '\1', pad_size);
+				ucv_to_stringbuf_add_padding(pb, pad_char, (depth + 1) * pad_size);
+				if (json) {
+					/* JSON mode: stringify value key to a JSON string */
+					s = ucv_to_string(vm, key);
+					l = s ? strlen(s) : 0;
+					ucv_to_string_json_encoded(pb, s, l, false);
+					free(s);
+				} else {
+					/* plain mode: emit key as a computed property expression */
+					ucv_stringbuf_append(pb, "[");
+					ucv_to_stringbuf_formatted(vm, pb, key, depth + 1, pad_char ? pad_char : '\1', pad_size);
+					ucv_stringbuf_append(pb, "]");
+				}
+				ucv_stringbuf_append(pb, ": ");
+				ucv_to_stringbuf_formatted(vm, pb, val, depth + 1, pad_char ? pad_char : '\1', pad_size);
+			}
+		} else {
+			ucv_object_foreach(uv, key, val) {
+				if (i++)
+					ucv_stringbuf_append(pb, ",");
+
+				ucv_to_stringbuf_add_padding(pb, pad_char, (depth + 1) * pad_size);
+				ucv_to_string_json_encoded(pb, key, strlen(key), false);
+				ucv_stringbuf_append(pb, ": ");
+				ucv_to_stringbuf_formatted(vm, pb, val, depth + 1, pad_char ? pad_char : '\1', pad_size);
+			}
 		}
 
 		ucv_to_stringbuf_add_padding(pb, pad_char, depth * pad_size);
