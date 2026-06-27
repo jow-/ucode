@@ -1238,7 +1238,9 @@ uc_vm_insn_load_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_RESOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
-		uc_vm_stack_push(vm, ucv_key_get(vm, v, k));
+		uc_vm_stack_push(vm, ucv_is_dict(v)
+			? ucv_dict_get(vm, v, k)
+			: ucv_key_get(vm, v, k));
 		break;
 
 	default:
@@ -1263,7 +1265,9 @@ uc_vm_insn_peek_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_RESOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
-		uc_vm_stack_push(vm, ucv_key_get(vm, v, k));
+		uc_vm_stack_push(vm, ucv_is_dict(v)
+			? ucv_dict_get(vm, v, k)
+			: ucv_key_get(vm, v, k));
 		break;
 
 	default:
@@ -1459,7 +1463,9 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_OBJECT:
 	case UC_ARRAY:
 		if (assert_mutable_value(vm, o)) {
-			uc_value_t *rv = ucv_key_set(vm, o, k, v);
+			uc_value_t *rv = ucv_is_dict(o)
+			    ? ucv_dict_set(vm, o, k, v)
+			    : ucv_key_set(vm, o, k, v);
 
 			/* on success rv is a reference to the stored value that gets
 			 * pushed onto the stack; clear v so the cleanup below does not
@@ -1942,9 +1948,13 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 		if (assert_mutable_value(vm, v)) {
 			uc_value_t *nv, *rv;
 
-			val = ucv_key_get(vm, v, k);
+			val = ucv_is_dict(v)
+			    ? ucv_dict_get(vm, v, k)
+			    : ucv_key_get(vm, v, k);
 			nv = uc_vm_value_arith(vm, vm->arg.u8, val, inc);
-			rv = ucv_key_set(vm, v, k, nv);
+			rv = ucv_is_dict(v)
+			    ? ucv_dict_set(vm, v, k, nv)
+			    : ucv_key_set(vm, v, k, nv);
 
 			/* on success rv is a reference to the stored value that gets
 			 * pushed onto the stack; on failure nv was not stored, so
@@ -2077,10 +2087,17 @@ uc_vm_insn_sobj(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *obj = uc_vm_stack_peek(vm, vm->arg.u32);
 	size_t idx;
 
-	for (idx = 0; idx < vm->arg.u32; idx += 2)
-		ucv_key_set(vm, obj,
-			uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1),
-			uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2));
+	if (ucv_is_dict(obj)) {
+		for (idx = 0; idx < vm->arg.u32; idx += 2)
+			ucv_dict_set(vm, obj,
+				uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1),
+				uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2));
+	} else {
+		for (idx = 0; idx < vm->arg.u32; idx += 2)
+			ucv_key_set(vm, obj,
+				uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1),
+				uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2));
+	}
 
 	for (idx = 0; idx < vm->arg.u32; idx++)
 		ucv_put(uc_vm_stack_pop(vm));
@@ -2091,23 +2108,51 @@ uc_vm_insn_mobj(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *src = uc_vm_stack_pop(vm);
 	uc_value_t *dst = uc_vm_stack_peek(vm, 0);
+	bool dst_is_dict = ucv_is_dict(dst);
 	size_t i;
 	char *s;
 
 	switch (ucv_type(src)) {
 	case UC_OBJECT:
-		; /* a label can only be part of a statement and a declaration is not a statement */
-		ucv_object_foreach(src, k, v)
-			ucv_object_add(dst, k, ucv_get(v));
+		if (ucv_is_dict(src)) {
+			/* spread dict into object or dict */
+			ucv_dict_foreach(src, k, v) {
+				if (dst_is_dict) {
+					ucv_dict_set(vm, dst, k, ucv_get(v));
+				} else {
+					/* convert value key to string for regular object */
+					s = ucv_to_string(vm, k);
+					ucv_object_add(dst, s ? s : "", ucv_get(v));
+					free(s);
+				}
+			}
+		} else if (dst_is_dict) {
+			/* spread regular object into dict — keys become string values */
+			ucv_object_foreach(src, k, v) {
+				uc_value_t *key = ucv_string_new(k);
+
+				ucv_dict_set(vm, dst, key, ucv_get(v));
+			}
+		} else {
+			/* spread regular object into regular object */
+			ucv_object_foreach(src, k, v)
+				ucv_object_add(dst, k, ucv_get(v));
+		}
 
 		ucv_put(src);
 		break;
 
 	case UC_ARRAY:
 		for (i = 0; i < ucv_array_length(src); i++) {
-			xasprintf(&s, "%zu", i);
-			ucv_object_add(dst, s, ucv_get(ucv_array_get(src, i)));
-			free(s);
+			if (dst_is_dict) {
+				uc_value_t *key = ucv_int64_new((int64_t)i);
+
+				ucv_dict_set(vm, dst, key, ucv_get(ucv_array_get(src, i)));
+			} else {
+				xasprintf(&s, "%zu", i);
+				ucv_object_add(dst, s, ucv_get(ucv_array_get(src, i)));
+				free(s);
+			}
 		}
 
 		ucv_put(src);
@@ -2413,6 +2458,7 @@ uc_vm_object_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
 	uc_resource_t *res = (uc_resource_t *)k;
 	uc_object_t *obj = (uc_object_t *)v;
 	uc_object_iterator_t *iter;
+	bool is_dict;
 
 	if (!res) {
 		/* object is empty */
@@ -2448,7 +2494,12 @@ uc_vm_object_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
 		return false;
 	}
 
-	uc_vm_stack_push(vm, ucv_string_new(iter->u.pos->k));
+	is_dict = (iter->table->equal_fn == uc_dict_equal);
+
+	if (is_dict)
+		uc_vm_stack_push(vm, ucv_get((uc_value_t *)iter->u.pos->k));
+	else
+		uc_vm_stack_push(vm, ucv_string_new((char *)iter->u.pos->k));
 
 	if (insn == I_NEXTKV)
 		uc_vm_stack_push(vm, ucv_get((uc_value_t *)iter->u.pos->v));
@@ -2597,7 +2648,9 @@ uc_vm_insn_delete(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
 		if (assert_mutable_value(vm, v)) {
-			rv = ucv_key_delete(vm, v, k);
+			rv = ucv_is_dict(v)
+				? ucv_dict_delete(vm, v, k)
+				: ucv_key_delete(vm, v, k);
 			uc_vm_stack_push(vm, ucv_boolean_new(rv));
 		}
 

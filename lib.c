@@ -383,7 +383,9 @@ uc_length(uc_vm_t *vm, size_t nargs)
 
 	switch (ucv_type(arg)) {
 	case UC_OBJECT:
-		return ucv_int64_new(ucv_object_length(arg));
+		return ucv_int64_new(ucv_is_dict(arg)
+			? ucv_dict_length(arg)
+			: ucv_object_length(arg));
 
 	case UC_ARRAY:
 		return ucv_int64_new(ucv_array_length(arg));
@@ -843,6 +845,58 @@ uc_die(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Create a dictionary object with arbitrary value keys.
+ *
+ * Unlike regular objects which are limited to string keys, dictionary objects
+ * allow any ucode value as a key. Key uniqueness follows the same semantics as
+ * the {@link module:core#uniq|uniq()} function:
+ *
+ *  - Scalar values (null, boolean, integer, double, string): compared by value
+ *  - Non-scalar values (arrays, objects, resources, closures): compared by
+ *    reference (pointer equality)
+ *  - NaN doubles are treated as equal
+ *
+ * If an existing object, dict or array is passed as argument, its entries
+ * are copied into the new dictionary:
+ *
+ *  - Objects: string keys become string-value keys in the dict
+ *  - Dicts: value keys are copied as-is
+ *  - Arrays: numeric indices become integer-value keys
+ *
+ * @function module:core#dict
+ *
+ * @param {?*} [src=null]
+ * An optional source object, dict, or array to initialize from.
+ *
+ * @returns {Object}
+ * A new dictionary object.
+ *
+ * @example
+ * let d = dict();
+ * d[true] = "yes";
+ * d[false] = "no";
+ * d[42] = "answer";
+ * d["foo"] = "bar";
+ *
+ * // keys() returns actual key values
+ * keys(d);  // [true, false, 42, "foo"]
+ *
+ * // initialize from an existing object
+ * let d2 = dict({ a: 1, b: 2 });
+ * d2["a"];  // 1
+ *
+ * // spread dict into regular object (keys converted to strings)
+ * let obj = { ...d };
+ */
+static uc_value_t *
+uc_dict(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *src = uc_fn_arg(0);
+
+	return ucv_dict_new(vm, src);
+}
+
+/**
  * Check whether the given key exists within the given object value.
  *
  * Returns `true` if the given key is present within the object passed as the
@@ -871,16 +925,24 @@ uc_exists(uc_vm_t *vm, size_t nargs)
 	uc_value_t *key = uc_fn_arg(1);
 	bool found, freeable;
 	char *k;
+	uc_value_t *v;
 
 	if (ucv_type(obj) != UC_OBJECT)
 		return ucv_boolean_new(false);
 
-	k = uc_cast_string(vm, &key, &freeable);
+	if (ucv_is_dict(obj)) {
+		v = ucv_dict_get(vm, obj, key);
+		found = (v != NULL);
+		if (v)
+			ucv_put(v);
+	} else {
+		k = uc_cast_string(vm, &key, &freeable);
 
-	ucv_object_get(obj, k, &found);
+		ucv_object_get(obj, k, &found);
 
-	if (freeable)
-		free(k);
+		if (freeable)
+			free(k);
+	}
 
 	return ucv_boolean_new(found);
 }
@@ -1183,9 +1245,17 @@ uc_keys(uc_vm_t *vm, size_t nargs)
 
 	arr = ucv_array_new(vm);
 
-	ucv_object_foreach(obj, key, val) {
-		(void)val;
-		ucv_array_push(arr, ucv_string_new(key));
+	if (ucv_is_dict(obj)) {
+		/* dict keys are values, return them directly */
+		ucv_dict_foreach(obj, key, val) {
+			(void)val;
+			ucv_array_push(arr, ucv_get(key));
+		}
+	} else {
+		ucv_object_foreach(obj, key, val) {
+			(void)val;
+			ucv_array_push(arr, ucv_string_new(key));
+		}
 	}
 
 	return arr;
@@ -2192,9 +2262,16 @@ uc_values(uc_vm_t *vm, size_t nargs)
 
 	arr = ucv_array_new(vm);
 
-	ucv_object_foreach(obj, key, val) {
-		(void)key;
-		ucv_array_push(arr, ucv_get(val));
+	if (ucv_is_dict(obj)) {
+		ucv_dict_foreach(obj, key, val) {
+			(void)key;
+			ucv_array_push(arr, ucv_get(val));
+		}
+	} else {
+		ucv_object_foreach(obj, key, val) {
+			(void)key;
+			ucv_array_push(arr, ucv_get(val));
+		}
 	}
 
 	return arr;
@@ -6037,6 +6114,7 @@ uc_signal(uc_vm_t *vm, size_t nargs)
 const uc_function_list_t uc_stdlib_functions[] = {
 	{ "chr",		uc_chr },
 	{ "die",		uc_die },
+	{ "dict",		uc_dict },
 	{ "exists",		uc_exists },
 	{ "exit",		uc_exit },
 	{ "filter",		uc_filter },
