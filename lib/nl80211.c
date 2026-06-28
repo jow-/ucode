@@ -3512,6 +3512,36 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(NL80211_IFTYPE_P2P_DEVICE);
 	ADD_CONST(NL80211_IFTYPE_OCB);
 
+	/**
+	 * @typedef
+	 * @name States of a mesh peer link
+	 * @property {number} NL80211_PLINK_LISTEN - initial state of non-existent mesh peer links
+	 * @property {number} NL80211_PLINK_OPN_SNT - mesh plink open frame has been sent
+	 * @property {number} NL80211_PLINK_OPN_RCVD - mesh plink open frame has been received
+	 * @property {number} NL80211_PLINK_CNF_RCVD - mesh plink confirm frame has been received
+	 * @property {number} NL80211_PLINK_ESTAB - mesh peer link is established
+	 * @property {number} NL80211_PLINK_HOLDING - mesh peer link is being closed or cancelled
+	 * @property {number} NL80211_PLINK_BLOCKED - all frames are discarded, except for authentication frames
+	 */
+	ADD_CONST(NL80211_PLINK_LISTEN);
+	ADD_CONST(NL80211_PLINK_OPN_SNT);
+	ADD_CONST(NL80211_PLINK_OPN_RCVD);
+	ADD_CONST(NL80211_PLINK_CNF_RCVD);
+	ADD_CONST(NL80211_PLINK_ESTAB);
+	ADD_CONST(NL80211_PLINK_HOLDING);
+	ADD_CONST(NL80211_PLINK_BLOCKED);
+
+	/**
+	 * @typedef
+	 * @name Actions on mesh peer links
+	 * @property {number} NL80211_PLINK_ACTION_NO_ACTION - perform no action
+	 * @property {number} NL80211_PLINK_ACTION_OPEN - start mesh peer link establishment
+	 * @property {number} NL80211_PLINK_ACTION_BLOCK - block traffic from this mesh peer
+	 */
+	ADD_CONST(NL80211_PLINK_ACTION_NO_ACTION);
+	ADD_CONST(NL80211_PLINK_ACTION_OPEN);
+	ADD_CONST(NL80211_PLINK_ACTION_BLOCK);
+
 	ucv_object_add(scope, "const", c);
 };
 
