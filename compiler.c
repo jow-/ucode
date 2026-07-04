@@ -2790,7 +2790,7 @@ uc_compiler_compile_for_in(uc_compiler_t *compiler, bool local, uc_token_t *kvar
 }
 
 static void
-uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *var)
+uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *predecl, uc_token_t *var)
 {
 	uc_chunk_t *chunk = uc_compiler_current_chunk(compiler);
 	size_t test_off = 0, incr_off, skip_off, cond_off = 0;
@@ -2802,6 +2802,11 @@ uc_compiler_compile_for_count(uc_compiler_t *compiler, bool local, uc_token_t *v
 	uc_compiler_enter_scope(compiler);
 
 	/* Initializer ---------------------------------------------------------- */
+
+	/* A leading declaration without initializer, e.g. the `x` in
+	 * `for (let x, y = 0; ...)`, was consumed while disambiguating for-in */
+	if (predecl && local)
+		uc_compiler_declare_local_null(compiler, predecl->pos, predecl->uv);
 
 	/* If we parsed at least one label, try continue parsing as variable
 	 * expression... */
@@ -2946,8 +2951,12 @@ uc_compiler_compile_for(uc_compiler_t *compiler)
 	 * The previous expression ruled out a for-in loop, so continue parsing
 	 * as counting for loop...
 	 */
-	uc_compiler_compile_for_count(compiler, local,
-		valvar.uv ? &valvar : (keyvar.uv ? &keyvar : NULL));
+	if (valvar.uv)
+		uc_compiler_compile_for_count(compiler, local,
+			keyvar.uv ? &keyvar : NULL, &valvar);
+	else
+		uc_compiler_compile_for_count(compiler, local,
+			NULL, keyvar.uv ? &keyvar : NULL);
 
 out:
 	ucv_put(keyvar.uv);
