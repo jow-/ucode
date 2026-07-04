@@ -512,13 +512,15 @@ parse_regexp(uc_lexer_t *lex)
 				break;
 		}
 
-		len = xasprintf(&s, "%c%*s",
-			(is_reg_global << 0) | (is_reg_icase << 1) | (is_reg_newline << 2),
-			ucv_string_length(rv->uv),
-			ucv_string_get(rv->uv));
+		/* encode the flags byte followed by the raw pattern bytes; a plain
+		 * printf conversion cannot be used as the pattern may contain NUL */
+		len = ucv_string_length(rv->uv);
+		s = xalloc(len + 1);
+		s[0] = (is_reg_global << 0) | (is_reg_icase << 1) | (is_reg_newline << 2);
+		memcpy(s + 1, ucv_string_get(rv->uv), len);
 
 		ucv_free(rv->uv, false);
-		rv->uv = ucv_string_new_length(s, len);
+		rv->uv = ucv_string_new_length(s, len + 1);
 		free(s);
 	}
 
