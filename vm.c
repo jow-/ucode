@@ -1424,8 +1424,17 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(o)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
-		if (assert_mutable_value(vm, o))
-			uc_vm_stack_push(vm, ucv_key_set(vm, o, k, v));
+		if (assert_mutable_value(vm, o)) {
+			uc_value_t *rv = ucv_key_set(vm, o, k, v);
+
+			/* on success rv is a reference to the stored value that gets
+			 * pushed onto the stack; clear v so the cleanup below does not
+			 * release the reference now owned by the stack */
+			if (rv)
+				v = NULL;
+
+			uc_vm_stack_push(vm, rv);
+		}
 
 		break;
 
@@ -1435,6 +1444,7 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 		                      ucv_typename(o));
 	}
 
+	ucv_put(v);
 	ucv_put(o);
 	ucv_put(k);
 }
@@ -1880,8 +1890,19 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_OBJECT:
 	case UC_ARRAY:
 		if (assert_mutable_value(vm, v)) {
+			uc_value_t *nv, *rv;
+
 			val = ucv_key_get(vm, v, k);
-			uc_vm_stack_push(vm, ucv_key_set(vm, v, k, uc_vm_value_arith(vm, vm->arg.u8, val, inc)));
+			nv = uc_vm_value_arith(vm, vm->arg.u8, val, inc);
+			rv = ucv_key_set(vm, v, k, nv);
+
+			/* on success rv is a reference to the stored value that gets
+			 * pushed onto the stack; on failure nv was not stored, so
+			 * release it here */
+			if (!rv)
+				ucv_put(nv);
+
+			uc_vm_stack_push(vm, rv);
 		}
 
 		break;
