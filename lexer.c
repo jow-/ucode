@@ -738,7 +738,7 @@ lex_find_token(uc_lexer_t *lex)
 			return emit_op(lex, -2, TK_QDOT, NULL);
 		}
 
-		return emit_op(lex, lex->source->off, TK_QMARK, NULL);
+		return emit_op(lex, -1, TK_QMARK, NULL);
 
 	case '>':
 		if (check_char(lex, '>')) {
