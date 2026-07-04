@@ -982,7 +982,7 @@ uc_hex(uc_vm_t *vm, size_t nargs)
 
 	v = ucv_string_get(val);
 
-	if (!v || !isxdigit(*v))
+	if (!v || !isxdigit((unsigned char)*v))
 		return ucv_double_new(NAN);
 
 	n = strtoll(v, &e, 16);
