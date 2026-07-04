@@ -1395,7 +1395,7 @@ uc_reverse(uc_vm_t *vm, size_t nargs)
 		while (len > 0)
 			*p++ = str[--len];
 
-		rv = ucv_string_new(dup);
+		rv = ucv_string_new_length(dup, ucv_string_length(obj));
 
 		free(dup);
 	}
