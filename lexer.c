@@ -181,6 +181,10 @@ parse_comment(uc_lexer_t *lex, int kind)
 
 	uc_vector_push(&lex->buffer, '/');
 
+	/* consume the second opening character so that the opening star of a block
+	 * comment cannot double as the closing star of an empty comment */
+	uc_vector_push(&lex->buffer, next_char(lex));
+
 	while (true) {
 		ch = next_char(lex);
 
