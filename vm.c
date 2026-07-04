@@ -2611,7 +2611,7 @@ uc_vm_insn_import(uc_vm_t *vm, uc_vm_insn_t insn)
 	}
 
 	/* module export available, patch into upvalue */
-	else if (from <= prog->exports.count && prog->exports.entries[from]) {
+	else if (from < prog->exports.count && prog->exports.entries[from]) {
 		frame->closure->upvals[to] = prog->exports.entries[from];
 		ucv_get(&prog->exports.entries[from]->header);
 	}
