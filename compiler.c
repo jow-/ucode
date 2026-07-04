@@ -2344,8 +2344,9 @@ uc_compiler_compile_object(uc_compiler_t *compiler)
 				uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
 					"Expecting label");
 
-			/* save the key value before potentially advancing */
-			uc_value_t *key = compiler->parser->prev.uv;
+			/* hold a reference to the key: matching TK_LPAREN below advances
+			 * the parser, which releases the underlying prev.uv token value */
+			uc_value_t *key = ucv_get(compiler->parser->prev.uv);
 
 			/* load label */
 			uc_compiler_emit_constant(compiler, compiler->parser->prev.pos,
@@ -2378,6 +2379,8 @@ uc_compiler_compile_object(uc_compiler_t *compiler)
 				/* parse value expression */
 				uc_compiler_parse_precedence(compiler, P_ASSIGN);
 			}
+
+			ucv_put(key);
 		}
 
 		/* set items on stack so far... */
