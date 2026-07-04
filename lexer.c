@@ -612,8 +612,19 @@ is_numeric_char(uc_lexer_t *lex, char c)
 
 	case '+':
 	case '-':
-		/* sign is only allowed after an exponent char */
-		return (prev|32) == 'e';
+		/* sign is only allowed after a decimal exponent char; in a hex
+		 * literal `e`/`E` is a digit, not an exponent marker */
+		if ((prev|32) != 'e')
+			return false;
+
+		if (lex->buffer.count >= 2) {
+			char *b = uc_vector_first(&lex->buffer);
+
+			if (b[0] == '0' && (b[1]|32) == 'x')
+				return false;
+		}
+
+		return true;
 	}
 
 	return false;
