@@ -7,6 +7,10 @@
 #include <termios.h>
 #include <sys/ioctl.h>
 
+#ifdef __linux__
+#include <linux/serial.h>
+#endif
+
 #include "ucode/module.h"
 
 #ifndef TIOCINQ
@@ -433,6 +437,130 @@ uc_serial_output_waiting(uc_vm_t *vm, size_t nargs)
 	return serial_queue_count(vm, nargs, TIOCOUTQ);
 }
 
+#ifdef __linux__
+static uc_value_t *
+uc_serial_getinfo(uc_vm_t *vm, size_t nargs)
+{
+	struct serial_struct ss;
+	uc_value_t *rv;
+	int fd;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ioctl(fd, TIOCGSERIAL, &ss) != 0)
+		err_return(errno);
+
+	rv = ucv_object_new(vm);
+
+	ucv_object_add(rv, "type", ucv_int64_new(ss.type));
+	ucv_object_add(rv, "line", ucv_int64_new(ss.line));
+	ucv_object_add(rv, "port", ucv_uint64_new(ss.port));
+	ucv_object_add(rv, "irq", ucv_int64_new(ss.irq));
+	ucv_object_add(rv, "flags", ucv_int64_new(ss.flags));
+	ucv_object_add(rv, "xmit_fifo_size", ucv_int64_new(ss.xmit_fifo_size));
+	ucv_object_add(rv, "custom_divisor", ucv_int64_new(ss.custom_divisor));
+	ucv_object_add(rv, "baud_base", ucv_int64_new(ss.baud_base));
+	ucv_object_add(rv, "close_delay", ucv_int64_new(ss.close_delay));
+	ucv_object_add(rv, "closing_wait", ucv_int64_new(ss.closing_wait));
+	ucv_object_add(rv, "hub6", ucv_int64_new(ss.hub6));
+	ucv_object_add(rv, "io_type", ucv_int64_new(ss.io_type));
+	ucv_object_add(rv, "port_high", ucv_uint64_new(ss.port_high));
+	ucv_object_add(rv, "iomem_reg_shift", ucv_int64_new(ss.iomem_reg_shift));
+
+	return rv;
+}
+
+static uc_value_t *
+uc_serial_setinfo(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *opts = uc_fn_arg(1);
+	uc_value_t *v;
+	struct serial_struct ss;
+	int fd;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ucv_type(opts) != UC_OBJECT)
+		err_return(EINVAL);
+
+	if (ioctl(fd, TIOCGSERIAL, &ss) != 0)
+		err_return(errno);
+
+	v = ucv_object_get(opts, "type", NULL);
+	if (v) ss.type = (int)ucv_int64_get(v);
+
+	v = ucv_object_get(opts, "port", NULL);
+	if (v) ss.port = (unsigned int)ucv_to_unsigned(v);
+
+	v = ucv_object_get(opts, "irq", NULL);
+	if (v) ss.irq = (int)ucv_int64_get(v);
+
+	v = ucv_object_get(opts, "flags", NULL);
+	if (v) ss.flags = (int)ucv_int64_get(v);
+
+	v = ucv_object_get(opts, "xmit_fifo_size", NULL);
+	if (v) ss.xmit_fifo_size = (int)ucv_int64_get(v);
+
+	v = ucv_object_get(opts, "custom_divisor", NULL);
+	if (v) ss.custom_divisor = (int)ucv_int64_get(v);
+
+	v = ucv_object_get(opts, "baud_base", NULL);
+	if (v) ss.baud_base = (int)ucv_int64_get(v);
+
+	v = ucv_object_get(opts, "close_delay", NULL);
+	if (v) ss.close_delay = (unsigned short)ucv_to_unsigned(v);
+
+	v = ucv_object_get(opts, "closing_wait", NULL);
+	if (v) ss.closing_wait = (unsigned short)ucv_to_unsigned(v);
+
+	v = ucv_object_get(opts, "hub6", NULL);
+	if (v) ss.hub6 = (int)ucv_int64_get(v);
+
+	v = ucv_object_get(opts, "port_high", NULL);
+	if (v) ss.port_high = (unsigned int)ucv_to_unsigned(v);
+
+	v = ucv_object_get(opts, "iomem_reg_shift", NULL);
+	if (v) ss.iomem_reg_shift = (unsigned short)ucv_to_unsigned(v);
+
+	if (ioctl(fd, TIOCSSERIAL, &ss) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_serial_lowlatency(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *on = uc_fn_arg(1);
+	struct serial_struct ss;
+	int fd;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ioctl(fd, TIOCGSERIAL, &ss) != 0)
+		err_return(errno);
+
+	if (ucv_is_truish(on))
+		ss.flags |= ASYNC_LOW_LATENCY;
+	else
+		ss.flags &= ~ASYNC_LOW_LATENCY;
+
+	if (ioctl(fd, TIOCSSERIAL, &ss) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+#endif
+
 static const uc_function_list_t global_fns[] = {
 	{ "error",       uc_serial_error },
 	{ "isatty",      uc_serial_isatty },
@@ -452,6 +580,11 @@ static const uc_function_list_t global_fns[] = {
 	{ "flush",          uc_serial_flush },
 	{ "input_waiting",  uc_serial_input_waiting },
 	{ "output_waiting", uc_serial_output_waiting },
+#ifdef __linux__
+	{ "getinfo",        uc_serial_getinfo },
+	{ "setinfo",        uc_serial_setinfo },
+	{ "lowlatency",     uc_serial_lowlatency },
+#endif
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
@@ -812,6 +945,82 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 #endif
 #ifdef TIOCM_DSR
 	ADD_CONST(TIOCM_DSR);
+#endif
+
+#ifdef __linux__
+#ifdef ASYNC_HUP_NOTIFY
+	ADD_CONST(ASYNC_HUP_NOTIFY);
+#endif
+#ifdef ASYNC_FOURPORT
+	ADD_CONST(ASYNC_FOURPORT);
+#endif
+#ifdef ASYNC_SAK
+	ADD_CONST(ASYNC_SAK);
+#endif
+#ifdef ASYNC_SPD_HI
+	ADD_CONST(ASYNC_SPD_HI);
+#endif
+#ifdef ASYNC_SPD_VHI
+	ADD_CONST(ASYNC_SPD_VHI);
+#endif
+#ifdef ASYNC_SPD_SHI
+	ADD_CONST(ASYNC_SPD_SHI);
+#endif
+#ifdef ASYNC_SPD_CUST
+	ADD_CONST(ASYNC_SPD_CUST);
+#endif
+#ifdef ASYNC_SPD_WARP
+	ADD_CONST(ASYNC_SPD_WARP);
+#endif
+#ifdef ASYNC_SPD_MASK
+	ADD_CONST(ASYNC_SPD_MASK);
+#endif
+#ifdef ASYNC_SKIP_TEST
+	ADD_CONST(ASYNC_SKIP_TEST);
+#endif
+#ifdef ASYNC_AUTO_IRQ
+	ADD_CONST(ASYNC_AUTO_IRQ);
+#endif
+#ifdef ASYNC_CALLOUT_NOHUP
+	ADD_CONST(ASYNC_CALLOUT_NOHUP);
+#endif
+#ifdef ASYNC_LOW_LATENCY
+	ADD_CONST(ASYNC_LOW_LATENCY);
+#endif
+#ifdef ASYNC_BUGGY_UART
+	ADD_CONST(ASYNC_BUGGY_UART);
+#endif
+#ifdef ASYNC_CLOSING_WAIT_INF
+	ADD_CONST(ASYNC_CLOSING_WAIT_INF);
+#endif
+#ifdef ASYNC_CLOSING_WAIT_NONE
+	ADD_CONST(ASYNC_CLOSING_WAIT_NONE);
+#endif
+
+#ifdef PORT_UNKNOWN
+	ADD_CONST(PORT_UNKNOWN);
+#endif
+#ifdef PORT_8250
+	ADD_CONST(PORT_8250);
+#endif
+#ifdef PORT_16450
+	ADD_CONST(PORT_16450);
+#endif
+#ifdef PORT_16550
+	ADD_CONST(PORT_16550);
+#endif
+#ifdef PORT_16550A
+	ADD_CONST(PORT_16550A);
+#endif
+#ifdef PORT_16650
+	ADD_CONST(PORT_16650);
+#endif
+#ifdef PORT_16650V2
+	ADD_CONST(PORT_16650V2);
+#endif
+#ifdef PORT_16750
+	ADD_CONST(PORT_16750);
+#endif
 #endif
 
 	#undef ADD_CONST
