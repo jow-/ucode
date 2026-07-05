@@ -1,3 +1,5 @@
+#define _DEFAULT_SOURCE
+
 #include <errno.h>
 #include <string.h>
 #include <limits.h>
@@ -157,11 +159,103 @@ uc_serial_setattr(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+static uc_value_t *
+uc_serial_setspeed(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *speed = uc_fn_arg(1);
+	uc_value_t *when = uc_fn_arg(2);
+	struct termios t;
+	speed_t spd;
+	int fd, act;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ucv_type(speed) != UC_INTEGER)
+		err_return(EINVAL);
+
+	spd = (speed_t)ucv_to_unsigned(speed);
+
+	if (tcgetattr(fd, &t) != 0)
+		err_return(errno);
+
+	if (cfsetispeed(&t, spd) != 0 || cfsetospeed(&t, spd) != 0)
+		err_return(errno);
+
+	act = (ucv_type(when) == UC_INTEGER) ? (int)ucv_int64_get(when) : TCSANOW;
+
+	if (tcsetattr(fd, act, &t) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_serial_setraw(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *when = uc_fn_arg(1);
+	struct termios t;
+	int fd, act;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (tcgetattr(fd, &t) != 0)
+		err_return(errno);
+
+	cfmakeraw(&t);
+
+	act = (ucv_type(when) == UC_INTEGER) ? (int)ucv_int64_get(when) : TCSANOW;
+
+	if (tcsetattr(fd, act, &t) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_serial_setblocking(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *vmin = uc_fn_arg(1);
+	uc_value_t *vtime = uc_fn_arg(2);
+	uc_value_t *when = uc_fn_arg(3);
+	struct termios t;
+	int fd, act;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ucv_type(vmin) != UC_INTEGER || ucv_type(vtime) != UC_INTEGER)
+		err_return(EINVAL);
+
+	if (tcgetattr(fd, &t) != 0)
+		err_return(errno);
+
+	t.c_cc[VMIN] = (cc_t)ucv_to_unsigned(vmin);
+	t.c_cc[VTIME] = (cc_t)ucv_to_unsigned(vtime);
+
+	act = (ucv_type(when) == UC_INTEGER) ? (int)ucv_int64_get(when) : TCSANOW;
+
+	if (tcsetattr(fd, act, &t) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
 static const uc_function_list_t global_fns[] = {
-	{ "error",   uc_serial_error },
-	{ "isatty",  uc_serial_isatty },
-	{ "attr",    uc_serial_attr },
-	{ "setattr", uc_serial_setattr },
+	{ "error",       uc_serial_error },
+	{ "isatty",      uc_serial_isatty },
+	{ "attr",        uc_serial_attr },
+	{ "setattr",     uc_serial_setattr },
+	{ "setspeed",    uc_serial_setspeed },
+	{ "setraw",      uc_serial_setraw },
+	{ "setblocking", uc_serial_setblocking },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
