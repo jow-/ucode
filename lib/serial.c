@@ -65,12 +65,420 @@ uc_serial_isatty(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(isatty(fd) == 1);
 }
 
+static uc_value_t *
+uc_serial_attr(uc_vm_t *vm, size_t nargs)
+{
+	struct termios t;
+	uc_value_t *rv, *cc;
+	int fd, i;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (tcgetattr(fd, &t) != 0)
+		err_return(errno);
+
+	rv = ucv_object_new(vm);
+
+	ucv_object_add(rv, "iflag", ucv_uint64_new(t.c_iflag));
+	ucv_object_add(rv, "oflag", ucv_uint64_new(t.c_oflag));
+	ucv_object_add(rv, "cflag", ucv_uint64_new(t.c_cflag));
+	ucv_object_add(rv, "lflag", ucv_uint64_new(t.c_lflag));
+	ucv_object_add(rv, "ispeed", ucv_uint64_new(cfgetispeed(&t)));
+	ucv_object_add(rv, "ospeed", ucv_uint64_new(cfgetospeed(&t)));
+
+	cc = ucv_array_new(vm);
+
+	for (i = 0; i < NCCS; i++)
+		ucv_array_push(cc, ucv_uint64_new(t.c_cc[i]));
+
+	ucv_object_add(rv, "cc", cc);
+
+	return rv;
+}
+
+static uc_value_t *
+uc_serial_setattr(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *attrs = uc_fn_arg(1);
+	uc_value_t *when = uc_fn_arg(2);
+	uc_value_t *v, *cc;
+	struct termios t;
+	int fd, act;
+	size_t i, n;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ucv_type(attrs) != UC_OBJECT)
+		err_return(EINVAL);
+
+	if (tcgetattr(fd, &t) != 0)
+		err_return(errno);
+
+	v = ucv_object_get(attrs, "iflag", NULL);
+	if (v) t.c_iflag = (tcflag_t)ucv_to_unsigned(v);
+
+	v = ucv_object_get(attrs, "oflag", NULL);
+	if (v) t.c_oflag = (tcflag_t)ucv_to_unsigned(v);
+
+	v = ucv_object_get(attrs, "cflag", NULL);
+	if (v) t.c_cflag = (tcflag_t)ucv_to_unsigned(v);
+
+	v = ucv_object_get(attrs, "lflag", NULL);
+	if (v) t.c_lflag = (tcflag_t)ucv_to_unsigned(v);
+
+	v = ucv_object_get(attrs, "ispeed", NULL);
+	if (v) cfsetispeed(&t, (speed_t)ucv_to_unsigned(v));
+
+	v = ucv_object_get(attrs, "ospeed", NULL);
+	if (v) cfsetospeed(&t, (speed_t)ucv_to_unsigned(v));
+
+	cc = ucv_object_get(attrs, "cc", NULL);
+
+	if (ucv_type(cc) == UC_ARRAY) {
+		n = ucv_array_length(cc);
+
+		for (i = 0; i < n && i < NCCS; i++) {
+			v = ucv_array_get(cc, i);
+			if (v) t.c_cc[i] = (cc_t)ucv_to_unsigned(v);
+		}
+	}
+
+	act = (ucv_type(when) == UC_INTEGER) ? (int)ucv_int64_get(when) : TCSANOW;
+
+	if (tcsetattr(fd, act, &t) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
 static const uc_function_list_t global_fns[] = {
-	{ "error",  uc_serial_error },
-	{ "isatty", uc_serial_isatty },
+	{ "error",   uc_serial_error },
+	{ "isatty",  uc_serial_isatty },
+	{ "attr",    uc_serial_attr },
+	{ "setattr", uc_serial_setattr },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, global_fns);
+
+	#define ADD_CONST(x) ucv_object_add(scope, #x, ucv_int64_new(x))
+
+#ifdef TCSANOW
+	ADD_CONST(TCSANOW);
+#endif
+#ifdef TCSADRAIN
+	ADD_CONST(TCSADRAIN);
+#endif
+#ifdef TCSAFLUSH
+	ADD_CONST(TCSAFLUSH);
+#endif
+
+#ifdef CSIZE
+	ADD_CONST(CSIZE);
+#endif
+#ifdef CS5
+	ADD_CONST(CS5);
+#endif
+#ifdef CS6
+	ADD_CONST(CS6);
+#endif
+#ifdef CS7
+	ADD_CONST(CS7);
+#endif
+#ifdef CS8
+	ADD_CONST(CS8);
+#endif
+#ifdef CSTOPB
+	ADD_CONST(CSTOPB);
+#endif
+#ifdef CREAD
+	ADD_CONST(CREAD);
+#endif
+#ifdef PARENB
+	ADD_CONST(PARENB);
+#endif
+#ifdef PARODD
+	ADD_CONST(PARODD);
+#endif
+#ifdef HUPCL
+	ADD_CONST(HUPCL);
+#endif
+#ifdef CLOCAL
+	ADD_CONST(CLOCAL);
+#endif
+#ifdef CRTSCTS
+	ADD_CONST(CRTSCTS);
+#endif
+#ifdef CMSPAR
+	ADD_CONST(CMSPAR);
+#endif
+#ifdef CBAUD
+	ADD_CONST(CBAUD);
+#endif
+#ifdef CBAUDEX
+	ADD_CONST(CBAUDEX);
+#endif
+
+#ifdef IGNBRK
+	ADD_CONST(IGNBRK);
+#endif
+#ifdef BRKINT
+	ADD_CONST(BRKINT);
+#endif
+#ifdef IGNPAR
+	ADD_CONST(IGNPAR);
+#endif
+#ifdef PARMRK
+	ADD_CONST(PARMRK);
+#endif
+#ifdef INPCK
+	ADD_CONST(INPCK);
+#endif
+#ifdef ISTRIP
+	ADD_CONST(ISTRIP);
+#endif
+#ifdef INLCR
+	ADD_CONST(INLCR);
+#endif
+#ifdef IGNCR
+	ADD_CONST(IGNCR);
+#endif
+#ifdef ICRNL
+	ADD_CONST(ICRNL);
+#endif
+#ifdef IUCLC
+	ADD_CONST(IUCLC);
+#endif
+#ifdef IXON
+	ADD_CONST(IXON);
+#endif
+#ifdef IXANY
+	ADD_CONST(IXANY);
+#endif
+#ifdef IXOFF
+	ADD_CONST(IXOFF);
+#endif
+#ifdef IMAXBEL
+	ADD_CONST(IMAXBEL);
+#endif
+#ifdef IUTF8
+	ADD_CONST(IUTF8);
+#endif
+
+#ifdef OPOST
+	ADD_CONST(OPOST);
+#endif
+#ifdef OLCUC
+	ADD_CONST(OLCUC);
+#endif
+#ifdef ONLCR
+	ADD_CONST(ONLCR);
+#endif
+#ifdef OCRNL
+	ADD_CONST(OCRNL);
+#endif
+#ifdef ONOCR
+	ADD_CONST(ONOCR);
+#endif
+#ifdef ONLRET
+	ADD_CONST(ONLRET);
+#endif
+#ifdef OFILL
+	ADD_CONST(OFILL);
+#endif
+#ifdef OFDEL
+	ADD_CONST(OFDEL);
+#endif
+
+#ifdef ISIG
+	ADD_CONST(ISIG);
+#endif
+#ifdef ICANON
+	ADD_CONST(ICANON);
+#endif
+#ifdef ECHO
+	ADD_CONST(ECHO);
+#endif
+#ifdef ECHOE
+	ADD_CONST(ECHOE);
+#endif
+#ifdef ECHOK
+	ADD_CONST(ECHOK);
+#endif
+#ifdef ECHONL
+	ADD_CONST(ECHONL);
+#endif
+#ifdef ECHOCTL
+	ADD_CONST(ECHOCTL);
+#endif
+#ifdef ECHOKE
+	ADD_CONST(ECHOKE);
+#endif
+#ifdef NOFLSH
+	ADD_CONST(NOFLSH);
+#endif
+#ifdef TOSTOP
+	ADD_CONST(TOSTOP);
+#endif
+#ifdef IEXTEN
+	ADD_CONST(IEXTEN);
+#endif
+
+#ifdef VINTR
+	ADD_CONST(VINTR);
+#endif
+#ifdef VQUIT
+	ADD_CONST(VQUIT);
+#endif
+#ifdef VERASE
+	ADD_CONST(VERASE);
+#endif
+#ifdef VKILL
+	ADD_CONST(VKILL);
+#endif
+#ifdef VEOF
+	ADD_CONST(VEOF);
+#endif
+#ifdef VTIME
+	ADD_CONST(VTIME);
+#endif
+#ifdef VMIN
+	ADD_CONST(VMIN);
+#endif
+#ifdef VSWTC
+	ADD_CONST(VSWTC);
+#endif
+#ifdef VSTART
+	ADD_CONST(VSTART);
+#endif
+#ifdef VSTOP
+	ADD_CONST(VSTOP);
+#endif
+#ifdef VSUSP
+	ADD_CONST(VSUSP);
+#endif
+#ifdef VEOL
+	ADD_CONST(VEOL);
+#endif
+#ifdef VREPRINT
+	ADD_CONST(VREPRINT);
+#endif
+#ifdef VDISCARD
+	ADD_CONST(VDISCARD);
+#endif
+#ifdef VWERASE
+	ADD_CONST(VWERASE);
+#endif
+#ifdef VLNEXT
+	ADD_CONST(VLNEXT);
+#endif
+#ifdef VEOL2
+	ADD_CONST(VEOL2);
+#endif
+#ifdef NCCS
+	ADD_CONST(NCCS);
+#endif
+
+#ifdef B0
+	ADD_CONST(B0);
+#endif
+#ifdef B50
+	ADD_CONST(B50);
+#endif
+#ifdef B75
+	ADD_CONST(B75);
+#endif
+#ifdef B110
+	ADD_CONST(B110);
+#endif
+#ifdef B134
+	ADD_CONST(B134);
+#endif
+#ifdef B150
+	ADD_CONST(B150);
+#endif
+#ifdef B200
+	ADD_CONST(B200);
+#endif
+#ifdef B300
+	ADD_CONST(B300);
+#endif
+#ifdef B600
+	ADD_CONST(B600);
+#endif
+#ifdef B1200
+	ADD_CONST(B1200);
+#endif
+#ifdef B1800
+	ADD_CONST(B1800);
+#endif
+#ifdef B2400
+	ADD_CONST(B2400);
+#endif
+#ifdef B4800
+	ADD_CONST(B4800);
+#endif
+#ifdef B9600
+	ADD_CONST(B9600);
+#endif
+#ifdef B19200
+	ADD_CONST(B19200);
+#endif
+#ifdef B38400
+	ADD_CONST(B38400);
+#endif
+#ifdef B57600
+	ADD_CONST(B57600);
+#endif
+#ifdef B115200
+	ADD_CONST(B115200);
+#endif
+#ifdef B230400
+	ADD_CONST(B230400);
+#endif
+#ifdef B460800
+	ADD_CONST(B460800);
+#endif
+#ifdef B500000
+	ADD_CONST(B500000);
+#endif
+#ifdef B576000
+	ADD_CONST(B576000);
+#endif
+#ifdef B921600
+	ADD_CONST(B921600);
+#endif
+#ifdef B1000000
+	ADD_CONST(B1000000);
+#endif
+#ifdef B1152000
+	ADD_CONST(B1152000);
+#endif
+#ifdef B1500000
+	ADD_CONST(B1500000);
+#endif
+#ifdef B2000000
+	ADD_CONST(B2000000);
+#endif
+#ifdef B2500000
+	ADD_CONST(B2500000);
+#endif
+#ifdef B3000000
+	ADD_CONST(B3000000);
+#endif
+#ifdef B3500000
+	ADD_CONST(B3500000);
+#endif
+#ifdef B4000000
+	ADD_CONST(B4000000);
+#endif
+
+	#undef ADD_CONST
 }
