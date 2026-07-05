@@ -248,6 +248,107 @@ uc_serial_setblocking(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+static uc_value_t *
+uc_serial_mget(uc_vm_t *vm, size_t nargs)
+{
+	int fd, bits;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ioctl(fd, TIOCMGET, &bits) != 0)
+		err_return(errno);
+
+	return ucv_int64_new(bits);
+}
+
+static uc_value_t *
+uc_serial_mset(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *b = uc_fn_arg(1);
+	int fd, bits;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ucv_type(b) != UC_INTEGER)
+		err_return(EINVAL);
+
+	bits = (int)ucv_int64_get(b);
+
+	if (ioctl(fd, TIOCMSET, &bits) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+serial_modem_change(uc_vm_t *vm, size_t nargs, unsigned long req)
+{
+	uc_value_t *b = uc_fn_arg(1);
+	int fd, bits;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ucv_type(b) != UC_INTEGER)
+		err_return(EINVAL);
+
+	bits = (int)ucv_int64_get(b);
+
+	if (ioctl(fd, req, &bits) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_serial_mbis(uc_vm_t *vm, size_t nargs)
+{
+	return serial_modem_change(vm, nargs, TIOCMBIS);
+}
+
+static uc_value_t *
+uc_serial_mbic(uc_vm_t *vm, size_t nargs)
+{
+	return serial_modem_change(vm, nargs, TIOCMBIC);
+}
+
+static uc_value_t *
+serial_modem_line(uc_vm_t *vm, size_t nargs, int bit)
+{
+	uc_value_t *on = uc_fn_arg(1);
+	int fd;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ioctl(fd, ucv_is_truish(on) ? TIOCMBIS : TIOCMBIC, &bit) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_serial_dtr(uc_vm_t *vm, size_t nargs)
+{
+	return serial_modem_line(vm, nargs, TIOCM_DTR);
+}
+
+static uc_value_t *
+uc_serial_rts(uc_vm_t *vm, size_t nargs)
+{
+	return serial_modem_line(vm, nargs, TIOCM_RTS);
+}
+
 static const uc_function_list_t global_fns[] = {
 	{ "error",       uc_serial_error },
 	{ "isatty",      uc_serial_isatty },
@@ -256,6 +357,12 @@ static const uc_function_list_t global_fns[] = {
 	{ "setspeed",    uc_serial_setspeed },
 	{ "setraw",      uc_serial_setraw },
 	{ "setblocking", uc_serial_setblocking },
+	{ "mget",        uc_serial_mget },
+	{ "mset",        uc_serial_mset },
+	{ "mbis",        uc_serial_mbis },
+	{ "mbic",        uc_serial_mbic },
+	{ "dtr",         uc_serial_dtr },
+	{ "rts",         uc_serial_rts },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
@@ -572,6 +679,40 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 #endif
 #ifdef B4000000
 	ADD_CONST(B4000000);
+#endif
+
+#ifdef TIOCM_LE
+	ADD_CONST(TIOCM_LE);
+#endif
+#ifdef TIOCM_DTR
+	ADD_CONST(TIOCM_DTR);
+#endif
+#ifdef TIOCM_RTS
+	ADD_CONST(TIOCM_RTS);
+#endif
+#ifdef TIOCM_ST
+	ADD_CONST(TIOCM_ST);
+#endif
+#ifdef TIOCM_SR
+	ADD_CONST(TIOCM_SR);
+#endif
+#ifdef TIOCM_CTS
+	ADD_CONST(TIOCM_CTS);
+#endif
+#ifdef TIOCM_CAR
+	ADD_CONST(TIOCM_CAR);
+#endif
+#ifdef TIOCM_CD
+	ADD_CONST(TIOCM_CD);
+#endif
+#ifdef TIOCM_RNG
+	ADD_CONST(TIOCM_RNG);
+#endif
+#ifdef TIOCM_RI
+	ADD_CONST(TIOCM_RI);
+#endif
+#ifdef TIOCM_DSR
+	ADD_CONST(TIOCM_DSR);
 #endif
 
 	#undef ADD_CONST
