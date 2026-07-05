@@ -9,6 +9,10 @@
 
 #include "ucode/module.h"
 
+#ifndef TIOCINQ
+#define TIOCINQ FIONREAD
+#endif
+
 #define err_return(err) do { \
 	uc_vm_registry_set(vm, "serial.last_error", ucv_int64_new(err)); \
 	return NULL; \
@@ -349,6 +353,86 @@ uc_serial_rts(uc_vm_t *vm, size_t nargs)
 	return serial_modem_line(vm, nargs, TIOCM_RTS);
 }
 
+static uc_value_t *
+uc_serial_sendbreak(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *dur = uc_fn_arg(1);
+	int fd, d;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	d = (ucv_type(dur) == UC_INTEGER) ? (int)ucv_int64_get(dur) : 0;
+
+	if (tcsendbreak(fd, d) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_serial_drain(uc_vm_t *vm, size_t nargs)
+{
+	int fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (tcdrain(fd) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_serial_flush(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *q = uc_fn_arg(1);
+	int fd, queue;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	queue = (ucv_type(q) == UC_INTEGER) ? (int)ucv_int64_get(q) : TCIOFLUSH;
+
+	if (tcflush(fd, queue) != 0)
+		err_return(errno);
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+serial_queue_count(uc_vm_t *vm, size_t nargs, unsigned long req)
+{
+	int fd, n = 0;
+
+	fd = get_fd(vm, uc_fn_arg(0));
+
+	if (fd < 0)
+		err_return(EBADF);
+
+	if (ioctl(fd, req, &n) != 0)
+		err_return(errno);
+
+	return ucv_int64_new(n);
+}
+
+static uc_value_t *
+uc_serial_input_waiting(uc_vm_t *vm, size_t nargs)
+{
+	return serial_queue_count(vm, nargs, TIOCINQ);
+}
+
+static uc_value_t *
+uc_serial_output_waiting(uc_vm_t *vm, size_t nargs)
+{
+	return serial_queue_count(vm, nargs, TIOCOUTQ);
+}
+
 static const uc_function_list_t global_fns[] = {
 	{ "error",       uc_serial_error },
 	{ "isatty",      uc_serial_isatty },
@@ -363,6 +447,11 @@ static const uc_function_list_t global_fns[] = {
 	{ "mbic",        uc_serial_mbic },
 	{ "dtr",         uc_serial_dtr },
 	{ "rts",         uc_serial_rts },
+	{ "sendbreak",      uc_serial_sendbreak },
+	{ "drain",          uc_serial_drain },
+	{ "flush",          uc_serial_flush },
+	{ "input_waiting",  uc_serial_input_waiting },
+	{ "output_waiting", uc_serial_output_waiting },
 };
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
@@ -379,6 +468,16 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 #endif
 #ifdef TCSAFLUSH
 	ADD_CONST(TCSAFLUSH);
+#endif
+
+#ifdef TCIFLUSH
+	ADD_CONST(TCIFLUSH);
+#endif
+#ifdef TCOFLUSH
+	ADD_CONST(TCOFLUSH);
+#endif
+#ifdef TCIOFLUSH
+	ADD_CONST(TCIOFLUSH);
 #endif
 
 #ifdef CSIZE
