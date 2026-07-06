@@ -3552,13 +3552,24 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, const char *modname, 
 
 	uc_program_function_foreach(compiler->program, fn) {
 		if (uc_program_function_source(fn) == source) {
-			if (source->exports.offset == (size_t)-1)
-				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
-					"Circular dependency");
-
 			loaded = true;
 			break;
 		}
+	}
+
+	/* An offset of -1 marks a source whose compilation was entered but not yet
+	 * completed. Re-entering it is either a circular dependency (its function is
+	 * still present) or a module whose earlier compilation failed and freed its
+	 * function. Recompiling in either case recurses without bound across a large
+	 * import graph, so report the cycle and propagate the failure instead. */
+	if (source->exports.offset == (size_t)-1) {
+		if (loaded)
+			uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+				"Circular dependency");
+		else if (errp)
+			xasprintf(errp, "Module previously failed to compile\n");
+
+		return false;
 	}
 
 	if (!loaded) {
