@@ -2081,7 +2081,7 @@ uc_vm_insn_mobj(uc_vm_t *vm, uc_vm_insn_t insn)
 		ucv_put(src);
 		break;
 
-	case json_type_array:
+	case UC_ARRAY:
 		for (i = 0; i < ucv_array_length(src); i++) {
 			xasprintf(&s, "%zu", i);
 			ucv_object_add(dst, s, ucv_get(ucv_array_get(src, i)));
