@@ -2711,6 +2711,7 @@ uc_vm_insn_dynload(uc_vm_t *vm, uc_vm_insn_t insn)
 				                      ucv_string_get(name));
 
 				ucv_put(name);
+				ucv_put(modscope);
 
 				return;
 			}
@@ -2725,6 +2726,8 @@ uc_vm_insn_dynload(uc_vm_t *vm, uc_vm_insn_t insn)
 			to++;
 		}
 	}
+
+	ucv_put(modscope);
 }
 
 static void
