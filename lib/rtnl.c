@@ -1679,7 +1679,7 @@ uc_nl_convert_rta_multipath(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, s
 		nh_obj = ucv_object_new(vm);
 		ucv_array_push(nh_arr, nh_obj);
 
-		nla_parse(multipath_tb, RTA_MAX + 1, (struct nlattr *)RTNH_DATA(nh), nh->rtnh_len - sizeof(*nh), NULL);
+		nla_parse(multipath_tb, RTA_MAX, (struct nlattr *)RTNH_DATA(nh), nh->rtnh_len - sizeof(*nh), NULL);
 
 		if (multipath_tb[RTA_GATEWAY]) {
 			switch (nla_len(multipath_tb[RTA_GATEWAY])) {
