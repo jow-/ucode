@@ -1776,6 +1776,11 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 			if (n2 == 0) {
 				rv = ucv_double_new(INFINITY);
 			}
+			else if (n1 == INT64_MIN && n2 == -1) {
+				/* the mathematical result 2^63 only fits into uint64_t;
+				 * the signed division would trap with SIGFPE */
+				rv = ucv_uint64_new((uint64_t)INT64_MAX + 1);
+			}
 			else if (n1 < 0 || n2 < 0) {
 				rv = ucv_int64_new(n1 / n2);
 			}
@@ -1791,6 +1796,10 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 		case I_MOD:
 			if (n2 == 0) {
 				rv = ucv_double_new(NAN);
+			}
+			else if (n1 == INT64_MIN && n2 == -1) {
+				/* the signed modulo would trap with SIGFPE */
+				rv = ucv_int64_new(0);
 			}
 			else if (n1 < 0 || n2 < 0) {
 				rv = ucv_int64_new(n1 % n2);
