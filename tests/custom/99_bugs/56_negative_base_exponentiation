@@ -1,0 +1,31 @@
+Integer exponentiation with a negative base value applied a negative
+sign to the result unconditionally instead of respecting the parity of
+the exponent, e.g. (-2) ** 2 yielded -4 and (-2) ** 0 yielded -1.
+
+-- Testcase --
+{%
+	printf("%.J\n", [
+		(-2) ** 2,
+		(-2) ** 3,
+		(-3) ** 4,
+		(-2) ** 0,
+		(-2) ** -2,
+		(-2) ** -3,
+		(-1) ** 1000000,
+		(-9223372036854775807 - 1) ** 1
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	4,
+	-8,
+	81,
+	1,
+	0.25,
+	-0.125,
+	1,
+	-9223372036854775808
+]
+-- End --

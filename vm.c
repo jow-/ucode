@@ -1827,12 +1827,15 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 
 		case I_EXP:
 			if (n1 < 0 || n2 < 0) {
-				if (n1 < 0 && n2 < 0)
-					rv = ucv_double_new(-(1.0 / (double)upow64(abs64(n1), abs64(n2))));
-				else if (n2 < 0)
-					rv = ucv_double_new(1.0 / (double)upow64(abs64(n1), abs64(n2)));
+				/* the result is negative iff the base is negative and the
+				 * exponent is odd */
+				if (n2 < 0)
+					rv = ucv_double_new(((n1 < 0 && (n2 & 1)) ? -1.0 : 1.0) /
+						(double)upow64(abs64(n1), abs64(n2)));
+				else if (n2 & 1)
+					rv = ucv_int64_new((int64_t)-upow64(abs64(n1), abs64(n2)));
 				else
-					rv = ucv_int64_new(-upow64(abs64(n1), abs64(n2)));
+					rv = ucv_uint64_new(upow64(abs64(n1), abs64(n2)));
 			}
 			else {
 				if (!u1) u1 = (uint64_t)n1;
