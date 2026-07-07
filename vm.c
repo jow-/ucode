@@ -473,6 +473,7 @@ static uc_value_t *
 uc_vm_resolve_upval(uc_vm_t *vm, uc_value_t *value)
 {
 	uc_upvalref_t *ref;
+	uc_value_t *rv;
 
 #ifdef __clang_analyzer__
 	/* Clang static analyzer does not understand that ucv_type(NULL) can't
@@ -485,9 +486,13 @@ uc_vm_resolve_upval(uc_vm_t *vm, uc_value_t *value)
 		ref = (uc_upvalref_t *)value;
 
 		if (ref->closed)
-			return ucv_get(ref->value);
+			rv = ucv_get(ref->value);
 		else
-			return ucv_get(vm->stack.entries[ref->slot]);
+			rv = ucv_get(vm->stack.entries[ref->slot]);
+
+		ucv_put(value);
+
+		return rv;
 	}
 
 	return value;
