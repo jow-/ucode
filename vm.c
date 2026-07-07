@@ -1018,6 +1018,9 @@ uc_vm_get_error_context(uc_vm_t *vm)
 	uc_stringbuf_t *buf;
 	uc_chunk_t *chunk;
 
+	if (vm->callframes.count == 0)
+		return NULL;
+
 	/* skip to first non-native function call frame */
 	for (i = vm->callframes.count; i > 1; i--)
 		if (vm->callframes.entries[i - 1].closure)
