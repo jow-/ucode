@@ -1992,7 +1992,7 @@ uc_nl_convert_rta_linkinfo_data(uc_value_t *obj, size_t attr, struct nl_msg *msg
 static uc_value_t *
 uc_nl_convert_rta_linkinfo(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr **tb, uc_vm_t *vm)
 {
-	struct nlattr *linkinfo_tb[IFLA_INFO_MAX];
+	struct nlattr *linkinfo_tb[IFLA_INFO_MAX + 1];
 	uc_value_t *info_obj, *slave_obj;
 
 	if (!tb[spec->attr])
