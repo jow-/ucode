@@ -1563,7 +1563,7 @@ uc_nl_parse_rta_nexthop(struct nl_msg *msg, uc_vm_t *vm, uc_value_t *val)
 	if (ucv_type(val) != UC_OBJECT)
 		return false;
 
-	if (uc_nl_parse_cidr(vm, ucv_object_get(val, "via", NULL), &cidr))
+	if (!uc_nl_parse_cidr(vm, ucv_object_get(val, "via", NULL), &cidr))
 		return false;
 
 	aflen = (cidr.family == AF_INET6 ? sizeof(cidr.addr.in6) : sizeof(cidr.addr.in));
