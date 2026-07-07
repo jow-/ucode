@@ -1384,6 +1384,10 @@ uc_vm_insn_store_var(uc_vm_t *vm, uc_vm_insn_t insn)
 				uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
 				                      "access to undeclared variable %s",
 				                      ucv_string_get(name));
+				ucv_put(name);
+				ucv_put(v);
+
+				return;
 			}
 
 			break;
@@ -1870,6 +1874,10 @@ uc_vm_insn_update_var(uc_vm_t *vm, uc_vm_insn_t insn)
 				uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
 				                      "access to undeclared variable %s",
 				                      ucv_string_get(name));
+				ucv_put(name);
+				ucv_put(inc);
+
+				return;
 			}
 
 			break;

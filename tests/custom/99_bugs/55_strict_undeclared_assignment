@@ -1,0 +1,22 @@
+In strict mode, assigning to an undeclared variable raised the expected
+reference error but still performed the assignment, so the variable came
+into existence when the exception was caught. Ensure the assignment and
+compound update are suppressed when the exception is raised.
+
+-- Testcase --
+{%
+	'use strict';
+
+	try { undeclared_a = 1; } catch (e) { print(e.type, ": ", e.message, "\n"); }
+	try { print(undeclared_a, "\n"); } catch (e) { print(e.type, ": ", e.message, "\n"); }
+	try { undeclared_b += 2; } catch (e) { print(e.type, ": ", e.message, "\n"); }
+	try { print(undeclared_b, "\n"); } catch (e) { print(e.type, ": ", e.message, "\n"); }
+%}
+-- End --
+
+-- Expect stdout --
+Reference error: access to undeclared variable undeclared_a
+Reference error: access to undeclared variable undeclared_a
+Reference error: access to undeclared variable undeclared_b
+Reference error: access to undeclared variable undeclared_b
+-- End --
