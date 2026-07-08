@@ -220,13 +220,14 @@ uc_error_context_format(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stack
 
 void
 uc_error_message_indent(char **msg) {
-	uc_stringbuf_t *buf = xprintbuf_new();
+	uc_stringbuf_t *buf;
 	char *s, *p, *nl;
 	size_t len;
 
 	if (!msg || !*msg)
 		return;
 
+	buf = xprintbuf_new();
 	s = *msg;
 	len = strlen(s);
 

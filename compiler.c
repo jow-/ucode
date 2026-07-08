@@ -1949,20 +1949,27 @@ uc_compiler_compile_funcexpr_common(uc_compiler_t *compiler, bool require_name)
 			return;
 		}
 
-		slot = uc_compiler_resolve_funcstub(compiler, name);
+		/* A function declaration binds its name in the enclosing scope. A named
+		 * function expression must not: its name is only visible inside its own
+		 * body (for self-reference), and declaring it in the enclosing scope
+		 * would both leak it and shift the local slots, corrupting the
+		 * initialisation state of a `let`/`const` the expression initialises. */
+		if (require_name) {
+			slot = uc_compiler_resolve_funcstub(compiler, name);
 
-		if (slot > -1) {
-			compiler->locals.entries[slot].funcstub = false;
-		}
-		else {
-			slot = uc_compiler_declare_local(compiler, name, false);
+			if (slot > -1) {
+				compiler->locals.entries[slot].funcstub = false;
+			}
+			else {
+				slot = uc_compiler_declare_local(compiler, name, false);
 
-			if (slot == -1)
-				uc_compiler_initialize_local(compiler);
-			else if (compiler->locals.entries[slot].constant)
-				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
-					"Redeclaration of constant '%s'",
-					ucv_string_get(name));
+				if (slot == -1)
+					uc_compiler_initialize_local(compiler);
+				else if (compiler->locals.entries[slot].constant)
+					uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+						"Redeclaration of constant '%s'",
+						ucv_string_get(name));
+			}
 		}
 	}
 	else if (require_name) {
@@ -1975,6 +1982,14 @@ uc_compiler_compile_funcexpr_common(uc_compiler_t *compiler, bool require_name)
 		compiler->parser->prev.pos,
 		compiler->program,
 		uc_compiler_is_strict(compiler));
+
+	/* Bind a named function expression's name to its own callee slot so the
+	 * body can reference itself for recursion, without touching the enclosing
+	 * scope. Declarations keep the name in the enclosing scope (handled above). */
+	if (name && !require_name) {
+		ucv_put(fncompiler.locals.entries[0].name);
+		fncompiler.locals.entries[0].name = ucv_get(name);
+	}
 
 	fncompiler.parent = compiler;
 	fncompiler.parser = compiler->parser;
@@ -3552,13 +3567,24 @@ uc_compiler_compile_module_source(uc_compiler_t *compiler, const char *modname, 
 
 	uc_program_function_foreach(compiler->program, fn) {
 		if (uc_program_function_source(fn) == source) {
-			if (source->exports.offset == (size_t)-1)
-				uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
-					"Circular dependency");
-
 			loaded = true;
 			break;
 		}
+	}
+
+	/* An offset of -1 marks a source whose compilation was entered but not yet
+	 * completed. Re-entering it is either a circular dependency (its function is
+	 * still present) or a module whose earlier compilation failed and freed its
+	 * function. Recompiling in either case recurses without bound across a large
+	 * import graph, so report the cycle and propagate the failure instead. */
+	if (source->exports.offset == (size_t)-1) {
+		if (loaded)
+			uc_compiler_syntax_error(compiler, compiler->parser->prev.pos,
+				"Circular dependency");
+		else if (errp)
+			xasprintf(errp, "Module previously failed to compile\n");
+
+		return false;
 	}
 
 	if (!loaded) {

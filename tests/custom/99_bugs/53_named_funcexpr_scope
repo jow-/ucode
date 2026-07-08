@@ -1,0 +1,25 @@
+A named function expression must scope its name to its own body: the name is
+visible inside the function (for self-recursion) but must not be declared in the
+enclosing scope. Declaring it there leaked the name and shifted the local slots,
+so a `let`/`const` initialised by the expression was left uninitialised and its
+first use raised "Can't access lexical declaration 'x' before initialization".
+
+-- Testcase --
+const ok = !function self() { return false; }();
+print(ok, "\n");
+
+let fact = function rec(n) { return (n > 1) ? n * rec(n - 1) : 1; };
+print(fact(5), "\n");
+
+print((type(self) == "function" || type(rec) == "function") ? "leaked" : "clean", "\n");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+true
+120
+clean
+-- End --
