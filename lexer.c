@@ -181,6 +181,10 @@ parse_comment(uc_lexer_t *lex, int kind)
 
 	uc_vector_push(&lex->buffer, '/');
 
+	/* consume the second opening character so that the opening star of a block
+	 * comment cannot double as the closing star of an empty comment */
+	uc_vector_push(&lex->buffer, next_char(lex));
+
 	while (true) {
 		ch = next_char(lex);
 
@@ -508,13 +512,15 @@ parse_regexp(uc_lexer_t *lex)
 				break;
 		}
 
-		len = xasprintf(&s, "%c%*s",
-			(is_reg_global << 0) | (is_reg_icase << 1) | (is_reg_newline << 2),
-			ucv_string_length(rv->uv),
-			ucv_string_get(rv->uv));
+		/* encode the flags byte followed by the raw pattern bytes; a plain
+		 * printf conversion cannot be used as the pattern may contain NUL */
+		len = ucv_string_length(rv->uv);
+		s = xalloc(len + 1);
+		s[0] = (is_reg_global << 0) | (is_reg_icase << 1) | (is_reg_newline << 2);
+		memcpy(s + 1, ucv_string_get(rv->uv), len);
 
 		ucv_free(rv->uv, false);
-		rv->uv = ucv_string_new_length(s, len);
+		rv->uv = ucv_string_new_length(s, len + 1);
 		free(s);
 	}
 
@@ -606,8 +612,19 @@ is_numeric_char(uc_lexer_t *lex, char c)
 
 	case '+':
 	case '-':
-		/* sign is only allowed after an exponent char */
-		return (prev|32) == 'e';
+		/* sign is only allowed after a decimal exponent char; in a hex
+		 * literal `e`/`E` is a digit, not an exponent marker */
+		if ((prev|32) != 'e')
+			return false;
+
+		if (lex->buffer.count >= 2) {
+			char *b = uc_vector_first(&lex->buffer);
+
+			if (b[0] == '0' && (b[1]|32) == 'x')
+				return false;
+		}
+
+		return true;
 	}
 
 	return false;
@@ -721,7 +738,7 @@ lex_find_token(uc_lexer_t *lex)
 			return emit_op(lex, -2, TK_QDOT, NULL);
 		}
 
-		return emit_op(lex, lex->source->off, TK_QMARK, NULL);
+		return emit_op(lex, -1, TK_QMARK, NULL);
 
 	case '>':
 		if (check_char(lex, '>')) {

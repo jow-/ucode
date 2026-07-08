@@ -982,7 +982,7 @@ uc_hex(uc_vm_t *vm, size_t nargs)
 
 	v = ucv_string_get(val);
 
-	if (!v || !isxdigit(*v))
+	if (!v || !isxdigit((unsigned char)*v))
 		return ucv_double_new(NAN);
 
 	n = strtoll(v, &e, 16);
@@ -1137,20 +1137,23 @@ uc_keys(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_lc(uc_vm_t *vm, size_t nargs)
 {
-	char *str = ucv_to_string(vm, uc_fn_arg(0));
-	uc_value_t *rv = NULL;
-	char *p;
+	uc_stringbuf_t *buf = xprintbuf_new();
+	uc_value_t *rv;
+	size_t i, len;
+	char *s;
 
-	if (!str)
-		return NULL;
+	ucv_to_stringbuf(vm, buf, uc_fn_arg(0), false);
 
-	for (p = str; *p; p++)
-		if (*p >= 'A' && *p <= 'Z')
-			*p |= 32;
+	s = buf->buf;
+	len = printbuf_length(buf);
 
-	rv = ucv_string_new(str);
+	for (i = 0; i < len; i++)
+		if (s[i] >= 'A' && s[i] <= 'Z')
+			s[i] |= 32;
 
-	free(str);
+	rv = ucv_string_new_length(s, len);
+
+	printbuf_free(buf);
 
 	return rv;
 }
@@ -1395,7 +1398,7 @@ uc_reverse(uc_vm_t *vm, size_t nargs)
 		while (len > 0)
 			*p++ = str[--len];
 
-		rv = ucv_string_new(dup);
+		rv = ucv_string_new_length(dup, ucv_string_length(obj));
 
 		free(dup);
 	}
@@ -2005,20 +2008,23 @@ uc_time(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_uc(uc_vm_t *vm, size_t nargs)
 {
-	char *str = ucv_to_string(vm, uc_fn_arg(0));
-	uc_value_t *rv = NULL;
-	char *p;
+	uc_stringbuf_t *buf = xprintbuf_new();
+	uc_value_t *rv;
+	size_t i, len;
+	char *s;
 
-	if (!str)
-		return NULL;
+	ucv_to_stringbuf(vm, buf, uc_fn_arg(0), false);
 
-	for (p = str; *p; p++)
-		if (*p >= 'a' && *p <= 'z')
-			*p &= ~32;
+	s = buf->buf;
+	len = printbuf_length(buf);
 
-	rv = ucv_string_new(str);
+	for (i = 0; i < len; i++)
+		if (s[i] >= 'a' && s[i] <= 'z')
+			s[i] &= ~32;
 
-	free(str);
+	rv = ucv_string_new_length(s, len);
+
+	printbuf_free(buf);
 
 	return rv;
 }
