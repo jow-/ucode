@@ -274,9 +274,6 @@ void uc_vm_free(uc_vm_t *vm)
 		vm->open_upvals = ref;
 	}
 
-	for (i = 0; i < vm->restypes.count; i++)
-		ucv_put(vm->restypes.entries[i]->proto);
-
 	uc_vm_reset_callframes(vm);
 	uc_vm_reset_stack(vm);
 	uc_vector_clear(&vm->stack);
@@ -286,8 +283,14 @@ void uc_vm_free(uc_vm_t *vm)
 
 	ucv_freeall(vm);
 
-	for (i = 0; i < vm->restypes.count; i++)
+	/* Type prototypes are not on the GC value list, so a ucv_put() during
+	 * ucv_freeall()'s retain phase would only mark them UC_NULL and leak
+	 * them. Release them here, after the final GC, so the last reference a
+	 * GC value may hold (e.g. via proto()) is already gone. */
+	for (i = 0; i < vm->restypes.count; i++) {
+		ucv_put(vm->restypes.entries[i]->proto);
 		free(vm->restypes.entries[i]);
+	}
 
 	uc_vector_clear(&vm->restypes);
 
@@ -473,6 +476,7 @@ static uc_value_t *
 uc_vm_resolve_upval(uc_vm_t *vm, uc_value_t *value)
 {
 	uc_upvalref_t *ref;
+	uc_value_t *rv;
 
 #ifdef __clang_analyzer__
 	/* Clang static analyzer does not understand that ucv_type(NULL) can't
@@ -485,9 +489,13 @@ uc_vm_resolve_upval(uc_vm_t *vm, uc_value_t *value)
 		ref = (uc_upvalref_t *)value;
 
 		if (ref->closed)
-			return ucv_get(ref->value);
+			rv = ucv_get(ref->value);
 		else
-			return ucv_get(vm->stack.entries[ref->slot]);
+			rv = ucv_get(vm->stack.entries[ref->slot]);
+
+		ucv_put(value);
+
+		return rv;
 	}
 
 	return value;
@@ -1013,6 +1021,9 @@ uc_vm_get_error_context(uc_vm_t *vm)
 	uc_stringbuf_t *buf;
 	uc_chunk_t *chunk;
 
+	if (vm->callframes.count == 0)
+		return NULL;
+
 	/* skip to first non-native function call frame */
 	for (i = vm->callframes.count; i > 1; i--)
 		if (vm->callframes.entries[i - 1].closure)
@@ -1384,6 +1395,10 @@ uc_vm_insn_store_var(uc_vm_t *vm, uc_vm_insn_t insn)
 				uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
 				                      "access to undeclared variable %s",
 				                      ucv_string_get(name));
+				ucv_put(name);
+				ucv_put(v);
+
+				return;
 			}
 
 			break;
@@ -1424,8 +1439,17 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(o)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
-		if (assert_mutable_value(vm, o))
-			uc_vm_stack_push(vm, ucv_key_set(vm, o, k, v));
+		if (assert_mutable_value(vm, o)) {
+			uc_value_t *rv = ucv_key_set(vm, o, k, v);
+
+			/* on success rv is a reference to the stored value that gets
+			 * pushed onto the stack; clear v so the cleanup below does not
+			 * release the reference now owned by the stack */
+			if (rv)
+				v = NULL;
+
+			uc_vm_stack_push(vm, rv);
+		}
 
 		break;
 
@@ -1435,6 +1459,7 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 		                      ucv_typename(o));
 	}
 
+	ucv_put(v);
 	ucv_put(o);
 	ucv_put(k);
 }
@@ -1766,6 +1791,11 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 			if (n2 == 0) {
 				rv = ucv_double_new(INFINITY);
 			}
+			else if (n1 == INT64_MIN && n2 == -1) {
+				/* the mathematical result 2^63 only fits into uint64_t;
+				 * the signed division would trap with SIGFPE */
+				rv = ucv_uint64_new((uint64_t)INT64_MAX + 1);
+			}
 			else if (n1 < 0 || n2 < 0) {
 				rv = ucv_int64_new(n1 / n2);
 			}
@@ -1782,6 +1812,10 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 			if (n2 == 0) {
 				rv = ucv_double_new(NAN);
 			}
+			else if (n1 == INT64_MIN && n2 == -1) {
+				/* the signed modulo would trap with SIGFPE */
+				rv = ucv_int64_new(0);
+			}
 			else if (n1 < 0 || n2 < 0) {
 				rv = ucv_int64_new(n1 % n2);
 			}
@@ -1796,12 +1830,15 @@ uc_vm_value_arith(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 
 		case I_EXP:
 			if (n1 < 0 || n2 < 0) {
-				if (n1 < 0 && n2 < 0)
-					rv = ucv_double_new(-(1.0 / (double)upow64(abs64(n1), abs64(n2))));
-				else if (n2 < 0)
-					rv = ucv_double_new(1.0 / (double)upow64(abs64(n1), abs64(n2)));
+				/* the result is negative iff the base is negative and the
+				 * exponent is odd */
+				if (n2 < 0)
+					rv = ucv_double_new(((n1 < 0 && (n2 & 1)) ? -1.0 : 1.0) /
+						(double)upow64(abs64(n1), abs64(n2)));
+				else if (n2 & 1)
+					rv = ucv_int64_new((int64_t)-upow64(abs64(n1), abs64(n2)));
 				else
-					rv = ucv_int64_new(-upow64(abs64(n1), abs64(n2)));
+					rv = ucv_uint64_new(upow64(abs64(n1), abs64(n2)));
 			}
 			else {
 				if (!u1) u1 = (uint64_t)n1;
@@ -1851,6 +1888,10 @@ uc_vm_insn_update_var(uc_vm_t *vm, uc_vm_insn_t insn)
 				uc_vm_raise_exception(vm, EXCEPTION_REFERENCE,
 				                      "access to undeclared variable %s",
 				                      ucv_string_get(name));
+				ucv_put(name);
+				ucv_put(inc);
+
+				return;
 			}
 
 			break;
@@ -1880,8 +1921,19 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_OBJECT:
 	case UC_ARRAY:
 		if (assert_mutable_value(vm, v)) {
+			uc_value_t *nv, *rv;
+
 			val = ucv_key_get(vm, v, k);
-			uc_vm_stack_push(vm, ucv_key_set(vm, v, k, uc_vm_value_arith(vm, vm->arg.u8, val, inc)));
+			nv = uc_vm_value_arith(vm, vm->arg.u8, val, inc);
+			rv = ucv_key_set(vm, v, k, nv);
+
+			/* on success rv is a reference to the stored value that gets
+			 * pushed onto the stack; on failure nv was not stored, so
+			 * release it here */
+			if (!rv)
+				ucv_put(nv);
+
+			uc_vm_stack_push(vm, rv);
 		}
 
 		break;
@@ -2032,7 +2084,7 @@ uc_vm_insn_mobj(uc_vm_t *vm, uc_vm_insn_t insn)
 		ucv_put(src);
 		break;
 
-	case json_type_array:
+	case UC_ARRAY:
 		for (i = 0; i < ucv_array_length(src); i++) {
 			xasprintf(&s, "%zu", i);
 			ucv_object_add(dst, s, ucv_get(ucv_array_get(src, i)));
@@ -2590,7 +2642,7 @@ uc_vm_insn_import(uc_vm_t *vm, uc_vm_insn_t insn)
 	}
 
 	/* module export available, patch into upvalue */
-	else if (from <= prog->exports.count && prog->exports.entries[from]) {
+	else if (from < prog->exports.count && prog->exports.entries[from]) {
 		frame->closure->upvals[to] = prog->exports.entries[from];
 		ucv_get(&prog->exports.entries[from]->header);
 	}
@@ -2668,6 +2720,7 @@ uc_vm_insn_dynload(uc_vm_t *vm, uc_vm_insn_t insn)
 				                      ucv_string_get(name));
 
 				ucv_put(name);
+				ucv_put(modscope);
 
 				return;
 			}
@@ -2682,6 +2735,8 @@ uc_vm_insn_dynload(uc_vm_t *vm, uc_vm_insn_t insn)
 			to++;
 		}
 	}
+
+	ucv_put(modscope);
 }
 
 static void

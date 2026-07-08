@@ -1,0 +1,17 @@
+Ensure that dividing INT64_MIN by -1 does not trap with SIGFPE due to
+signed integer division overflow but yields the mathematically correct
+unsigned result, consistent with multiplication and subtraction.
+
+-- Testcase --
+{%
+	let min = -9223372036854775807 - 1;
+
+	print(min / -1, "\n");
+	print(min % -1, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+9223372036854775808
+0
+-- End --

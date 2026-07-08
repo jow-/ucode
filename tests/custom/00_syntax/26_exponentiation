@@ -11,7 +11,7 @@ the power of the second operand.
 	4,
 	9223372036854775808,
 	-9223372036854775808,
-	-0.25,
+	0.25,
 	2.7556759606311
 ]
 -- End --
@@ -36,7 +36,7 @@ power value in the rhs expression.
 -- Expect stdout --
 [
 	4,
-	-0.25,
+	0.25,
 	2.7556759606311
 ]
 -- End --
