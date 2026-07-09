@@ -1,0 +1,33 @@
+Concatenating two UC_STRING values whose combined lengths would exceed
+SIZE_MAX caused a size_t integer overflow in uc_vm_string_concat(),
+previously returning NULL silently. NULL was then pushed onto the VM
+stack with no exception raised, allowing execution to continue with a
+corrupted result. The fix raises a Runtime error exception so the
+condition is surfaced to script-level try/catch or terminates the script
+with a readable error message.
+
+Since reproducing the overflow requires strings near SIZE_MAX bytes
+(infeasible in a test environment), the testcase below verifies that
+exceptions raised within uc_vm_string_concat() propagate correctly
+through the VM's arithmetic dispatch path.
+
+-- Testcase --
+{%
+	let o = proto({}, {
+		tostring: function() {
+			die("string concat exception path check");
+		}
+	});
+
+	try {
+		let _ = "x" + o;
+	}
+	catch (e) {
+		print(e.type, ": ", e.message, "\n");
+	}
+%}
+-- End --
+
+-- Expect stdout --
+Error: string concat exception path check
+-- End --
