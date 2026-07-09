@@ -1608,6 +1608,10 @@ uc_vm_string_concat(uc_vm_t *vm, uc_value_t *v1, uc_value_t *v2)
 		l1 = ucv_string_length(v1);
 		l2 = ucv_string_length(v2);
 
+		/* guard against size_t overflow */
+		if (l2 > SIZE_MAX - l1)
+			return NULL;
+
 		/* ... result fits into a tagged pointer */
 		if (l1 + l2 + 1 < sizeof(buf)) {
 			memcpy(&buf[0], s1, l1);
