@@ -1563,7 +1563,7 @@ uc_nl_parse_rta_nexthop(struct nl_msg *msg, uc_vm_t *vm, uc_value_t *val)
 	if (ucv_type(val) != UC_OBJECT)
 		return false;
 
-	if (uc_nl_parse_cidr(vm, ucv_object_get(val, "via", NULL), &cidr))
+	if (!uc_nl_parse_cidr(vm, ucv_object_get(val, "via", NULL), &cidr))
 		return false;
 
 	aflen = (cidr.family == AF_INET6 ? sizeof(cidr.addr.in6) : sizeof(cidr.addr.in));
@@ -1679,7 +1679,7 @@ uc_nl_convert_rta_multipath(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, s
 		nh_obj = ucv_object_new(vm);
 		ucv_array_push(nh_arr, nh_obj);
 
-		nla_parse(multipath_tb, RTA_MAX + 1, (struct nlattr *)RTNH_DATA(nh), nh->rtnh_len - sizeof(*nh), NULL);
+		nla_parse(multipath_tb, RTA_MAX, (struct nlattr *)RTNH_DATA(nh), nh->rtnh_len - sizeof(*nh), NULL);
 
 		if (multipath_tb[RTA_GATEWAY]) {
 			switch (nla_len(multipath_tb[RTA_GATEWAY])) {
@@ -1992,7 +1992,7 @@ uc_nl_convert_rta_linkinfo_data(uc_value_t *obj, size_t attr, struct nl_msg *msg
 static uc_value_t *
 uc_nl_convert_rta_linkinfo(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, struct nlattr **tb, uc_vm_t *vm)
 {
-	struct nlattr *linkinfo_tb[IFLA_INFO_MAX];
+	struct nlattr *linkinfo_tb[IFLA_INFO_MAX + 1];
 	uc_value_t *info_obj, *slave_obj;
 
 	if (!tb[spec->attr])
