@@ -1593,6 +1593,12 @@ uc_vm_value_bitop(uc_vm_t *vm, uc_vm_insn_t operation, uc_value_t *value, uc_val
 	return rv;
 }
 
+static bool
+uc_string_concat_would_overflow(size_t l1, size_t l2)
+{
+	return l2 >= SIZE_MAX - l1;
+}
+
 static uc_value_t *
 uc_vm_string_concat(uc_vm_t *vm, uc_value_t *v1, uc_value_t *v2)
 {
@@ -1609,7 +1615,7 @@ uc_vm_string_concat(uc_vm_t *vm, uc_value_t *v1, uc_value_t *v2)
 		l2 = ucv_string_length(v2);
 
 		/* guard against size_t overflow */
-		if (l2 > SIZE_MAX - l1) {
+		if (uc_string_concat_would_overflow(l1, l2)) {
 			uc_vm_raise_exception(vm, EXCEPTION_RUNTIME,
 			    "string concatenation result exceeds maximum string size");
 			return NULL;
