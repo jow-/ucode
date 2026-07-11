@@ -1,0 +1,2 @@
+add_executable(test_string_concat_overflow test_string_concat_overflow.c)
+add_test(NAME test_string_concat_overflow COMMAND test_string_concat_overflow)

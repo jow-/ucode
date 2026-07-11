@@ -1,0 +1,25 @@
+Concatenating two UC_STRING values whose combined lengths equal or exceed
+SIZE_MAX caused a size_t integer overflow in uc_vm_string_concat(). The
+original guard used > instead of >=, so the l1 + l2 == SIZE_MAX case
+passed through: the subsequent l1 + l2 + 1 expression wraps to 0, which
+is less than sizeof(buf) (8 on 64-bit), causing the code to take the
+stack-buffer memcpy branch and overflow an 8-byte buffer with SIZE_MAX
+bytes of data.
+
+Note: the scenario of two *simultaneously resident* multi-GB strings is
+unrealistic in practice — by the time two strings totalling >SIZE_MAX
+bytes exist, available address space is already exhausted and prior
+allocations would have failed. The realistic trigger is incremental
+accumulation: a loop that repeatedly concatenates moderate-sized chunks
+onto a growing accumulator, where the running total eventually approaches
+SIZE_MAX. The overflow guard catches that case regardless of how the
+large lengths were reached.
+
+The fix changes the guard to >= (via uc_string_concat_would_overflow())
+and raises a Runtime error exception so the condition is surfaced to
+script-level try/catch or terminates the script with a readable error
+message rather than silently pushing null onto the VM stack.
+
+The overflow guard logic is unit-tested in
+tests/unit/test_string_concat_overflow.c using contrived SIZE_MAX-boundary
+values without requiring real gigabyte allocations.
