@@ -2747,6 +2747,14 @@ uc_nl_parse_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *
 
 	nested_nla = nla_reserve(msg, spec->attr, nest->headsize);
 
+	if (!nested_nla)
+		return false;
+
+	/* nla_reserve() only zeroes the padding, not the payload, so struct
+	 * headers would otherwise carry heap garbage into the kernel */
+	if (nest->headsize)
+		memset(nla_data(nested_nla), 0, nest->headsize);
+
 	if (!uc_nl_parse_attrs(msg, nla_data(nested_nla), nest->attrs, nest->nattrs, vm, val))
 		return false;
 
