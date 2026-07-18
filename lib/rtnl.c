@@ -90,6 +90,7 @@ limitations under the License.
 #include <linux/netconf.h>
 #include <linux/ipv6.h>
 #include <linux/can/netlink.h>
+#include <linux/can/vxcan.h>
 
 #include <libubox/uloop.h>
 
@@ -1065,6 +1066,10 @@ static const uc_nl_attr_spec_t link_vrf_attrs[] = {
 	{ IFLA_VRF_TABLE, "table", DT_U32, 0, NULL },
 };
 
+static const uc_nl_attr_spec_t link_vxcan_attrs[] = {
+	{ VXCAN_INFO_PEER, "info_peer", DT_NESTED, 0, &link_msg },
+};
+
 static const uc_nl_attr_spec_t link_vxlan_attrs[] = {
 	{ IFLA_VXLAN_AGEING, "ageing", DT_U32, 0, NULL },
 	{ IFLA_VXLAN_COLLECT_METADATA, "collect_metadata", DT_U8, 0, NULL },
@@ -1964,7 +1969,7 @@ static const struct {
 	LINK_TYPE(rmnet),
 	LINK_TYPE(vlan),
 	LINK_TYPE(vrf),
-	//LINK_TYPE(vxcan),
+	LINK_TYPE(vxcan),
 	LINK_TYPE(vxlan),
 	//LINK_TYPE(xdp),
 	//LINK_TYPE(xstats),
