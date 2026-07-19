@@ -53,6 +53,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/file.h>
 #include <grp.h>
 #include <pwd.h>
@@ -122,6 +123,11 @@ mac_ioctl_cmd(unsigned int dir, unsigned int type, unsigned int num, size_t size
 	return NULL; \
 } while(0)
 
+typedef struct {
+	FILE *fp;
+	pid_t pid;
+} uc_proc_t;
+
 static int
 get_fd(uc_vm_t *vm, uc_value_t *val)
 {
@@ -185,7 +191,7 @@ uc_fs_error(uc_vm_t *vm, size_t nargs)
 }
 
 static uc_value_t *
-uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
+uc_fs_read_common(uc_vm_t *vm, size_t nargs, FILE **fp)
 {
 	uc_value_t *limit = uc_fn_arg(0);
 	uc_value_t *rv = NULL;
@@ -194,8 +200,6 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 	const char *lstr;
 	int64_t lsize;
 	ssize_t llen;
-
-	FILE **fp = uc_fn_this(type);
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -277,13 +281,11 @@ uc_fs_read_common(uc_vm_t *vm, size_t nargs, const char *type)
 }
 
 static uc_value_t *
-uc_fs_write_common(uc_vm_t *vm, size_t nargs, const char *type)
+uc_fs_write_common(uc_vm_t *vm, size_t nargs, FILE **fp)
 {
 	uc_value_t *data = uc_fn_arg(0);
 	size_t len, wsize;
 	char *str;
-
-	FILE **fp = uc_fn_this(type);
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -306,10 +308,8 @@ uc_fs_write_common(uc_vm_t *vm, size_t nargs, const char *type)
 }
 
 static uc_value_t *
-uc_fs_flush_common(uc_vm_t *vm, size_t nargs, const char *type)
+uc_fs_flush_common(uc_vm_t *vm, size_t nargs, FILE **fp)
 {
-	FILE **fp = uc_fn_this(type);
-
 	if (!fp || !*fp)
 		err_return(EBADF);
 
@@ -320,11 +320,9 @@ uc_fs_flush_common(uc_vm_t *vm, size_t nargs, const char *type)
 }
 
 static uc_value_t *
-uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
+uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, FILE **fp)
 {
 	int fd;
-
-	FILE **fp = uc_fn_this(type);
 
 	if (!fp || !*fp)
 		err_return(EBADF);
@@ -389,23 +387,27 @@ uc_fs_fileno_common(uc_vm_t *vm, size_t nargs, const char *type)
 static uc_value_t *
 uc_fs_pclose(uc_vm_t *vm, size_t nargs)
 {
-	FILE **fp = uc_fn_this("fs.proc");
-	int rc;
+	uc_proc_t *proc = uc_fn_thisval("fs.proc");
+	int rc, status;
 
-	if (!fp || !*fp)
+	if (!proc || !proc->fp)
 		err_return(EBADF);
 
-	rc = pclose(*fp);
-	*fp = NULL;
+	fclose(proc->fp);
+	proc->fp = NULL;
+
+	do {
+		rc = waitpid(proc->pid, &status, 0);
+	} while (rc == -1 && errno == EINTR);
 
 	if (rc == -1)
 		err_return(errno);
 
-	if (WIFEXITED(rc))
-		return ucv_int64_new(WEXITSTATUS(rc));
+	if (WIFEXITED(status))
+		return ucv_int64_new(WEXITSTATUS(status));
 
-	if (WIFSIGNALED(rc))
-		return ucv_int64_new(-WTERMSIG(rc));
+	if (WIFSIGNALED(status))
+		return ucv_int64_new(-WTERMSIG(status));
 
 	return ucv_int64_new(0);
 }
@@ -467,7 +469,8 @@ uc_fs_pclose(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_pread(uc_vm_t *vm, size_t nargs)
 {
-	return uc_fs_read_common(vm, nargs, "fs.proc");
+	uc_proc_t *proc = uc_fn_thisval("fs.proc");
+	return uc_fs_read_common(vm, nargs, proc ? &proc->fp : NULL);
 }
 
 /**
@@ -504,7 +507,8 @@ uc_fs_pread(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_pwrite(uc_vm_t *vm, size_t nargs)
 {
-	return uc_fs_write_common(vm, nargs, "fs.proc");
+	uc_proc_t *proc = uc_fn_thisval("fs.proc");
+	return uc_fs_write_common(vm, nargs, proc ? &proc->fp : NULL);
 }
 
 /**
@@ -522,7 +526,8 @@ uc_fs_pwrite(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_pflush(uc_vm_t *vm, size_t nargs)
 {
-	return uc_fs_flush_common(vm, nargs, "fs.proc");
+	uc_proc_t *proc = uc_fn_thisval("fs.proc");
+	return uc_fs_flush_common(vm, nargs, proc ? &proc->fp : NULL);
 }
 
 /**
@@ -539,7 +544,8 @@ uc_fs_pflush(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_pfileno(uc_vm_t *vm, size_t nargs)
 {
-	return uc_fs_fileno_common(vm, nargs, "fs.proc");
+	uc_proc_t *proc = uc_fn_thisval("fs.proc");
+	return uc_fs_fileno_common(vm, nargs, proc ? &proc->fp : NULL);
 }
 
 /**
@@ -560,8 +566,12 @@ uc_fs_pfileno(uc_vm_t *vm, size_t nargs)
  *
  * @function module:fs#popen
  *
- * @param {string} command
- * The command to be executed.
+ * @param {string|Array<*>} command
+ * The command to be executed, either as a plain shell command string or as an
+ * array of arguments. When an array is provided the process is started directly
+ * via execvp() without involving a shell, so argument values are never
+ * interpreted as shell syntax. Non-string array elements are converted to their
+ * string representation. A string command is passed to /bin/sh -c as usual.
  *
  * @param {string} [mode="r"]
  * The open mode of the process handle.
@@ -569,26 +579,162 @@ uc_fs_pfileno(uc_vm_t *vm, size_t nargs)
  * @returns {?module:fs.proc}
  *
  * @example
- * // Open a process
- * const process = popen('command', 'r');
+ * // Open a process with a command string (interpreted by the shell)
+ * const process = popen('ls -la /tmp', 'r');
+ *
+ * @example
+ * // Open a process with an argument array (no shell involved)
+ * const process = popen(['ls', '-la', '/tmp'], 'r');
  */
 static uc_value_t *
 uc_fs_popen(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *comm = uc_fn_arg(0);
 	uc_value_t *mode = uc_fn_arg(1);
+	const char *modestr;
+	int pfds[2], write_mode, err;
+	size_t argc = 0;
+	uc_proc_t *proc;
+	pid_t pid;
 	FILE *fp;
 
-	if (ucv_type(comm) != UC_STRING)
+	switch (ucv_type(comm)) {
+	case UC_STRING:
+		break;
+
+	case UC_ARRAY:
+		argc = ucv_array_length(comm);
+
+		if (argc == 0)
+			err_return(EINVAL);
+
+		/* Pre-fork validation of argv[0] to provide meaningful errno */
+		{
+			char *name = ucv_to_string(vm, ucv_array_get(comm, 0));
+			char pathbuf[PATH_MAX];
+			struct stat st;
+
+			err = ENOENT;
+
+			if (name && strchr(name, '/')) {
+				if (stat(name, &st) == -1)
+					err = errno;
+				else if (S_ISDIR(st.st_mode))
+					err = EISDIR;
+				else if (access(name, X_OK) == -1)
+					err = errno;
+				else
+					err = 0;
+			} else if (name) {
+				const char *path = getenv("PATH");
+				const char *end;
+
+				if (!path)
+					path = "/usr/local/bin:/usr/bin:/bin";
+
+				for (; *path; path = (*end ? end + 1 : end)) {
+					end = strchrnul(path, ':');
+
+					if (end == path)
+						continue;
+
+					if (snprintf(pathbuf, sizeof(pathbuf), "%.*s/%s",
+					             (int)(end - path), path, name) >= (int)sizeof(pathbuf))
+						continue;
+
+					if (stat(pathbuf, &st) == -1)
+						continue;
+
+					if (S_ISDIR(st.st_mode))
+						err = EISDIR;
+					else if (access(pathbuf, X_OK) == -1)
+						err = errno;
+					else
+						err = 0;
+
+					break;
+				}
+			}
+
+			free(name);
+
+			if (err)
+				err_return(err);
+		}
+		break;
+
+	default:
 		err_return(EINVAL);
+	}
 
-	fp = popen(ucv_string_get(comm),
-		ucv_type(mode) == UC_STRING ? ucv_string_get(mode) : "r");
+	modestr    = ucv_type(mode) == UC_STRING ? ucv_string_get(mode) : "r";
+	write_mode = (modestr[0] == 'w');
 
-	if (!fp)
+	if (pipe2(pfds, O_CLOEXEC) == -1)
 		err_return(errno);
 
-	return ucv_resource_create(vm, "fs.proc", fp);
+	pid = fork();
+
+	if (pid == -1) {
+		err = errno;
+		close(pfds[0]);
+		close(pfds[1]);
+		err_return(err);
+	}
+
+	if (pid == 0) {
+		dup2(write_mode ? pfds[0] : pfds[1],
+		     write_mode ? STDIN_FILENO : STDOUT_FILENO);
+
+		close(pfds[0]);
+		close(pfds[1]);
+
+		if (ucv_type(comm) == UC_ARRAY) {
+			char **argv = calloc(argc + 1, sizeof(char *));
+
+			if (argv) {
+				size_t n = 0;
+
+				for (size_t i = 0; i < argc; i++) {
+					argv[i] = ucv_to_string(vm, ucv_array_get(comm, i));
+					n += !!argv[i];
+				}
+
+				if (n > 0 && n == argc)
+					execvp(argv[0], argv);
+			}
+		} else {
+			execl("/bin/sh", "sh", "-c", ucv_string_get(comm), NULL);
+		}
+
+		_exit(127);
+	}
+
+	close(write_mode ? pfds[0] : pfds[1]);
+
+	fp = fdopen(write_mode ? pfds[1] : pfds[0], write_mode ? "w" : "r");
+
+	if (!fp) {
+		err = errno;
+		close(write_mode ? pfds[1] : pfds[0]);
+		kill(pid, SIGKILL);
+		while (waitpid(pid, NULL, 0) == -1 && errno == EINTR);
+		err_return(err);
+	}
+
+	uc_value_t *res = ucv_resource_create_ex(vm, "fs.proc", (void **)&proc, 0, sizeof(*proc));
+
+	if (!res) {
+		fclose(fp);
+		kill(pid, SIGKILL);
+		while (waitpid(pid, NULL, 0) == -1 && errno == EINTR);
+		err_return(ENOMEM);
+	}
+
+	proc->fp  = fp;
+	proc->pid = pid;
+
+	return res;
 }
 
 
@@ -710,7 +856,7 @@ uc_fs_close(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_read(uc_vm_t *vm, size_t nargs)
 {
-	return uc_fs_read_common(vm, nargs, "fs.file");
+	return uc_fs_read_common(vm, nargs, uc_fn_this("fs.file"));
 }
 
 /**
@@ -747,7 +893,7 @@ uc_fs_read(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_write(uc_vm_t *vm, size_t nargs)
 {
-	return uc_fs_write_common(vm, nargs, "fs.file");
+	return uc_fs_write_common(vm, nargs, uc_fn_this("fs.file"));
 }
 
 /**
@@ -994,7 +1140,7 @@ uc_fs_isatty(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_flush(uc_vm_t *vm, size_t nargs)
 {
-	return uc_fs_flush_common(vm, nargs, "fs.file");
+	return uc_fs_flush_common(vm, nargs, uc_fn_this("fs.file"));
 }
 
 /**
@@ -1011,7 +1157,7 @@ uc_fs_flush(uc_vm_t *vm, size_t nargs)
 static uc_value_t *
 uc_fs_fileno(uc_vm_t *vm, size_t nargs)
 {
-	return uc_fs_fileno_common(vm, nargs, "fs.file");
+	return uc_fs_fileno_common(vm, nargs, uc_fn_this("fs.file"));
 }
 
 #if defined(HAS_IOCTL) || defined(HAS_MAC_IOCTL)
@@ -3205,10 +3351,13 @@ static const uc_function_list_t global_fns[] = {
 
 static void close_proc(void *ud)
 {
-	FILE *fp = ud;
+	uc_proc_t *proc = ud;
 
-	if (fp)
-		pclose(fp);
+	if (!proc || !proc->fp)
+		return;
+
+	fclose(proc->fp);
+	while (waitpid(proc->pid, NULL, 0) == -1 && errno == EINTR);
 }
 
 static void close_file(void *ud)
