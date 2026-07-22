@@ -656,7 +656,8 @@ debug_setup(uc_vm_t *vm)
  *
  * The file parameter can be either a string value containing a file path, in
  * which case this function tries to create and write the report file at the
- * given location, or an already open file handle this function should write to.
+ * given location, a numeric file descriptor, or a resource implementing a
+ * `fileno()` method which returns a numeric file descriptor.
  *
  * Returns `true` if the report has been written.
  *
@@ -664,31 +665,68 @@ debug_setup(uc_vm_t *vm)
  *
  * @function module:debug#memdump
  *
- * @param {string|module:fs.file|module:fs.proc} file
- * The file path or open file handle to write report to.
+ * @param {string|number|module:fs.file|module:fs.proc|module:uloop.handle|module:socket.socket} file
+ * The file path, file descriptor number, or open file handle to write report to.
  *
  * @return {?boolean}
  */
 static uc_value_t *
 uc_memdump(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *file = uc_fn_arg(0);
+	uc_value_t *file = uc_fn_arg(0), *fn;
 	FILE *fp = NULL;
+	int fd = -1;
 
 	if (ucv_type(file) == UC_RESOURCE) {
-		fp = ucv_resource_data(file, "fs.file");
+		fn = ucv_property_get(file, "fileno");
 
-		if (!fp)
-			fp = ucv_resource_data(file, "fs.proc");
+		if (ucv_is_callable(fn)) {
+			uc_vm_stack_push(vm, ucv_get(file));
+			uc_vm_stack_push(vm, ucv_get(fn));
+
+			if (uc_vm_call(vm, true, 0) == EXCEPTION_NONE) {
+				file = uc_vm_stack_pop(vm);
+			}
+			else {
+				errno = EBADF;
+				file = NULL;
+			}
+		}
+		else {
+			ucv_get(file);
+		}
+
+		if (file) {
+			fd = ucv_int64_get(file);
+
+			if (errno || fd < 0)
+				fd = -1;
+
+			ucv_put(file);
+		}
+	}
+	else if (ucv_type(file) == UC_INTEGER) {
+		errno = 0;
+		fd = ucv_int64_get(file);
+
+		if (errno || fd < 0)
+			fd = -1;
 	}
 	else if (ucv_type(file) == UC_STRING) {
 		fp = fopen(ucv_string_get(file), "w");
+	}
+
+	if (!fp && fd != -1) {
+		fd = dup(fd);
+		if (fd != -1)
+			fp = fdopen(fd, "w");
 	}
 
 	if (!fp)
 		return NULL;
 
 	print_memdump(vm, fp);
+	fclose(fp);
 
 	return ucv_boolean_new(true);
 }
