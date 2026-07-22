@@ -1,0 +1,57 @@
+Callbacks allow C function pointers to invoke ucode closures. The `qsort` function
+demonstrates callback usage with integer and string array sorting.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// Method 1: Predeclare with cdef(), then wrap bare name
+ffi.cdef(`
+    void qsort(void *base, size_t nmemb, size_t size,
+               int (*compar)(const void *, const void *));
+    int strcmp(const char *, const char *);
+`);
+
+let narr = ffi.ctype('int[5]', [56, 4, 12, 1, 5]);
+let qsort_fn = ffi.C.wrap('qsort');
+
+qsort_fn(narr.ptr(), narr.length(), narr.itemsize(),
+         (a, b) => a.deref('int') - b.deref('int'));
+
+print("sorted: ");
+for (let i = 0; i < 5; i++) {
+    print(narr.get(i), " ");
+}
+print("\n");
+-- End --
+
+-- Expect stdout --
+sorted: 1 4 5 12 56 
+-- End --
+
+
+String array sorting using strcmp callback.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// Method 2: No cdef(), use full declaration in wrap()
+let sarr = ffi.ctype('const char *[3]', ['foo', 'bar', 'qrx']);
+let qsort_fn = ffi.C.wrap('void qsort(void *, size_t, size_t, int (*)(const void *, const void *))');
+let strcmp = ffi.C.wrap('int strcmp(const char *, const char *)');
+
+qsort_fn(sarr.ptr(), sarr.length(), sarr.itemsize(),
+         (a, b) => strcmp(a.deref('const char *'), b.deref('const char *')));
+
+print("sorted: ");
+for (let i = 0; i < 3; i++) {
+    print(sarr.get(i), " ");
+}
+print("\n");
+-- End --
+
+-- Expect stdout --
+sorted: bar foo qrx 
+-- End --
+

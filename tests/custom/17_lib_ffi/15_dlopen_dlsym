@@ -1,0 +1,52 @@
+The `ffi.dlopen()` and `ffi.C.dlsym()` functions load dynamic libraries and resolve symbols.
+
+Load a dynamic library (libz).
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+try {
+    let libz = ffi.dlopen('z');
+    print("dlopen result: ", libz ? "OK" : "NULL", "\n");
+} catch (e) {
+    print("dlopen error: ", e, "\n");
+}
+-- End --
+
+-- Expect stdout --
+dlopen result: OK
+-- End --
+
+
+Resolve symbol from global scope.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let strlen_sym = ffi.C.dlsym('strlen');
+print("dlsym result: ", strlen_sym ? "found" : "NULL", "\n");
+-- End --
+
+-- Expect stdout --
+dlsym result: found
+-- End --
+
+
+Wrap and call dlsym'd function.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let strlen_sym = ffi.C.dlsym('strlen');
+let strlen_fn = ffi.C.wrap('size_t strlen(const char *)');
+let len = strlen_fn("hello");
+
+print("strlen: ", len, "\n");
+-- End --
+
+-- Expect stdout --
+strlen: 5
+-- End --

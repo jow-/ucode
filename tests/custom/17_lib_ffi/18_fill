@@ -1,0 +1,18 @@
+The `ffi.fill()` function fills memory with a byte value.
+
+Fill buffer with a byte value.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let buf = ffi.ctype('char[10]');
+ffi.fill(buf.ptr(), 10, 0x41);  // Fill with 'A'
+
+print("filled: ", ffi.string(buf.ptr(), 10), "\n");
+-- End --
+
+-- Expect stdout --
+filled: AAAAAAAAAA
+-- End --
+

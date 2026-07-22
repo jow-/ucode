@@ -1,0 +1,38 @@
+The `cdata.length()` and `cdata.itemsize()` methods query array properties.
+
+Array length query.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[5];');
+let a = ffi.ctype('intarr', 1, 2, 3, 4, 5);
+
+print("length: ", a.length(), "\n");
+-- End --
+
+-- Expect stdout --
+length: 5
+-- End --
+
+
+Item size for different array types.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[5]; typedef char chararr[10];');
+let a = ffi.ctype('intarr', 1, 2, 3, 4, 5);
+let c = ffi.ctype('chararr', [1, 2, 3, 4, 5]);
+
+print("int itemsize: ", a.itemsize(), "\n");
+print("char itemsize: ", c.itemsize(), "\n");
+-- End --
+
+-- Expect stdout --
+int itemsize: 4
+char itemsize: 1
+-- End --
+
