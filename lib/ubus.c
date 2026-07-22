@@ -1171,7 +1171,7 @@ uc_ubus_call_data_user_cb(struct ubus_request *req, int type, struct blob_attr *
 
 		uc_vm_stack_push(vm, ucv_get(defer->res));
 		uc_vm_stack_push(vm, ucv_get(func));
-		uc_vm_stack_push(vm, ucv_get(reply));
+		uc_vm_stack_push(vm, reply);
 
 		if (uc_ubus_vm_call(vm, true, 1))
 			ucv_put(uc_vm_stack_pop(vm));
