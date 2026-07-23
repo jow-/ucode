@@ -770,6 +770,17 @@ debug_setup(uc_vm_t *vm)
 {
 	char *ev;
 
+	/* Make sure the ucode-level signal() builtin actually works,
+	 * regardless of whether the embedding host opted into
+	 * uc_parse_config_t.setup_signal_handlers - debug_setup_memdump()
+	 * below and debug.attach()/debug.listen()/debug.debugger() all rely
+	 * on it, and a host that simply calls uc_vm_init(vm, NULL) (uwsd,
+	 * uhttpd) gets that flag unset by default. Without this, installing
+	 * one of those handlers would silently end up with a NULL/SIG_DFL
+	 * disposition, terminating the process on the next occurrence of the
+	 * signal instead of invoking the handler. */
+	uc_vm_signal_handlers_ensure(vm);
+
 	ev = getenv("UCODE_DEBUG_MEMDUMP_ENABLED");
 
 	if (!ev || !strcmp(ev, "1") || !strcmp(ev, "yes") || !strcmp(ev, "true"))
@@ -6835,6 +6846,114 @@ uc_debug_break(uc_vm_t *vm, size_t nargs)
 	return ucv_boolean_new(true);
 }
 
+static bool debug_remote_listen_armed = false;
+
+/* Registered as a ucode-level SIGUSR1 handler via the builtin signal()
+ * function, exactly like uc_debug_sigusr1_attach_handler() above. This
+ * matters for embedding: ucode-level signal handlers are invoked from
+ * uc_vm_signal_dispatch(), which is only ever called from inside
+ * uc_vm_execute_chunk()'s own per-instruction loop (see vm.c) - so this
+ * runs nested within whatever uc_vm_call()/uc_vm_execute() invocation the
+ * host application (uhttpd, uwsd, ...) is currently making, and returns
+ * normally once the debug session ends. It never unwinds the host's own
+ * C call stack the way the -X flag's raw POSIX SIGUSR1 handler does via
+ * uc_vm_break_request()/STATUS_BREAK, which a host application that embeds
+ * the VM directly (rather than driving it through ucode's own -X main
+ * loop) would have no way to handle. */
+static uc_value_t *
+uc_debug_listen_sigusr1_handler(uc_vm_t *vm, size_t nargs)
+{
+	int client_fd = debug_remote_handle_break(vm);
+
+	if (client_fd >= 0)
+		debug_cli_run_remote_session(vm, client_fd);
+
+	return NULL;
+}
+
+/**
+ * Listen for a remote debugger connection.
+ *
+ * With no argument (or a boolean), this arms `SIGUSR1`-triggered remote
+ * debugging on the PID-derived attach socket `/tmp/ucode-debug-<pid>.sock`
+ * - the same socket `-X` and `udbg <pid>` use. This is the counterpart to
+ * the `-X` command line flag for scripts running inside a host application
+ * that embeds the ucode VM directly (e.g. uhttpd or uwsd) and therefore has
+ * no `-X` flag or `SIGUSR1`-triggered break infrastructure of its own. Once
+ * armed, sending `SIGUSR1` to the process makes it pause at the next
+ * instruction boundary, open the attach socket and hand off to the very
+ * same interactive CLI session used locally or via `-X` - the exact same
+ * command set, tab completion and ANSI rendering.
+ *
+ * With a string argument, it instead binds the given Unix domain socket
+ * path and blocks immediately (right here, synchronously, indefinitely)
+ * until a client connects on that path - independent of `SIGUSR1` and of
+ * the PID-derived attach socket. This is useful for host applications that
+ * want to expose the debugger on a well-known path of their own choosing.
+ *
+ * @param {boolean|string} [wait]
+ * If a string, treated as a socket path to bind and block on (see above).
+ * If truish (and not a string), block immediately, right here, until a
+ * debugger client connects on the PID-derived attach socket or a 30 second
+ * timeout elapses, exactly as if `SIGUSR1` had just been received - in
+ * addition to arming `SIGUSR1` for later. If omitted or falsy, only arm the
+ * `SIGUSR1` handler and return immediately; the process keeps running
+ * normally until a signal is actually sent.
+ *
+ * @returns {boolean}
+ * `true` on success, `false` if binding an explicit socket path failed.
+ *
+ * @example
+ * import { listen } from 'debug';
+ *
+ * // Arm SIGUSR1-triggered remote debugging, keep running
+ * listen();
+ *
+ * // ... or pause right here until a debugger attaches
+ * listen(true);
+ *
+ * // ... or listen on an explicit, caller-chosen socket path
+ * listen("/tmp/ucode-debug.sock");
+ */
+static uc_value_t *
+uc_debug_listen(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *arg = uc_fn_arg(0);
+
+	if (ucv_type(arg) == UC_STRING) {
+		int client_fd = debug_remote_accept_on_path(ucv_string_get(arg));
+
+		if (client_fd < 0)
+			return ucv_boolean_new(false);
+
+		debug_cli_run_remote_session(vm, client_fd);
+
+		return ucv_boolean_new(true);
+	}
+
+	if (!debug_remote_listen_armed) {
+		uc_cfn_ptr_t ucsignal = uc_stdlib_function("signal");
+
+		uc_vm_stack_push(vm, ucv_string_new("SIGUSR1"));
+		uc_vm_stack_push(vm,
+			ucv_cfunction_new("debug_listen_sigusr1_handler", uc_debug_listen_sigusr1_handler));
+		ucv_put(ucsignal(vm, 2));
+		ucv_put(uc_vm_stack_pop(vm));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		debug_remote_listen_armed = true;
+	}
+
+	if (ucv_is_truish(arg)) {
+		int client_fd = debug_remote_handle_break(vm);
+
+		if (client_fd >= 0)
+			debug_cli_run_remote_session(vm, client_fd);
+	}
+
+	return ucv_boolean_new(true);
+}
+
 static uc_value_t *
 uc_debug_sigint_handler(uc_vm_t *vm, size_t nargs)
 {
@@ -6998,8 +7117,6 @@ static const uc_function_list_t debug_fns[] = {
 	{ "listen",	uc_debug_listen },
 };
 
-void uc_module_init_remote(uc_vm_t *vm, uc_value_t *scope);
-
 /* Callback invoked by main.c when STATUS_BREAK is returned in -X mode.
  * debug_remote_handle_break() (in debug_remote.c) only deals with socket
  * transport: it creates the attach socket and waits for a udbg client to
@@ -7031,8 +7148,6 @@ uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	uc_function_list_register(scope, debug_fns);
 
 	debug_setup(vm);
-
-	uc_module_init_remote(vm, scope);
 
 	have_highlighting = compile_patterns();
 

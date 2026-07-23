@@ -7,7 +7,10 @@ int debug_remote_create_attach_socket(void);
 const char *debug_remote_get_socket_path(void);
 void debug_remote_cleanup_attach_socket(void);
 
-uc_value_t *uc_debug_listen(uc_vm_t *vm, size_t nargs);
+/* Accept a single connection on an arbitrary, caller-supplied Unix domain
+ * socket path, blocking indefinitely. Returns the accepted client fd, or -1
+ * on error. Used by debug.listen(path) for the explicit-path case. */
+int debug_remote_accept_on_path(const char *path);
 
 /* Push unsolicited notifications to a connected debugger client, if any. */
 void debug_remote_notify_exception(uc_vm_t *vm, uc_exception_t *ex);
@@ -16,7 +19,7 @@ void debug_remote_notify_signal(int signum);
 /* Mark the given fd as the currently attached remote debugger connection
  * (or -1 for none), used by debug_remote_has_active_connection() and the
  * notify helpers above. Owned by whoever is currently driving the session
- * (either uc_debug_listen() or debug_cli_run_remote_session()). */
+ * (debug_cli_run_remote_session()). */
 void debug_remote_set_active_fd(int fd);
 bool debug_remote_has_active_connection(void);
 

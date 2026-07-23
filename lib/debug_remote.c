@@ -14,35 +14,18 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/**
- * @module debug
- */
 /*
+ * Remote debugger socket transport.
  *
- * Remote debugger attachment functionality.
- *
- * This file only deals with the socket transport: creating the Unix domain
- * socket(s), accepting a `udbg` client connection (with a timeout for the
- * SIGUSR1 attach flow), and pushing asynchronous "EVENT " notifications to
- * an attached client. The actual interactive command session - which reuses
- * the exact same command set, tab completion and readline-style editing as
- * the local terminal debugger - is driven by debug_cli_run_remote_session()
- * in debug.c, once a client fd has been accepted here.
- *
- *   ```
- *   import * as debug from 'debug';
- *
- *   // Start listening for debugger connections on a Unix socket
- *   debug.listen('/tmp/ucode-debug.sock');
- *
- *   // Script will pause here waiting for debugger connection
- *   ```
- *
- * Then connect with:
- *
- *   ```
- *   udbg /tmp/ucode-debug.sock
- *   ```
+ * This file only deals with the socket transport: creating Unix domain
+ * sockets (both the PID-derived SIGUSR1 attach socket and arbitrary
+ * caller-supplied paths for debug.listen()), accepting a `udbg` client
+ * connection, and pushing asynchronous "EVENT " notifications to an
+ * attached client. The script-facing debug.listen() API and the actual
+ * interactive command session - which reuses the exact same command set,
+ * tab completion and readline-style editing as the local terminal debugger
+ * - live in debug.c (see uc_debug_listen() / debug_cli_run_remote_session()),
+ * once a client fd has been accepted here.
  */
 
 #include <stdio.h>
@@ -62,21 +45,7 @@
 #include "ucode/vm.h"
 #include "debug_remote.h"
 
-/* Forward declaration from debug.c */
-extern void uc_module_init_remote(uc_vm_t *vm, uc_value_t *scope);
-
 static int remote_debug_fd = -1;
-static char remote_socket_path[1024] = { 0 };
-
-
-static void
-debug_remote_cleanup_socket(void)
-{
-	if (remote_socket_path[0] != '\0') {
-		unlink(remote_socket_path);
-		remote_socket_path[0] = '\0';
-	}
-}
 
 
 static void
@@ -165,40 +134,32 @@ debug_remote_handle_break(uc_vm_t *vm)
 }
 
 
-/* Global socket path for SIGUSR1-triggered attach */
-static char attach_socket_path[1024] = { 0 };
-
-int
-debug_remote_create_attach_socket(void)
+/* Create, bind (mode 0600) and listen on a Unix domain socket at the given
+ * path, removing any stale socket file first. Shared by both the
+ * SIGUSR1-triggered attach socket (fixed, PID-derived path) and
+ * debug.listen() (arbitrary caller-supplied path). Returns the listening
+ * fd, or -1 on error. */
+static int
+debug_remote_bind_and_listen(const char *path)
 {
 	struct sockaddr_un addr = { 0 };
 	int listen_fd;
 	socklen_t addrlen;
 	mode_t old_umask;
-	pid_t pid = getpid();
 
-	/* Create socket path */
-	snprintf(attach_socket_path, sizeof(attach_socket_path),
-		 "/tmp/ucode-debug-%d.sock", pid);
-
-	/* Create socket */
 	listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (listen_fd < 0)
 		return -1;
 
-	/* Set up address */
 	addr.sun_family = AF_UNIX;
-	strncpy(addr.sun_path, attach_socket_path, sizeof(addr.sun_path) - 1);
+	strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
 	addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-	addrlen = sizeof(sa_family_t) + strlen(attach_socket_path) + 1;
+	addrlen = sizeof(sa_family_t) + strlen(path) + 1;
 
-	/* Remove existing socket file */
-	unlink(attach_socket_path);
+	unlink(path);
 
-	/* Set umask for socket permissions */
 	old_umask = umask(077);
 
-	/* Bind */
 	if (bind(listen_fd, (struct sockaddr *)&addr, addrlen) < 0) {
 		umask(old_umask);
 		close(listen_fd);
@@ -207,13 +168,27 @@ debug_remote_create_attach_socket(void)
 
 	umask(old_umask);
 
-	/* Listen */
 	if (listen(listen_fd, 1) < 0) {
 		close(listen_fd);
 		return -1;
 	}
 
 	return listen_fd;
+}
+
+
+/* Global socket path for SIGUSR1-triggered attach */
+static char attach_socket_path[1024] = { 0 };
+
+int
+debug_remote_create_attach_socket(void)
+{
+	pid_t pid = getpid();
+
+	snprintf(attach_socket_path, sizeof(attach_socket_path),
+		 "/tmp/ucode-debug-%d.sock", pid);
+
+	return debug_remote_bind_and_listen(attach_socket_path);
 }
 
 const char *
@@ -231,96 +206,28 @@ debug_remote_cleanup_attach_socket(void)
 	}
 }
 
-/**
- * Listen for debugger connection.
- *
- * This function creates a Unix domain socket at the specified path and waits
- * for a debugger client (like `udbg`) to connect. Once connected, the script
- * pauses and hands control to the same interactive command-line debugger
- * used for local sessions (breakpoints, stepping, variable inspection, etc.)
- * until the connection is closed or the `quit` command is issued.
- *
- * The socket file will be created with permissions 0600 and removed on
- * cleanup.
- *
- * @param {string} path
- * The Unix domain socket path to listen on (e.g., "/tmp/ucode-debug.sock")
- *
- * @returns {boolean}
- * `true` if the listener was set up successfully, `false` on error.
- *
- * @example
- * import * as debug from 'debug';
- *
- * debug.listen("/tmp/ucode-debug.sock");
- *
- * // Script is now paused, waiting for debugger connection
- * // Connect with: udbg /tmp/ucode-debug.sock
- */
-uc_value_t *
-uc_debug_listen(uc_vm_t *vm, size_t nargs)
+/* Bind, listen on and accept a single connection on an arbitrary,
+ * caller-supplied Unix domain socket path, blocking indefinitely. Returns
+ * the accepted client fd, or -1 on error. Used by debug.listen(path) (see
+ * debug.c) for the explicit-path case, as opposed to the PID-derived attach
+ * socket used for the SIGUSR1/-X flow above. */
+int
+debug_remote_accept_on_path(const char *path)
 {
-	uc_value_t *path_val = uc_fn_arg(0);
-	struct sockaddr_un addr = { 0 };
 	int listen_fd, client_fd;
-	socklen_t addrlen;
-	char *path;
-	mode_t old_umask;
 
-	if (ucv_type(path_val) != UC_STRING)
-		return ucv_boolean_new(false);
-
-	path = (char *)ucv_string_get(path_val);
-
-	/* Create socket */
-	listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	listen_fd = debug_remote_bind_and_listen(path);
 	if (listen_fd < 0)
-		return ucv_boolean_new(false);
+		return -1;
 
-	/* Set up address */
-	addr.sun_family = AF_UNIX;
-	strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
-	addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-	addrlen = sizeof(sa_family_t) + strlen(path) + 1;
-
-	/* Remove existing socket file */
-	unlink(path);
-
-	/* Set umask for socket permissions */
-	old_umask = umask(077);
-
-	/* Bind */
-	if (bind(listen_fd, (struct sockaddr *)&addr, addrlen) < 0) {
-		umask(old_umask);
-		close(listen_fd);
-		return ucv_boolean_new(false);
-	}
-
-	umask(old_umask);
-
-	/* Listen */
-	if (listen(listen_fd, 1) < 0) {
-		close(listen_fd);
-		return ucv_boolean_new(false);
-	}
-
-	/* Accept connection (blocking) */
 	client_fd = accept(listen_fd, NULL, NULL);
 	close(listen_fd);
 
-	if (client_fd < 0)
-		return ucv_boolean_new(false);
+	/* The socket file is no longer needed once accepted (or on error) -
+	 * the connection itself doesn't depend on the path persisting. */
+	unlink(path);
 
-	strncpy(remote_socket_path, path, sizeof(remote_socket_path) - 1);
-
-	/* Run the full interactive debugger CLI session over this connection;
-	 * takes ownership of client_fd and resumes script execution before
-	 * returning. */
-	debug_cli_run_remote_session(vm, client_fd);
-
-	debug_remote_cleanup_socket();
-
-	return ucv_boolean_new(true);
+	return client_fd;
 }
 
 
@@ -367,15 +274,4 @@ debug_remote_notify_signal(int signum)
 	if (remote_debug_fd >= 0) {
 		if (write(remote_debug_fd, msg, sizeof(msg) - 1) == -1) {}
 	}
-}
-
-
-static const uc_function_list_t debug_remote_fns[] = {
-	{ "listen",	uc_debug_listen },
-};
-
-
-void uc_module_init_remote(uc_vm_t *vm, uc_value_t *scope)
-{
-	uc_function_list_register(scope, debug_remote_fns);
 }

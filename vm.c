@@ -171,20 +171,14 @@ uc_vm_signal_handler(int sig)
 	uc_vm_signal_raise(vm, sig);
 }
 
-static void
-uc_vm_signal_handlers_setup(uc_vm_t *vm)
+/* Actually wire up the self-pipe/handler array/sigaction template needed
+ * for ucode-level signal() callbacks to work, independent of whether the
+ * embedding host opted into this via config->setup_signal_handlers. Safe
+ * to call more than once (a no-op once already set up for this thread). */
+void
+uc_vm_signal_handlers_ensure(uc_vm_t *vm)
 {
-	uc_thread_context_t *tctx;
-
-	memset(&vm->signal, 0, sizeof(vm->signal));
-
-	vm->signal.sigpipe[0] = -1;
-	vm->signal.sigpipe[1] = -1;
-
-	if (!vm->config->setup_signal_handlers)
-		return;
-
-	tctx = uc_thread_context_get();
+	uc_thread_context_t *tctx = uc_thread_context_get();
 
 	if (tctx->signal_handler_vm)
 		return;
@@ -199,6 +193,20 @@ uc_vm_signal_handlers_setup(uc_vm_t *vm)
 	sigemptyset(&vm->signal.sa.sa_mask);
 
 	tctx->signal_handler_vm = vm;
+}
+
+static void
+uc_vm_signal_handlers_setup(uc_vm_t *vm)
+{
+	memset(&vm->signal, 0, sizeof(vm->signal));
+
+	vm->signal.sigpipe[0] = -1;
+	vm->signal.sigpipe[1] = -1;
+
+	if (!vm->config->setup_signal_handlers)
+		return;
+
+	uc_vm_signal_handlers_ensure(vm);
 }
 
 static void
@@ -2921,7 +2929,12 @@ uc_vm_signal_dispatch(uc_vm_t *vm)
 	size_t i, j;
 	int sig, rv;
 
-	if (!vm->config->setup_signal_handlers)
+	/* Check whether the signal self-pipe was actually set up, rather than
+	 * re-checking config->setup_signal_handlers directly: the pipe may
+	 * have been lazily initialized on demand via
+	 * uc_vm_signal_handlers_ensure() after the fact (see lib/debug.c),
+	 * independent of what the original config requested. */
+	if (vm->signal.sigpipe[0] < 0)
 		return EXCEPTION_NONE;
 
 	for (i = 0; i < ARRAY_SIZE(vm->signal.raised); i++) {

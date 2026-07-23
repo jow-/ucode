@@ -69,6 +69,9 @@ typedef struct debug_breakpoint {
 | `debug.getupval(target, var)` | Get upvalue (closure variable) |
 | `debug.setupval(target, var, value)` | Set upvalue |
 | `debug.debugger([target])` | Launch interactive debugger |
+| `debug.attach(mainfn)` | Break on entry to `mainfn`, driven by a local terminal or the SIGUSR1 attach socket |
+| `debug.break()` | Pause execution right here and launch the local terminal CLI |
+| `debug.listen([wait\|path])` | Enable remote debugging (see "Remote Debugging" below) |
 
 ### Data Types
 
@@ -318,9 +321,28 @@ In addition to the local interactive debugger, `ucode -X script.uc` runs the
 script with break infrastructure enabled but without launching the CLI
 directly. Sending `SIGUSR1` to the process (e.g. via `udbg <pid>`, which does
 this automatically) makes the VM pause at the next instruction boundary and
-open a Unix domain socket at `/tmp/ucode-debug-<pid>.sock`. `debug.listen()`
-provides the same experience for a script-chosen path instead of a
-SIGUSR1-triggered one.
+open a Unix domain socket at `/tmp/ucode-debug-<pid>.sock`.
+
+The same thing is available from script code via `debug.listen()`, without
+needing `-X` at all - this is the primary way to enable remote debugging in
+a host application that embeds the ucode VM directly (uhttpd, uwsd, ...) and
+therefore has no `-X` flag of its own:
+
+```ucode
+import { listen } from 'debug';
+
+// Arm SIGUSR1-triggered remote debugging on /tmp/ucode-debug-<pid>.sock,
+// matching what -X and `udbg <pid>` expect, and keep running.
+listen();
+
+// ...or pause right here, synchronously, until a debugger attaches (or a
+// 30s timeout elapses) - also arms SIGUSR1 for later, same as above.
+listen(true);
+
+// ...or bind an arbitrary, caller-chosen socket path and block
+// indefinitely until a client connects on it, independent of SIGUSR1.
+listen("/tmp/ucode-debug.sock");
+```
 
 ### Full command parity, not a reduced protocol
 
@@ -374,6 +396,54 @@ arrives.
 When the client disconnects (or the 30s connect timeout elapses without a
 connection), the debug server tears itself down and the script resumes
 running unattended - this is the "detach" behavior.
+
+### Safe to use from an embedding host application
+
+`-X`'s `SIGUSR1` handling works by setting `vm->break_requested`, which
+`uc_vm_execute_chunk()` checks per-instruction and, if set, unwinds the
+*entire* C call stack back to whoever called `uc_vm_execute()`/
+`uc_vm_resume()` by returning `STATUS_BREAK`. That is fine for `main.c`'s own
+`-X` loop, which knows what to do with it, but a host application that calls
+`uc_vm_call()`/`uc_vm_execute()` directly from its own request-handling code
+(uhttpd, uwsd, ...) has no way to handle an unexpected `STATUS_BREAK`
+bubbling out of what it thought was a normal call - it would very likely be
+treated as an error and abort the request or the whole process.
+
+`debug.listen()`'s `SIGUSR1` handling therefore does *not* use that
+mechanism. Instead it registers a handler through ucode's own `signal()`
+builtin, which is dispatched from `uc_vm_signal_dispatch()` - itself only
+ever called from *within* `uc_vm_execute_chunk()`'s per-instruction loop,
+nested inside whatever `uc_vm_call()`/`uc_vm_execute()` invocation is
+currently running. It never unwinds the host's C call stack, and returns
+normally, exactly like any other completed call, once the debug session
+ends. See `uc_debug_listen_sigusr1_handler()` in `lib/debug.c`, which mirrors
+`debug.attach()`'s existing `uc_debug_sigusr1_attach_handler()`.
+
+This depends on the VM's signal self-pipe and dispatch machinery actually
+being initialized, which normally only happens when the embedding host opts
+in via `uc_parse_config_t.setup_signal_handlers`. Hosts that just call
+`uc_vm_init(vm, NULL)` (uwsd, uhttpd) get that flag unset by default -
+without further changes, installing a handler through `signal()` in that
+case would silently end up with a `NULL`/`SIG_DFL` disposition for the
+signal, **terminating the process** the next time that signal is delivered,
+instead of invoking the handler. `debug_setup()` in `lib/debug.c` therefore
+calls the new `uc_vm_signal_handlers_ensure()` (`vm.c`) unconditionally at
+debug module load time, lazily wiring up the self-pipe and handler array
+regardless of what the host originally configured - and `uc_vm_signal_dispatch()`
+checks whether that pipe actually exists rather than re-checking the
+original config flag, so signals raised this way get properly dispatched
+too. This fixes not just `debug.listen()` but also `debug.attach()` and the
+memory-dump signal handler (`UCODE_DEBUG_MEMDUMP_SIGNAL`, `SIGUSR2` by
+default), which had the exact same latent crash for any host with
+`setup_signal_handlers` unset.
+
+Verified end-to-end against a real `uwsd` worker process (which embeds the
+VM via `uc_vm_init(&ctx.vm, NULL)` and drives request handlers through
+`uc_vm_call()` from its own uloop event loop, with no `-X` flag or CLI of
+its own): a `debug.listen()`-armed handler script paused mid-request on
+`SIGUSR1`, `udbg` attached and ran `backtrace`/`continue` against it,
+showing the real `onBody(request=<uwsd.connection ...>, data=...)` call
+stack, and the worker process resumed and remained healthy afterwards.
 
 ---
 
