@@ -60,6 +60,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <errno.h>
@@ -1834,6 +1835,11 @@ typedef struct {
 static struct {
 	bool initialized;
 	bool interactive;    /* true if stdin is a tty */
+	bool remote;         /* true if driven over a raw socket, not a real tty;
+	                       * implies interactive, but skips tty-specific
+	                       * ioctls (tcgetattr/tcsetattr) which would fail on
+	                       * a socket fd. The remote peer is expected to
+	                       * manage its own local raw terminal mode. */
 	char data[128];
 	size_t pos, fill;
 	size_t rows, cols, col_offset;
@@ -2994,8 +3000,12 @@ term_reset(void)
 	/* Only reset terminal if we're in interactive mode */
 	if (!termstate.interactive)
 		return;
-	
-	if (tcsetattr(STDOUT_FILENO, TCSAFLUSH, &termstate.orig_settings) == -1)
+
+	/* Remote sessions are driven over a plain socket, not a real tty -
+	 * there is no local terminal mode to restore here, the peer manages
+	 * its own. */
+	if (!termstate.remote &&
+	    tcsetattr(STDOUT_FILENO, TCSAFLUSH, &termstate.orig_settings) == -1)
 		fprintf(stderr, "tcsetattr(): %m\n");
 
 	while (termstate.patterns.count > 0) {
@@ -3016,7 +3026,13 @@ term_raw(void)
 	/* Don't set raw mode in non-interactive mode */
 	if (!termstate.interactive)
 		return true;
-	
+
+	/* Remote sessions have no local tty to put into raw mode - the peer
+	 * is expected to already be reading/writing unbuffered raw bytes on
+	 * its own end (a socket has no line discipline to configure here). */
+	if (termstate.remote)
+		return true;
+
 	if (tcgetattr(STDOUT_FILENO, &termstate.orig_settings) == -1) {
 		fprintf(stderr, "tcgetattr(): %m\n");
 
@@ -3048,7 +3064,11 @@ term_isig(bool enable)
 	/* Skip signal settings in non-interactive mode */
 	if (!termstate.interactive)
 		return true;
-	
+
+	/* No local tty to configure for remote sessions. */
+	if (termstate.remote)
+		return true;
+
 	struct termios t;
 
 	if (tcgetattr(STDOUT_FILENO, &t) == -1) {
@@ -6630,6 +6650,83 @@ bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk)
 		term_isig(true);
 }
 
+/* Run a full interactive debugger CLI session over an already-connected
+ * remote client socket, reusing the exact same command set, tab completion
+ * and readline-style editing as the local terminal debugger.
+ *
+ * This works because term_getline()/term_printf() only ever touch
+ * STDIN_FILENO/STDOUT_FILENO directly via plain read()/write() - the only
+ * tty-specific bits are the tcgetattr()/tcsetattr() calls in term_raw()/
+ * term_isig()/term_reset(), which are skipped via termstate.remote since a
+ * socket has no line discipline to configure; the remote peer (udbg) is
+ * expected to put its own local terminal into raw mode and forward bytes
+ * verbatim in both directions.
+ *
+ * Any breakpoints set during the session (via the "break"/"next"/"step"
+ * commands) are handled transparently: they are dispatched directly from
+ * uc_vm_execute_chunk()'s per-instruction breakpoint check (see vm.c),
+ * nested inside the uc_vm_resume() call below, and will reenter
+ * bk_enter_cli() using the very same dup'd file descriptors. */
+void
+debug_cli_run_remote_session(uc_vm_t *vm, int client_fd)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	int orig_stdin, orig_stdout;
+	void (*orig_sigpipe)(int);
+	debug_breakpoint_t dbk;
+
+	if (!frame) {
+		close(client_fd);
+		return;
+	}
+
+	orig_stdin = dup(STDIN_FILENO);
+	orig_stdout = dup(STDOUT_FILENO);
+	orig_sigpipe = signal(SIGPIPE, SIG_IGN);
+
+	dup2(client_fd, STDIN_FILENO);
+	dup2(client_fd, STDOUT_FILENO);
+
+	termstate.interactive = true;
+	termstate.remote = true;
+	termstate.cols = 0;
+	termstate.rows = 0;
+
+	debug_remote_set_active_fd(client_fd);
+
+	dbk = (debug_breakpoint_t){
+		.bk = { .ip = frame->ip },
+		.fn = frame->closure->function,
+		.kind = BK_USER
+	};
+
+	bk_enter_cli(vm, &dbk.bk);
+
+	/* Unless "quit" was issued (which already raised EXCEPTION_EXIT),
+	 * resume script execution; further breakpoints hit during this call
+	 * reenter bk_enter_cli() directly, still using the fds set up above. */
+	if (vm->exception.type != EXCEPTION_EXIT)
+		uc_vm_resume(vm);
+
+	debug_remote_set_active_fd(-1);
+
+	dup2(orig_stdin, STDIN_FILENO);
+	dup2(orig_stdout, STDOUT_FILENO);
+	close(orig_stdin);
+	close(orig_stdout);
+	close(client_fd);
+
+	/* No-op unless this session came from the SIGUSR1 attach socket. */
+	debug_remote_cleanup_attach_socket();
+
+	signal(SIGPIPE, orig_sigpipe);
+
+	termstate.interactive = false;
+	termstate.remote = false;
+	termstate.cols = 0;
+	termstate.rows = 0;
+}
+
 static uc_value_t *
 uc_debug_sigusr1_handler(uc_vm_t *vm, size_t nargs)
 {
@@ -6903,17 +7000,29 @@ static const uc_function_list_t debug_fns[] = {
 
 void uc_module_init_remote(uc_vm_t *vm, uc_value_t *scope);
 
-/* Provided by debug_remote.c */
-extern int debug_remote_handle_break(uc_vm_t *vm);
-
 /* Callback invoked by main.c when STATUS_BREAK is returned in -X mode.
- * Delegates to debug_remote.c which creates an attach socket, waits for
- * a udbg client, then handles commands via the remote debug protocol.
- * Returns 0 if execution should resume, 1 if the program should exit. */
+ * debug_remote_handle_break() (in debug_remote.c) only deals with socket
+ * transport: it creates the attach socket and waits for a udbg client to
+ * connect, returning the accepted client fd, -1 on timeout/no client, or
+ * -2 on a fatal socket error. On success, the full interactive CLI session
+ * is driven by debug_cli_run_remote_session() above, which also resumes
+ * script execution once the session ends.
+ * Returns 0 if execution should resume unattended, 1 if the program has
+ * already finished or should exit. */
 static int
 debug_server_handle_break(uc_vm_t *vm)
 {
-	return debug_remote_handle_break(vm);
+	int client_fd = debug_remote_handle_break(vm);
+
+	if (client_fd == -1)
+		return 0;
+
+	if (client_fd < 0)
+		return 1;
+
+	debug_cli_run_remote_session(vm, client_fd);
+
+	return 1;
 }
 
 void

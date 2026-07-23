@@ -29,7 +29,6 @@
 #include <sys/select.h>
 #include <sys/wait.h>
 #include <termios.h>
-#include <ctype.h>
 
 #define SOCKET_PATH_ARG 1
 #define MAX_LINE 4096
@@ -83,13 +82,6 @@ connect_socket(const char *path)
 	}
 
 	return fd;
-}
-
-static void
-send_command(int fd, const char *cmd)
-{
-	write(fd, cmd, strlen(cmd));
-	write(fd, "\n", 1);
 }
 
 static char *
@@ -149,8 +141,6 @@ main(int argc, char **argv)
 	int fd;
 	fd_set readfds;
 	char buf[MAX_LINE];
-	char line[MAX_LINE];
-	int line_len = 0;
 	pid_t pid;
 	char *socket_path;
 
@@ -194,9 +184,13 @@ main(int argc, char **argv)
 		return 1;
 	}
 
-	fprintf(stderr, "Connected to ucode debugger\n");
-	fprintf(stderr, "Type 'help' for available commands\n\n");
+	fprintf(stderr, "Connected to ucode debugger\n\n");
 
+	/* The remote debugger renders the exact same interactive CLI as a
+	 * local session - prompts, tab completion, history navigation, ANSI
+	 * cursor control - over the socket. All udbg has to do is put the
+	 * local terminal into raw mode and transparently pump raw bytes in
+	 * both directions; the server does all of the actual rendering. */
 	enable_raw_mode();
 
 	while (connected) {
@@ -208,55 +202,33 @@ main(int argc, char **argv)
 			break;
 
 		if (FD_ISSET(STDIN_FILENO, &readfds)) {
-			char ch;
-			int n = read(STDIN_FILENO, &ch, 1);
+			int n = read(STDIN_FILENO, buf, sizeof(buf));
+
 			if (n <= 0)
 				break;
 
-			if (ch == '\n' || ch == '\r') {
-				/* Send command */
-				line[line_len] = '\0';
-				send_command(fd, line);
-				line_len = 0;
-				fprintf(stderr, "\n");
-			} else if (ch == 3) {
-				/* Ctrl-C */
-				send_command(fd, "continue");
-				fprintf(stderr, "^C\n");
-			} else if (ch == 4) {
-				/* Ctrl-D */
-				send_command(fd, "quit");
-				connected = 0;
+			if (write(fd, buf, n) != n)
 				break;
-			} else if (ch == 127 || ch == 8) {
-				/* Backspace */
-				if (line_len > 0) {
-					line_len--;
-					write(STDERR_FILENO, "\b \b", 3);
-				}
-			} else if (isprint((unsigned char)ch)) {
-				if (line_len < MAX_LINE - 1) {
-					line[line_len++] = ch;
-					write(STDERR_FILENO, &ch, 1);
-				}
-			}
 		}
 
 		if (FD_ISSET(fd, &readfds)) {
-			int n = read(fd, buf, sizeof(buf) - 1);
+			int n = read(fd, buf, sizeof(buf));
+
 			if (n <= 0) {
-				fprintf(stderr, "\nConnection closed\n");
 				connected = 0;
 				break;
 			}
 
-			buf[n] = '\0';
-			fwrite(buf, 1, n, stderr);
+			if (write(STDOUT_FILENO, buf, n) != n)
+				break;
 		}
 	}
 
-	close(fd);
 	disable_raw_mode();
+
+	fprintf(stderr, "\r\nConnection closed\n");
+
+	close(fd);
 
 	return 0;
 }

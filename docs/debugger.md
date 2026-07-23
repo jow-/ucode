@@ -318,14 +318,46 @@ In addition to the local interactive debugger, `ucode -X script.uc` runs the
 script with break infrastructure enabled but without launching the CLI
 directly. Sending `SIGUSR1` to the process (e.g. via `udbg <pid>`, which does
 this automatically) makes the VM pause at the next instruction boundary and
-open a Unix domain socket at `/tmp/ucode-debug-<pid>.sock`. A client such as
-`udbg` connects to that socket and drives the session with the same text
-commands as the local debugger (`continue`, `print <expr>`, `quit`, ...).
+open a Unix domain socket at `/tmp/ucode-debug-<pid>.sock`. `debug.listen()`
+provides the same experience for a script-chosen path instead of a
+SIGUSR1-triggered one.
 
-The wire protocol is line-oriented plain text. Every client command produces
-exactly one response written back on the socket. In addition, the server can
-push unsolicited notification lines at any time, prefixed with `EVENT `, so a
-client does not need to poll:
+### Full command parity, not a reduced protocol
+
+A client such as `udbg` connects to that socket and gets the *exact same*
+interactive session as the local terminal debugger: all 16 commands (`help`,
+`break`, `delete`, `list`/`ls`, `next`, `step`, `continue`, `return`,
+`backtrace`/`bt`, `variables`, `sources`/`src`, `print`, `lines`/`ln`,
+`throw`, `disassemble`/`disasm`, `quit`), including tab completion, arrow-key
+history navigation, and the same ANSI-highlighted source/backtrace output.
+
+This works because the interactive CLI (`term_getline`/`term_printf` in
+`lib/debug.c`) only ever does plain `read()`/`write()` on `STDIN_FILENO`/
+`STDOUT_FILENO` - once a client connects, the accepted socket fd is `dup2`'d
+onto both for the duration of the session
+(`debug_cli_run_remote_session()`), and the exact same `bk_enter_cli()`
+dispatcher used locally handles it. The only tty-specific calls
+(`tcgetattr`/`tcsetattr` for local raw-mode setup) are skipped for remote
+sessions via a `termstate.remote` flag, since a socket has no line
+discipline to configure - the remote peer is expected to put its own local
+terminal into raw mode and forward bytes verbatim in both directions, which
+is exactly what `udbg` does (`enable_raw_mode()` + a transparent two-way
+byte pump). No real PTY is required: raw single-key reads, ANSI escape
+rendering and history/tab-completion all work identically over a plain
+socket once the tty ioctls are skipped.
+
+Breakpoints set during a session (`break`, `next`, `step`) work transparently
+across a `continue`: they are dispatched directly from
+`uc_vm_execute_chunk()`'s per-instruction breakpoint check (see `vm.c`),
+nested inside the `uc_vm_resume()` call that `debug_cli_run_remote_session()`
+makes after the initial `bk_enter_cli()` call returns, so they reenter the
+CLI using the very same file descriptors.
+
+### Asynchronous push notifications
+
+On top of the interactive session, the server can push unsolicited
+notification lines at any time, prefixed with `EVENT `, so a client does not
+need to poll:
 
 - `EVENT exception <Type>: <message>` - an uncaught exception propagated to
   the top of the call stack while the program was running (e.g. after
@@ -335,9 +367,9 @@ client does not need to poll:
   process keeps running/waiting for commands as before instead of pausing
   again.
 
-`udbg` reads from stdin and the socket concurrently (`select()`), so any
-`EVENT ` line is printed to the terminal as soon as it arrives, independent
-of whatever command the user is currently typing.
+`udbg` forwards raw bytes bidirectionally without interpreting them, so any
+`EVENT ` line simply appears inline in the terminal output as soon as it
+arrives.
 
 When the client disconnects (or the 30s connect timeout elapses without a
 connection), the debug server tears itself down and the script resumes
