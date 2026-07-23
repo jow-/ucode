@@ -83,6 +83,12 @@ check that ucode provides exepected help:
   -x
     Start program in interactive debugger.
   
+  -X
+    Enable debugger infrastructure (SIGUSR1 break, uloop) without
+    launching the interactive debugger automatically.
+  
+
+
 
 check that ucode prints greetings:
 

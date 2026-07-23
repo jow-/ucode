@@ -71,6 +71,9 @@
 
 #include "debug_remote.h"
 
+/* Forward declarations from debug_remote.c */
+extern bool debug_remote_has_active_connection(void);
+
 #ifdef HAVE_ULOOP
 #include <libubox/uloop.h>
 #endif
@@ -688,6 +691,13 @@ static uc_vm_t *debug_break_vm = NULL;
 static void
 debug_break_signal_handler(int sig)
 {
+	/* A debugger is already attached - notify it instead of requesting
+	 * another break, since the VM is already halted or being controlled. */
+	if (debug_remote_has_active_connection()) {
+		debug_remote_notify_signal(sig);
+		return;
+	}
+
 	/* Signal handler - request break via VM API
 	 * The actual break will be processed by uloop or the VM */
 	if (debug_break_vm)
@@ -706,9 +716,8 @@ debug_setup_break_signal(uc_vm_t *vm)
 	sigemptyset(&sa.sa_mask);
 
 	/* Only install if not already handled by debug module */
-	if (sigaction(SIGUSR1, &sa, NULL) == 0) {
-		/* Successfully installed */
-	}
+	if (sigaction(SIGUSR1, &sa, NULL) != 0)
+		fprintf(stderr, "SIGUSR1 handler installation failed: %s\n", strerror(errno));
 }
 
 static void
@@ -740,6 +749,21 @@ debug_setup_memdump(uc_vm_t *vm)
 	ucv_put(handler);
 }
 
+static uc_exception_handler_t *debug_prev_exhandler = NULL;
+
+static void
+debug_exception_notify_handler(uc_vm_t *vm, uc_exception_t *ex)
+{
+	/* Forward uncaught exceptions to an attached remote debugger client,
+	 * in addition to whatever the previously installed handler does
+	 * (normally printing to stderr). No-op when nobody is attached. */
+	if (debug_remote_has_active_connection())
+		debug_remote_notify_exception(vm, ex);
+
+	if (debug_prev_exhandler)
+		debug_prev_exhandler(vm, ex);
+}
+
 static void
 debug_setup(uc_vm_t *vm)
 {
@@ -751,6 +775,9 @@ debug_setup(uc_vm_t *vm)
 		debug_setup_memdump(vm);
 
 	debug_setup_break_signal(vm);
+
+	debug_prev_exhandler = uc_vm_exception_handler_get(vm);
+	uc_vm_exception_handler_set(vm, debug_exception_notify_handler);
 }
 
 
@@ -6876,7 +6903,21 @@ static const uc_function_list_t debug_fns[] = {
 
 void uc_module_init_remote(uc_vm_t *vm, uc_value_t *scope);
 
-void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
+/* Provided by debug_remote.c */
+extern int debug_remote_handle_break(uc_vm_t *vm);
+
+/* Callback invoked by main.c when STATUS_BREAK is returned in -X mode.
+ * Delegates to debug_remote.c which creates an attach socket, waits for
+ * a udbg client, then handles commands via the remote debug protocol.
+ * Returns 0 if execution should resume, 1 if the program should exit. */
+static int
+debug_server_handle_break(uc_vm_t *vm)
+{
+	return debug_remote_handle_break(vm);
+}
+
+void
+uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, debug_fns);
 
@@ -6885,4 +6926,8 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	uc_module_init_remote(vm, scope);
 
 	have_highlighting = compile_patterns();
+
+	/* Register break handler so main.c can find it via registry */
+	uc_vm_registry_set(vm, "debug.server_handle_break",
+		ucv_resource_new(NULL, (void *)(uintptr_t)debug_server_handle_break));
 }

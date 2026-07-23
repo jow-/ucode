@@ -3527,3 +3527,24 @@ uc_vm_break_notifyfd(uc_vm_t *vm)
 {
 	return vm->break_notifyfd[0];
 }
+
+uc_vm_status_t
+uc_vm_resume(uc_vm_t *vm)
+{
+	uc_vm_status_t status = uc_vm_execute_chunk(vm);
+
+	switch (status) {
+	case STATUS_OK:
+	case STATUS_EXIT:
+	case STATUS_BREAK:
+		break;
+
+	default:
+		if (vm->exhandler)
+			vm->exhandler(vm, &vm->exception);
+
+		break;
+	}
+
+	return status;
+}
