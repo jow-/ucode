@@ -100,4 +100,12 @@ void uc_vm_break_cleanup(uc_vm_t *vm);
 
 uc_vm_status_t uc_vm_resume(uc_vm_t *vm);
 
+/* Well-known sentinel `uc_breakpoint_t.ip` value identifying the dedicated
+ * "break on uncaught exception" system breakpoint. Not a real bytecode
+ * address - install a breakpoint with this as its `ip` (and any `cb`) to
+ * have it invoked, with callframes fully intact, right before an exception
+ * that nothing would catch starts unwinding the stack. See the comment on
+ * uc_vm_exception_would_be_caught() in vm.c for the exact semantics. */
+extern uint8_t *const UC_BREAKPOINT_UNCAUGHT_EXCEPTION;
+
 #endif /* UCODE_VM_H */
