@@ -608,11 +608,29 @@ static struct {
 
 static bool debug_attach_mode = false;
 
+/* Saved original stdio fds for the currently spliced attach-mode remote
+ * session, if any. These must survive across separate bk_enter_cli() calls
+ * (one per breakpoint hit) rather than living on the stack, since each hit
+ * during an ongoing "next"/"step" sequence is a fresh, sequential call from
+ * the VM's instruction decode loop, not a nested one - see bk_enter_cli(). */
+static int remote_attach_orig_stdin = -1;
+static int remote_attach_orig_stdout = -1;
+static bool remote_attach_orig_interactive = false;
+static bool remote_attach_orig_remote = false;
+
 typedef enum {
 	BK_ONCE,
 	BK_USER,
 	BK_STEP,
 	BK_CATCH,
+	/* Dedicated system breakpoint firing once per raise, right before an
+	 * exception that nothing would catch starts unwinding the stack - see
+	 * UC_BREAKPOINT_UNCAUGHT_EXCEPTION in vm.c. Unlike BK_STEP/BK_CATCH it
+	 * isn't tied to a concrete instruction address (dbk->bk.ip is instead
+	 * the UC_BREAKPOINT_UNCAUGHT_EXCEPTION sentinel), and unlike BK_USER
+	 * it's armed automatically for the lifetime of the debug session, not
+	 * by an explicit `break` command. */
+	BK_UNCAUGHT,
 } debug_breakpoint_kind_t;
 
 typedef struct debug_breakpoint {
@@ -620,6 +638,17 @@ typedef struct debug_breakpoint {
 	uc_function_t *fn;
 	size_t depth;
 	debug_breakpoint_kind_t kind;
+	/* Set instead of actually freeing the struct when "delete" removes the
+	 * breakpoint bk_enter_cli() is *currently* handling: that C stack frame
+	 * still holds this pointer and keeps handling further commands (and,
+	 * for "next"/"step", keeps reading ->depth) for the rest of the CLI
+	 * session, so freeing it there and then would be a use-after-free the
+	 * moment the next command runs, and a double free once bk_enter_cli()'s
+	 * own end-of-session cleanup runs free_breakpoint() on it again. The
+	 * breakpoint is unlinked from vm->breakpoints immediately either way
+	 * (so it can't fire again); only the free() of the struct itself is
+	 * deferred until bk_enter_cli() is done with it. */
+	bool deleted;
 } debug_breakpoint_t;
 
 static void bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk);
@@ -757,9 +786,15 @@ debug_exception_notify_handler(uc_vm_t *vm, uc_exception_t *ex)
 {
 	/* Forward uncaught exceptions to an attached remote debugger client,
 	 * in addition to whatever the previously installed handler does
-	 * (normally printing to stderr). No-op when nobody is attached. */
-	if (debug_remote_has_active_connection())
+	 * (normally printing to stderr). No-op when nobody is attached.
+	 * vm->output (stdout) is fully block-buffered once it's a socket
+	 * rather than a tty, while the notification itself goes out via a raw
+	 * write() - flush first, or the event can overtake not-yet-flushed
+	 * script output the target already produced earlier. */
+	if (debug_remote_has_active_connection()) {
+		fflush(vm->output);
 		debug_remote_notify_exception(vm, ex);
+	}
 
 	if (debug_prev_exhandler)
 		debug_prev_exhandler(vm, ex);
@@ -2580,6 +2615,9 @@ bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk);
 static void
 bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk);
 
+static void
+bk_handle_uncaught(uc_vm_t *vm, uc_breakpoint_t *bk);
+
 static debug_breakpoint_t *
 get_breakpoint(uc_vm_t *vm, debug_breakpoint_kind_t kind)
 {
@@ -2617,8 +2655,11 @@ update_breakpoint(uc_vm_t *vm, debug_breakpoint_kind_t kind,
 		dbk->bk.ip = ip;
 }
 
+/* Remove a breakpoint from vm->breakpoints so it can no longer fire, without
+ * freeing its backing memory - see the `deleted` field comment above for why
+ * these two steps sometimes need to happen at different times. */
 static bool
-free_breakpoint(uc_vm_t *vm, uc_breakpoint_t *bk)
+unlink_breakpoint(uc_vm_t *vm, uc_breakpoint_t *bk)
 {
 	uc_breakpoints_t *bks = &vm->breakpoints;
 	bool found = false;
@@ -2636,9 +2677,52 @@ free_breakpoint(uc_vm_t *vm, uc_breakpoint_t *bk)
 	while (bks->count > 0 && bks->entries[bks->count - 1] == NULL)
 		bks->count--;
 
+	return found;
+}
+
+static bool
+free_breakpoint(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	bool found = unlink_breakpoint(vm, bk);
+
 	free(bk);
 
 	return found;
+}
+
+/* Delete a breakpoint via the "delete" CLI command. `dbk` is the one to
+ * remove; `current` is the breakpoint bk_enter_cli() is presently handling
+ * (its `dbk` parameter), still alive on that C stack frame and still going
+ * to be dereferenced by further commands in this same session (and, for
+ * BK_STEP, possibly by bk_enter_cli()'s own end-of-session cleanup). If
+ * they're the same object, only unlink it now and mark it `deleted` so
+ * bk_enter_cli() frees it once it's actually done with it; otherwise it's
+ * safe to free it outright. */
+static void
+delete_breakpoint(uc_vm_t *vm, debug_breakpoint_t *dbk, debug_breakpoint_t *current)
+{
+	if (dbk == current) {
+		unlink_breakpoint(vm, &dbk->bk);
+		dbk->deleted = true;
+	}
+	else {
+		free_breakpoint(vm, &dbk->bk);
+	}
+}
+
+/* Arm the dedicated "break on uncaught exception" system breakpoint (see
+ * UC_BREAKPOINT_UNCAUGHT_EXCEPTION in vm.c) for the lifetime of the debug
+ * session. Idempotent - safe to call from every entry point that can start
+ * a session (uc_debugger(), uc_debug_attach(), uc_debug_listen()), each of
+ * which only runs its one-time setup once anyway, but this keeps that
+ * invariant local rather than relying on the caller not to double-arm it. */
+static void
+install_uncaught_exception_breakpoint(uc_vm_t *vm)
+{
+	debug_breakpoint_t *dbk = get_breakpoint(vm, BK_UNCAUGHT);
+
+	dbk->bk.cb = bk_handle_uncaught;
+	dbk->bk.ip = UC_BREAKPOINT_UNCAUGHT_EXCEPTION;
 }
 
 static size_t
@@ -2986,7 +3070,7 @@ term_dimensions(void)
 {
 	struct winsize w;
 
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_row > 0 && w.ws_col > 0) {
 		termstate.rows = w.ws_row;
 		termstate.cols = w.ws_col;
 	}
@@ -3141,8 +3225,20 @@ term_getc_raw(void)
 				return -1;
 			}
 
-			if (rlen == 0)
-				return -1;
+			/* On a real local tty, VMIN=0/VTIME=1 means a 0-byte read
+			 * is just the poll timeout expiring with no data
+			 * available yet, not EOF - keep waiting for real input.
+			 * Over a remote session, STDIN_FILENO is dup2()'d to a
+			 * plain socket instead (no VMIN/VTIME line discipline to
+			 * speak of), where a 0-byte read is unambiguously the
+			 * peer closing the connection and must be treated as
+			 * real EOF, or this would spin forever. */
+			if (rlen == 0) {
+				if (termstate.remote)
+					return -1;
+
+				continue;
+			}
 
 			termstate.fill = rlen;
 			termstate.pos = 0;
@@ -4095,6 +4191,9 @@ term_getline(const char *prompt, arg_t **argv,
 			break;
 
 		case '\15': /* carriage return */
+		case '\12': /* newline - accepted alongside CR since a peer's
+		             * local tty may translate CR to NL (ICRNL) before
+		             * the byte ever reaches us over a remote session */
 			/* save to history if no other line was selected */
 			if (curr_line == &line && curr_line->width > 0) {
 				if (termstate.history.count >= HISTORY_SIZE) {
@@ -4188,6 +4287,7 @@ format_context_header_backtrace(uc_stringbuf_t *sb, uc_vm_t *vm)
 	printbuf_memset(sb, -1, ' ', columns - printed);
 
 	cs(sb, NULL);
+	printbuf_strappend(sb, "\n");
 }
 
 static void
@@ -4225,6 +4325,7 @@ format_context_header_callframe(uc_stringbuf_t *sb, uc_vm_t *vm,
 	printbuf_memset(sb, -1, ' ', columns - printed);
 
 	cs(sb, NULL);
+	printbuf_strappend(sb, "\n");
 }
 
 static bool have_highlighting = false;
@@ -4740,7 +4841,7 @@ static size_t
 insn_length(uint8_t *ip, uc_program_t *prog)
 {
 	if (*ip == I_CALL)
-		return 5 + insn_u16(ip + 1) * 2;
+		return 5 + ((insn_u32(ip + 1) >> 16) & 0x7fff) * 2;
 
 	if (*ip == I_CLFN || *ip == I_ARFN) {
 		uint32_t u32 = insn_u32(ip + 1);
@@ -4877,6 +4978,51 @@ bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk)
 	bk_enter_cli(vm, bk);
 }
 
+/* cb for the dedicated BK_UNCAUGHT system breakpoint (see
+ * install_uncaught_exception_breakpoint() / UC_BREAKPOINT_UNCAUGHT_EXCEPTION
+ * in vm.c). Invoked directly from vm.c's exception label, before any
+ * unwinding happens, so vm->exception and the full callframe stack are
+ * still exactly as they were at the point of the raise. */
+static void
+bk_handle_uncaught(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+#define exname(x) [EXCEPTION_##x] = "EXCEPTION_" #x
+	const char *exnames[] = {
+		exname(NONE),
+		exname(SYNTAX),
+		exname(RUNTIME),
+		exname(TYPE),
+		exname(REFERENCE),
+		exname(USER),
+		exname(EXIT)
+	};
+#undef exname
+
+	term_print("Uncaught exception - nothing would catch this, "
+		"the program is about to terminate!\n");
+	term_printf("Type:    %s\n", exnames[vm->exception.type]);
+	term_printf("Message: %s\n", vm->exception.message);
+
+	bk_enter_cli(vm, bk);
+}
+
+/* Sentinel returned by next_step() to mean "stay paused right where we
+ * are" - distinct from a real instruction address and from NULL (which
+ * means "no next instruction, resume unattended"). Used for the case where
+ * a single-step would return from the outermost callframe: there is no
+ * parent frame left for bk_leave_function() to arm a breakpoint in and no
+ * further instruction will ever be decoded once RETURN executes (the
+ * program terminates), so silently resuming would blow past the debugger
+ * entirely instead of stopping. See cmd_step_common().
+ *
+ * Reuses the vm pointer itself as the sentinel value rather than a
+ * dedicated static byte: vm is already available at both the producing and
+ * consuming end, points at an object entirely disjoint from any bytecode
+ * ip, and needs no allocation to obtain (unlike e.g. the address of the
+ * BK_STEP breakpoint struct, which would force get_breakpoint() to
+ * lazily xalloc() it just to manufacture a comparison value). */
+#define STEP_STAY_PAUSED(vm) ((uint8_t *)(vm))
+
 static uint8_t *
 next_step(uc_vm_t *vm, uc_function_t **fnp, uint8_t *ip, bool single, size_t *depthp)
 {
@@ -4898,6 +5044,9 @@ next_step(uc_vm_t *vm, uc_function_t **fnp, uint8_t *ip, bool single, size_t *de
 
 			case I_RETURN:
 				if (single) {
+					if (!uc_debug_curr_frame(vm, 1))
+						return STEP_STAY_PAUSED(vm);
+
 					update_breakpoint(vm, BK_STEP, bk_leave_function, p, *fnp, 0);
 
 					return NULL;
@@ -5297,8 +5446,16 @@ print_location(uc_vm_t *vm, const char *prefix, debug_breakpoint_t *dbk)
 		if (vm->callframes.entries[i - 1].closure) {
 			funframe = &vm->callframes.entries[i - 1];
 
-			/* Update location in automatic function breakpoint */
-			if (dbk->fn == NULL) {
+			/* Update location in automatic function breakpoint.
+			 * BK_UNCAUGHT is exempt: its ip is permanently the
+			 * UC_BREAKPOINT_UNCAUGHT_EXCEPTION sentinel (see vm.c), never a
+			 * real instruction address - overwriting it here would both
+			 * break the vm.c exception-label lookup that fires it (which
+			 * matches on that exact sentinel) and, since ordinary
+			 * ip-matching breakpoint dispatch runs on every instruction,
+			 * make it fire again the next time execution happens to reach
+			 * whatever real address got written here. */
+			if (dbk->fn == NULL && dbk->kind != BK_UNCAUGHT) {
 				dbk->fn = funframe->closure->function;
 				dbk->bk.ip = funframe->ip;
 			}
@@ -5409,18 +5566,32 @@ cmd_help(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 	return true;
 }
 
-static bool
-cmd_break(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+/* Resolve a breakpoint location specification of the form
+ * "path[:line[:offset]]", a bare function name, or a ucode expression that
+ * evaluates to a function, and install a breakpoint of the given kind.
+ *
+ * `frame` may be NULL when there is no active script call frame yet, e.g.
+ * when installing a breakpoint before the program has started running (the
+ * `-x <expr>`/`-X <expr>` command line options) - in that case, `program`
+ * must be given explicitly to resolve bare function names against; a `:line`
+ * spec cannot default its path from a current file and arbitrary expressions
+ * cannot be evaluated, so both are reported as unsupported instead.
+ *
+ * Returns the installed breakpoint id, or 0 on failure. On failure, `*errmsg`
+ * is set to a newly allocated diagnostic string the caller must free(), or to
+ * NULL if the caller should fall back to a generic message. */
+static size_t
+resolve_breakpoint(uc_vm_t *vm, uc_callframe_t *frame, uc_program_t *program,
+                   char *spec, debug_breakpoint_kind_t kind, char **errmsg)
 {
-	char *spec = (argc == 2) ? argv[1].sv : NULL;
 	size_t id = 0;
 
-	if (spec == NULL || *spec == '\0') {
-		term_print("Usage:\n");
-		term_print("  break path[:line[:offset]]\n");
-		term_print("  break expr\n");
+	*errmsg = NULL;
 
-		return true;
+	if (spec == NULL || *spec == '\0') {
+		xasprintf(errmsg, "Usage: path[:line[:offset]] | expr");
+
+		return 0;
 	}
 
 	/* path spec */
@@ -5430,10 +5601,14 @@ cmd_break(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 		char *path, *line, *byte;
 
 		if (*spec == ':' || (*spec >= '0' && *spec <= '9')) {
-			uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
-			uc_function_t *function = frame->closure->function;
+			if (frame == NULL) {
+				xasprintf(errmsg,
+					"No active source file to default path from");
 
-			path = uc_program_function_source(function)->filename;
+				return 0;
+			}
+
+			path = uc_program_function_source(frame->closure->function)->filename;
 			line = strtok(spec, ": \t");
 			byte = strtok(NULL, ": \t");
 		}
@@ -5444,27 +5619,27 @@ cmd_break(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 		}
 
 		if (!path && !line && !byte) {
-			term_print("Usage: break path[:line[:offset]]\n");
+			xasprintf(errmsg, "Usage: path[:line[:offset]]");
 
-			return true;
+			return 0;
 		}
 
 		id = add_breakpoint(vm, path,
 			line ? strtoul(line, NULL, 10) : 0,
 			byte ? strtoul(byte, NULL, 10) : 0,
-			BK_USER);
+			kind);
 	}
 
 	/* expression spec or function name */
 	else {
-		uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+		uc_program_t *prog = frame ? frame->closure->function->program : program;
 		uc_value_t *val = NULL;
 
 		/* Before evaluating as code, try looking up function name directly. */
-		if (frame != NULL) {
-			uc_program_function_foreach(frame->closure->function->program, fn) {
+		if (prog != NULL) {
+			uc_program_function_foreach(prog, fn) {
 				if (!strcmp(fn->name, spec)) {
-					id = patch_breakpoint(vm, fn, 0, BK_USER, 1);
+					id = patch_breakpoint(vm, fn, 0, kind, 1);
 					break;
 				}
 			}
@@ -5473,27 +5648,59 @@ cmd_break(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 		if (id == 0 && frame != NULL && eval_expr(vm, frame, spec, &val)) {
 			if (ucv_type(val) == UC_CLOSURE) {
 				id = patch_breakpoint(vm,
-					((uc_closure_t *)val)->function, 0, BK_USER, 1);
+					((uc_closure_t *)val)->function, 0, kind, 1);
 			}
 			else {
 				char *s = ucv_to_string(vm, val);
 				int len = strlen(s);
 
-				term_printf("Value `%s` (%.*s%s) is not a function\n",
+				xasprintf(errmsg, "Value `%s` (%.*s%s) is not a function",
 					spec,
 					len > 32 ? 31 : len,
 					s,
 					len > 32 ? "…" : "");
+
+				free(s);
 			}
 
 			ucv_put(val);
 		}
+		else if (id == 0 && frame == NULL) {
+			xasprintf(errmsg,
+				"No function named `%s` found "
+				"(expressions require an active frame)", spec);
+		}
 	}
+
+	return id;
+}
+
+static bool
+cmd_break(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+{
+	char *spec = (argc == 2) ? argv[1].sv : NULL;
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	char *errmsg = NULL;
+	size_t id;
+
+	if (spec == NULL || *spec == '\0') {
+		term_print("Usage:\n");
+		term_print("  break path[:line[:offset]]\n");
+		term_print("  break expr\n");
+
+		return true;
+	}
+
+	id = resolve_breakpoint(vm, frame,
+		frame ? frame->closure->function->program : NULL,
+		spec, BK_USER, &errmsg);
 
 	if (id)
 		term_printf("Breakpoint #%zu added\n", id);
 	else
-		term_print("Unable to resolve source location\n");
+		term_printf("%s\n", errmsg ? errmsg : "Unable to resolve source location");
+
+	free(errmsg);
 
 	return true;
 }
@@ -5510,13 +5717,13 @@ cmd_delete(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 		size_t n = 0;
 
 		for (size_t i = 0; i < bks->count; i++) {
-			debug_breakpoint_t *dbk = (debug_breakpoint_t *)bks->entries[i];
+			debug_breakpoint_t *target = (debug_breakpoint_t *)bks->entries[i];
 
-			if (dbk == NULL || dbk->kind != BK_USER)
+			if (target == NULL || target->kind != BK_USER)
 				continue;
 
 			if (++n == argv[1].nv) {
-				free_breakpoint(vm, &dbk->bk);
+				delete_breakpoint(vm, target, dbk);
 
 				return term_printf("Breakpoint #%zu deleted\n", argv[1].nv);
 			}
@@ -5526,7 +5733,7 @@ cmd_delete(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 	}
 	else {
 		if (dbk->kind == BK_USER) {
-			free_breakpoint(vm, &dbk->bk);
+			delete_breakpoint(vm, dbk, dbk);
 			term_print("Current breakpoint deleted\n");
 		}
 		else {
@@ -5549,6 +5756,7 @@ cmd_list(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 		[BK_USER] = "(user)",
 		[BK_STEP] = "(step)",
 		[BK_CATCH] = "(catch)",
+		[BK_UNCAUGHT] = "(uncaught)",
 	};
 
 	for (size_t i = 0; i < ARRAY_SIZE(kinds); i++) {
@@ -5615,6 +5823,15 @@ cmd_step_common(uc_vm_t *vm, debug_breakpoint_t *dbk, bool single)
 	uc_function_t *fn = frame->closure->function;
 	size_t depth = dbk->depth;
 	uint8_t *nextinsn = next_step(vm, &fn, frame->ip, single, &depth);
+
+	/* Returning from the outermost frame - nothing further to step to and
+	 * the program is about to terminate. Stay in the CLI instead of
+	 * resuming unattended (see STEP_STAY_PAUSED comment). */
+	if (nextinsn == STEP_STAY_PAUSED(vm)) {
+		term_print("No next instruction - program will terminate on 'continue'\n");
+
+		return true;
+	}
 
 	/* no next instruction, run until completion */
 	if (!nextinsn)
@@ -6367,7 +6584,7 @@ cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 			}
 		}
 		else if (insn == I_CALL) {
-			for (size_t j = 0; j < arg.u32 >> 16; j++) {
+			for (size_t j = 0; j < ((arg.u32 >> 16) & 0x7fff); j++) {
 				uint16_t slot = insn_u16(bytecode + i + 5 + j * 2);
 				int off = buf.bpos;
 
@@ -6567,12 +6784,20 @@ bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk)
 	debug_breakpoint_t *dbk = (debug_breakpoint_t *)bk;
 	arg_t *argv = NULL;
 	ssize_t argc = 0;
-	int client_fd = -1;
-	int listen_fd = -1;
+	uint8_t *entry_ip = bk->ip;
 
-	/* In attach mode, create socket and wait for debugger connection */
-	if (debug_attach_mode) {
-		listen_fd = debug_remote_create_attach_socket();
+	/* If a remote client is already connected - either because this is a
+	 * BK_STEP breakpoint hit during an ongoing "next"/"step" sequence, or a
+	 * reentrant SIGUSR1 while already attached - the stdio splice from that
+	 * earlier, separate bk_enter_cli() call (each breakpoint hit is a fresh
+	 * call from the VM's instruction decode loop, not a nested one) is still
+	 * in place; reuse it as-is instead of tearing it down to accept a
+	 * redundant second connection, which would just disconnect the live one
+	 * mid-session. */
+	if (debug_attach_mode && !debug_remote_has_active_connection()) {
+		int client_fd = -1;
+		int listen_fd = debug_remote_create_attach_socket();
+
 		if (listen_fd < 0) {
 			fprintf(stderr, "Failed to create attach socket: %s\n", strerror(errno));
 		} else {
@@ -6580,12 +6805,20 @@ bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk)
 			struct timeval tv;
 			int ret;
 
-			FD_ZERO(&readfds);
-			FD_SET(listen_fd, &readfds);
-			tv.tv_sec = 30;
-			tv.tv_usec = 0;
+			for (;;) {
+				FD_ZERO(&readfds);
+				FD_SET(listen_fd, &readfds);
+				tv.tv_sec = 30;
+				tv.tv_usec = 0;
 
-			ret = select(listen_fd + 1, &readfds, NULL, NULL, &tv);
+				ret = select(listen_fd + 1, &readfds, NULL, NULL, &tv);
+
+				if (ret < 0 && errno == EINTR)
+					continue;
+
+				break;
+			}
+
 			if (ret > 0) {
 				client_fd = accept(listen_fd, NULL, NULL);
 				close(listen_fd);
@@ -6602,10 +6835,35 @@ bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk)
 				return;
 			}
 		}
+
+		/* Splice the accepted connection onto stdio for the duration of the
+		 * session, exactly as debug_cli_run_remote_session() does for
+		 * debug.listen() - term_getline()/term_printf() only ever touch
+		 * STDIN_FILENO/STDOUT_FILENO directly, so this is what actually
+		 * makes the CLI interact with the remote peer instead of the local
+		 * tty. The original fds are stashed in statics (not locals) since
+		 * whichever later, separate bk_enter_cli() call ends up tearing the
+		 * session down needs them back. */
+		if (client_fd >= 0) {
+			remote_attach_orig_stdin = dup(STDIN_FILENO);
+			remote_attach_orig_stdout = dup(STDOUT_FILENO);
+			remote_attach_orig_interactive = termstate.interactive;
+			remote_attach_orig_remote = termstate.remote;
+
+			dup2(client_fd, STDIN_FILENO);
+			dup2(client_fd, STDOUT_FILENO);
+
+			termstate.interactive = true;
+			termstate.remote = true;
+			termstate.cols = 0;
+			termstate.rows = 0;
+
+			debug_remote_set_active_fd(client_fd);
+		}
 	}
 
 	/* Only set terminal settings in interactive mode */
-	if (termstate.interactive && client_fd < 0)
+	if (termstate.interactive && !termstate.remote)
 		term_isig(false);
 
 	print_location(vm, "Paused execution in ", dbk);
@@ -6648,16 +6906,85 @@ bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk)
 	}
 
 	/* Restore terminal settings in interactive mode */
-	if (termstate.interactive && client_fd < 0)
+	if (termstate.interactive && !termstate.remote)
 		term_isig(true);
 
-	if (client_fd >= 0)
-		close(client_fd);
+	if (termstate.remote && debug_attach_mode) {
+		bool disconnected = (argc < 0);
+		bool exiting = (vm->exception.type == EXCEPTION_EXIT);
 
-	if (dbk->kind == BK_ONCE || dbk->kind == BK_STEP)
+		if (disconnected && !exiting) {
+			/* The client dropped the connection without an explicit "quit"
+			 * - rather than silently resuming the paused script (losing the
+			 * session for good), tear down the dead connection and go back
+			 * to waiting for a fresh one, exactly as if we had never
+			 * connected in the first place, so a spurious disconnect
+			 * doesn't strand the target. */
+			int client_fd = debug_remote_get_active_fd();
+
+			debug_remote_set_active_fd(-1);
+
+			dup2(remote_attach_orig_stdin, STDIN_FILENO);
+			dup2(remote_attach_orig_stdout, STDOUT_FILENO);
+			close(remote_attach_orig_stdin);
+			close(remote_attach_orig_stdout);
+			close(client_fd);
+
+			termstate.interactive = remote_attach_orig_interactive;
+			termstate.remote = remote_attach_orig_remote;
+			termstate.cols = 0;
+			termstate.rows = 0;
+
+			bk_enter_cli(vm, bk);
+			return;
+		}
+
+		if (disconnected || exiting) {
+			int client_fd = debug_remote_get_active_fd();
+
+			debug_remote_set_active_fd(-1);
+
+			dup2(remote_attach_orig_stdin, STDIN_FILENO);
+			dup2(remote_attach_orig_stdout, STDOUT_FILENO);
+			close(remote_attach_orig_stdin);
+			close(remote_attach_orig_stdout);
+			close(client_fd);
+
+			debug_remote_cleanup_attach_socket();
+
+			termstate.interactive = remote_attach_orig_interactive;
+			termstate.remote = remote_attach_orig_remote;
+			termstate.cols = 0;
+			termstate.rows = 0;
+		}
+
+		/* else: "next"/"step"/"continue" was issued - leave the splice in
+		 * place; the next breakpoint hit reenters bk_enter_cli() and reuses
+		 * it directly (see the has_active_connection() check above). */
+	}
+
+	/* If "delete" removed this very breakpoint during the session above, it
+	 * only unlinked it and deferred the actual free() until now - see the
+	 * `deleted` field comment. Do that first and skip the kind-based checks
+	 * below entirely: dbk was already unlinked, so free_breakpoint() here
+	 * just frees the struct without touching vm->breakpoints again. */
+	if (dbk->deleted) {
 		free_breakpoint(vm, &dbk->bk);
+	}
+	/* BK_STEP is a single, reused breakpoint object (see get_breakpoint()):
+	 * a "next"/"step" command handled above may have already re-armed it
+	 * in place, via update_breakpoint(), to a new target instruction so a
+	 * later hit can continue the stepping sequence - in that case dbk->bk.ip
+	 * no longer matches the instruction we were entered for and freeing it
+	 * here would silently cancel that re-arm before it ever fires, letting
+	 * the script run to completion instead of stopping at the next step.
+	 * Only free it when it's still pointing at the same place we started
+	 * at, i.e. nothing re-armed it (e.g. plain "continue"). */
+	else if (dbk->kind == BK_ONCE || (dbk->kind == BK_STEP && dbk->bk.ip == entry_ip)) {
+		free_breakpoint(vm, &dbk->bk);
+	}
 
-	if (client_fd < 0)
+	if (!termstate.remote)
 		term_isig(true);
 }
 
@@ -6811,10 +7138,18 @@ uc_debug_attach(uc_vm_t *vm, size_t nargs)
 		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(uc_vm_stack_pop(vm));
 
-		if (termstate.interactive) {
-			term_raw();
-			term_isig(true);
-		}
+		/* Unlike uc_debugger() (the local `-x` CLI), attach mode never
+		 * actually interacts over the target's own stdin/stdout - the CLI
+		 * session only ever runs over a client fd spliced onto stdio once
+		 * a remote debugger connects, at which point bk_enter_cli() marks
+		 * termstate.remote and skips tcsetattr() entirely (a socket has no
+		 * line discipline to configure - the remote peer manages its own
+		 * local terminal instead). Putting the target's own controlling
+		 * terminal into raw mode here, before any client has connected (or
+		 * even ever will), just leaves it in a broken, unechoed state with
+		 * nothing to ever undo it. */
+
+		install_uncaught_exception_breakpoint(vm);
 
 		termstate.initialized = true;
 	}
@@ -6844,6 +7179,113 @@ uc_debug_break(uc_vm_t *vm, size_t nargs)
 	bk_enter_cli(vm, &dbk.bk);
 
 	return ucv_boolean_new(true);
+}
+
+/**
+ * Install a user breakpoint from a location specification, using the exact
+ * same grammar as the interactive `break` CLI command (`path[:line[:offset]]`,
+ * a bare function name, or a ucode expression evaluating to a function).
+ *
+ * Unlike the `break` CLI command, this may be called before the program has
+ * started running and thus without any active script call frame - e.g. by
+ * the `-x <expr>`/`-X <expr>` command line options, which use this function
+ * to resolve their argument early, before `uc_vm_execute()` is even called.
+ * In that case, `mainfn` is used to resolve bare function names instead of
+ * the (nonexistent) current frame; a `:line` spec without an explicit path,
+ * or an arbitrary expression, cannot be resolved without a frame and are
+ * reported as an error.
+ *
+ * @function module:debug#breakpoint
+ *
+ * @param {string} spec
+ * The breakpoint location specification.
+ *
+ * @param {function} [mainfn]
+ * The program entry function, used to resolve bare function names when
+ * there is no active call frame yet.
+ *
+ * @returns {number|boolean}
+ * The installed breakpoint id, or `false` on failure.
+ */
+static uc_value_t *
+uc_debug_breakpoint(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *specarg = uc_fn_arg(0);
+	uc_value_t *mainfn = uc_fn_arg(1);
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_program_t *program = NULL;
+	char *spec, *errmsg = NULL;
+	size_t id;
+
+	if (ucv_type(specarg) != UC_STRING)
+		return ucv_boolean_new(false);
+
+	if (!frame && ucv_type(mainfn) == UC_CLOSURE)
+		program = ((uc_closure_t *)mainfn)->function->program;
+
+	spec = xstrdup(ucv_string_get(specarg));
+	id = resolve_breakpoint(vm, frame, program, spec, BK_USER, &errmsg);
+	free(spec);
+
+	if (!id) {
+		if (errmsg)
+			fprintf(stderr, "%s\n", errmsg);
+
+		free(errmsg);
+
+		return ucv_boolean_new(false);
+	}
+
+	return ucv_uint64_new(id);
+}
+
+/**
+ * Notify an attached remote debugger client, if any, that the target is
+ * about to exit, with the final VM status (successful completion,
+ * `exit()`/`quit`, or an uncaught error). A no-op when nobody is attached,
+ * or for the local interactive debugger, where the exit is immediately
+ * visible on the same terminal.
+ *
+ * Called by main.c right after `uc_vm_execute()` returns, passing its raw
+ * `uc_vm_status_t` return value plus the corresponding detail (exit code, or
+ * an exception object), so a remote client learns the final outcome as an
+ * explicit event instead of only noticing sometime later that the
+ * connection dropped, with no indication of why.
+ *
+ * The detail arguments must be passed in explicitly by the caller rather
+ * than read off the vm here: by the time this C function body runs,
+ * uc_vm_call() has already cleared vm->exception as its own first action
+ * (a normal safety reset for ordinary calls), so main.c has to snapshot
+ * vm->arg.s32 / call uc_vm_exception_object() into locals before making
+ * this call.
+ *
+ * @function module:debug#notifyExit
+ *
+ * @param {number} status
+ * The `uc_vm_status_t` value `uc_vm_execute()` returned.
+ *
+ * @param {number} exitCode
+ * `vm->arg.s32` at the time `status` was returned, meaningful only for
+ * `STATUS_EXIT`.
+ *
+ * @param {object} [exception]
+ * `uc_vm_exception_object(vm)` at the time `status` was returned - the same
+ * `{type, message, stacktrace}` shape script code sees via try/catch.
+ * Meaningful only for `ERROR_COMPILE`/`ERROR_RUNTIME`.
+ */
+static uc_value_t *
+uc_debug_notify_exit(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *status = uc_fn_arg(0);
+	uc_value_t *exit_code = uc_fn_arg(1);
+	uc_value_t *exception_obj = uc_fn_arg(2);
+
+	debug_remote_notify_exit(vm,
+		(ucv_type(status) == UC_INTEGER) ? (uc_vm_status_t)ucv_int64_get(status) : STATUS_OK,
+		(ucv_type(exit_code) == UC_INTEGER) ? (int32_t)ucv_int64_get(exit_code) : 0,
+		exception_obj);
+
+	return NULL;
 }
 
 static bool debug_remote_listen_armed = false;
@@ -6940,6 +7382,8 @@ uc_debug_listen(uc_vm_t *vm, size_t nargs)
 		ucv_put(ucsignal(vm, 2));
 		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(uc_vm_stack_pop(vm));
+
+		install_uncaught_exception_breakpoint(vm);
 
 		debug_remote_listen_armed = true;
 	}
@@ -7077,6 +7521,8 @@ uc_debugger(uc_vm_t *vm, size_t nargs)
 			term_isig(true);
 		}
 
+		install_uncaught_exception_breakpoint(vm);
+
 		termstate.initialized = true;
 	}
 
@@ -7114,7 +7560,9 @@ static const uc_function_list_t debug_fns[] = {
 	{ "debugger",	uc_debugger },
 	{ "attach",	uc_debug_attach },
 	{ "break",	uc_debug_break },
+	{ "breakpoint",	uc_debug_breakpoint },
 	{ "listen",	uc_debug_listen },
+	{ "notifyExit",	uc_debug_notify_exit },
 };
 
 /* Callback invoked by main.c when STATUS_BREAK is returned in -X mode.

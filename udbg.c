@@ -56,6 +56,7 @@ enable_raw_mode(void)
 	atexit(disable_raw_mode);
 
 	raw = orig_termios;
+	raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
 	raw.c_lflag &= ~(ECHO | ICANON);
 	raw.c_cc[VMIN] = 1;
 	raw.c_cc[VTIME] = 0;
@@ -162,18 +163,33 @@ main(int argc, char **argv)
 
 	socket_path = get_socket_path_for_pid(pid);
 
-	/* Send SIGUSR1 to trigger socket creation */
-	if (kill(pid, SIGUSR1) < 0) {
-		fprintf(stderr, "Failed to send SIGUSR1 to process %d: %s\n", pid, strerror(errno));
-		return 1;
+	/* If the attach socket already exists, the target already has a
+	 * breakpoint session waiting (e.g. `-X <expr>`/debug.attach()) - just
+	 * connect to it. Sending SIGUSR1 in that case would still be delivered
+	 * eventually, but only *after* this session ends and script execution
+	 * resumes (signal dispatch only happens from within the bytecode
+	 * execution loop, not while blocked waiting for us to connect), so it
+	 * would surface later as a confusing extra, unrequested pause. Only
+	 * fall back to the SIGUSR1 kick for the classic bare `-X` flow, where
+	 * nothing is listening yet until asked to. */
+	struct stat st;
+
+	if (stat(socket_path, &st) == 0 && S_ISSOCK(st.st_mode)) {
+		fprintf(stderr, "Debugger socket already present, connecting...\n");
 	}
+	else {
+		if (kill(pid, SIGUSR1) < 0) {
+			fprintf(stderr, "Failed to send SIGUSR1 to process %d: %s\n", pid, strerror(errno));
+			return 1;
+		}
 
-	fprintf(stderr, "Sent SIGUSR1 to process %d, waiting for debugger socket...\n", pid);
+		fprintf(stderr, "Sent SIGUSR1 to process %d, waiting for debugger socket...\n", pid);
 
-	/* Wait for socket to appear */
-	if (wait_for_socket(socket_path, MAX_WAIT_TIME) < 0) {
-		fprintf(stderr, "Timeout waiting for debugger socket at %s\n", socket_path);
-		return 1;
+		/* Wait for socket to appear */
+		if (wait_for_socket(socket_path, MAX_WAIT_TIME) < 0) {
+			fprintf(stderr, "Timeout waiting for debugger socket at %s\n", socket_path);
+			return 1;
+		}
 	}
 
 	fprintf(stderr, "Debugger socket ready, connecting...\n");

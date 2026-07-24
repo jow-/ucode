@@ -941,6 +941,49 @@ uc_vm_clear_exception(uc_vm_t *vm)
 	vm->exception.message = NULL;
 }
 
+/* Well-known sentinel `uc_breakpoint_t.ip` value identifying the dedicated
+ * "break on uncaught exception" system breakpoint (see debug.c's BK_UNCAUGHT).
+ * It deliberately isn't a real bytecode address, so the ordinary
+ * ip-matching breakpoint dispatch in uc_vm_decode_insn() - which walks
+ * vm->breakpoints on every single instruction - never fires it by
+ * accident; it is only ever invoked explicitly, from the exception label in
+ * uc_vm_execute_chunk() below, at the one moment it actually applies. */
+static uint8_t uc_breakpoint_uncaught_exception_storage;
+uint8_t *const UC_BREAKPOINT_UNCAUGHT_EXCEPTION =
+	&uc_breakpoint_uncaught_exception_storage;
+
+/* Non-destructively predict whether uc_vm_handle_exception()'s real unwind
+ * loop (below) would find a handler for the currently raised exception
+ * anywhere between the current callframe and `caller` (the frame depth this
+ * uc_vm_execute_chunk() invocation was entered at - the same boundary its
+ * own unwind loop stops at). Mirrors that loop's exact stopping conditions
+ * (a native callframe, or reaching `caller`) but only inspects state; nops
+ * of the stack/exception state, jumping ip. Used to decide whether to break
+ * into the debugger *before* unwinding starts, while the original throwing
+ * frame - locals, exact position - is still fully intact, since once
+ * uc_vm_handle_exception() starts really popping frames that's gone. */
+static bool
+uc_vm_exception_would_be_caught(uc_vm_t *vm, size_t caller)
+{
+	for (size_t i = vm->callframes.count; i > caller; i--) {
+		uc_callframe_t *frame = &vm->callframes.entries[i - 1];
+
+		if (!frame->closure)
+			return false;
+
+		uc_chunk_t *chunk = &frame->closure->function->chunk;
+		size_t pos = frame->ip - chunk->entries;
+
+		for (size_t j = 0; j < chunk->ehranges.count; j++) {
+			if (pos >= chunk->ehranges.entries[j].from &&
+			    pos < chunk->ehranges.entries[j].to)
+				return true;
+		}
+	}
+
+	return false;
+}
+
 static bool
 uc_vm_handle_exception(uc_vm_t *vm)
 {
@@ -3245,6 +3288,33 @@ exception:
 				uc_vm_reset_callframes(vm);
 
 				return STATUS_EXIT;
+			}
+
+			/* If a debugger has armed the dedicated "break on uncaught
+			 * exception" system breakpoint and nothing between here and
+			 * this invocation's original call depth would actually handle
+			 * this exception, give it a chance to inspect the fully intact
+			 * stack *before* uc_vm_handle_exception()'s loop below starts
+			 * popping frames - once that happens, the original throwing
+			 * frame's locals and exact position are gone for good. */
+			if (!uc_vm_exception_would_be_caught(vm, caller)) {
+				for (size_t i = 0; i < vm->breakpoints.count; i++) {
+					uc_breakpoint_t *bk = vm->breakpoints.entries[i];
+
+					if (bk != NULL && bk->ip == UC_BREAKPOINT_UNCAUGHT_EXCEPTION) {
+						bk->cb(vm, bk);
+
+						/* "quit" was issued from within the breakpoint's
+						 * CLI session */
+						if (vm->exception.type == EXCEPTION_EXIT) {
+							uc_vm_reset_callframes(vm);
+
+							return STATUS_EXIT;
+						}
+
+						break;
+					}
+				}
 			}
 
 			/* walk up callframes until something handles the exception or the original caller is reached */

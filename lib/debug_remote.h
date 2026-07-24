@@ -2,6 +2,7 @@
 #define _UCODE_DEBUG_REMOTE_H
 
 #include <ucode/types.h>
+#include <ucode/vm.h>
 
 int debug_remote_create_attach_socket(void);
 const char *debug_remote_get_socket_path(void);
@@ -15,6 +16,8 @@ int debug_remote_accept_on_path(const char *path);
 /* Push unsolicited notifications to a connected debugger client, if any. */
 void debug_remote_notify_exception(uc_vm_t *vm, uc_exception_t *ex);
 void debug_remote_notify_signal(int signum);
+void debug_remote_notify_exit(uc_vm_t *vm, uc_vm_status_t status, int32_t exit_code,
+                               uc_value_t *exception_obj);
 
 /* Mark the given fd as the currently attached remote debugger connection
  * (or -1 for none), used by debug_remote_has_active_connection() and the
@@ -22,6 +25,7 @@ void debug_remote_notify_signal(int signum);
  * (debug_cli_run_remote_session()). */
 void debug_remote_set_active_fd(int fd);
 bool debug_remote_has_active_connection(void);
+int debug_remote_get_active_fd(void);
 
 /* Wait for a udbg client to connect to the SIGUSR1 attach socket, with a
  * 30s timeout. Returns the accepted client fd on success, -1 on timeout or

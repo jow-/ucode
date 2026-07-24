@@ -77,6 +77,12 @@ debug_remote_has_active_connection(void)
 	return remote_debug_fd >= 0;
 }
 
+int
+debug_remote_get_active_fd(void)
+{
+	return remote_debug_fd;
+}
+
 
 /* Wait for a udbg client to connect to the SIGUSR1 attach socket, with a
  * 30s timeout. Returns the accepted client fd on success, -1 on timeout
@@ -231,33 +237,61 @@ debug_remote_accept_on_path(const char *path)
 }
 
 
-static const char *exception_type_names[] = {
-	[EXCEPTION_NONE]      = "None",
-	[EXCEPTION_SYNTAX]    = "SyntaxError",
-	[EXCEPTION_RUNTIME]   = "RuntimeError",
-	[EXCEPTION_TYPE]      = "TypeError",
-	[EXCEPTION_REFERENCE] = "ReferenceError",
-	[EXCEPTION_USER]      = "Error",
-	[EXCEPTION_EXIT]      = "Exit",
-};
+/* Shallow-copy a plain object's own keys into a fresh object with no
+ * prototype - values are shared (ucv_get()'d, not deep-cloned).
+ *
+ * Used to defuse uc_vm_exception_object()'s tostring() prototype method
+ * (attached for script-facing try/catch ergonomics, so `catch (e) {
+ * print(e) }` prints the message) before JSON-serializing it: ucv_to_json
+ * string() invokes tostring() if present instead of serializing the
+ * object's own fields, which would collapse the whole thing down to just
+ * the message string. Worse, invoking it runs through the VM's own call
+ * machinery, which calls uc_vm_clear_exception() as a side effect - wiping
+ * out vm->exception (including freeing ->message) out from under whatever
+ * runs next. Copying rather than mutating the prototype in place on the
+ * original object avoids surprising a caller who still holds a reference
+ * to it for other purposes. */
+static uc_value_t *
+object_shallow_copy_no_proto(uc_vm_t *vm, uc_value_t *obj)
+{
+	uc_value_t *copy = ucv_object_new(vm);
+
+	ucv_object_foreach(obj, k, v)
+		ucv_object_add(copy, k, ucv_get(v));
+
+	return copy;
+}
 
 /* Push an unsolicited exception notification to the connected debugger
- * client, if any. Safe to call unconditionally from the VM's exception
- * handler chain; a no-op when nobody is attached. */
+ * client, if any, as the same JSON exception object shape script code sees
+ * via try/catch ({type, message, stacktrace} - see uc_vm_exception_object()
+ * in vm.c) - safe to call unconditionally from the VM's exception handler
+ * chain; a no-op when nobody is attached. `ex` is expected to still be
+ * `&vm->exception` at this point (true for the exception handler chain,
+ * which runs synchronously before anything gets cleared), since the actual
+ * object is built from vm->exception directly. */
 void
 debug_remote_notify_exception(uc_vm_t *vm, uc_exception_t *ex)
 {
-	const char *typenam;
+	uc_value_t *exo, *plain;
+	char *json;
+
+	(void)ex;
 
 	if (remote_debug_fd < 0)
 		return;
 
-	typenam = (ex->type >= 0 && (size_t)ex->type < ARRAY_SIZE(exception_type_names) &&
-			exception_type_names[ex->type])
-		? exception_type_names[ex->type] : "Error";
+	exo = uc_vm_exception_object(vm);
+	plain = object_shallow_copy_no_proto(vm, exo);
+	ucv_put(exo);
 
-	debug_write_response(remote_debug_fd, "EVENT exception %s: %s\n",
-		typenam, ex->message ? ex->message : "");
+	json = ucv_to_jsonstring(vm, plain);
+	ucv_put(plain);
+
+	if (json) {
+		debug_write_response(remote_debug_fd, "EVENT exception %s\n", json);
+		free(json);
+	}
 }
 
 /* Push an unsolicited signal notification to the connected debugger client.
@@ -273,5 +307,73 @@ debug_remote_notify_signal(int signum)
 
 	if (remote_debug_fd >= 0) {
 		if (write(remote_debug_fd, msg, sizeof(msg) - 1) == -1) {}
+	}
+}
+
+static const char *
+vm_status_name(uc_vm_status_t status)
+{
+	switch (status) {
+	case STATUS_OK:      return "OK";
+	case STATUS_EXIT:    return "EXIT";
+	case STATUS_BREAK:   return "BREAK";
+	case ERROR_COMPILE:  return "ERROR_COMPILE";
+	case ERROR_RUNTIME:  return "ERROR_RUNTIME";
+	default:             return "UNKNOWN";
+	}
+}
+
+/* Push a final "the target is going away" notification to the connected
+ * debugger client, if any, as a JSON object describing the full final VM
+ * state - {status}, plus {code} for STATUS_EXIT or the same {type, message,
+ * stacktrace} exception object shape used above for ERROR_COMPILE/
+ * ERROR_RUNTIME. Called from main.c right after uc_vm_execute() returns,
+ * before the process actually exits and the connection drops - without
+ * this, a client only finds out the target is gone once the socket EOFs,
+ * with no indication of why.
+ *
+ * Takes the raw uc_vm_status_t rather than main.c's own CLI exit-code
+ * translation (which flattens both ERROR_COMPILE and ERROR_RUNTIME to the
+ * same -2 and loses the actual exception), plus exit_code and a
+ * pre-built exception object (or NULL). Both must be supplied by the
+ * caller rather than read off the vm here: by the time this runs
+ * (dispatched through a ucode-level call), uc_vm_call() has already
+ * cleared vm->exception as its own first action, so main.c has to
+ * snapshot vm->arg.s32 / call uc_vm_exception_object() *before* making
+ * this call. */
+void
+debug_remote_notify_exit(uc_vm_t *vm, uc_vm_status_t status, int32_t exit_code,
+                          uc_value_t *exception_obj)
+{
+	uc_value_t *evo;
+	char *json;
+
+	if (remote_debug_fd < 0)
+		return;
+
+	evo = ucv_object_new(vm);
+
+	ucv_object_add(evo, "status", ucv_string_new(vm_status_name(status)));
+
+	if (status == STATUS_EXIT)
+		ucv_object_add(evo, "code", ucv_int64_new(exit_code));
+	else if (exception_obj) {
+		/* Copy without the tostring() prototype uc_vm_exception_object()
+		 * attaches (for script-facing try/catch ergonomics) before nesting
+		 * it - see the comment on object_shallow_copy_no_proto() above:
+		 * otherwise ucv_to_jsonstring() below would invoke it and collapse
+		 * this down to just the message string instead of serializing
+		 * {type, message, stacktrace}. */
+		uc_value_t *plain = object_shallow_copy_no_proto(vm, exception_obj);
+
+		ucv_object_add(evo, "exception", plain);
+	}
+
+	json = ucv_to_jsonstring(vm, evo);
+	ucv_put(evo);
+
+	if (json) {
+		debug_write_response(remote_debug_fd, "EVENT exit %s\n", json);
+		free(json);
 	}
 }
