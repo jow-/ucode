@@ -71,6 +71,7 @@
 #include <termios.h>
 
 #include "debug_remote.h"
+#include "debug_proto.h"
 
 /* Forward declarations from debug_remote.c */
 extern bool debug_remote_has_active_connection(void);
@@ -608,16 +609,6 @@ static struct {
 
 static bool debug_attach_mode = false;
 
-/* Saved original stdio fds for the currently spliced attach-mode remote
- * session, if any. These must survive across separate bk_enter_cli() calls
- * (one per breakpoint hit) rather than living on the stack, since each hit
- * during an ongoing "next"/"step" sequence is a fresh, sequential call from
- * the VM's instruction decode loop, not a nested one - see bk_enter_cli(). */
-static int remote_attach_orig_stdin = -1;
-static int remote_attach_orig_stdout = -1;
-static bool remote_attach_orig_interactive = false;
-static bool remote_attach_orig_remote = false;
-
 typedef enum {
 	BK_ONCE,
 	BK_USER,
@@ -639,19 +630,19 @@ typedef struct debug_breakpoint {
 	size_t depth;
 	debug_breakpoint_kind_t kind;
 	/* Set instead of actually freeing the struct when "delete" removes the
-	 * breakpoint bk_enter_cli() is *currently* handling: that C stack frame
+	 * breakpoint bk_enter_session() is *currently* handling: that C stack frame
 	 * still holds this pointer and keeps handling further commands (and,
 	 * for "next"/"step", keeps reading ->depth) for the rest of the CLI
 	 * session, so freeing it there and then would be a use-after-free the
-	 * moment the next command runs, and a double free once bk_enter_cli()'s
+	 * moment the next command runs, and a double free once bk_enter_session()'s
 	 * own end-of-session cleanup runs free_breakpoint() on it again. The
 	 * breakpoint is unlinked from vm->breakpoints immediately either way
 	 * (so it can't fire again); only the free() of the struct itself is
-	 * deferred until bk_enter_cli() is done with it. */
+	 * deferred until bk_enter_session() is done with it. */
 	bool deleted;
 } debug_breakpoint_t;
 
-static void bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk);
+static void bk_enter_session(uc_vm_t *vm, uc_breakpoint_t *bk);
 static uc_callframe_t *uc_debug_curr_frame(uc_vm_t *vm, size_t off);
 
 static void
@@ -681,7 +672,7 @@ uc_uloop_break_cb(struct uloop_fd *ufd, unsigned int events)
 				.kind = BK_USER
 			};
 
-			bk_enter_cli(vm, &dbk.bk);
+			bk_enter_session(vm, &dbk.bk);
 		}
 	}
 }
@@ -1854,139 +1845,10 @@ typedef struct {
 	uc_function_t *function;
 } location_t;
 
-typedef enum {
-	ARGTYPE_NONE,
-	ARGTYPE_ERROR,
-	ARGTYPE_STRING,
-	ARGTYPE_NUMBER,
-} argtype_t;
-
-typedef struct {
-	argtype_t type;
-	size_t off;
-	size_t nv;
-	char *sv;
-} arg_t;
-
-typedef struct {
-	size_t count;
-	char **entries;
-} suggestions_t;
-
-typedef struct {
-	size_t pos, len, size, width;
-	uint32_t *chars;
-} termline_t;
-
-static struct {
-	bool initialized;
-	bool interactive;    /* true if stdin is a tty */
-	bool remote;         /* true if driven over a raw socket, not a real tty;
-	                       * implies interactive, but skips tty-specific
-	                       * ioctls (tcgetattr/tcsetattr) which would fail on
-	                       * a socket fd. The remote peer is expected to
-	                       * manage its own local raw terminal mode. */
-	char data[128];
-	size_t pos, fill;
-	size_t rows, cols, col_offset;
-	struct termios orig_settings, curr_settings;
-	struct {
-		size_t count;
-		termline_t *entries;
-	} history;
-	struct {
-		size_t count;
-		regex_t *entries;
-	} patterns;
-} termstate;
-
-enum {
-	HOME_KEY = 0x110000,
-	END_KEY,
-	DEL_KEY,
-	PAGE_UP,
-	PAGE_DOWN,
-	ARROW_UP,
-	ARROW_DOWN,
-	ARROW_LEFT,
-	ARROW_RIGHT,
-	CTRL_UP,
-	CTRL_DOWN,
-	CTRL_LEFT,
-	CTRL_RIGHT,
-};
-
-#define HISTORY_SIZE 100
-
-enum {
-	BOLD       = (1 << 0),
-	FAINT      = (1 << 1),
-	ULINE      = (1 << 2),
-};
-
-typedef enum {
-	FG_BLACK   =  30,
-	FG_RED     =  31,
-	FG_GREEN   =  32,
-	FG_YELLOW  =  33,
-	FG_BLUE    =  34,
-	FG_MAGENTA =  35,
-	FG_CYAN    =  36,
-	FG_GRAY    =  37,
-	FG_BBLACK  =  90,
-	FG_BRED    =  91,
-	FG_BGREEN  =  92,
-	FG_BYELLOW =  93,
-	FG_BBLUE   =  94,
-	FG_BMAGENT =  95,
-	FG_BCYAN   =  96,
-	FG_BWHITE  =  97,
-} fg_color_t;
-
-typedef enum {
-	BG_BLACK   =  40,
-	BG_GRAY    = 100,
-} bg_color_t;
-
-typedef struct {
-	fg_color_t fg;
-	bg_color_t bg;
-	uint32_t styles;
-} style_t;
-
 #define uc_vector_add(vec, ...) ({ \
 	uc_vector_push((vec), ((typeof((vec)->entries[0]))__VA_ARGS__)); \
 	uc_vector_last(vec); \
 })
-
-static void
-cs(uc_stringbuf_t *sb, style_t *style)
-{
-	int codes[8] = { 0 };
-	size_t i = 0;
-
-	if (style == NULL) {
-		printbuf_strappend(sb, "\033[0m");
-		return;
-	}
-
-	if ((style->styles & (BOLD|FAINT|ULINE)) == 0)
-		codes[i++] = 0;
-
-	if (style->styles & BOLD)  codes[i++] = 1;
-	if (style->styles & FAINT) codes[i++] = 2;
-	if (style->styles & ULINE) codes[i++] = 4;
-
-	codes[i++] = style->fg ? style->fg : 39;
-	codes[i++] = style->bg ? style->bg : 49;
-
-	printbuf_strappend(sb, "\033[");
-
-	for (size_t n = 0; n < i; n++)
-		sprintbuf(sb, "%s%d", n ? ";" : "", codes[n]);
-
-	printbuf_strappend(sb, "m");
-}
 
 static uc_callframe_t *
 uc_debug_curr_frame(uc_vm_t *vm, size_t off)
@@ -2000,146 +1862,6 @@ uc_debug_curr_frame(uc_vm_t *vm, size_t off)
 
 	return NULL;
 }
-
-static bool cmd_help(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_break(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_delete(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_list(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_next(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_step(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_continue(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_return(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_backtrace(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_variables(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_sources(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_quit(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_print(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_lines(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_throw(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-static bool cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv);
-
-static const struct {
-	const char *command;
-	bool (*cb)(uc_vm_t *, debug_breakpoint_t *, size_t, arg_t *);
-	const char *help;
-} commands[] = {
-	{ "help\0", cmd_help,
-		"Print help information." },
-	{ "break\0", cmd_break,
-		"The break command sets a breakpoint at the given location, "
-		"instructing the virtual machine to stop execution at this "
-		"point and handing control to the debugger.\n\n"
-		"Breakpoint locations may be specified either as filename, "
-		"line number and optional character offset within the line "
-		"or as a ucode expression that evaluates to a function in "
-		"which a breakpoint is set.\n\n"
-		"Examples:\n"
-		"  break example.uc:13  # Set breakpoint in line 13 of example.uc\n"
-		"  break 4:17           # Break in line in 4, char 17 of current file\n"
-		"  break myobj.method   # Break in function `method` of `myobj`\n"
-		"  break (string.uc)    # Parens to disambiguate expression from path"
-	},
-	{ "delete\0", cmd_delete,
-		"Delete a breakpoint. When no argument is given, the current "
-		"breakpoint is deleted, otherwise this function deletes the breakpoint "
-		"with the given index.\n\n"
-		"Examples:\n"
-		"  delete               # Delete current breakpoint\n"
-		"  delete 2             # Delete breakpoint #2"
-	},
-	{ "list\0ls\0", cmd_list,
-		"List all currently set breakpoints. User defined breakpoints are "
-		"prefixed with a number identifying the breakpoint, internal "
-		"breakpoints used by the debugger are prefixed with a breakpoint type "
-		"enclosed in parens, e.g. '(step)'."
-	},
-	{ "next\0", cmd_next,
-		"Execute the next statement and stop again."
-	},
-	{ "step\0", cmd_step,
-		"Execute the next statement, in case of function calls step into the "
-		"called function and stop there."
-	},
-	{ "continue\0", cmd_continue,
-		"Continue execution until the next breakpoint or end of program."
-	},
-	{ "return\0", cmd_return,
-		"Continue executing the current function until it returns, then stop. "
-		"in the calling function. If the current function is the program entry "
-		"function, then run until the end of the program."
-	},
-	{ "backtrace\0bt\0", cmd_backtrace,
-		"Print a trace of the current callstack, with most recent callframes "
-		"output first. If the optional 'full' argument is specified, "
-		"additional information about each call frame is printed.\n\n"
-		"Examples:\n"
-		"  backtrace            # Print backtrace\n"
-		"  backtrace full       # Print backtrace with additional information"
-	},
-	{ "variables\0", cmd_variables,
-		"Print local variables and their contents for the current execution "
-		"context. Internal variables which are unreachable by script code "
-		"are colored grey, upvalues (variables captured from parent scopes) "
-		"are colored blue and ordinary variables use the default color.\n\n"
-		"If the optional 'full' argument is specified, the complete value for "
-		"each variable is shown, instead of an abbreviated line truncated to "
-		"the current terminal width.\n\n"
-		"Examples:\n"
-		"  variables            # Print local variables\n"
-		"  variables full       # Print variables with complete content"
-	},
-	{ "sources\0src\0", cmd_sources,
-		"Print a list of loaded source buffers.\n"
-	},
-	{ "print\0", cmd_print,
-		"Evaluate an ucode expression and print the resulting value.\n\n"
-		"Examples:\n"
-		"  print varname        # Print value of variable 'varname'\n"
-		"  print myobj.prop     # Print `prop` property of `myobj`\n"
-		"  print keys(myobj)    # Invoke a stdlib function"
-	},
-	{ "lines\0ln\0", cmd_lines,
-		"Print source code lines surrounding the given location specified "
-		"either as filename with line number or as expression evaluating to a "
-		"function value.\n\n"
-		"The amount of preceeding and following lines to print may be "
-		"specified as second and third argument respecitely. By default, two "
-		"lines of context are printed before and after the location.\n\n"
-		"Examples:\n"
-		"  lines                # Output lines surrounding current line\n"
-		"  lines example.uc     # Print first three lines of example.uc\n"
-		"  lines (obj.func)     # Parens to disambiguate expression from path\n"
-		"  lines foo 5 8        # Print 5 lines before foo() till 8 lines in\n"
-		"  lines #123           # Print source of instruction offset 123\n"
-		"  lines +0 3 3         # Print 3 lines before and after current line\n"
-		"  lines -5             # Print source 5 lines before current line\n"
-		"  lines +3             # Print source 3 lines after current line"
-	},
-	{ "throw\0", cmd_throw,
-		"Raise an exception at the current instruction offset.\n\n"
-		"Examples:\n"
-		"  throw \"Message\"    # Throw exception with given message"
-	},
-	{ "disassemble\0disasm\0", cmd_disasm,
-		"Disassembe the given function or statement location and output the "
-		"corresponding byte code in a human readable manner. The location to "
-		"disassemble may be either a function name, a single instruction "
-		"offset, an instruction offset range or a ucode expression.\n\n"
-		"Examples:\n"
-		"  disassemble          # Disassemble current statment\n"
-		"  disassemble foo      # Disassemble body of foo()\n"
-		"  disassemble foo+100  # Disassemble first 100 byte of function foo()\n"
-		"  disassemble #5       # Disassemble statement containing instruction 5\n"
-		"  disassemble #2-10    # Disassemble instructions 2 to 10\n"
-		"  disassemble #22+100  # Disassemble instructions 22 to 122\n"
-		"  disassemble (12/3*4) # Disassemble ucode expression\n"
-	},
-	{ "quit\0", cmd_quit,
-		"Forcibly terminate the currently running program. The termination "
-		"happens in the same manner as if 'exit()' has been called from "
-		"script code."
-	}
-};
 
 /* -- convert file path to module name -------------------------------------- */
 static char *
@@ -2563,54 +2285,8 @@ printbuf_append_srcpath(uc_stringbuf_t *sb, uc_source_t *source, size_t maxcols)
 	return printbuf_truncate(sb, off, maxcols, false);
 }
 
-static size_t
-printbuf_cs(uc_stringbuf_t *sb, const char *fmt, ...)
-{
-	uc_stringbuf_t fmtbuf = { 0 };
-	style_t *styles[8] = { 0 };
-	uint8_t nstyles = 0;
-	va_list ap, ap1;
-
-	for (const char *p = fmt; *p; p++)
-		if (*p >= '\1' && *p <= '\7' && *p > nstyles)
-			nstyles = *p;
-
-	va_start(ap, fmt);
-
-	for (uint8_t i = 0; i < nstyles; i++)
-		styles[i] = va_arg(ap, style_t *);
-
-	const char *p, *l;
-
-	for (p = l = fmt; *p; p++) {
-		if ((*p >= '\1' && *p <= '\7') || *p == '\177') {
-			printbuf_memappend_fast((&fmtbuf), l, p - l);
-			cs(&fmtbuf, (*p <= '\7' ? styles[(size_t)*p - 1] : NULL));
-			l = p + 1;
-		}
-	}
-
-	printbuf_memappend_fast((&fmtbuf), l, p - l);
-
-	va_copy(ap1, ap);
-	int len = vsnprintf(NULL, 0, fmtbuf.buf, ap1);
-	va_end(ap1);
-
-	if (len > 0) {
-		printbuf_memset(sb, sb->bpos + len - 1, '\0', 1);
-		vsnprintf(sb->buf + sb->bpos - len, len + 1, fmtbuf.buf, ap);
-	}
-
-	va_end(ap);
-
-	free(fmtbuf.buf);
-
-	return (len > 0) ? len : 0;
-}
-
-
 static void
-bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk);
+bk_enter_session(uc_vm_t *vm, uc_breakpoint_t *bk);
 
 static void
 bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk);
@@ -2691,12 +2367,12 @@ free_breakpoint(uc_vm_t *vm, uc_breakpoint_t *bk)
 }
 
 /* Delete a breakpoint via the "delete" CLI command. `dbk` is the one to
- * remove; `current` is the breakpoint bk_enter_cli() is presently handling
+ * remove; `current` is the breakpoint bk_enter_session() is presently handling
  * (its `dbk` parameter), still alive on that C stack frame and still going
  * to be dereferenced by further commands in this same session (and, for
- * BK_STEP, possibly by bk_enter_cli()'s own end-of-session cleanup). If
+ * BK_STEP, possibly by bk_enter_session()'s own end-of-session cleanup). If
  * they're the same object, only unlink it now and mark it `deleted` so
- * bk_enter_cli() frees it once it's actually done with it; otherwise it's
+ * bk_enter_session() frees it once it's actually done with it; otherwise it's
  * safe to free it outright. */
 static void
 delete_breakpoint(uc_vm_t *vm, debug_breakpoint_t *dbk, debug_breakpoint_t *current)
@@ -2734,7 +2410,7 @@ patch_breakpoint(uc_vm_t *vm, uc_function_t *fn, size_t insnoff,
 	uc_breakpoints_t *bks = &vm->breakpoints;
 
 	dbk->bk.ip = fn ? &fn->chunk.entries[insnoff] : NULL;
-	dbk->bk.cb = bk_enter_cli;
+	dbk->bk.cb = bk_enter_session;
 	dbk->fn = fn;
 	dbk->kind = kind;
 	dbk->depth = depth;
@@ -3065,1745 +2741,10 @@ found:
 	return true;
 }
 
-static void
-term_dimensions(void)
-{
-	struct winsize w;
-
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_row > 0 && w.ws_col > 0) {
-		termstate.rows = w.ws_row;
-		termstate.cols = w.ws_col;
-	}
-	else {
-		termstate.rows = 26;
-		termstate.cols = 80;
-	}
-}
-
-static size_t
-term_width(void)
-{
-	if (termstate.cols == 0)
-		term_dimensions();
-
-	return termstate.cols;
-}
-
-static void
-term_reset(void)
-{
-	/* Only reset terminal if we're in interactive mode */
-	if (!termstate.interactive)
-		return;
-
-	/* Remote sessions are driven over a plain socket, not a real tty -
-	 * there is no local terminal mode to restore here, the peer manages
-	 * its own. */
-	if (!termstate.remote &&
-	    tcsetattr(STDOUT_FILENO, TCSAFLUSH, &termstate.orig_settings) == -1)
-		fprintf(stderr, "tcsetattr(): %m\n");
-
-	while (termstate.patterns.count > 0) {
-		regex_t *re = &termstate.patterns.entries[--termstate.patterns.count];
-		if (re)	regfree(re);
-	}
-
-	while (termstate.history.count > 0)
-		free(termstate.history.entries[--termstate.history.count].chars);
-
-	uc_vector_clear(&termstate.patterns);
-	uc_vector_clear(&termstate.history);
-}
-
-static bool
-term_raw(void)
-{
-	/* Don't set raw mode in non-interactive mode */
-	if (!termstate.interactive)
-		return true;
-
-	/* Remote sessions have no local tty to put into raw mode - the peer
-	 * is expected to already be reading/writing unbuffered raw bytes on
-	 * its own end (a socket has no line discipline to configure here). */
-	if (termstate.remote)
-		return true;
-
-	if (tcgetattr(STDOUT_FILENO, &termstate.orig_settings) == -1) {
-		fprintf(stderr, "tcgetattr(): %m\n");
-
-		return false;
-	}
-
-	atexit(term_reset);
-
-	termstate.curr_settings = termstate.orig_settings;
-
-	termstate.curr_settings.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-	termstate.curr_settings.c_cflag |= (CS8);
-	termstate.curr_settings.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-	termstate.curr_settings.c_cc[VMIN] = 0;
-	termstate.curr_settings.c_cc[VTIME] = 1;
-
-	if (tcsetattr(STDOUT_FILENO, TCSAFLUSH, &termstate.curr_settings) == -1) {
-		fprintf(stderr, "tcsetattr(): %m\n");
-
-		return false;
-	}
-
-	return true;
-}
-
-static bool
-term_isig(bool enable)
-{
-	/* Skip signal settings in non-interactive mode */
-	if (!termstate.interactive)
-		return true;
-
-	/* No local tty to configure for remote sessions. */
-	if (termstate.remote)
-		return true;
-
-	struct termios t;
-
-	if (tcgetattr(STDOUT_FILENO, &t) == -1) {
-		fprintf(stderr, "tcgetattr(): %m\n");
-
-		return false;
-	}
-
-	if (enable)
-		t.c_lflag |= ISIG;
-	else
-		t.c_lflag &= ~ISIG;
-
-	if (tcsetattr(STDOUT_FILENO, TCSAFLUSH, &t) == -1) {
-		fprintf(stderr, "tcsetattr(): %m\n");
-
-		return false;
-	}
-
-	return true;
-}
-
-static ssize_t
-fgetline(FILE *stream, char **buf, size_t *bufsize)
-{
-	ssize_t n = 0;
-
-	while (true) {
-		n = getline(buf, bufsize, stream);
-
-		if (n == -1 && errno == EINTR) {
-			clearerr(stream);
-			continue;
-		}
-
-		break;
-	}
-
-	return n;
-}
-
-static int
-term_getc_raw(void)
-{
-	ssize_t rlen;
-
-	/* In non-interactive mode, return -1 to signal EOF immediately */
-	if (!termstate.interactive)
-		return -1;
-
-	if (termstate.pos >= termstate.fill) {
-		while (true) {
-			rlen = read(STDIN_FILENO, termstate.data, sizeof(termstate.data));
-
-			if (rlen == -1) {
-				if (errno == EINTR)
-					continue;
-
-				return -1;
-			}
-
-			/* On a real local tty, VMIN=0/VTIME=1 means a 0-byte read
-			 * is just the poll timeout expiring with no data
-			 * available yet, not EOF - keep waiting for real input.
-			 * Over a remote session, STDIN_FILENO is dup2()'d to a
-			 * plain socket instead (no VMIN/VTIME line discipline to
-			 * speak of), where a 0-byte read is unambiguously the
-			 * peer closing the connection and must be treated as
-			 * real EOF, or this would spin forever. */
-			if (rlen == 0) {
-				if (termstate.remote)
-					return -1;
-
-				continue;
-			}
-
-			termstate.fill = rlen;
-			termstate.pos = 0;
-			break;
-		}
-	}
-
-	return termstate.data[termstate.pos++];
-}
-
-static bool is_utf8_2b(char c) { return (c & 0xe0) == 0xc0; }
-static bool is_utf8_3b(char c) { return (c & 0xf0) == 0xe0; }
-static bool is_utf8_4b(char c) { return (c & 0xf8) == 0xf0; }
-static bool is_utf8_ct(char c) { return (c & 0xc0) == 0x80; }
-
-static int
-term_getc(void)
-{
-	int chr = term_getc_raw();
-	int seq[5];
-
-	/* EOF - propagate */
-	if (chr == -1)
-		return -1;
-
-	/* escape sequence */
-	if (chr == '\033') {
-		if ((seq[0] = term_getc_raw()) == -1) return '\033';
-		if ((seq[1] = term_getc_raw()) == -1) return '\033';
-
-		switch (seq[0]) {
-		case '[':
-			switch (seq[1]) {
-			case '0': case '1': case '2': case '3': case '4':
-			case '5': case '6': case '7': case '8': case '9':
-				if ((seq[2] = term_getc_raw()) == -1) return '\033';
-
-				switch (seq[2]) {
-				case '~':
-					switch (seq[1]) {
-					case '1': return HOME_KEY;
-					case '3': return DEL_KEY;
-					case '4': return END_KEY;
-					case '5': return PAGE_UP;
-					case '6': return PAGE_DOWN;
-					case '7': return HOME_KEY;
-					case '8': return END_KEY;
-					}
-					break;
-
-				case ';':
-					if ((seq[3] = term_getc_raw()) == -1) return '\033';
-
-					switch (seq[3]) {
-					case '5':
-						if ((seq[4] = term_getc_raw()) == -1) return '\033';
-
-						switch (seq[4]) {
-						case 'A': return CTRL_UP;
-						case 'B': return CTRL_DOWN;
-						case 'C': return CTRL_RIGHT;
-						case 'D': return CTRL_LEFT;
-						}
-						break;
-					}
-					break;
-				}
-				break;
-
-			case 'A': return ARROW_UP;
-			case 'B': return ARROW_DOWN;
-			case 'C': return ARROW_RIGHT;
-			case 'D': return ARROW_LEFT;
-			case 'H': return HOME_KEY;
-			case 'F': return END_KEY;
-			}
-			break;
-
-		case 'O':
-			switch (seq[1]) {
-			case 'H': return HOME_KEY;
-			case 'F': return END_KEY;
-			}
-			break;
-		}
-
-		return '\033';
-	}
-
-	/* two byte utf-8 sequence */
-	if (is_utf8_2b(chr) &&
-	    is_utf8_ct(seq[0] = term_getc_raw()))
-	{
-		return ((chr    & 0x1f) <<  6) |
-		        (seq[0] & 0x3f);
-	}
-
-	/* three byte utf-8 sequence */
-	if (is_utf8_3b(chr) &&
-	    is_utf8_ct(seq[0] = term_getc_raw()) &&
-	    is_utf8_ct(seq[1] = term_getc_raw()))
-	{
-		return ((chr    & 0x0f) << 12) |
-		       ((seq[0] & 0x3f) <<  6) |
-		        (seq[1] & 0x3f);
-	}
-
-	/* four byte utf-8 sequence */
-	if (is_utf8_4b(chr) &&
-	    is_utf8_ct(seq[0] = term_getc_raw()) &&
-	    is_utf8_ct(seq[1] = term_getc_raw()) &&
-	    is_utf8_ct(seq[2] = term_getc_raw()))
-	{
-		return ((chr    & 0x07) << 18) |
-		       ((seq[0] & 0x3f) << 12) |
-		       ((seq[1] & 0x3f) <<  6) |
-		        (seq[2] & 0x3f);
-	}
-
-	return chr;
-}
-
-static bool
-term_write(const char *s, size_t len)
-{
-	ssize_t wlen = write(STDOUT_FILENO, s, len);
-
-	return (wlen > -1 && (size_t)wlen == len);
-}
-
-#define term_print(x) term_write(x, sizeof(x) - 1)
-#define term_printf(fmt, ...) dprintf(STDOUT_FILENO, fmt, __VA_ARGS__)
-
-static void
-uc_vector_addcp(void *vec, uint32_t cp)
-{
-	struct { size_t count; char *entries; } *v = vec;
-
-	if (cp <= 0x7F) {
-		uc_vector_add(v, cp);
-	}
-	else if (cp <= 0x7FF) {
-		uc_vector_add(v, ((cp >>  6) & 0x1F) | 0xC0);
-		uc_vector_add(v, ( cp        & 0x3F) | 0x80);
-	}
-	else if (cp <= 0xFFFF) {
-		uc_vector_add(v, ((cp >> 12) & 0x0F) | 0xE0);
-		uc_vector_add(v, ((cp >>  6) & 0x3F) | 0x80);
-		uc_vector_add(v, ( cp        & 0x3F) | 0x80);
-	}
-	else if (cp <= 0x10FFFF) {
-		uc_vector_add(v, ((cp >> 18) & 0x07) | 0xF0);
-		uc_vector_add(v, ((cp >> 12) & 0x3F) | 0x80);
-		uc_vector_add(v, ((cp >>  6) & 0x3F) | 0x80);
-		uc_vector_add(v, ( cp        & 0x3F) | 0x80);
-	}
-}
-
-static bool
-term_line_parsearg(termline_t *line, size_t *off, arg_t *arg, bool silent)
-{
-	struct { size_t count; char *entries; } buf = { 0 }, nesting = { 0 };
-	uint32_t *end, *cp, q;
-	unsigned long n;
-	bool esc;
-
-	if (line == NULL || *off >= line->width) {
-		arg->type = ARGTYPE_NONE;
-		arg->off = line->width;
-		arg->sv = NULL;
-		arg->nv = 0;
-
-		return false;
-	}
-
-	end = line->chars + line->width;
-	cp = line->chars + *off;
-
-	while (cp < end && strchr(" \t\r\n", *cp) != NULL)
-		cp++;
-
-	arg->off = cp - line->chars;
-
-	if (cp < end && strchr("\"'", *cp) != NULL) {
-		for (esc = false, q = *cp++; cp < end; cp++) {
-			if (esc) {
-				if (cp[0] >= '0' && cp[0] <= '7') {
-					int n = cp[0] - '0';
-					int i = 0;
-
-					if (cp[1] >= '0' && cp[1] <= '7') {
-						n = n * 8 + (cp[1] - '0');
-						i++;
-
-						if (cp[2] >= '0' && cp[2] <= '7') {
-							n = n * 8 + (cp[2] - '0');
-							i++;
-						}
-					}
-
-					if (n <= 255) {
-						uc_vector_addcp(&buf, n);
-					}
-					else {
-						uc_vector_add(&buf, cp[-1]);
-						uc_vector_add(&buf, cp[0]);
-						if (i > 0) uc_vector_addcp(&buf, cp[1]);
-						if (i > 1) uc_vector_addcp(&buf, cp[2]);
-					}
-
-					cp += i;
-				}
-				else if (cp[0] == 'x') {
-					char c = cp[1]|32;
-					char d = c ? cp[2]|32 : 0;
-
-					if (((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) &&
-					    ((d >= '0' && d <= '9') || (d >= 'a' && d <= 'f')))
-					{
-						uc_vector_add(&buf,
-							(c > '9' ? 10 + c - 'a' : c - '0') * 16 +
-							(d > '9' ? 10 + d - 'a' : d - '0'));
-					}
-					else {
-						uc_vector_add(&buf, cp[-1]);
-						uc_vector_add(&buf, cp[0]);
-						if (c) uc_vector_addcp(&buf, cp[1]);
-						if (d) uc_vector_addcp(&buf, cp[2]);
-					}
-
-					cp += !!c + !!d;
-				}
-				else {
-					switch (cp[0]) {
-					case 'n': uc_vector_add(&buf, '\n'); break;
-					case 't': uc_vector_add(&buf, '\t'); break;
-					case 'r': uc_vector_add(&buf, '\r'); break;
-					case 'b': uc_vector_add(&buf, '\b'); break;
-					default:  uc_vector_addcp(&buf, *cp);  break;
-					}
-				}
-
-				esc = false;
-				continue;
-			}
-
-			if (*cp == '\\') {
-				esc = true;
-				continue;
-			}
-
-			if (*cp == q)
-				break;
-
-			uc_vector_addcp(&buf, *cp);
-		}
-
-		*off = cp - line->chars;
-
-		uc_vector_add(&buf, 0);
-
-		arg->sv = buf.entries, buf.entries = NULL;
-		arg->nv = buf.count;
-
-		uc_vector_clear(&buf);
-
-		if (esc == true || cp == end || *cp != q) {
-			if (!silent)
-				term_print("Unterminated string\n");
-
-			arg->type = ARGTYPE_ERROR;
-		}
-		else {
-			arg->type = ARGTYPE_STRING;
-		}
-
-		return true;
-	}
-
-	for (n = 0; cp < end && *cp >= '0' && *cp <= '9'; cp++) {
-		uint32_t d = *cp - '0';
-
-		uc_vector_add(&buf, *cp);
-
-		if (n > ULONG_MAX / 10) {
-			n = ULONG_MAX;
-			continue;
-		}
-
-		n *= 10;
-
-		if (n > ULONG_MAX - d) {
-			n = ULONG_MAX;
-			continue;
-		}
-
-		n += d;
-	}
-
-	*off = cp - line->chars;
-
-	if (buf.count > 0 && (cp == end || strchr(" \t\r\n", *cp) != NULL)) {
-		uc_vector_add(&buf, 0);
-
-		arg->type = ARGTYPE_NUMBER;
-		arg->sv = buf.entries, buf.entries = NULL;
-		arg->nv = n;
-
-		uc_vector_clear(&buf);
-
-		return true;
-	}
-
-	for (esc = false, q = 0; cp < end; cp++) {
-		if (esc) {
-			esc = false;
-		}
-		else if (*cp == '\\') {
-			esc = true;
-		}
-		else if (q != 0 && *cp == q) {
-			q = 0;
-		}
-		else if (q == 0) {
-			switch (*cp) {
-			case '(': uc_vector_push(&nesting, ')'); break;
-			case '{': uc_vector_push(&nesting, '}'); break;
-			case '[': uc_vector_push(&nesting, ']'); break;
-
-			case '"':
-			case '\'':
-				q = *cp;
-				break;
-
-			case ']':
-			case '}':
-			case ')':
-				if (nesting.count > 0 && *uc_vector_last(&nesting) == (char)*cp)
-					nesting.count--;
-
-				break;
-			}
-		}
-
-		if (strchr(" \t\r\n", *cp) && nesting.count == 0 && esc == false)
-			break;
-
-		uc_vector_addcp(&buf, *cp);
-	}
-
-	uc_vector_clear(&nesting);
-
-	*off = cp - line->chars;
-
-	n = buf.count;
-
-	uc_vector_add(&buf, 0);
-
-	arg->sv = buf.entries, buf.entries = NULL;
-	arg->nv = n;
-
-	uc_vector_clear(&buf);
-
-	if (esc == true || q != 0) {
-		if (!silent)
-			term_print("Unterminated string\n");
-
-		arg->type = ARGTYPE_ERROR;
-	}
-	else if (n > 0 || silent == true) {
-		arg->type = ARGTYPE_STRING;
-	}
-	else {
-		free(arg->sv);
-
-		arg->type = ARGTYPE_NONE;
-		arg->sv = NULL;
-
-		return false;
-	}
-
-	return true;
-}
-
-static size_t
-term_line_toargv(termline_t *line, bool silent, arg_t **argp)
-{
-	struct { size_t count; arg_t *entries; } argv = { 0 };
-	size_t off = 0;
-
-	while (true) {
-		arg_t arg;
-		argtype_t t = term_line_parsearg(line, &off, &arg, silent);
-
-		if (t == ARGTYPE_NONE)
-			break;
-
-		uc_vector_add(&argv, arg);
-	}
-
-	*argp = argv.entries;
-
-	return argv.count;
-}
-
-static size_t
-term_line_fromstr(termline_t *line, size_t from, char *s, size_t len)
-{
-	size_t needed = 0;
-
-	for (const char *p = s, *e = s + len; p < e; needed++) {
-		if      (is_utf8_2b(p[0]) && is_utf8_ct(p[1]))
-			p += 2;
-		else if (is_utf8_3b(p[0]) && is_utf8_ct(p[1]) &&
-		         is_utf8_ct(p[2]))
-			p += 3;
-		else if (is_utf8_4b(p[0]) && is_utf8_ct(p[1]) &&
-		         is_utf8_ct(p[2]) && is_utf8_ct(p[3]))
-			p += 4;
-		else
-			p++;
-	}
-
-	if (from + needed > line->size) {
-		line->size = ((from + needed + 127) >> 7) << 7;
-		line->chars = xrealloc(line->chars, line->size * sizeof(*line->chars));
-	}
-
-	uint32_t *cp = line->chars + from;
-
-	for (const char *p = s, *e = s + len; p < e; cp++) {
-		if      (is_utf8_2b(p[0]) && is_utf8_ct(p[1])) {
-			*cp  = ((*p++ & 0x1f) <<  6);
-			*cp |=  (*p++ & 0x3f);
-		}
-		else if (is_utf8_3b(p[0]) && is_utf8_ct(p[1]) &&
-		         is_utf8_ct(p[2])) {
-			*cp  = ((*p++ & 0x0f) << 12);
-			*cp |= ((*p++ & 0x3f) <<  6);
-			*cp |=  (*p++ & 0x3f);
-		}
-		else if (is_utf8_4b(p[0]) && is_utf8_ct(p[1]) &&
-		         is_utf8_ct(p[2]) && is_utf8_ct(p[3])) {
-			*cp  = ((*p++ & 0x07) << 18);
-			*cp |= ((*p++ & 0x3f) << 12);
-			*cp |= ((*p++ & 0x3f) <<  6);
-			*cp |=  (*p++ & 0x3f);
-		}
-		else {
-			*cp = *p++;
-		}
-	}
-
-	line->width = cp - line->chars;
-
-	return line->width;
-}
-
-static bool
-term_line_setcur(termline_t *line, size_t pos)
-{
-	size_t columns = term_width();
-	size_t from_row = (termstate.col_offset + line->pos) / columns;
-	size_t from_col = ((termstate.col_offset + line->pos) % columns) + 1;
-	size_t to_row = (termstate.col_offset + pos) / columns;
-	size_t to_col = ((termstate.col_offset + pos) % columns) + 1;
-	size_t len = 0;
-	char buf[64];
-
-	if (from_row > to_row)
-		len = snprintf(buf, sizeof(buf), "\033[%zuA", from_row - to_row);
-	else if (from_row < to_row)
-		len = snprintf(buf, sizeof(buf), "\033[%zuB", to_row - from_row);
-
-	if (from_col > to_col)
-		len += snprintf(buf + len, sizeof(buf) - len,
-			"\033[%zuD", from_col - to_col);
-	else if (from_col < to_col)
-		len += snprintf(buf + len, sizeof(buf) - len,
-			"\033[%zuC", to_col - from_col);
-
-	line->pos = pos;
-
-	return (len == 0 || term_write(buf, len) == true);
-}
-
-static bool
-term_line_clear(termline_t *line, size_t from)
-{
-	/* move cursor to initial position, erase screen after curser */
-	return term_line_setcur(line, from) && term_print("\033[0J");
-}
-
-static bool
-term_line_needlf(termline_t *line)
-{
-	return (((termstate.col_offset + line->width) % term_width()) == 0);
-}
-
-static bool
-term_line_write(termline_t *line, size_t off)
-{
-	struct { size_t count; char *entries; } buf = { 0 };
-	bool ret;
-
-	for (size_t i = off; i < line->width; i++)
-		uc_vector_addcp(&buf, line->chars[i]);
-
-	ret = (buf.count == 0 || term_write(buf.entries, buf.count) == true);
-
-	uc_vector_clear(&buf);
-
-	/* if the printed string filled the entire line then print one more
-	   character and erase it again in order to force scrolling to the next
-	   line */
-	if (term_line_needlf(line))
-		ret &= term_print(" \033[1D\033[0K");
-
-	line->pos = line->width;
-
-	return ret;
-}
-
-static bool
-term_line_cancel(termline_t *line)
-{
-	term_print("^C");
-	term_line_setcur(line, line->width);
-	term_print("\n");
-
-	return true;
-}
-
-static bool
-term_line_prevword(termline_t *line)
-{
-	if (line->width == 0)
-		return true;
-
-	/* find offset */
-	size_t off = (line->pos < line->width) ? line->pos : line->width - 1;
-
-	/* skip spaces before cursor */
-	while (off > 0 && strchr(" \t", line->chars[off - 1]) != NULL)
-		off--;
-
-	/* skip non-whitespace before cursor */
-	while (off > 0 && strchr(" \t", line->chars[off - 1]) == NULL)
-		off--;
-
-	return term_line_setcur(line, off);
-}
-
-static bool
-term_line_nextword(termline_t *line)
-{
-	if (line->width == 0)
-		return true;
-
-	/* find offset */
-	size_t off = (line->pos < line->width) ? line->pos : line->width - 1;
-
-	/* skip spaces after cursor */
-	while (off < line->width && strchr(" \t", line->chars[off]) != NULL)
-		off++;
-
-	/* skip non-whitespace after cursor */
-	while (off < line->width && strchr(" \t", line->chars[off]) == NULL)
-		off++;
-
-	return term_line_setcur(line, off);
-}
-
-static bool
-term_line_delchr(termline_t *line)
-{
-	if (line->pos >= line->width || line->width == 0)
-		return true;
-
-	/* remember original position */
-	size_t pos = line->pos;
-
-	/* move cursor before last char, erase */
-	term_line_setcur(line, line->width - 1);
-	term_print("\033[0K");
-
-	/* move cursor to original position */
-	term_line_setcur(line, pos);
-
-	/* rearrange char buffer */
-	for (size_t i = pos + 1; i < line->width; i++)
-		line->chars[i-1] = line->chars[i];
-
-	line->width--;
-
-	/* re-write tail, will move cursor to eol */
-	term_line_write(line, pos);
-
-	/* reset cursor to original position */
-	term_line_setcur(line, pos);
-
-	return true;
-}
-
-static bool
-term_line_delword(termline_t *line)
-{
-	if (line->width == 0)
-		return true;
-
-	/* find offset */
-	size_t off = (line->pos < line->width) ? line->pos : line->width - 1;
-
-	/* skip spaces before cursor */
-	while (off > 0 && strchr(" \t", line->chars[off - 1]) != NULL)
-		off--;
-
-	/* skip non-whitespace before cursor */
-	while (off > 0 && strchr(" \t", line->chars[off - 1]) == NULL)
-		off--;
-
-	/* calculate shift offset */
-	size_t shift = line->pos - off;
-
-	if (shift > 0) {
-		/* erase everything after offset */
-		term_line_clear(line, off);
-
-		/* rearrange char buffer */
-		for (size_t i = off + shift; i < line->width; i++)
-			line->chars[i - shift] = line->chars[i];
-
-		line->width -= shift;
-
-		/* re-write tail, will move cursor to eol */
-		term_line_write(line, off);
-
-		/* reset cursor to offset position */
-		term_line_setcur(line, off);
-	}
-
-	return true;
-}
-
-static bool
-term_line_addchr(termline_t *line, uint32_t chr)
-{
-	if (line->width == line->size) {
-		line->size += 128;
-		line->chars = xrealloc(line->chars, line->size * sizeof(*line->chars));
-	}
-
-	size_t pos = line->pos;
-
-	for (size_t i = line->width; i > pos; i--)
-		line->chars[i] = line->chars[i-1];
-
-	line->chars[pos] = chr;
-	line->width++;
-
-	/* write tail, will move cursor to eol */
-	term_line_write(line, pos);
-
-	/* restore cursor to original position + 1 */
-	term_line_setcur(line, pos + 1);
-
-	return true;
-}
-
-static int
-qsort_strcmp(const void *a, const void *b)
-{
-	return strcmp(*(const char **)a, *(const char **)b);
-}
-
-static char *
-common_prefix(suggestions_t *suggests)
-{
-	if (!suggests || suggests->count == 0 || *suggests->entries[0] == '\0')
-		return NULL;
-
-	char *prefix = xstrdup(suggests->entries[0]);
-	size_t prefixlen = strlen(prefix);
-
-	for (size_t i = 1; i < suggests->count; i++) {
-		while (strncmp(suggests->entries[i], prefix, prefixlen) != 0) {
-			prefix[--prefixlen] = '\0';
-
-			if (prefixlen == 0) {
-				free(prefix);
-
-				return NULL;
-			}
-		}
-	}
-
-	return prefix;
-}
-
-static void
-term_line_tabcomplete(termline_t *line, const char *prompt,
-                      void (*cb)(size_t, arg_t *, suggestions_t *, void *),
-                      void *ud)
-{
-	arg_t *argv = NULL;
-	size_t argc = term_line_toargv(line, true, &argv);
-
-	suggestions_t suggests = { 0 };
-
-	cb(argc, argv, &suggests, ud);
-
-	if (suggests.count > 1) {
-		size_t longest = 0;
-
-		for (size_t i = 0; i < suggests.count; i++) {
-			size_t itemlen = strlen(suggests.entries[i]) + 2;
-
-			if (itemlen > longest)
-				longest = itemlen;
-		}
-
-		size_t cols = term_width() / longest;
-
-		if (cols == 0)
-			cols = 1;
-
-		qsort(suggests.entries, suggests.count,
-			sizeof(suggests.entries[0]), qsort_strcmp);
-
-		term_print("\n");
-
-		for (size_t row = 0; row < suggests.count; row += cols) {
-			for (size_t col = 0; col < cols && row + col < suggests.count; col++)
-				term_printf("%-*s", (int)longest, suggests.entries[row + col]);
-
-			term_print("\n");
-		}
-
-		fflush(stdout);
-
-		if (prompt)
-			term_write(prompt, termstate.col_offset);
-	}
-	else {
-		term_line_clear(line, 0);
-	}
-
-	char *prefix = common_prefix(&suggests);
-
-	if (prefix) {
-		if (argc > 0) {
-			arg_t *partial = argv + argc - 1;
-
-			term_line_fromstr(line, partial->off, prefix, strlen(prefix));
-		}
-		else {
-			term_line_fromstr(line, line->width, prefix, strlen(prefix));
-		}
-
-		if (suggests.count == 1)
-			term_line_fromstr(line, line->width, " ", 1);
-
-		free(prefix);
-	}
-
-	term_line_write(line, 0);
-
-	for (size_t i = 0; i < suggests.count; i++)
-		free(suggests.entries[i]);
-
-	uc_vector_clear(&suggests);
-
-	for (size_t i = 0; i < argc; i++)
-		free(argv[i].sv);
-
-	free(argv);
-}
-
-/* Simple line reader for non-interactive mode (piped input) */
-static ssize_t
-term_getline_fallback(const char *prompt, arg_t **argv, bool *eof)
-{
-	char buf[4096];
-	char *line, *p, *arg_start;
-	size_t len, argc = 0;
-	arg_t *args = NULL;
-
-	*eof = false;
-
-	/* Print prompt without color codes */
-	if (prompt != NULL)
-		fprintf(stderr, "%s", prompt);
-
-	/* Read a line from stdin */
-	line = fgets(buf, sizeof(buf), stdin);
-	if (line == NULL) {
-		*eof = true;
-		return -1;
-	}
-
-	/* Remove trailing newline */
-	len = strlen(line);
-	if (len > 0 && line[len-1] == '\n')
-		line[--len] = '\0';
-
-	/* Skip empty lines */
-	if (len == 0)
-		return 0;
-
-	/* Parse arguments (simple whitespace splitting) */
-	p = line;
-	while (*p) {
-		/* Skip leading whitespace */
-		while (*p && (*p == ' ' || *p == '\t'))
-			p++;
-
-		if (*p == '\0')
-			break;
-
-		arg_start = p;
-
-		/* Find end of argument */
-		while (*p && *p != ' ' && *p != '\t')
-			p++;
-
-		/* Save argument */
-		if (*p)
-			*p++ = '\0';
-
-		args = xrealloc(args, (argc + 1) * sizeof(arg_t));
-		args[argc] = (arg_t){
-			.type = ARGTYPE_STRING,
-			.sv = xstrdup(arg_start),
-			.off = 0,
-			.nv = 0
-		};
-		argc++;
-	}
-
-	*argv = args;
-	return argc;
-}
-
-static ssize_t
-term_getline(const char *prompt, arg_t **argv,
-             void (*completion_cb)(size_t, arg_t *, suggestions_t *, void *),
-             void *ud)
-{
-	/* Use simple fallback for non-interactive mode */
-	if (!termstate.interactive) {
-		bool eof;
-		ssize_t argc = term_getline_fallback(prompt, argv, &eof);
-		if (eof && argc < 0)
-			return -1;
-		return argc;
-	}
-
-	termline_t line = { 0 };
-	termline_t *curr_line = &line;
-	termline_t *next_line;
-
-	if (prompt != NULL) {
-		termstate.col_offset = strwidth(prompt);
-		term_write(prompt, termstate.col_offset);
-	}
-	else {
-		termstate.col_offset = 0;
-	}
-
-	while (true) {
-		int chr = term_getc();
-
-		/* EOF - return -1 */
-		if (chr == -1)
-			break;
-
-		switch (chr) {
-		case HOME_KEY:
-		case CTRL_UP:
-			term_line_setcur(curr_line, 0);
-			break;
-
-		case END_KEY:
-		case CTRL_DOWN:
-			term_line_setcur(curr_line, curr_line->width);
-			break;
-
-		case DEL_KEY:
-			term_line_delchr(curr_line);
-			break;
-
-		case PAGE_UP:
-		case ARROW_UP:
-			if (termstate.history.count > 0 &&
-			    curr_line != uc_vector_first(&termstate.history)) {
-
-				if (curr_line == &line)
-					next_line = uc_vector_last(&termstate.history);
-				else
-					next_line = curr_line - 1;
-
-				term_line_clear(curr_line, 0);
-				term_line_write(next_line, 0);
-				curr_line = next_line;
-			}
-			break;
-
-		case PAGE_DOWN:
-		case ARROW_DOWN:
-			if (termstate.history.count > 0 && curr_line != &line) {
-				if (curr_line == uc_vector_last(&termstate.history))
-					next_line = &line;
-				else
-					next_line = curr_line + 1;
-
-				term_line_clear(curr_line, 0);
-				term_line_write(next_line, 0);
-				curr_line = next_line;
-			}
-			break;
-
-		case ARROW_LEFT:
-			if (curr_line->pos > 0)
-				term_line_setcur(curr_line, curr_line->pos - 1);
-			break;
-
-		case ARROW_RIGHT:
-			if (curr_line->pos < curr_line->width)
-				term_line_setcur(curr_line, curr_line->pos + 1);
-			break;
-
-		case CTRL_LEFT:
-			term_line_prevword(curr_line);
-			break;
-
-		case CTRL_RIGHT:
-			term_line_nextword(curr_line);
-			break;
-
-		case '\3': /* Ctrl-C */
-			term_line_cancel(curr_line);
-
-			*argv = NULL;
-
-			return 0;
-
-		case '\11': /* tab */
-			if (completion_cb != NULL)
-				term_line_tabcomplete(curr_line, prompt, completion_cb, ud);
-			break;
-
-		case '\15': /* carriage return */
-		case '\12': /* newline - accepted alongside CR since a peer's
-		             * local tty may translate CR to NL (ICRNL) before
-		             * the byte ever reaches us over a remote session */
-			/* save to history if no other line was selected */
-			if (curr_line == &line && curr_line->width > 0) {
-				if (termstate.history.count >= HISTORY_SIZE) {
-					free(termstate.history.entries[0].chars);
-
-					for (size_t i = 1; i < termstate.history.count; i++)
-						termstate.history.entries[i-1] =
-							termstate.history.entries[i];
-
-					termstate.history.count--;
-				}
-
-				uc_vector_push(&termstate.history, line);
-			}
-
-			term_print("\n");
-
-			return term_line_toargv(curr_line, false, argv);
-
-		case '\27': /* Ctrl-W */
-			term_line_delword(curr_line);
-			break;
-
-		case '\177': /* backspace */
-			if (curr_line->pos > 0) {
-				term_line_setcur(curr_line, curr_line->pos - 1);
-				term_line_delchr(curr_line);
-			}
-			break;
-
-		default:
-			if (chr >= ' ')
-				term_line_addchr(curr_line, chr);
-			break;
-		}
-	}
-
-	*argv = NULL;
-
-	return -1;
-}
 
 static uc_value_t *
 uc_debug_sigint_handler(uc_vm_t *vm, size_t nargs);
 
-static size_t
-format_context_breadcrumb(uc_stringbuf_t *sb, uc_vm_t *vm, size_t maxcols)
-{
-	int off = sb->bpos;
-
-	for (size_t i = 0; i < vm->callframes.count; i++) {
-		uc_callframe_t *frame = &vm->callframes.entries[i];
-
-		if (frame->cfunction != NULL &&
-		    frame->cfunction->cfn == uc_debug_sigint_handler)
-			continue;
-
-		if (sb->bpos > off)
-			printbuf_strappend(sb, " » ");
-
-		printbuf_append_function(sb, vm,
-			frame->closure
-				? &frame->closure->header : &frame->cfunction->header,
-			NULL, SIZE_MAX);
-	}
-
-	return printbuf_truncate(sb, off, maxcols, false);
-}
-
-static void
-format_context_header_backtrace(uc_stringbuf_t *sb, uc_vm_t *vm)
-{
-	size_t columns = term_width();
-	size_t filename_width = (columns >= 42) ? (columns - 2) / 4 : columns - 2;
-	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
-	uc_source_t *source = uc_program_function_source(frame->closure->function);
-	size_t printed = 0;
-
-	cs(sb, &((style_t){ FG_BWHITE, BG_GRAY, 0 }));
-
-	printbuf_strappend(sb, "[");
-	printed += 2 + printbuf_append_srcpath(sb, source, filename_width);
-	printbuf_strappend(sb, "]");
-
-	if (columns - printed - 2 > 10) {
-		printbuf_strappend(sb, " ");
-		printed += 2 + format_context_breadcrumb(sb, vm, columns - printed - 2);
-		printbuf_strappend(sb, " ");
-	}
-
-	printbuf_memset(sb, -1, ' ', columns - printed);
-
-	cs(sb, NULL);
-	printbuf_strappend(sb, "\n");
-}
-
-static void
-format_context_header_callframe(uc_stringbuf_t *sb, uc_vm_t *vm,
-                                uc_callframe_t *frame, size_t left_pad)
-{
-	size_t columns = term_width() - left_pad;
-	size_t filename_width = (columns >= 42) ? (columns - 2) / 4 : columns - 2;
-	size_t printed = 0;
-
-	printbuf_memset(sb, -1, ' ', left_pad);
-
-	cs(sb, &((style_t){ FG_BWHITE, BG_GRAY, 0 }));
-
-	if (frame->closure) {
-		uc_source_t *source = uc_program_function_source(frame->closure->function);
-
-		printbuf_strappend(sb, "[");
-		printed += 2 + printbuf_append_srcpath(sb, source, filename_width);
-		printbuf_strappend(sb, "]");
-	}
-	else {
-		printbuf_strappend(sb, "[C]");
-		printed += 3;
-	}
-
-	if (columns - printed - 2 > 10) {
-		printbuf_strappend(sb, " ");
-		printed += 2 + printbuf_append_function(sb, vm,
-			frame->closure ? &frame->closure->header : &frame->cfunction->header,
-			frame, columns - printed - 2);
-		printbuf_strappend(sb, " ");
-	}
-
-	printbuf_memset(sb, -1, ' ', columns - printed);
-
-	cs(sb, NULL);
-	printbuf_strappend(sb, "\n");
-}
-
-static bool have_highlighting = false;
-
-static struct {
-	fg_color_t color;
-	char *start, *end;
-} highlight_rules[] = {
-	{ FG_GRAY, "^#!.*", NULL },
-
-	/* declarations */
-	{ FG_GREEN, "\\<(let|const|function|this)\\>", NULL },
-
-	/* arrow functions */
-	{ FG_GREEN, "(\\<\\w+\\>|\\([[:alnum:][:space:]_,.]*\\))[[:space:]]*=>", NULL },
-
-	/* flow control */
-	{ FG_BYELLOW, "\\<(while|if|else|elif|switch|case|default|for|in|endif|endfor|endwhile|endfunction)\\>", NULL },
-
-	/* keywords */
-	{ FG_BYELLOW, "\\<(export|import|try|catch|delete)\\>", NULL },
-
-	/* exit points */
-	{ FG_MAGENTA, "\\<(break|continue|return)\\>", NULL },
-
-	/* numeric literals */
-	{ FG_CYAN, "\\<([0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0-9]+)\\>", NULL },
-	{ FG_CYAN, "\\<0[xX][[:xdigit:]]+(\\.[[:xdigit:]]+)?\\>", NULL },
-	{ FG_CYAN, "\\<(0[oO][0-7]+|0[bB][01]+|[0-9]+)\\>", NULL },
-
-	/* special values */
-	{ FG_CYAN, "\\<(true|false|null|NaN|Infinity)\\>", NULL },
-
-	/* strings */
-	{ FG_BMAGENT, "\"([^\"\\{%#}]|\\\\.|\\{[^\"\\{%#]|[%#}][^\"\\}]|[{%#}]\\\\.)*[{%#}]?\"", NULL },
-	{ FG_BMAGENT, "'([^'\\{%#}]|\\\\.|\\{[^'\\{%#]|[%#}][^'\\}]|[{%#}]\\\\.)*[{%#}]?'", NULL },
-	{ FG_BMAGENT, "`([^`\\{%#}]|\\\\.|\\{[^`\\{%#]|[%#}][^`\\}]|[{%#}]\\\\.)*[{%#}]?`", NULL },
-
-	/* template string expressions */
-	{ FG_BWHITE, "\\$\\{", "}" },
-
-	/* comments */
-	{ FG_BBLUE, "(^|[[:blank:]])//.*", NULL },
-	{ FG_BBLUE, "(^|[[:space:]])/\\*", "\\*/" },
-	{ FG_BBLUE, "\\{#", "#\\}" },
-
-	/* text outside template directives */
-	{ FG_GRAY, "[}%#]\\}", "\\{[{%#]" },
-	{ FG_GRAY, "^#!.*(\\<utpl\\>|[[:space:]]-[[:alnum:]]*T[[:alnum:]]*\\>)", "\\{[{%#]" },
-	{ FG_GRAY, "^([^{%#}]|\\{[^{%#]|[%#}][^}])+\\{[{%#]", NULL },
-
-	/* template tags */
-	{ FG_BWHITE, "\\{[{%][+-]?|-?[%}]\\}", NULL },
-	{ FG_BBLUE, "\\{#[+-]?|-?#\\}", NULL },
-};
-
-static bool
-compile_patterns(void)
-{
-	regex_t *re = NULL;
-	int err = 0;
-
-	if (termstate.patterns.count > 0)
-		return true;
-
-	for (size_t i = 0; i < ARRAY_SIZE(highlight_rules); i++) {
-		re = uc_vector_add(&termstate.patterns, { 0 });
-		err = regcomp(re, highlight_rules[i].start, REG_EXTENDED);
-
-		if (err != 0)
-			goto err;
-
-		re = uc_vector_add(&termstate.patterns, { 0 });
-
-		if (highlight_rules[i].end) {
-			err = regcomp(re, highlight_rules[i].end, REG_EXTENDED);
-
-			if (err != 0)
-				goto err;
-		}
-	}
-
-	return true;
-
-err:
-	char errbuf[128];
-	regerror(err, re, errbuf, sizeof(errbuf));
-	fprintf(stderr, "Regex error: %s\n", errbuf);
-
-	for (size_t i = 0; i < termstate.patterns.count; i++) {
-		regex_t *re = &termstate.patterns.entries[i];
-		if (re) regfree(re);
-	}
-
-	uc_vector_clear(&termstate.patterns);
-
-	return false;
-}
-
-typedef struct {
-	uint32_t style;
-	size_t from, to;
-} style_range_t;
-
-typedef struct {
-	size_t count;
-	style_range_t *entries;
-} style_ranges_t;
-
-typedef struct {
-	size_t from, to;
-} line_range_t;
-
-static void
-print_source_location(uc_stringbuf_t *sb, uc_vm_t *vm, uc_source_t *source,
-                      size_t nranges, line_range_t *ranges, insn_span_t *hl,
-                      size_t left_pad)
-{
-	size_t columns = term_width() - left_pad;
-	off_t offset = ftello(source->fp);
-
-	fseeko(source->fp, 0, SEEK_SET);
-
-	size_t linesize = 0, byte_pos = 0, start_line = SIZE_MAX, end_line = 0;
-	size_t hl_start = hl ? hl->pos_start : SIZE_MAX;
-	size_t cursor_pos = hl ? hl->pos_ip : SIZE_MAX;
-	size_t hl_end = hl ? hl->pos_end : SIZE_MAX;
-	style_t style = { FG_BWHITE, BG_BLACK, 0 };
-	regex_t *ml_rule_re_end = NULL;
-	uint32_t ml_rule_color = 0;
-	ssize_t last_indent = -1;
-	char *linestr = NULL;
-
-	for (size_t i = 0; i < nranges; i++) {
-		if (ranges[i].from == 0 || ranges[i].to == 0)
-			continue;
-
-		if (ranges[i].from < start_line)
-			start_line = ranges[i].from;
-
-		if (ranges[i].to > end_line)
-			end_line = ranges[i].to;
-	}
-
-	for (size_t linenum = 1; linenum <= end_line; linenum++) {
-		ssize_t linelen = fgetline(source->fp, &linestr, &linesize);
-
-		struct {
-			size_t count;
-			struct { fg_color_t color; ssize_t from, to; } *entries;
-		} colors = { 0 };
-
-		if (linelen == -1)
-			break;
-
-		/* apply highlighting rules */
-		if (have_highlighting) {
-			size_t ml_rule_from;
-			regmatch_t m;
-			char *p;
-			int rf;
-
-			/* apply single line matches */
-			for (size_t i = 0; i < ARRAY_SIZE(highlight_rules); i++) {
-				regex_t *re = &termstate.patterns.entries[i * 2];
-
-				/* only consider single line matches */
-				if (highlight_rules[i].end != NULL)
-					continue;
-
-				for (rf = 0, p = linestr;
-				     regexec(re, p, 1, &m, rf) == 0;
-				     rf = REG_NOTBOL, p += m.rm_eo)
-				{
-					uc_vector_add(&colors, {
-						.color = highlight_rules[i].color,
-						.from  = p + m.rm_so - linestr,
-						.to    = p + m.rm_eo - linestr
-					});
-				}
-			}
-
-			/* apply multi line matches */
-			for (rf = 0, p = linestr, ml_rule_from = 0;
-			     rf == 0 || ml_rule_re_end != NULL;
-			     rf = REG_NOTBOL) {
-
-				/* handle unterminated multiline matches */
-				if (ml_rule_re_end != NULL) {
-					/* end match found on this line, colorize until match */
-					if (regexec(ml_rule_re_end, p, 1, &m, 0) == 0) {
-						uc_vector_add(&colors, {
-							.color = ml_rule_color,
-							.from  = ml_rule_from,
-							.to    = p + m.rm_eo - linestr
-						});
-
-						ml_rule_re_end = NULL;
-						ml_rule_color = 0;
-						ml_rule_from = 0;
-						p += m.rm_eo;
-					}
-
-					/* no end match, colorize entire remainder and skip rest */
-					else {
-						uc_vector_add(&colors, {
-							.color = ml_rule_color,
-							.from  = ml_rule_from,
-							.to    = linelen
-						});
-
-						break;
-					}
-				}
-
-				/* look for next multiline start match */
-				for (size_t i = 0; i < ARRAY_SIZE(highlight_rules); i++) {
-					regex_t *re_start = &termstate.patterns.entries[i * 2];
-					regex_t *re_end = &termstate.patterns.entries[i * 2 + 1];
-
-					/* only consider multi line rules */
-					if (highlight_rules[i].end == NULL)
-						continue;
-
-					/* found another multi line start */
-					if (regexec(re_start, p, 1, &m, rf) == 0) {
-						ml_rule_re_end = re_end;
-						ml_rule_color = highlight_rules[i].color;
-						ml_rule_from = p + m.rm_so - linestr;
-						p += m.rm_eo;
-						break;
-					}
-				}
-			}
-		}
-
-		bool print_line = false, more_lines = false;
-
-		for (size_t i = 0; i < nranges; i++) {
-			if (ranges[i].from == 0 || ranges[i].to == 0)
-				continue;
-
-			print_line |= (linenum >= ranges[i].from && linenum <= ranges[i].to);
-			more_lines |= (ranges[i].from > start_line && ranges[i].from == linenum + 1);
-		}
-
-		if (!print_line) {
-			uc_vector_clear(&colors);
-			byte_pos += linelen;
-
-			if (more_lines) {
-				printbuf_memset(sb, -1, ' ', left_pad);
-				cs(sb, &((style_t){ FG_GRAY, BG_BLACK, FAINT }));
-				printbuf_strappend(sb, "   … ");
-				printbuf_memset(sb, -1, ' ', last_indent);
-				printbuf_strappend(sb, "…");
-				printbuf_memset(sb, -1, ' ', columns - 6 - last_indent);
-				cs(sb, &((style_t){ FG_BWHITE, BG_BLACK, 0 }));
-				printbuf_strappend(sb, "\n");
-			}
-
-			continue;
-		}
-
-		if (linelen > 0 && linestr[linelen - 1] == '\n')
-			linelen--;
-
-		size_t trunc = 0;
-
-		/* determine display width of line and whether it is too long */
-		for (size_t i = 0, c = 0; i < (size_t)linelen; i++) {
-			c += (linestr[i] == '\t') ? 4 : 1;
-
-			if (columns > 6 && c > columns - 6) {
-				trunc = linelen - i;
-				linelen = i;
-				break;
-			}
-		}
-
-		size_t linecols = 0;
-
-		printbuf_memset(sb, -1, ' ', left_pad);
-		cs(sb, &((style_t){ FG_GRAY, BG_BLACK, FAINT }));
-		sprintbuf(sb, "%4zu ", linenum);
-		cs(sb, &style);
-
-		last_indent = -1;
-
-		/* format line (substitute tabs and ctrls with placeholders) */
-		for (ssize_t i = 0; i < linelen; i++, byte_pos++) {
-			style_t newstyle = {
-				.fg = FG_BWHITE,
-				.bg = (byte_pos >= hl_start && byte_pos < hl_end)
-					? BG_GRAY : BG_BLACK,
-				.styles = (cursor_pos == byte_pos) ? ULINE : 0
-			};
-
-			for (size_t j = 0; j < colors.count; j++)
-				if (colors.entries[j].from <= i && colors.entries[j].to > i)
-					newstyle.fg = colors.entries[j].color;
-
-			if (memcmp(&style, &newstyle, sizeof(style))) {
-				style = newstyle;
-				cs(sb, &style);
-			}
-
-			if (linestr[i] == '\t') {
-				linecols += 4;
-				cs(sb, &((style_t){ FG_BBLACK, style.bg, FAINT }));
-				printbuf_strappend(sb, "<-> ");
-				cs(sb, &style);
-			}
-			else if (linestr[i] < ' ' || linestr[i] == 0x7f) {
-				linecols++;
-				cs(sb, &((style_t){ FG_BBLACK, style.bg, FAINT }));
-				printbuf_strappend(sb, ".");
-				cs(sb, &style);
-			}
-			else {
-				if (last_indent == -1)
-					last_indent = linecols;
-
-				linecols++;
-				printbuf_memappend_fast(sb, linestr + i, 1);
-			}
-		}
-
-		/* reset char styles */
-		style.styles = 0;
-		style.bg = (byte_pos >= hl_start &&
-		            byte_pos + trunc <= hl_end) ? BG_GRAY : BG_BLACK;
-		cs(sb, &style);
-
-		/* if truncated, add ellipsis */
-		if (trunc > 0) {
-			if (linecols < columns - 6)
-				printbuf_memset(sb, -1, ' ', (columns - 6) - linecols);
-
-			printbuf_strappend(sb, "…");
-			byte_pos += trunc;
-		}
-
-		/* if shorter than display width, pad with trailing spaces */
-		else if (linecols < columns - 5) {
-			if (linestr[linelen] == '\n') {
-				printbuf_memset(sb, -1, ' ', 1);
-				linecols++;
-			}
-
-			if (style.bg != BG_BLACK) {
-				style.bg = BG_BLACK;
-				cs(sb, &style);
-			}
-
-			printbuf_memset(sb, -1, ' ', (columns - 5) - linecols);
-		}
-
-		cs(sb, &((style_t){ 0, 0, 0 }));
-		printbuf_strappend(sb, "\n");
-
-		uc_vector_clear(&colors);
-
-		byte_pos++;
-	}
-
-	free(linestr);
-
-	fseeko(source->fp, offset, SEEK_SET);
-}
-
-static void
-format_context_statement(uc_stringbuf_t *sb, uc_vm_t *vm,
-                         uc_function_t *fn, insn_span_t *stmt,
-                         size_t ctx_before, size_t ctx_after, size_t left_pad)
-{
-	size_t beg_line = 1, beg_off = 0, end_line = 1, end_off = 0, ip_line = 1;
-	uc_source_t *source = uc_program_function_source(fn);
-	uc_lineinfo_t *lines = &source->lineinfo;
-
-	/* determine start and end byte position of first and last statement line */
-	for (size_t i = 0, lineoff = 0; i < lines->count; i++) {
-		// FIXME: >= stmt->pos_start ?
-		if (end_off <= stmt->pos_start &&
-		    end_off + (lines->entries[i] & 0x7f) > stmt->pos_start)
-		{
-			beg_line = end_line;
-			beg_off = lineoff;
-		}
-
-		if (end_off <= stmt->pos_ip &&
-		    end_off + (lines->entries[i] & 0x7f) >= stmt->pos_ip)
-		{
-			ip_line = end_line;
-		}
-
-		if (i > 0 && lines->entries[i] & 0x80) {
-			end_line++;
-			end_off++;
-			lineoff = end_off;
-
-			if (end_off >= stmt->pos_end)
-				break;
-		}
-
-		end_off += lines->entries[i] & 0x7f;
-	}
-
-	if (beg_off >= end_off)
-		return;
-
-	line_range_t ranges[3] = { 0 };
-
-	if (end_line - beg_line <= 4) {
-		ranges[0].from = beg_line;
-		ranges[0].to = end_line;
-	}
-	else {
-		if (ip_line - beg_line <= (ctx_before + ctx_after + 2)) {
-			ranges[1].from = beg_line;
-		}
-		else {
-			ranges[0].from = beg_line;
-			ranges[0].to = beg_line + ctx_after;
-
-			ranges[1].from = ip_line - ctx_before;
-		}
-
-		if (end_line - ip_line <= (ctx_before + ctx_after + 2)) {
-			ranges[1].to = end_line;
-		}
-		else {
-			ranges[1].to = ip_line + ctx_after;
-
-			ranges[2].from = end_line - ctx_before;
-			ranges[2].to = end_line;
-		}
-	}
-
-	print_source_location(sb, vm, source, 3, ranges, stmt, left_pad);
-}
-
-static void
-format_context_cfunction(uc_stringbuf_t *sb, uc_vm_t *vm,
-                         uc_cfunction_t *cfn, size_t left_pad)
-{
-	void *loadaddr = NULL, *symaddr = NULL;
-	const char *filename = "Not available";
-	const char *symname = "Not available";
-	size_t columns = term_width() - left_pad;
-	Dl_info dli;
-	int n;
-
-	if (dladdr(cfn->cfn, &dli)) {
-		if (dli.dli_fname)
-			filename = dli.dli_fname;
-
-		if (dli.dli_sname)
-			symname = dli.dli_sname;
-
-		loadaddr = dli.dli_fbase;
-		symaddr = dli.dli_saddr;
-	}
-
-	printbuf_memset(sb, -1, ' ', left_pad);
-	cs(sb, &((style_t){ FG_BWHITE, BG_BLACK, FAINT }));
-	n = sprintbuf(sb, "  Dynamic library: %s (%p)", filename, loadaddr);
-	printbuf_memset(sb, -1, ' ', columns - n);
-	cs(sb, NULL);
-	printbuf_strappend(sb, "\n");
-
-	printbuf_memset(sb, -1, ' ', left_pad);
-	cs(sb, &((style_t){ FG_BWHITE, BG_BLACK, FAINT }));
-	n = sprintbuf(sb, "  Symbol name:     %s (%p)", symname, symaddr);
-	printbuf_memset(sb, -1, ' ', columns - n);
-	cs(sb, NULL);
-	printbuf_strappend(sb, "\n");
-}
 
 // FIXME: read beyond end of array
 static int32_t
@@ -4876,7 +2817,7 @@ bk_enter_function(uc_vm_t *vm, uc_breakpoint_t *bk)
 			if (ucv_type(fno) == UC_CLOSURE) {
 				uc_function_t *fn = ((uc_closure_t *)fno)->function;
 
-				dbk->bk.cb = bk_enter_cli;
+				dbk->bk.cb = bk_enter_session;
 				dbk->bk.ip = fn->chunk.entries;
 				dbk->depth = 1;
 				dbk->fn = fn;
@@ -4886,7 +2827,7 @@ bk_enter_function(uc_vm_t *vm, uc_breakpoint_t *bk)
 	}
 
 	if (!enter) {
-		dbk->bk.cb = bk_enter_cli;
+		dbk->bk.cb = bk_enter_session;
 		dbk->bk.ip = NULL;
 		dbk->depth = 0;
 		dbk->fn = NULL;
@@ -4901,12 +2842,10 @@ bk_leave_function(uc_vm_t *vm, uc_breakpoint_t *bk)
 
 	assert(dbk->kind == BK_STEP);
 
-	term_print("Leaving function!\n");
-
 	if (!frame)
 		return;
 
-	dbk->bk.cb = bk_enter_cli;
+	dbk->bk.cb = bk_enter_session;
 	dbk->bk.ip = frame->ip;
 	dbk->depth = 0;
 	dbk->fn = frame->closure->function;
@@ -4936,7 +2875,6 @@ bk_follow_jump(uc_vm_t *vm, uc_breakpoint_t *bk)
 		if ((addr < 0 && (size_t)-addr > off) ||
 		    (addr >= 0 && (size_t)addr >= chunk->count))
 		{
-			term_print("Jump target out of range\n");
 			off += insn_length(ip, prog);
 		}
 		else {
@@ -4949,7 +2887,7 @@ bk_follow_jump(uc_vm_t *vm, uc_breakpoint_t *bk)
 	if (chunk->entries[off] == I_JMP || chunk->entries[off] == I_JMPZ)
 		dbk->bk.cb = bk_follow_jump;
 	else
-		dbk->bk.cb = bk_enter_cli;
+		dbk->bk.cb = bk_enter_session;
 
 	dbk->bk.ip = chunk->entries + off;
 	dbk->depth = 0;
@@ -4959,23 +2897,7 @@ bk_follow_jump(uc_vm_t *vm, uc_breakpoint_t *bk)
 static void
 bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk)
 {
-#define exname(x) [EXCEPTION_##x] = "EXCEPTION_" #x
-	const char *exnames[] = {
-		exname(NONE),
-		exname(SYNTAX),
-		exname(RUNTIME),
-		exname(TYPE),
-		exname(REFERENCE),
-		exname(USER),
-		exname(EXIT)
-	};
-#undef exname
-
-	term_print("Exception occurred!\n");
-	term_printf("Type:    %s\n", exnames[vm->exception.type]);
-	term_printf("Message: %s\n", vm->exception.message);
-
-	bk_enter_cli(vm, bk);
+	bk_enter_session(vm, bk);
 }
 
 /* cb for the dedicated BK_UNCAUGHT system breakpoint (see
@@ -4986,24 +2908,7 @@ bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk)
 static void
 bk_handle_uncaught(uc_vm_t *vm, uc_breakpoint_t *bk)
 {
-#define exname(x) [EXCEPTION_##x] = "EXCEPTION_" #x
-	const char *exnames[] = {
-		exname(NONE),
-		exname(SYNTAX),
-		exname(RUNTIME),
-		exname(TYPE),
-		exname(REFERENCE),
-		exname(USER),
-		exname(EXIT)
-	};
-#undef exname
-
-	term_print("Uncaught exception - nothing would catch this, "
-		"the program is about to terminate!\n");
-	term_printf("Type:    %s\n", exnames[vm->exception.type]);
-	term_printf("Message: %s\n", vm->exception.message);
-
-	bk_enter_cli(vm, bk);
+	bk_enter_session(vm, bk);
 }
 
 /* Sentinel returned by next_step() to mean "stay paused right where we
@@ -5077,8 +2982,6 @@ next_step(uc_vm_t *vm, uc_function_t **fnp, uint8_t *ip, bool single, size_t *de
 		}
 	}
 
-	term_print("No next statement, continuing in parent\n");
-
 	*depthp = 0;
 
 	return next_parent(vm, fnp);
@@ -5129,29 +3032,31 @@ load_constval(uc_value_list_t *vallist, size_t cidx)
 	return NULL;
 }
 
-static void
-print_variables(uc_stringbuf_t *buf, uc_vm_t *vm, uc_callframe_t *frame,
-                bool verbose, const char *indent)
+/* Data-only extraction of local variables/upvalues for the current frame,
+ * for the VARIABLES protocol response and BACKTRACE's optional per-frame
+ * variable dump - the client owns all rendering (column widths, colors,
+ * truncation), so this only ever emits raw name/kind/value_repr data. */
+static uc_value_t *
+build_variables_json(uc_vm_t *vm, uc_callframe_t *frame)
 {
 	uc_chunk_t *chunk = &frame->closure->function->chunk;
 	uc_variables_t *decls = &chunk->debuginfo.variables;
 	uc_value_list_t *names = &chunk->debuginfo.varnames;
-	size_t columns = term_width() - strlen(indent);
 	size_t pos = frame->ip - chunk->entries;
+	uc_value_t *arr = ucv_array_new(vm);
 
 	if (frame->ctx) {
-		printbuf_memappend_fast(buf, indent, strlen(indent));
+		uc_value_t *item = ucv_object_new(vm);
+		uc_stringbuf_t vb = { 0 };
 
-		cs(buf, &((style_t){ FG_BWHITE, 0, FAINT }));
-		printbuf_strappend(buf, "(this)           : ");
-		cs(buf, NULL);
+		ucv_to_stringbuf_formatted(vm, &vb, frame->ctx, 0, ' ', 2);
 
-		if (verbose)
-			ucv_to_stringbuf_formatted(vm, buf, frame->ctx, 0, ' ', 2);
-		else
-			printbuf_append_uv(buf, vm, frame->ctx, columns - 19);
+		ucv_object_add(item, "name", ucv_string_new("this"));
+		ucv_object_add(item, "kind", ucv_string_new("this"));
+		ucv_object_add(item, "value_repr", ucv_string_new_length(vb.buf, vb.bpos));
 
-		printbuf_strappend(buf, "\n");
+		free(vb.buf);
+		ucv_array_push(arr, item);
 	}
 
 	for (size_t i = 0; i < decls->count; i++) {
@@ -5160,136 +3065,212 @@ print_variables(uc_stringbuf_t *buf, uc_vm_t *vm, uc_callframe_t *frame,
 
 		uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
 		size_t slot = decls->entries[i].slot;
+		bool is_upval = slot >= (size_t)-1 / 2;
+		uc_value_t *item = ucv_object_new(vm);
+		uc_value_t *vval = NULL;
 
-		printbuf_memappend_fast(buf, indent, strlen(indent));
+		if (vname) {
+			ucv_object_add(item, "name", ucv_get(vname));
+		}
+		else {
+			char buf[32];
+			snprintf(buf, sizeof(buf), "$%zu", slot);
+			ucv_object_add(item, "name", ucv_string_new(buf));
+		}
 
-		/* is local variable */
-		if (slot < (size_t)-1 / 2) {
+		if (!is_upval) {
 			bool is_internal = (vname && *ucv_string_get(vname) == '(');
 
-			if (is_internal)
-				cs(buf, &((style_t){ FG_BWHITE, 0, FAINT }));
+			ucv_object_add(item, "kind", ucv_string_new(is_internal ? "internal" : "local"));
 
-			int n, off = buf->bpos;
+			if (frame->stackframe + slot < vm->stack.count)
+				vval = vm->stack.entries[frame->stackframe + slot];
+		}
+		else {
+			size_t upslot = slot - ((size_t)-1 / 2);
 
-			if (vname)
-				n = sprintbuf(buf, "%s", ucv_string_get(vname));
-			else
-				n = sprintbuf(buf, "$%zu", slot);
+			ucv_object_add(item, "kind", ucv_string_new("upvalue"));
 
-			printbuf_truncate(buf, off, 16, true);
+			if (upslot < frame->closure->function->nupvals) {
+				uc_upvalref_t *ref = frame->closure->upvals[upslot];
 
-			if (is_internal)
-				cs(buf, NULL);
-
-			if (n < 16)
-				printbuf_memset(buf, -1, ' ', 16 - n);
-
-			cs(buf, &((style_t){ FG_BWHITE, 0, FAINT }));
-			printbuf_strappend(buf, " : ");
-			cs(buf, NULL);
-
-			if (frame->stackframe + slot < vm->stack.count) {
-				uc_value_t *vval = vm->stack.entries[frame->stackframe + slot];
-
-				if (verbose)
-					ucv_to_stringbuf_formatted(vm, buf, vval, 0, ' ', 2);
-				else
-					printbuf_append_uv(buf, vm, vval, columns - 19);
-			}
-			else {
-				cs(buf, &((style_t){ FG_RED, 0, BOLD }));
-				printbuf_strappend(buf, "<out of range>");
-				cs(buf, NULL);
+				if (ref) {
+					if (ref->closed)
+						vval = ref->value;
+					else if (ref->slot < vm->stack.count)
+						vval = vm->stack.entries[ref->slot];
+				}
 			}
 		}
 
-		/* is upvalue */
+		if (vval) {
+			uc_stringbuf_t vb = { 0 };
+
+			ucv_to_stringbuf_formatted(vm, &vb, vval, 0, ' ', 2);
+			ucv_object_add(item, "value_repr", ucv_string_new_length(vb.buf, vb.bpos));
+			free(vb.buf);
+		}
 		else {
-			cs(buf, &((style_t){ FG_CYAN, 0, BOLD }));
-
-			int n, off = buf->bpos;
-
-			if (vname)
-				n = sprintbuf(buf, "%s", ucv_string_get(vname));
-			else
-				n = sprintbuf(buf, "$%zu", slot);
-
-			printbuf_truncate(buf, off, 16, true);
-			cs(buf, NULL);
-
-			if (n < 16)
-				printbuf_memset(buf, -1, ' ', 16 - n);
-
-			cs(buf, &((style_t){ FG_BWHITE, 0, FAINT }));
-			printbuf_strappend(buf, " : ");
-			cs(buf, NULL);
-
-			slot -= ((size_t)-1 / 2);
-
-			if (slot < frame->closure->function->nupvals) {
-				uc_upvalref_t *ref = frame->closure->upvals[slot];
-
-				if (!ref) {
-					cs(buf, &((style_t){ FG_BWHITE, 0, FAINT }));
-					printbuf_strappend(buf, "<not initialized>");
-					cs(buf, NULL);
-				}
-				else if (ref->closed) {
-					uc_value_t *vval = ref->value;
-
-					if (verbose)
-						ucv_to_stringbuf_formatted(vm, buf, vval, 0, ' ', 2);
-					else
-						printbuf_append_uv(buf, vm, vval, columns - 19);
-				}
-				else if (ref->slot < vm->stack.count) {
-					uc_value_t *vval = vm->stack.entries[ref->slot];
-
-					if (verbose)
-						ucv_to_stringbuf_formatted(vm, buf, vval, 0, ' ', 2);
-					else
-						printbuf_append_uv(buf, vm, vval, columns - 19);
-				}
-				else {
-					cs(buf, &((style_t){ FG_RED, 0, BOLD }));
-					printbuf_strappend(buf, "<out of range>");
-					cs(buf, NULL);
-				}
-			}
-			else {
-				cs(buf, &((style_t){ FG_RED, 0, BOLD }));
-				printbuf_strappend(buf, "<out of range>");
-				cs(buf, NULL);
-			}
+			ucv_object_add(item, "value_repr", ucv_string_new("<out of range>"));
 		}
 
 		ucv_put(vname);
-
-		printbuf_strappend(buf, "\n");
+		ucv_array_push(arr, item);
 	}
+
+	return arr;
+}
+
+/* Resolve a breakpoint location specification of the form
+ * "path[:line[:offset]]", a bare function name, or a ucode expression that
+ * evaluates to a function, and install a breakpoint of the given kind.
+ *
+ * `frame` may be NULL when there is no active script call frame yet, e.g.
+ * when installing a breakpoint before the program has started running (the
+ * `-x <expr>`/`-X <expr>` command line options) - in that case, `program`
+ * must be given explicitly to resolve bare function names against; a `:line`
+ * spec cannot default its path from a current file and arbitrary expressions
+ * cannot be evaluated, so both are reported as unsupported instead.
+ *
+ * Returns the installed breakpoint id, or 0 on failure. On failure, `*errmsg`
+ * is set to a newly allocated diagnostic string the caller must free(), or to
+ * NULL if the caller should fall back to a generic message. */
+static bool eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr,
+                      uc_value_t **res, char **errmsg);
+
+static size_t
+resolve_breakpoint(uc_vm_t *vm, uc_callframe_t *frame, uc_program_t *program,
+                   char *spec, debug_breakpoint_kind_t kind, char **errmsg)
+{
+	size_t id = 0;
+
+	*errmsg = NULL;
+
+	if (spec == NULL || *spec == '\0') {
+		xasprintf(errmsg, "Usage: path[:line[:offset]] | expr");
+
+		return 0;
+	}
+
+	/* path spec */
+	if ((strchr(spec, '/') || strchr(spec, ':') ||
+	     (*spec >= '0' && *spec <= '9')) && *spec != '(') {
+
+		char *path, *line, *byte;
+
+		if (*spec == ':' || (*spec >= '0' && *spec <= '9')) {
+			if (frame == NULL) {
+				xasprintf(errmsg,
+					"No active source file to default path from");
+
+				return 0;
+			}
+
+			path = uc_program_function_source(frame->closure->function)->filename;
+			line = strtok(spec, ": \t");
+			byte = strtok(NULL, ": \t");
+		}
+		else {
+			path = strtok(spec, ": \t");
+			line = strtok(NULL, ": \t");
+			byte = strtok(NULL, ": \t");
+		}
+
+		if (!path && !line && !byte) {
+			xasprintf(errmsg, "Usage: path[:line[:offset]]");
+
+			return 0;
+		}
+
+		id = add_breakpoint(vm, path,
+			line ? strtoul(line, NULL, 10) : 0,
+			byte ? strtoul(byte, NULL, 10) : 0,
+			kind);
+	}
+
+	/* expression spec or function name */
+	else {
+		uc_program_t *prog = frame ? frame->closure->function->program : program;
+		uc_value_t *val = NULL;
+
+		/* Before evaluating as code, try looking up function name directly. */
+		if (prog != NULL) {
+			uc_program_function_foreach(prog, fn) {
+				if (!strcmp(fn->name, spec)) {
+					id = patch_breakpoint(vm, fn, 0, kind, 1);
+					break;
+				}
+			}
+		}
+
+		if (id == 0 && frame != NULL) {
+			char *errmsg2 = NULL;
+
+			if (eval_expr(vm, frame, spec, &val, &errmsg2)) {
+				if (ucv_type(val) == UC_CLOSURE) {
+					id = patch_breakpoint(vm,
+						((uc_closure_t *)val)->function, 0, kind, 1);
+				}
+				else {
+					char *s = ucv_to_string(vm, val);
+					int len = strlen(s);
+
+					xasprintf(errmsg, "Value `%s` (%.*s%s) is not a function",
+						spec,
+						len > 32 ? 31 : len,
+						s,
+						len > 32 ? "…" : "");
+
+					free(s);
+				}
+
+				ucv_put(val);
+			}
+
+			free(errmsg2);
+		}
+		else if (id == 0 && frame == NULL) {
+			xasprintf(errmsg,
+				"No function named `%s` found "
+				"(expressions require an active frame)", spec);
+		}
+	}
+
+	return id;
+}
+
+static void
+send_error(int fd, uc_vm_t *vm, const char *msg)
+{
+	uc_value_t *obj = ucv_object_new(vm);
+
+	ucv_object_add(obj, "message", ucv_string_new(msg));
+	debug_proto_write(fd, vm, "ERROR", obj);
+	ucv_put(obj);
 }
 
 static bool
-eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res)
+eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
+          char **errmsg)
 {
 	uc_chunk_t *caller_chunk = &frame->closure->function->chunk;
 	uc_variables_t *decls = &caller_chunk->debuginfo.variables;
 	uc_value_list_t *names = &caller_chunk->debuginfo.varnames;
 	size_t pos = frame->ip - caller_chunk->entries;
-	char *err = NULL;
+
+	*errmsg = NULL;
 
 	uc_source_t *source =
 		uc_source_new_buffer("[eval expression]", xstrdup(expr), strlen(expr));
 
 	uc_parse_config_t conf = { .raw_mode = true };
+	char *err = NULL;
 	uc_program_t *prog = uc_compile(&conf, source, &err);
 
 	uc_source_put(source);
 
 	if (!prog) {
-		term_printf("%s", err);
-		free(err);
+		*errmsg = err;
 		*res = NULL;
 
 		return false;
@@ -5299,7 +3280,7 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res)
 	uc_chunk_t *chunk = &((uc_closure_t *)exprfn)->function->chunk;
 
 	if (chunk->entries[0] != I_LVAR && chunk->entries[0] != I_LTHIS) {
-		term_print("Expecting expression\n");
+		*errmsg = xstrdup("Expecting expression");
 		uc_program_put(prog);
 		ucv_put(exprfn);
 		*res = NULL;
@@ -5395,7 +3376,7 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res)
 		rv = true;
 	}
 	else {
-		term_printf("Exception: %s\n", vm->exception.message);
+		xasprintf(errmsg, "Exception: %s", vm->exception.message);
 		vm->exception.type = EXCEPTION_NONE;
 		*res = NULL;
 		rv = false;
@@ -5416,6 +3397,9 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res)
 	return rv;
 }
 
+/* Arm/refresh the BK_CATCH breakpoint for the innermost exception handler
+ * range (if any) covering `ip` within `fn`, so a subsequent exception raised
+ * there is intercepted by bk_handle_catch() before normal unwinding. */
 static void
 update_catchpoint(uc_vm_t *vm, uc_function_t *fn, uint8_t *ip)
 {
@@ -5432,11 +3416,29 @@ update_catchpoint(uc_vm_t *vm, uc_function_t *fn, uint8_t *ip)
 	}
 }
 
-static void
-print_location(uc_vm_t *vm, const char *prefix, debug_breakpoint_t *dbk)
+/* Build the PAUSED event payload: resolve the current source location (and,
+ * as a side effect, finish arming the breakpoint's fn/ip and the exception
+ * catchpoint - see the original print_location() this replaces), then emit
+ * {reason, file, line, col, function, breakpoint_id} with no rendering. */
+static const char *
+paused_reason_name(debug_breakpoint_kind_t kind)
+{
+	switch (kind) {
+	case BK_ONCE:     return "entry";
+	case BK_USER:     return "breakpoint";
+	case BK_STEP:     return "step";
+	case BK_CATCH:    return "exception";
+	case BK_UNCAUGHT: return "uncaught";
+	default:          return "unknown";
+	}
+}
+
+static uc_value_t *
+build_paused_payload(uc_vm_t *vm, debug_breakpoint_t *dbk)
 {
 	uc_callframe_t *topframe = NULL, *funframe = NULL;
 	size_t depth = dbk->depth;
+	uc_value_t *obj = ucv_object_new(vm);
 
 	for (size_t i = vm->callframes.count; i > 0; i--) {
 		if (!topframe || (topframe->cfunction &&
@@ -5446,29 +3448,17 @@ print_location(uc_vm_t *vm, const char *prefix, debug_breakpoint_t *dbk)
 		if (vm->callframes.entries[i - 1].closure) {
 			funframe = &vm->callframes.entries[i - 1];
 
-			/* Update location in automatic function breakpoint.
-			 * BK_UNCAUGHT is exempt: its ip is permanently the
-			 * UC_BREAKPOINT_UNCAUGHT_EXCEPTION sentinel (see vm.c), never a
-			 * real instruction address - overwriting it here would both
-			 * break the vm.c exception-label lookup that fires it (which
-			 * matches on that exact sentinel) and, since ordinary
-			 * ip-matching breakpoint dispatch runs on every instruction,
-			 * make it fire again the next time execution happens to reach
-			 * whatever real address got written here. */
 			if (dbk->fn == NULL && dbk->kind != BK_UNCAUGHT) {
 				dbk->fn = funframe->closure->function;
 				dbk->bk.ip = funframe->ip;
 			}
 
-			/* Update exception catch point */
 			update_catchpoint(vm, funframe->closure->function, funframe->ip);
 			break;
 		}
 	}
 
-	uc_stringbuf_t *pb = xprintbuf_new();
-
-	printbuf_memappend_fast(pb, prefix, strlen(prefix));
+	ucv_object_add(obj, "reason", ucv_string_new(paused_reason_name(dbk->kind)));
 
 	if (funframe) {
 		uc_function_t *function = funframe->closure->function;
@@ -5476,245 +3466,173 @@ print_location(uc_vm_t *vm, const char *prefix, debug_breakpoint_t *dbk)
 		insn_span_t stmt;
 
 		if (find_statement_boundaries(function, funframe->ip, depth, &stmt)) {
+			uc_stringbuf_t pathbuf = { 0 };
 			size_t byte = stmt.pos_start;
 			size_t line = uc_source_get_line(source, &byte);
 
-			sprintbuf(pb, "%s, line %zu:%zu\n",
-				source->filename, line, byte);
+			printbuf_append_srcpath(&pathbuf, source, SIZE_MAX);
 
-			format_context_header_backtrace(pb, vm);
-			format_context_statement(pb, vm, function, &stmt, 2, 2, 0);
+			ucv_object_add(obj, "file", ucv_string_new_length(pathbuf.buf, pathbuf.bpos));
+			ucv_object_add(obj, "line", ucv_uint64_new(line));
+			ucv_object_add(obj, "col", ucv_uint64_new(byte));
+
+			free(pathbuf.buf);
 		}
+
+		uc_stringbuf_t fnbuf = { 0 };
+		printbuf_append_funcname(&fnbuf, vm, &funframe->closure->header, SIZE_MAX);
+		ucv_object_add(obj, "function", ucv_string_new_length(fnbuf.buf, fnbuf.bpos));
+		free(fnbuf.buf);
 	}
-	else if (topframe) {
-		if (topframe->cfunction->name[0])
-			sprintbuf(pb, "native function %s()\n", topframe->cfunction->name);
-		else
-			printbuf_strappend(pb, "unnamed native function\n");
-	}
-	else {
-		printbuf_strappend(pb, "[unknown location]\n");
+	else if (topframe && topframe->cfunction) {
+		ucv_object_add(obj, "function", ucv_string_new(
+			topframe->cfunction->name[0]
+				? topframe->cfunction->name : "[native function]"));
 	}
 
-	printbuf_strappend(pb, "\n");
-	term_write(pb->buf, pb->bpos);
+	if ((dbk->kind == BK_CATCH || dbk->kind == BK_UNCAUGHT) &&
+	    vm->exception.type != EXCEPTION_NONE) {
+		ucv_object_add(obj, "exception_type",
+			ucv_uint64_new(vm->exception.type));
+		ucv_object_add(obj, "exception_message",
+			ucv_string_new(vm->exception.message));
+	}
 
-	printbuf_free(pb);
-}
+	if (dbk->kind == BK_USER) {
+		size_t n = 0;
 
-static bool
-cmd_help(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
-{
-	char *cmd = (argc > 1) ? argv[1].sv : NULL;
-	size_t columns = term_width();
+		for (size_t i = 0; i < vm->breakpoints.count; i++) {
+			debug_breakpoint_t *p = (debug_breakpoint_t *)vm->breakpoints.entries[i];
 
-	for (size_t i = 0; i < ARRAY_SIZE(commands); i++) {
-		bool match = !cmd;
+			if (p == NULL || p->kind != BK_USER)
+				continue;
 
-		if (cmd) {
-			for (const char *c = commands[i].command; *c; c += strlen(c) + 1) {
-				if (str_startswith(c, argv[1].sv)) {
-					match = true;
-					break;
-				}
+			n++;
+
+			if (p == dbk) {
+				ucv_object_add(obj, "breakpoint_id", ucv_uint64_new(n));
+				break;
 			}
 		}
+	}
 
-		if (match == false)
+	return obj;
+}
+
+static void
+proto_cmd_help(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	static const struct {
+		const char *verb;
+		const char *help;
+	} help_table[] = {
+		{ "BREAK",
+			"Set a breakpoint. Payload: {\"spec\":\"path[:line[:offset]]\"|\"expr\"}. "
+			"Response: BREAKPOINT_ADDED {\"id\"} or ERROR." },
+		{ "DELETE",
+			"Delete a breakpoint. Payload: {\"id\":N} or omitted for the current one." },
+		{ "LIST_BREAKPOINTS",
+			"List all currently set breakpoints. Response: BREAKPOINTS {\"items\"}." },
+		{ "NEXT",
+			"Execute the next statement and stop again." },
+		{ "STEP",
+			"Execute the next statement, stepping into calls." },
+		{ "CONTINUE",
+			"Continue execution until the next breakpoint or end of program." },
+		{ "RETURN",
+			"Run until the current function returns." },
+		{ "BACKTRACE",
+			"Print a trace of the current callstack. Payload: {\"full\":bool}." },
+		{ "VARIABLES",
+			"List local variables for the current context." },
+		{ "SOURCES",
+			"List loaded source buffers." },
+		{ "PRINT",
+			"Evaluate an expression. Payload: {\"expr\":\"...\"}." },
+		{ "LINES",
+			"Resolve a source range. Payload: {\"spec\",\"before\",\"after\"}." },
+		{ "THROW",
+			"Raise an exception. Payload: {\"type\",\"message\"}." },
+		{ "DISASSEMBLE",
+			"Disassemble a function or statement. Payload: {\"spec\"}." },
+		{ "SOURCE",
+			"Fetch raw source text for a file. Payload: {\"file\"}." },
+		{ "QUIT",
+			"Terminate the debugged program." },
+	};
+
+	uc_value_t *cmdv = ucv_object_get(payload, "command", NULL);
+	const char *filter = (ucv_type(cmdv) == UC_STRING) ? ucv_string_get(cmdv) : NULL;
+	uc_value_t *items = ucv_array_new(vm);
+
+	for (size_t i = 0; i < ARRAY_SIZE(help_table); i++) {
+		if (filter && !str_startswith(help_table[i].verb, filter))
 			continue;
 
-		term_printf("\033[1m%s\033[0m\n\n", commands[i].command);
+		uc_value_t *item = ucv_object_new(vm);
 
-		const char *p = commands[i].help;
-
-		while (*p != '\0') {
-			size_t pad = strspn(p, " ");
-			size_t len = strcspn(p, "\r\n") - pad;
-
-			if (pad + len <= columns) {
-				term_printf("%.*s\n", (int)(pad + len), p);
-				p += pad + len + (p[pad + len] == '\n');
-			}
-			else {
-				if (pad > columns)
-					pad = 1;
-
-				const char *l = p + pad;
-
-				while (len > columns - pad) {
-					term_printf("%.*s", (int)pad, p);
-
-					for (size_t j = columns - pad; j > 0; j--) {
-						if (l[j-1] == ' ') {
-							term_printf("%.*s\n", (int)j, l);
-							l += j;
-							len -= j;
-							break;
-						}
-					}
-				}
-
-				term_printf("%.*s", (int)pad, p);
-				term_printf("%.*s\n", (int)len, l);
-				p = l + len + (l[len] == '\n');
-			}
-		}
-
-		term_print("\n\n");
+		ucv_object_add(item, "verb", ucv_string_new(help_table[i].verb));
+		ucv_object_add(item, "help", ucv_string_new(help_table[i].help));
+		ucv_array_push(items, item);
 	}
 
-	return true;
+	uc_value_t *obj = ucv_object_new(vm);
+	ucv_object_add(obj, "commands", items);
+	debug_proto_write(fd, vm, "HELP", obj);
+	ucv_put(obj);
 }
 
-/* Resolve a breakpoint location specification of the form
- * "path[:line[:offset]]", a bare function name, or a ucode expression that
- * evaluates to a function, and install a breakpoint of the given kind.
- *
- * `frame` may be NULL when there is no active script call frame yet, e.g.
- * when installing a breakpoint before the program has started running (the
- * `-x <expr>`/`-X <expr>` command line options) - in that case, `program`
- * must be given explicitly to resolve bare function names against; a `:line`
- * spec cannot default its path from a current file and arbitrary expressions
- * cannot be evaluated, so both are reported as unsupported instead.
- *
- * Returns the installed breakpoint id, or 0 on failure. On failure, `*errmsg`
- * is set to a newly allocated diagnostic string the caller must free(), or to
- * NULL if the caller should fall back to a generic message. */
-static size_t
-resolve_breakpoint(uc_vm_t *vm, uc_callframe_t *frame, uc_program_t *program,
-                   char *spec, debug_breakpoint_kind_t kind, char **errmsg)
+static void
+proto_cmd_break(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
-	size_t id = 0;
-
-	*errmsg = NULL;
-
-	if (spec == NULL || *spec == '\0') {
-		xasprintf(errmsg, "Usage: path[:line[:offset]] | expr");
-
-		return 0;
-	}
-
-	/* path spec */
-	if ((strchr(spec, '/') || strchr(spec, ':') ||
-	     (*spec >= '0' && *spec <= '9')) && *spec != '(') {
-
-		char *path, *line, *byte;
-
-		if (*spec == ':' || (*spec >= '0' && *spec <= '9')) {
-			if (frame == NULL) {
-				xasprintf(errmsg,
-					"No active source file to default path from");
-
-				return 0;
-			}
-
-			path = uc_program_function_source(frame->closure->function)->filename;
-			line = strtok(spec, ": \t");
-			byte = strtok(NULL, ": \t");
-		}
-		else {
-			path = strtok(spec, ": \t");
-			line = strtok(NULL, ": \t");
-			byte = strtok(NULL, ": \t");
-		}
-
-		if (!path && !line && !byte) {
-			xasprintf(errmsg, "Usage: path[:line[:offset]]");
-
-			return 0;
-		}
-
-		id = add_breakpoint(vm, path,
-			line ? strtoul(line, NULL, 10) : 0,
-			byte ? strtoul(byte, NULL, 10) : 0,
-			kind);
-	}
-
-	/* expression spec or function name */
-	else {
-		uc_program_t *prog = frame ? frame->closure->function->program : program;
-		uc_value_t *val = NULL;
-
-		/* Before evaluating as code, try looking up function name directly. */
-		if (prog != NULL) {
-			uc_program_function_foreach(prog, fn) {
-				if (!strcmp(fn->name, spec)) {
-					id = patch_breakpoint(vm, fn, 0, kind, 1);
-					break;
-				}
-			}
-		}
-
-		if (id == 0 && frame != NULL && eval_expr(vm, frame, spec, &val)) {
-			if (ucv_type(val) == UC_CLOSURE) {
-				id = patch_breakpoint(vm,
-					((uc_closure_t *)val)->function, 0, kind, 1);
-			}
-			else {
-				char *s = ucv_to_string(vm, val);
-				int len = strlen(s);
-
-				xasprintf(errmsg, "Value `%s` (%.*s%s) is not a function",
-					spec,
-					len > 32 ? 31 : len,
-					s,
-					len > 32 ? "…" : "");
-
-				free(s);
-			}
-
-			ucv_put(val);
-		}
-		else if (id == 0 && frame == NULL) {
-			xasprintf(errmsg,
-				"No function named `%s` found "
-				"(expressions require an active frame)", spec);
-		}
-	}
-
-	return id;
-}
-
-static bool
-cmd_break(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
-{
-	char *spec = (argc == 2) ? argv[1].sv : NULL;
+	uc_value_t *specv = ucv_object_get(payload, "spec", NULL);
 	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
 	char *errmsg = NULL;
+	char *spec;
 	size_t id;
 
-	if (spec == NULL || *spec == '\0') {
-		term_print("Usage:\n");
-		term_print("  break path[:line[:offset]]\n");
-		term_print("  break expr\n");
-
-		return true;
+	if (ucv_type(specv) != UC_STRING) {
+		send_error(fd, vm, "Usage: BREAK {\"spec\":\"path[:line[:offset]]\"|\"expr\"}");
+		return;
 	}
+
+	spec = xstrdup(ucv_string_get(specv));
 
 	id = resolve_breakpoint(vm, frame,
 		frame ? frame->closure->function->program : NULL,
 		spec, BK_USER, &errmsg);
 
-	if (id)
-		term_printf("Breakpoint #%zu added\n", id);
-	else
-		term_printf("%s\n", errmsg ? errmsg : "Unable to resolve source location");
+	free(spec);
+
+	if (id) {
+		uc_value_t *obj = ucv_object_new(vm);
+
+		ucv_object_add(obj, "id", ucv_uint64_new(id));
+		debug_proto_write(fd, vm, "BREAKPOINT_ADDED", obj);
+		ucv_put(obj);
+	}
+	else {
+		send_error(fd, vm, errmsg ? errmsg : "Unable to resolve source location");
+	}
 
 	free(errmsg);
-
-	return true;
 }
 
-static bool
-cmd_delete(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_delete(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
 	uc_breakpoints_t *bks = &vm->breakpoints;
+	uc_value_t *idv = ucv_object_get(payload, "id", NULL);
 
-	if (argc > 2 || (argc == 2 && argv[1].type != ARGTYPE_NUMBER)) {
-		term_print("Usage: delete [id]\n");
-	}
-	else if (argc == 2) {
-		size_t n = 0;
+	if (idv) {
+		size_t want, n = 0;
+
+		if (ucv_type(idv) != UC_INTEGER && ucv_type(idv) != UC_DOUBLE) {
+			send_error(fd, vm, "Usage: DELETE {\"id\":N}");
+			return;
+		}
+
+		want = (size_t)ucv_int64_get(idv);
 
 		for (size_t i = 0; i < bks->count; i++) {
 			debug_breakpoint_t *target = (debug_breakpoint_t *)bks->entries[i];
@@ -5722,41 +3640,39 @@ cmd_delete(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 			if (target == NULL || target->kind != BK_USER)
 				continue;
 
-			if (++n == argv[1].nv) {
+			if (++n == want) {
 				delete_breakpoint(vm, target, dbk);
-
-				return term_printf("Breakpoint #%zu deleted\n", argv[1].nv);
+				debug_proto_write(fd, vm, "OK", NULL);
+				return;
 			}
 		}
 
-		term_printf("No breakpoint #%zu set\n", argv[1].nv);
+		char msg[64];
+		snprintf(msg, sizeof(msg), "No breakpoint #%zu set", want);
+		send_error(fd, vm, msg);
+	}
+	else if (dbk->kind == BK_USER) {
+		delete_breakpoint(vm, dbk, dbk);
+		debug_proto_write(fd, vm, "OK", NULL);
 	}
 	else {
-		if (dbk->kind == BK_USER) {
-			delete_breakpoint(vm, dbk, dbk);
-			term_print("Current breakpoint deleted\n");
-		}
-		else {
-			term_print("Automatic breakpoint cannot be deleted\n");
-		}
+		send_error(fd, vm, "Automatic breakpoint cannot be deleted");
 	}
-
-	return true;
 }
 
-static bool
-cmd_list(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_list(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
 	uc_breakpoints_t *bks = &vm->breakpoints;
-	uc_stringbuf_t buf = { 0 };
+	uc_value_t *items = ucv_array_new(vm);
 	size_t n = 0;
 
 	const char *kinds[] = {
-		[BK_ONCE] = "(once)",
-		[BK_USER] = "(user)",
-		[BK_STEP] = "(step)",
-		[BK_CATCH] = "(catch)",
-		[BK_UNCAUGHT] = "(uncaught)",
+		[BK_ONCE] = "once",
+		[BK_USER] = "user",
+		[BK_STEP] = "step",
+		[BK_CATCH] = "catch",
+		[BK_UNCAUGHT] = "uncaught",
 	};
 
 	for (size_t i = 0; i < ARRAY_SIZE(kinds); i++) {
@@ -5766,261 +3682,208 @@ cmd_list(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 			if (p == NULL || p->kind != i)
 				continue;
 
+			uc_value_t *item = ucv_object_new(vm);
+
+			ucv_object_add(item, "kind", ucv_string_new(kinds[p->kind]));
+
 			if (p->kind == BK_USER)
-				sprintbuf(&buf, "#%-6zu ", ++n);
-			else
-				sprintbuf(&buf, "%-7s ", kinds[p->kind]);
+				ucv_object_add(item, "id", ucv_uint64_new(++n));
 
 			if (p->fn) {
 				uc_source_t *source = uc_program_function_source(p->fn);
 				size_t byte = uc_program_function_srcpos(p->fn,
 					p->bk.ip - p->fn->chunk.entries);
-
 				size_t line = uc_source_get_line(source, &byte);
-
-				if (source)
-					printbuf_append_srcpath(&buf, source, SIZE_MAX);
-				else
-					printbuf_strappend(&buf, "[unknown source]");
-
-				sprintbuf(&buf, ":%zu:%zu - ", line, byte > 1 ? byte : 1);
-
+				uc_stringbuf_t pathbuf = { 0 }, fnbuf = { 0 };
 				uc_closure_t cl = {
 					.header = { .type = UC_CLOSURE },
 					.function = p->fn
 				};
 
-				printbuf_append_function(&buf, vm, &cl.header, NULL, SIZE_MAX);
+				printbuf_append_srcpath(&pathbuf, source, SIZE_MAX);
+				printbuf_append_function(&fnbuf, vm, &cl.header, NULL, SIZE_MAX);
 
+				ucv_object_add(item, "file", ucv_string_new_length(pathbuf.buf, pathbuf.bpos));
+				ucv_object_add(item, "line", ucv_uint64_new(line));
+				ucv_object_add(item, "col", ucv_uint64_new(byte > 1 ? byte : 1));
+				ucv_object_add(item, "function", ucv_string_new_length(fnbuf.buf, fnbuf.bpos));
 
+				free(pathbuf.buf);
+				free(fnbuf.buf);
 			}
-			else {
-				printbuf_strappend(&buf, "<next instruction>");
-			}
 
-			printbuf_strappend(&buf, "\n");
-			term_write(buf.buf, buf.bpos);
-			printbuf_reset(&buf);
+			ucv_array_push(items, item);
 		}
 	}
 
-	if (n == 0)
-		term_print("No user breakpoints set\n");
-
-	free(buf.buf);
-
-	return true;
+	uc_value_t *obj = ucv_object_new(vm);
+	ucv_object_add(obj, "items", items);
+	debug_proto_write(fd, vm, "BREAKPOINTS", obj);
+	ucv_put(obj);
 }
 
-static bool
-cmd_step_common(uc_vm_t *vm, debug_breakpoint_t *dbk, bool single)
+static void
+cmd_step_common(uc_vm_t *vm, debug_breakpoint_t *dbk, bool single, int fd, bool *proceed)
 {
 	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_function_t *fn;
+	size_t depth;
+	uint8_t *nextinsn;
 
-	if (!frame)
-		return false;
+	if (!frame) {
+		*proceed = false;
+		return;
+	}
 
-	uc_function_t *fn = frame->closure->function;
-	size_t depth = dbk->depth;
-	uint8_t *nextinsn = next_step(vm, &fn, frame->ip, single, &depth);
+	fn = frame->closure->function;
+	depth = dbk->depth;
+	nextinsn = next_step(vm, &fn, frame->ip, single, &depth);
 
 	/* Returning from the outermost frame - nothing further to step to and
-	 * the program is about to terminate. Stay in the CLI instead of
-	 * resuming unattended (see STEP_STAY_PAUSED comment). */
+	 * the program is about to terminate. Stay paused instead of resuming
+	 * unattended (see STEP_STAY_PAUSED comment). */
 	if (nextinsn == STEP_STAY_PAUSED(vm)) {
-		term_print("No next instruction - program will terminate on 'continue'\n");
-
-		return true;
+		send_error(fd, vm, "No next instruction - program will terminate on 'continue'");
+		*proceed = true;
+		return;
 	}
 
 	/* no next instruction, run until completion */
-	if (!nextinsn)
-		return false;
+	if (!nextinsn) {
+		*proceed = false;
+		return;
+	}
 
-	uc_source_t *source = uc_program_function_source(fn);
+	update_breakpoint(vm, BK_STEP, bk_enter_session, nextinsn, fn, depth);
 
-	size_t byte = uc_program_function_srcpos(fn,
-		nextinsn - fn->chunk.entries);
-
-	size_t line = uc_source_get_line(
-		uc_program_function_source(fn), &byte);
-
-	if (fn != frame->closure->function)
-		term_printf("Entering %s()...\n",
-			fn->name[0]
-				? fn->name : fn->arrow
-					? "[arrow function]" : "[unnamed function]");
-	else
-		term_printf("Continuing in %s:%zu:%zu...\n",
-			source->filename, line, byte);
-
-	update_breakpoint(vm, BK_STEP, bk_enter_cli, nextinsn, fn, depth);
-
-	return false;
+	*proceed = false;
 }
 
-static bool
-cmd_next(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_next(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
-	return cmd_step_common(vm, dbk, false);
+	cmd_step_common(vm, dbk, false, fd, proceed);
 }
 
-static bool
-cmd_step(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_step(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
-	return cmd_step_common(vm, dbk, true);
+	cmd_step_common(vm, dbk, true, fd, proceed);
 }
 
-static bool
-cmd_continue(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_continue(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
-	term_print("Continuing...\n");
-
-	return false;
+	*proceed = false;
 }
 
-static bool
-cmd_return(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_return(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
 	uc_callframe_t *frame = uc_debug_curr_frame(vm, 1);
 
 	if (frame) {
-		update_breakpoint(vm, BK_STEP, bk_enter_cli, frame->ip,
+		update_breakpoint(vm, BK_STEP, bk_enter_session, frame->ip,
 			frame->closure->function, 0); /* XXX: fixup depth? */
 	}
-	else {
-		term_print("In topmost function, running until completion...\n");
-	}
 
-	return false;
+	*proceed = false;
 }
 
-static bool
-cmd_backtrace(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_backtrace(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
-	bool verbose = false;
+	bool verbose = ucv_is_truish(ucv_object_get(payload, "full", NULL));
+	uc_value_t *frames = ucv_array_new(vm);
 
-	if (argc > 3 || (argc == 2 && argv[1].type != ARGTYPE_STRING))
-		return term_print("Usage: backtrace [full]\n");
-
-	if (argc == 2 && str_startswith("full", argv[1].sv))
-		verbose = true;
-
-	uc_stringbuf_t buf = { 0 };
-	uc_function_t *function;
-	uc_callframe_t *frame;
-	bool adjust_ip = true;
-	size_t i;
-
-	for (i = vm->callframes.count; i > 0; i--) {
-		frame = &vm->callframes.entries[i - 1];
+	for (size_t i = vm->callframes.count; i > 0; i--) {
+		uc_callframe_t *frame = &vm->callframes.entries[i - 1];
+		uc_value_t *item;
 
 		if (frame->closure) {
-			function = frame->closure->function;
-
-			printbuf_cs(&buf, "\1#%-2zu\177 in ",
-				&((style_t){ 0, 0, BOLD }),
-				i);
-
-			printbuf_append_srcpath(&buf,
-				uc_program_function_source(function), SIZE_MAX);
-
+			uc_function_t *function = frame->closure->function;
+			uc_source_t *source = uc_program_function_source(function);
 			size_t insn = frame->ip - function->chunk.entries;
 			size_t byte = insn;
 			size_t line = insnoff_to_srcpos(function, &byte);
+			uc_stringbuf_t pathbuf = { 0 }, fnbuf = { 0 };
 
-			sprintbuf(&buf, ":%zu:%zu at insn #%zu in ", line, byte, insn);
+			item = ucv_object_new(vm);
 
-			cs(&buf, &((style_t){ 0, 0, BOLD }));
-			printbuf_append_funcname(&buf,
-				vm, &frame->closure->header, SIZE_MAX);
-			printbuf_strappend(&buf, "()\n");
-			cs(&buf, NULL);
+			printbuf_append_srcpath(&pathbuf, source, SIZE_MAX);
+			printbuf_append_funcname(&fnbuf, vm, &frame->closure->header, SIZE_MAX);
 
-			uint8_t *ip = frame->ip;
-			insn_span_t stmt;
+			ucv_object_add(item, "kind", ucv_string_new("script"));
+			ucv_object_add(item, "index", ucv_uint64_new(i));
+			ucv_object_add(item, "file", ucv_string_new_length(pathbuf.buf, pathbuf.bpos));
+			ucv_object_add(item, "line", ucv_uint64_new(line));
+			ucv_object_add(item, "col", ucv_uint64_new(byte));
+			ucv_object_add(item, "insn", ucv_uint64_new(insn));
+			ucv_object_add(item, "function", ucv_string_new_length(fnbuf.buf, fnbuf.bpos));
 
-			if (adjust_ip && i < vm->callframes.count)
-				ip -= 5 - 2 * (vm->arg.u32 >> 16);
+			free(pathbuf.buf);
+			free(fnbuf.buf);
 
-			if (find_statement_boundaries(function, ip, 0, &stmt)) {
-				format_context_header_callframe(&buf, vm, frame, 2);
-				format_context_statement(&buf, vm, function, &stmt, 2, 2, 2);
-			}
-
-			if (verbose) {
-				printbuf_cs(&buf, "\n  \1Local variables:\177\n",
-					&((style_t){ 0, 0, BOLD }));
-
-				print_variables(&buf, vm, frame, false, "   - ");
-			}
+			if (verbose)
+				ucv_object_add(item, "variables", build_variables_json(vm, frame));
 		}
 		else if (frame->cfunction) {
 			uc_cfunction_t *cfn = frame->cfunction;
+			uc_stringbuf_t fnbuf = { 0 };
 			Dl_info dli;
 
-			printbuf_cs(&buf, "\1#%-2zu\177 in ",
-				&((style_t){ 0, 0, BOLD }),
-				i);
+			item = ucv_object_new(vm);
+
+			printbuf_append_funcname(&fnbuf, vm, &cfn->header, SIZE_MAX);
+
+			ucv_object_add(item, "kind", ucv_string_new("native"));
+			ucv_object_add(item, "index", ucv_uint64_new(i));
 
 			if (dladdr(cfn->cfn, &dli) != 0 && dli.dli_fname != NULL)
-				printbuf_memappend_fast((&buf),
-					dli.dli_fname, strlen(dli.dli_fname));
-			else
-				printbuf_strappend(&buf, "[unknown shared object]");
+				ucv_object_add(item, "module", ucv_string_new(dli.dli_fname));
 
-			printbuf_strappend(&buf, ", function ");
+			ucv_object_add(item, "function", ucv_string_new_length(fnbuf.buf, fnbuf.bpos));
 
-			cs(&buf, &((style_t){ 0, 0, BOLD }));
-			printbuf_append_funcname(&buf, vm, &cfn->header, SIZE_MAX);
-			printbuf_strappend(&buf, "()\n");
-			cs(&buf, NULL);
-
-			format_context_header_callframe(&buf, vm, frame, 2);
-			format_context_cfunction(&buf, vm, cfn, 2);
-
-			adjust_ip = false;
+			free(fnbuf.buf);
+		}
+		else {
+			continue;
 		}
 
-		printbuf_strappend(&buf, "\n");
-		term_write(buf.buf, buf.bpos);
-		printbuf_reset(&buf);
+		ucv_array_push(frames, item);
 	}
 
-	free(buf.buf);
-
-	return true;
+	uc_value_t *obj = ucv_object_new(vm);
+	ucv_object_add(obj, "frames", frames);
+	debug_proto_write(fd, vm, "BACKTRACE", obj);
+	ucv_put(obj);
 }
 
-static bool
-cmd_variables(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_variables(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
 	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
-	uc_stringbuf_t buf = { 0 };
-	bool verbose = false;
+	uc_value_t *obj;
 
-	if (argc > 3 || (argc == 2 && argv[1].type != ARGTYPE_STRING))
-		return term_print("Usage: backtrace [full]\n");
+	if (!frame) {
+		send_error(fd, vm, "No local variables in current context");
+		return;
+	}
 
-	if (argc == 2 && str_startswith("full", argv[1].sv))
-		verbose = true;
-
-	if (!frame)
-		return term_print("No local variables in current context\n");
-
-	print_variables(&buf, vm, frame, verbose, "");
-
-	term_write(buf.buf, buf.bpos);
-	free(buf.buf);
-
-	return true;
+	obj = ucv_object_new(vm);
+	ucv_object_add(obj, "vars", build_variables_json(vm, frame));
+	debug_proto_write(fd, vm, "VARIABLES", obj);
+	ucv_put(obj);
 }
 
-static bool
-cmd_sources(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_sources(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
 	struct lh_table *sources = lh_kptr_table_new(16, NULL);
+	uc_value_t *items = ucv_array_new(vm);
+	struct lh_entry *e;
 	uc_weakref_t *ref;
+	size_t i = 0;
 
 	for (ref = vm->values.next; ref != &vm->values; ref = ref->next) {
 		uc_closure_t *uc =
@@ -6032,8 +3895,8 @@ cmd_sources(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 		if (!uc->function || !uc->function->program)
 			continue;
 
-		for (size_t i = 0; i < uc->function->program->sources.count; i++) {
-			uc_source_t *source = uc->function->program->sources.entries[i];
+		for (size_t j = 0; j < uc->function->program->sources.count; j++) {
+			uc_source_t *source = uc->function->program->sources.entries[j];
 			unsigned long hash = lh_get_hash(sources, source);
 
 			if (!lh_table_lookup_entry_w_hash(sources, source, hash))
@@ -6041,108 +3904,123 @@ cmd_sources(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 		}
 	}
 
-	struct lh_entry *e;
-	size_t i = 0;
-
 	lh_foreach(sources, e) {
 		uc_source_t *source = lh_entry_k(e);
+		uc_value_t *item = ucv_object_new(vm);
 
-		term_printf("#%2zu %s\n", i++, source->filename);
+		ucv_object_add(item, "index", ucv_uint64_new(i++));
+		ucv_object_add(item, "file", ucv_string_new(source->filename));
+		ucv_array_push(items, item);
 	}
 
 	lh_table_free(sources);
 
-	return true;
+	uc_value_t *obj = ucv_object_new(vm);
+	ucv_object_add(obj, "items", items);
+	debug_proto_write(fd, vm, "SOURCES", obj);
+	ucv_put(obj);
 }
 
-static bool
-cmd_print(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_print(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
 	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
-	uc_stringbuf_t buf = { 0 };
-
-	if (argc < 2)
-		return term_print("Usage: print expr\n");
-
-	for (size_t i = 1; i < argc; i++) {
-		if (i > 1)
-			printbuf_strappend(&buf, " ");
-
-		printbuf_memappend_fast((&buf), argv[i].sv, strlen(argv[i].sv));
-	}
-
+	uc_value_t *exprv = ucv_object_get(payload, "expr", NULL);
 	uc_value_t *res = NULL;
+	char *errmsg = NULL;
 
-	if (eval_expr(vm, frame, buf.buf, &res)) {
-		printbuf_reset(&buf);
-		ucv_to_stringbuf_formatted(vm, &buf, res, 0, ' ', 2);
-		printbuf_strappend(&buf, "\n");
-
-		ucv_put(res);
-
-		term_write(buf.buf, buf.bpos);
+	if (ucv_type(exprv) != UC_STRING) {
+		send_error(fd, vm, "Usage: PRINT {\"expr\":\"...\"}");
+		return;
 	}
 
-	free(buf.buf);
+	if (eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg)) {
+		uc_stringbuf_t vb = { 0 };
+		uc_value_t *obj = ucv_object_new(vm);
 
-	return true;
+		ucv_to_stringbuf_formatted(vm, &vb, res, 0, ' ', 2);
+
+		ucv_object_add(obj, "repr", ucv_string_new_length(vb.buf, vb.bpos));
+		debug_proto_write(fd, vm, "VALUE", obj);
+
+		ucv_put(obj);
+		ucv_put(res);
+		free(vb.buf);
+	}
+	else {
+		send_error(fd, vm, errmsg ? errmsg : "Evaluation failed");
+	}
+
+	free(errmsg);
 }
 
-static bool
-cmd_lines(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_lines(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
 	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
-	uc_function_t *fn = frame->closure->function;
-	size_t insn = frame->ip - fn->chunk.entries;
-	bool ctx_is_range = false;
-	size_t ctx_before = 2;
-	size_t ctx_after = 2;
+	uc_function_t *fn = frame ? frame->closure->function : NULL;
+	uc_value_t *specv = ucv_object_get(payload, "spec", NULL);
+	uc_value_t *beforev = ucv_object_get(payload, "before", NULL);
+	uc_value_t *afterv = ucv_object_get(payload, "after", NULL);
+	const char *spec = (ucv_type(specv) == UC_STRING) ? ucv_string_get(specv) : NULL;
+	size_t ctx_before = (ucv_type(beforev) == UC_INTEGER || ucv_type(beforev) == UC_DOUBLE)
+		? (size_t)ucv_int64_get(beforev) : 2;
+	size_t ctx_after = (ucv_type(afterv) == UC_INTEGER || ucv_type(afterv) == UC_DOUBLE)
+		? (size_t)ucv_int64_get(afterv) : 2;
+	insn_span_t stmt = { .pos_start = SIZE_MAX, .pos_end = SIZE_MAX, .pos_ip = SIZE_MAX };
+	location_t loc;
+	size_t insn, from, to;
+	uc_value_t *obj;
 
-	location_t loc = {
+	if (!fn) {
+		send_error(fd, vm, "No active source location");
+		return;
+	}
+
+	insn = frame->ip - fn->chunk.entries;
+
+	loc = (location_t){
 		.program = fn->program,
 		.source = uc_program_function_source(fn),
 		.function = fn,
 		.offset = uc_program_function_srcpos(fn, insn),
 	};
 
-	insn_span_t stmt = {
-		.pos_start = SIZE_MAX,
-		.pos_end = SIZE_MAX,
-		.pos_ip = SIZE_MAX
-	};
-
-	/* no argument */
-	if (argc == 1) {
+	if (!spec) {
 		if (find_statement_boundaries(fn, frame->ip, 0, &stmt))
 			loc.offset = stmt.pos_start;
 
 		loc.column = loc.offset;
 		loc.line = uc_source_get_line(loc.source, &loc.column);
 	}
+	else if (spec[0] >= '0' && spec[0] <= '9') {
+		char *end;
+		unsigned long n = strtoul(spec, &end, 10);
 
-	/* absolute line number */
-	else if (argc >= 2 && argv[1].type == ARGTYPE_NUMBER) {
-		loc.line = (argv[1].nv > 0) ? argv[1].nv : 1;
+		if (*end != '\0') {
+			send_error(fd, vm, "Invalid line number");
+			return;
+		}
+
+		loc.line = (n > 0) ? n : 1;
 	}
+	else if (strchr("+-#", spec[0]) != NULL && spec[1] >= '0' && spec[1] <= '9') {
+		char *end;
+		unsigned long n = strtoul(spec + 1, &end, 0);
 
-	/* line or instruction offset */
-	else if (argc >= 2 && argv[1].type == ARGTYPE_STRING &&
-	         strchr("+-#", argv[1].sv[0]) != NULL &&
-	         argv[1].sv[1] >= '0' && argv[1].sv[1] <= '9') {
-		char *e;
-		unsigned long n = strtoul(argv[1].sv + 1, &e, 0);
+		if (*end != '\0') {
+			send_error(fd, vm, "Invalid offset");
+			return;
+		}
 
-		if (*e != '\0')
-			return term_print("Invalid offset\n");
-
-		if (argv[1].sv[0] == '+' || argv[1].sv[0] == '-') {
+		if (spec[0] == '+' || spec[0] == '-') {
 			if (find_statement_boundaries(fn, frame->ip, 0, &stmt))
 				loc.offset = stmt.pos_start;
 
 			loc.column = loc.offset;
 			loc.line = uc_source_get_line(loc.source, &loc.column);
 
-			if (argv[1].sv[0] == '+')
+			if (spec[0] == '+')
 				loc.line += n;
 			else if (n < loc.line)
 				loc.line -= n;
@@ -6153,31 +4031,21 @@ cmd_lines(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 			loc.offset = uc_program_function_srcpos(fn, n);
 			loc.column = loc.offset;
 			loc.line = uc_source_get_line(loc.source, &loc.column);
-
 			stmt.pos_ip = loc.offset;
 		}
 	}
-
-	/* source path, function name or function expression */
-	else if (argc >= 2 && argv[1].type == ARGTYPE_STRING) {
+	else {
 		bool found = false;
 
-		if (argv[1].sv[0] != '(') {
-			loc = ((location_t){
-				.path = argv[1].sv,
-				.line = 1,
-				.column = 1
-			});
-
+		if (spec[0] != '(') {
+			loc = (location_t){ .path = spec, .line = 1, .column = 1 };
 			found = lookup_source(vm, &loc);
-			ctx_is_range = true;
 
 			if (!found) {
 				uc_program_function_foreach(fn->program, pfn) {
-					if (!strcmp(pfn->name, argv[1].sv)) {
-						loc = ((location_t){ .function = pfn });
+					if (!strcmp(pfn->name, spec)) {
+						loc = (location_t){ .function = pfn };
 						found = true;
-						ctx_is_range = false;
 						break;
 					}
 				}
@@ -6185,37 +4053,34 @@ cmd_lines(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 		}
 
 		if (!found) {
-			uc_value_t *val;
+			uc_value_t *val = NULL;
+			char *errmsg = NULL;
+			char *specdup = xstrdup(spec);
+			bool ok = eval_expr(vm, frame, specdup, &val, &errmsg);
 
-			if (!eval_expr(vm, frame, argv[1].sv, &val))
-				return true;
+			free(specdup);
 
-			if (ucv_type(val) != UC_CLOSURE) {
-				char *s = ucv_to_string(vm, val);
-				int len = strlen(s);
-
-				term_printf("Value `%s` (%.*s%s) is not a function\n",
-					argv[1].sv,
-					len > 32 ? 31 : len,
-					s,
-					len > 32 ? "…" : "");
-
-				ucv_put(val);
-				free(s);
-
-				return true;
+			if (!ok) {
+				send_error(fd, vm, errmsg ? errmsg : "Evaluation failed");
+				free(errmsg);
+				return;
 			}
 
-			loc = ((location_t){ .function = ((uc_closure_t *)val)->function });
-			found = true;
-			ctx_is_range = false;
+			free(errmsg);
 
+			if (ucv_type(val) != UC_CLOSURE) {
+				ucv_put(val);
+				send_error(fd, vm, "Value is not a function");
+				return;
+			}
+
+			loc = (location_t){ .function = ((uc_closure_t *)val)->function };
 			ucv_put(val);
 		}
 
 		if (loc.function) {
 			size_t beg = uc_program_function_srcpos(loc.function, 0);
-			size_t end = uc_program_function_srcpos(loc.function, SIZE_MAX);
+			size_t end2 = uc_program_function_srcpos(loc.function, SIZE_MAX);
 
 			loc.program = loc.function->program;
 			loc.source = uc_program_function_source(loc.function);
@@ -6223,153 +4088,155 @@ cmd_lines(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 			loc.line = uc_source_get_line(loc.source, &loc.column);
 
 			ctx_before = 1;
-			ctx_after = uc_source_get_line(loc.source, &end) + 2 - loc.line;
-		}
-		else {
-			ctx_before = 0;
-			ctx_after = 5;
+			ctx_after = uc_source_get_line(loc.source, &end2) + 2 - loc.line;
 		}
 	}
 
-	if (argc >= 3 && argv[2].type != ARGTYPE_NUMBER)
-		return term_print("Invalid amount of context lines\n");
-
-	if (argc >= 4 && argv[3].type != ARGTYPE_NUMBER)
-		return term_print("Invalid amount of following context lines\n");
-
-	if (argc >= 4) {
-		if (ctx_is_range) {
-			loc.line = argv[2].nv > 0 ? argv[2].nv : 1;
-			ctx_before = 0;
-			ctx_after = (argv[3].nv > argv[2].nv) ? argv[3].nv - argv[2].nv : 1;
-		}
-		else {
-			ctx_before = argv[2].nv;
-			ctx_after = argv[3].nv;
-		}
-	}
-	else if (argc >= 3) {
-		ctx_before = 0, ctx_after = argv[2].nv;
+	if (!lookup_function(vm, &loc)) {
+		send_error(fd, vm, "Unable to resolve source code location");
+		return;
 	}
 
-	if (!lookup_function(vm, &loc))
-		return term_print("Unable to resolve source code location\n");
+	from = (loc.line > ctx_before) ? loc.line - ctx_before : 1;
+	to = loc.line + ctx_after;
 
-	uc_stringbuf_t buf = { 0 };
+	obj = ucv_object_new(vm);
 
-	line_range_t lines = {
-		.from = (loc.line > ctx_before) ? loc.line - ctx_before : 1,
-		.to   = loc.line + ctx_after
+	{
+		uc_stringbuf_t pathbuf = { 0 };
 
-	};
+		printbuf_append_srcpath(&pathbuf, loc.source, SIZE_MAX);
+		ucv_object_add(obj, "file", ucv_string_new_length(pathbuf.buf, pathbuf.bpos));
+		free(pathbuf.buf);
+	}
 
-	print_source_location(&buf, vm, loc.source, 1, &lines,
-		(loc.source == uc_program_function_source(fn)) ? &stmt : NULL, 0);
+	ucv_object_add(obj, "from", ucv_uint64_new(from));
+	ucv_object_add(obj, "to", ucv_uint64_new(to));
 
-	printbuf_strappend(&buf, "\n");
+	if (loc.source == uc_program_function_source(fn) && stmt.pos_start != SIZE_MAX) {
+		size_t sline_byte = stmt.pos_start;
+		size_t sline = uc_source_get_line(loc.source, &sline_byte);
+		size_t eline_byte = stmt.pos_end;
+		size_t eline = uc_source_get_line(loc.source, &eline_byte);
+		uc_value_t *cursor = ucv_object_new(vm);
 
-	term_write(buf.buf, buf.bpos);
-	free(buf.buf);
+		ucv_object_add(cursor, "from_line", ucv_uint64_new(sline));
+		ucv_object_add(cursor, "from_col", ucv_uint64_new(sline_byte));
+		ucv_object_add(cursor, "to_line", ucv_uint64_new(eline));
+		ucv_object_add(cursor, "to_col", ucv_uint64_new(eline_byte));
+		ucv_object_add(obj, "cursor", cursor);
+	}
 
-	return true;
+	debug_proto_write(fd, vm, "SOURCE_RANGE", obj);
+	ucv_put(obj);
 }
 
-static bool
-cmd_throw(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_throw(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
+	uc_value_t *typev = ucv_object_get(payload, "type", NULL);
+	uc_value_t *msgv = ucv_object_get(payload, "message", NULL);
 	uc_exception_type_t et = EXCEPTION_USER;
 
-	if (argc < 2 || argv[1].type != ARGTYPE_STRING || argc > 3)
-		return term_print("Usage: throw [type] message\n");
-
-	if (argc == 3) {
-		if (str_startswith("syntax", argv[1].sv))
-			et = EXCEPTION_SYNTAX;
-		else if (str_startswith("runtime", argv[1].sv))
-			et = EXCEPTION_RUNTIME;
-		else if (str_startswith("type", argv[1].sv))
-			et = EXCEPTION_TYPE;
-		else if (str_startswith("reference", argv[1].sv))
-			et = EXCEPTION_REFERENCE;
-		else if (str_startswith("user", argv[1].sv))
-			et = EXCEPTION_USER;
-		else if (str_startswith("exit", argv[1].sv))
-			et = EXCEPTION_EXIT;
-		else
-			return term_printf("Unrecognized exception type '%s'\n", argv[1].sv);
+	if (ucv_type(msgv) != UC_STRING) {
+		send_error(fd, vm, "Usage: THROW {\"message\":\"...\"}");
+		return;
 	}
 
-	uc_vm_raise_exception(vm, et, "%s", argv[argc - 1].sv);
+	if (ucv_type(typev) == UC_STRING) {
+		const char *t = ucv_string_get(typev);
 
-	return true;
+		if (str_startswith("syntax", t)) et = EXCEPTION_SYNTAX;
+		else if (str_startswith("runtime", t)) et = EXCEPTION_RUNTIME;
+		else if (str_startswith("type", t)) et = EXCEPTION_TYPE;
+		else if (str_startswith("reference", t)) et = EXCEPTION_REFERENCE;
+		else if (str_startswith("user", t)) et = EXCEPTION_USER;
+		else if (str_startswith("exit", t)) et = EXCEPTION_EXIT;
+		else {
+			char msg[128];
+			snprintf(msg, sizeof(msg), "Unrecognized exception type '%s'", t);
+			send_error(fd, vm, msg);
+			return;
+		}
+	}
+
+	uc_vm_raise_exception(vm, et, "%s", ucv_string_get(msgv));
 }
 
-#undef __insn
-#define __insn(_name) #_name,
-
 static const char *insn_names[__I_MAX] = {
+#undef __insn
+#define __insn(_name) [I_##_name] = #_name,
 	__insns
 };
 
-static bool
-cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
+static void
+proto_cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
 	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_value_t *specv = ucv_object_get(payload, "spec", NULL);
+	const char *spec = (ucv_type(specv) == UC_STRING) ? ucv_string_get(specv) : NULL;
 	uc_function_t *target = NULL;
-	uc_stringbuf_t buf = { 0 };
 	uc_program_t *prog = NULL;
 	size_t from = 0, to = 0;
-	size_t columns = term_width();
+	uc_value_t *insns, *obj;
+	uint8_t *bytecode;
 
-	if (argc > 2 || (argc == 2 && argv[1].type != ARGTYPE_STRING))
-		return term_print("Usage: disassemble [target]\n");
+	if (!frame) {
+		send_error(fd, vm, "No active call frame");
+		return;
+	}
 
-	if (argc == 2) {
-		if (*argv[1].sv == '#') {
+	if (spec) {
+		if (*spec == '#') {
 			char *e;
 
-			from = strtoul(argv[1].sv + 1, &e, 10);
+			from = strtoul(spec + 1, &e, 10);
 
 			if (*e == '-') {
 				to = strtoul(e + 1, &e, 10);
 
-				if (*e != '\0' || to < from)
-					return term_printf("Invalid instruction range '%s'\n", argv[1].sv);
+				if (*e != '\0' || to < from) {
+					send_error(fd, vm, "Invalid instruction range");
+					return;
+				}
 			}
 			else if (*e == '+') {
 				to = from + strtoul(e + 1, &e, 10);
 
-				if (*e != '\0')
-					return term_printf("Invalid instruction count '%s'\n", argv[1].sv);
+				if (*e != '\0') {
+					send_error(fd, vm, "Invalid instruction count");
+					return;
+				}
 			}
 			else if (*e == '\0') {
 				to = from;
 			}
 			else {
-				return term_printf("Invalid instruction offset '%s'\n", argv[1].sv);
+				send_error(fd, vm, "Invalid instruction offset");
+				return;
 			}
 
 			target = frame->closure->function;
 
-			if (from >= target->chunk.count || to >= target->chunk.count)
-				return term_printf("Instruction offset '%s' out of range 0..%zu\n",
-					argv[1].sv, target->chunk.count - 1);
+			if (from >= target->chunk.count || to >= target->chunk.count) {
+				send_error(fd, vm, "Instruction offset out of range");
+				return;
+			}
 		}
-		else if (*argv[1].sv == '(') {
+		else if (*spec == '(') {
 			uc_parse_config_t conf = { .raw_mode = true };
 			uc_source_t *source = uc_source_new_buffer("[disasm expression]",
-				xstrdup(argv[1].sv), strlen(argv[1].sv));
+				xstrdup(spec), strlen(spec));
+			char *err = NULL;
 
-			char *err;
 			prog = uc_compile(&conf, source, &err);
 
 			uc_source_put(source);
 
 			if (!prog) {
-				term_write(err, strlen(err));
+				send_error(fd, vm, err ? err : "Invalid expression");
 				free(err);
-
-				return term_print("Invalid expression\n");
+				return;
 			}
 
 			target = uc_program_entry(prog);
@@ -6377,31 +4244,40 @@ cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 			to = target->chunk.count - 1;
 		}
 		else {
-			char *p = strchr(argv[1].sv, '+');
+			char *dup = xstrdup(spec);
+			char *p = strchr(dup, '+');
 			size_t limit = SIZE_MAX;
 
 			if (p) {
 				char *e;
+
 				limit = strtoul(p + 1, &e, 10);
 
-				if (e == p + 1 || *e != '\0' || limit == 0)
-					return term_printf("Invalid instruction count '%s'\n", p + 1);
+				if (e == p + 1 || *e != '\0' || limit == 0) {
+					send_error(fd, vm, "Invalid instruction count");
+					free(dup);
+					return;
+				}
 
-				*p++ = 0;
+				*p = 0;
 			}
 
 			uc_program_function_foreach(frame->closure->function->program, fn) {
-				if (!strcmp(fn->name, argv[1].sv)) {
+				if (!strcmp(fn->name, dup)) {
 					target = fn;
 					from = 0;
-					to = (limit < target->chunk.count)
-						? limit : target->chunk.count - 1;
+					to = (limit < target->chunk.count) ? limit : target->chunk.count - 1;
 					break;
 				}
 			}
 
-			if (!target)
-				return term_printf("Unable to find function '%s'\n", argv[1].sv);
+			if (!target) {
+				send_error(fd, vm, "Unable to find function");
+				free(dup);
+				return;
+			}
+
+			free(dup);
 		}
 	}
 	else {
@@ -6409,16 +4285,17 @@ cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 
 		target = frame->closure->function;
 
-		if (!find_statement_boundaries(target, frame->ip, 0, &stmt))
-			return term_print("Unable to determine current statement boundaries\n");
+		if (!find_statement_boundaries(target, frame->ip, 0, &stmt)) {
+			send_error(fd, vm, "Unable to determine current statement boundaries");
+			return;
+		}
 
 		from = stmt.ip_start - target->chunk.entries;
-		to   = (stmt.ip_end   - target->chunk.entries) - 1;
+		to = (stmt.ip_end - target->chunk.entries) - 1;
 	}
 
-	uint8_t *bytecode = target->chunk.entries;
+	bytecode = target->chunk.entries;
 
-	/* find nearest instruction start */
 	for (size_t i = 0; i < target->chunk.count; ) {
 		size_t len = insn_length(bytecode + i, target->program);
 
@@ -6430,31 +4307,17 @@ cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 		i += len;
 	}
 
+	insns = ucv_array_new(vm);
+
 	for (size_t i = from; i <= to; ) {
-		union { uint8_t u8; uint16_t u16; uint32_t u32; int32_t s32; } arg;
+		union { uint8_t u8; uint16_t u16; uint32_t u32; int32_t s32; } arg = { 0 };
 		size_t n = insn_length(bytecode + i, target->program);
 		uint8_t insn = bytecode[i];
-		int off = buf.bpos;
-		fg_color_t color;
+		uc_value_t *item = ucv_object_new(vm);
+		uc_value_t *operand = NULL;
 
-		sprintbuf(&buf, "%06zu:", i);
-
-		for (size_t j = 0; j <= (size_t)abs(uc_vm_insn_format[insn]); j++) {
-			if (j == 0)
-				color = 0;
-			else if (j <= (size_t)abs(uc_vm_insn_format[insn]))
-				color = FG_BMAGENT;
-			else
-				color = FG_BYELLOW;
-
-			printbuf_cs(&buf, " \001%02hhx\177",
-				&((style_t){ color, 0, 0 }),
-				bytecode[i + j]);
-		}
-
-		printbuf_memset(&buf, -1, ' ', 3 * (4 - abs(uc_vm_insn_format[insn])));
-
-		sprintbuf(&buf, "  %7s", insn_names[insn]);
+		ucv_object_add(item, "offset", ucv_uint64_new(i));
+		ucv_object_add(item, "mnemonic", ucv_string_new(insn_names[insn]));
 
 		switch (uc_vm_insn_format[insn]) {
 		case 0:
@@ -6462,94 +4325,61 @@ cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 
 		case -4:
 			arg.s32 = insn_s32(bytecode + i + 1);
-
-			printbuf_cs(&buf, " {\1%c0x%x\177}",
-				&((style_t){ FG_BMAGENT, 0, 0 }),
-				arg.s32 < 0 ? '-' : '+',
-				(uint32_t)(arg.s32 < 0 ? -arg.s32 : arg.s32));
-
+			operand = ucv_int64_new(arg.s32);
 			break;
 
 		case 1:
 			arg.u8 = bytecode[i + 1];
-
-			printbuf_cs(&buf, " {\1%hhu\177}",
-				&((style_t){ FG_BMAGENT, 0, 0 }),
-				arg.u8);
-
+			operand = ucv_uint64_new(arg.u8);
 			break;
 
 		case 2:
 			arg.u16 = insn_u16(bytecode + i + 1);
-
-			printbuf_cs(&buf, " {\0010x%hx\177}",
-				&((style_t){ FG_BMAGENT, 0, 0 }),
-				arg.u16);
-
+			operand = ucv_uint64_new(arg.u16);
 			break;
 
 		case 4:
 			arg.u32 = insn_u32(bytecode + i + 1);
+			operand = ucv_uint64_new(arg.u32);
 
 			if (insn == I_LOAD) {
 				uc_value_t *cv = load_constval(&target->program->constants, arg.u32);
-
-				char *s = ucv_to_jsonstring(vm, cv);
-				printbuf_cs(&buf, " {\0010x%x\177 : \002%s\177}",
-					&((style_t){ FG_BMAGENT, 0, 0 }),
-					&((style_t){ ucv_type(cv) == UC_STRING ? FG_BMAGENT : FG_CYAN, 0, 0 }),
-					arg.u32, s);
-				free(s);
+				ucv_object_add(item, "constant", cv);
 			}
 			else if (insn == I_LLOC || insn == I_SLOC || insn == I_LUPV || insn == I_SUPV) {
 				bool upval = (insn == I_LUPV || insn == I_SUPV);
 				uc_value_t *vn = uc_chunk_debug_get_variable(
 					&target->chunk, i, arg.u32, upval);
 
-				printbuf_cs(&buf, " {\0010x%x\177 : %s \002%s\177}",
-					&((style_t){ FG_BMAGENT, 0, 0 }),
-					&((style_t){ upval ? FG_CYAN : FG_BWHITE, 0, 0 }),
-					arg.u32, upval ? "upval" : "local",
-					vn ? ucv_string_get(vn) : "(unknown)");
+				ucv_object_add(item, "variable_kind", ucv_string_new(upval ? "upval" : "local"));
+				ucv_object_add(item, "variable_name",
+					ucv_string_new(vn ? ucv_string_get(vn) : "(unknown)"));
 			}
 			else if (insn == I_LVAR || insn == I_SVAR) {
 				uc_value_t *vn = load_constval(&target->program->constants, arg.u32);
 
-				printbuf_cs(&buf, " {\0010x%x\177 : global \002%s\177}",
-					&((style_t){ FG_BMAGENT, 0, 0 }),
-					&((style_t){ FG_BWHITE, 0, 0 }),
-					arg.u32, vn ? ucv_string_get(vn) : "(unknown)");
+				ucv_object_add(item, "variable_kind", ucv_string_new("global"));
+				ucv_object_add(item, "variable_name",
+					ucv_string_new(vn ? ucv_string_get(vn) : "(unknown)"));
+				ucv_put(vn);
 			}
 			else if (insn == I_CLFN || insn == I_ARFN) {
-				printbuf_cs(&buf, " {\0010x%x\177 : %s \001#%u\177}",
-					&((style_t){ FG_BMAGENT, 0, 0 }),
-					arg.u32,
-					(insn == I_CLFN) ? "closure" : "arrow",
-					arg.u32);
-			}
-			else {
-				printbuf_cs(&buf, " {\0010x%x\177}",
-					&((style_t){ FG_BMAGENT, 0, 0 }),
-					arg.u32);
+				ucv_object_add(item, "closure_index", ucv_uint64_new(arg.u32));
 			}
 
 			break;
 
 		default:
-			printbuf_cs(&buf, " \1(unknown operand format: %hhu)\177",
-				&((style_t){ FG_RED, 0, 0 }),
-				uc_vm_insn_format[insn]);
-
 			break;
 		}
 
-		printbuf_truncate(&buf, off, columns, true);
-		cs(&buf, NULL);
-
-		printbuf_strappend(&buf, "\n");
+		if (operand)
+			ucv_object_add(item, "operand", operand);
 
 		if (insn == I_CLFN || insn == I_ARFN) {
 			size_t id = 1, nupvals = 0;
+			uc_value_t *captures = ucv_array_new(vm);
+
 			uc_program_function_foreach(target->program, fn) {
 				if (id++ == arg.u32) {
 					nupvals = fn->nupvals;
@@ -6562,408 +4392,214 @@ cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
 				bool upval = (slot >= 0);
 				uc_value_t *vn = uc_chunk_debug_get_variable(
 					&target->chunk, i, (slot < 0) ? -(slot + 1) : slot, upval);
+				uc_value_t *cap = ucv_object_new(vm);
 
-				int off = buf.bpos;
-
-				printbuf_cs(&buf, "         … \1%02hhx %02hhx %02hhx %02hhx\177",
-					&((style_t){ FG_YELLOW, 0, 0 }),
-					bytecode[i + 5 + j * 4 + 0], bytecode[i + 5 + j * 4 + 1],
-					bytecode[i + 5 + j * 4 + 2], bytecode[i + 5 + j * 4 + 3]);
-
-				printbuf_cs(&buf,
-					"  capture {\001%c0x%x\177 : %s \002%s\177}",
-					&((style_t){ FG_YELLOW, 0, 0 }),
-					&((style_t){ upval ? FG_CYAN : FG_BWHITE, 0, 0 }),
-					(slot < 0) ? '-' : '+',
-					(slot < 0) ? -slot : slot,
-					upval ? "upval" : "local",
-					vn ? ucv_string_get(vn) : "(unknown)");
-
-				printbuf_truncate(&buf, off, columns, true);
-				printbuf_strappend(&buf, "\n");
+				ucv_object_add(cap, "slot", ucv_int64_new(slot));
+				ucv_object_add(cap, "kind", ucv_string_new(upval ? "upval" : "local"));
+				ucv_object_add(cap, "name",
+					ucv_string_new(vn ? ucv_string_get(vn) : "(unknown)"));
+				ucv_array_push(captures, cap);
 			}
+
+			ucv_object_add(item, "captures", captures);
 		}
 		else if (insn == I_CALL) {
+			uc_value_t *unpacks = ucv_array_new(vm);
+
 			for (size_t j = 0; j < ((arg.u32 >> 16) & 0x7fff); j++) {
 				uint16_t slot = insn_u16(bytecode + i + 5 + j * 2);
-				int off = buf.bpos;
+				uc_value_t *u = ucv_object_new(vm);
 
-				printbuf_cs(&buf, "         … \1%02hhx %02hhx\177",
-					&((style_t){ FG_YELLOW, 0, 0 }),
-					bytecode[i + 5 + j * 2 + 0], bytecode[i + 5 + j * 2 + 1]);
-
-				printbuf_cs(&buf,
-					"         unpack {\0010x%hx\177 : stack slot \002-%hx\177}",
-					&((style_t){ FG_YELLOW, 0, 0 }),
-					&((style_t){ FG_BMAGENT, 0, 0 }),
-					slot, slot + 1);
-
-				printbuf_truncate(&buf, off, columns, true);
-				printbuf_strappend(&buf, "\n");
+				ucv_object_add(u, "stack_slot", ucv_int64_new(-(int64_t)(slot + 1)));
+				ucv_array_push(unpacks, u);
 			}
+
+			ucv_object_add(item, "unpacks", unpacks);
 		}
 
-		term_write(buf.buf, buf.bpos);
-		printbuf_reset(&buf);
-
+		ucv_array_push(insns, item);
 		i += n;
 	}
 
-	free(buf.buf);
+	if (prog)
+		uc_program_put(prog);
 
-	return true;
-}
-
-static bool
-cmd_quit(uc_vm_t *vm, debug_breakpoint_t *dbk, size_t argc, arg_t *argv)
-{
-	bool proceed = true;
-	ssize_t c;
-	arg_t *v;
-
-	/* check for force flag (-f) or non-interactive mode */
-	if (argc > 0 && strcmp(argv[0].sv, "-f") == 0) {
-		vm->arg.s32 = -1;
-		uc_vm_raise_exception(vm, EXCEPTION_EXIT, "Terminated");
-		return false;
-	}
-	
-	/* In non-interactive mode, auto-confirm quit */
-	if (!termstate.interactive) {
-		vm->arg.s32 = -1;
-		uc_vm_raise_exception(vm, EXCEPTION_EXIT, "Terminated");
-		return false;
-	}
-
-	while ((c = term_getline("Terminate program? (y/n) > ", &v, NULL, NULL)) != -1) {
-		if (c > 0 && v[0].sv[0] == 'y') {
-			vm->arg.s32 = -1;
-			uc_vm_raise_exception(vm, EXCEPTION_EXIT, "Terminated");
-			proceed = false;
-			break;
-		}
-
-		if (c > 0 && v[0].sv[0] == 'n')
-			break;
-	}
-
-	while (c > 0)
-		free(v[--c].sv);
-
-	free(v);
-
-	return proceed;
+	obj = ucv_object_new(vm);
+	ucv_object_add(obj, "function", ucv_string_new(target->name));
+	ucv_object_add(obj, "instructions", insns);
+	debug_proto_write(fd, vm, "DISASSEMBLY", obj);
+	ucv_put(obj);
 }
 
 static void
-cli_tab_complete(size_t nargs, arg_t *args, suggestions_t *suggests, void *ud)
+proto_cmd_source(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
-	uc_vm_t *vm = ud;
-	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
-	char *cmd = (nargs > 0) ? args[0].sv : NULL;
+	uc_value_t *filev = ucv_object_get(payload, "file", NULL);
+	location_t loc = { 0 };
+	uc_value_t *obj;
 
-	/* no completions beyond first arg */
-	if (nargs > 2)
-		return;
-
-	/* no completions without stackframe info */
-	if (frame == NULL)
-		return;
-
-	/* complete command itself */
-	if (nargs <= 1) {
-		for (size_t i = 0; i < ARRAY_SIZE(commands); i++)
-			if (nargs == 0 || str_startswith(commands[i].command, args[0].sv))
-				uc_vector_add(suggests, xstrdup(commands[i].command));
-
+	if (ucv_type(filev) != UC_STRING) {
+		send_error(fd, vm, "Usage: SOURCE {\"file\":\"...\"}");
 		return;
 	}
 
-	/* completions for `break` and `disassemble` */
-	if (str_startswith("break", cmd) ||
-	    str_startswith("disasm", cmd) ||
-	    str_startswith("disassemble", cmd)) {
+	loc.path = ucv_string_get(filev);
+	loc.line = 1;
+	loc.column = 1;
 
-		size_t len = strlen(args[1].sv);
+	obj = ucv_object_new(vm);
+	ucv_object_add(obj, "file", ucv_get(filev));
 
-		uc_program_function_foreach(frame->closure->function->program, fn) {
-			if (fn->name[0] == '\0')
-				continue;
+	if (!lookup_source(vm, &loc)) {
+		ucv_object_add(obj, "text", NULL);
+		ucv_object_add(obj, "error", ucv_string_new("source not available on server"));
+	}
+	else {
+		uc_stringbuf_t text = { 0 };
+		char buf[4096];
+		size_t n;
 
-			if (len > 0 && strncmp(fn->name, args[1].sv, len) != 0)
-				continue;
+		fseeko(loc.source->fp, 0, SEEK_SET);
 
-			uc_vector_add(suggests, xstrdup(fn->name));
-		}
+		while ((n = fread(buf, 1, sizeof(buf), loc.source->fp)) > 0)
+			printbuf_memappend_fast((&text), buf, n);
 
-		return;
+		ucv_object_add(obj, "text", ucv_string_new_length(text.buf, text.bpos));
+		free(text.buf);
 	}
 
-	/* completions for `lines` */
-	if (str_startswith("lines", cmd) || str_startswith("ln", cmd)) {
-		uc_program_t *prog = frame->closure->function->program;
-		size_t len = strlen(args[1].sv);
-
-		/* suggest function names */
-		uc_program_function_foreach(prog, fn) {
-			if (fn->name[0] == '\0')
-				continue;
-
-			if (len > 0 && strncmp(fn->name, args[1].sv, len) != 0)
-				continue;
-
-			uc_vector_add(suggests, xstrdup(fn->name));
-		}
-
-		/* suggest file names */
-		for (size_t i = 0; i < prog->sources.count; i++) {
-			uc_stringbuf_t buf = { 0 };
-			printbuf_append_srcpath(&buf, prog->sources.entries[i], SIZE_MAX);
-
-			if (len > 0 && strncmp(buf.buf, args[1].sv, len) != 0) {
-				free(buf.buf);
-				continue;
-			}
-
-			uc_vector_add(suggests, buf.buf);
-		}
-
-		return;
-	}
-
-	/* completions for `help` */
-	if (str_startswith("help", cmd)) {
-		size_t len = strlen(args[1].sv);
-
-		/* suggest command names */
-		for (size_t i = 0; i < ARRAY_SIZE(commands); i++) {
-			if (len > 0 && strncmp(commands[i].command, args[1].sv, len) != 0)
-				continue;
-
-			uc_vector_add(suggests, xstrdup(commands[i].command));
-		}
-
-		return;
-	}
-
-	/* completions for `print` */
-	if (str_startswith("print", cmd)) {
-		uc_chunk_t *chunk = &frame->closure->function->chunk;
-		uc_variables_t *decls = &chunk->debuginfo.variables;
-		uc_value_list_t *names = &chunk->debuginfo.varnames;
-		size_t len = strlen(args[1].sv);
-
-		/* suggest local variable names */
-		for (size_t i = 0; i < decls->count; i++) {
-			uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
-			char *s = ucv_string_get(vname);
-
-			if (*s != '(' && (len == 0 || strncmp(s, args[1].sv, len) == 0))
-				uc_vector_add(suggests, xstrdup(s));
-
-			ucv_put(vname);
-		}
-
-		/* suggest global variables */
-		ucv_object_foreach(uc_vm_scope_get(vm), k, v) {
-			/* skip functions */
-			if (ucv_is_callable(v))
-				continue;
-
-			if (len > 0 && strncmp(k, args[1].sv, len) != 0)
-				continue;
-
-			uc_vector_add(suggests, xstrdup(k));
-		}
-	}
+	debug_proto_write(fd, vm, "SOURCE", obj);
+	ucv_put(obj);
 }
 
 static void
-bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk)
+proto_cmd_quit(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	vm->arg.s32 = -1;
+	uc_vm_raise_exception(vm, EXCEPTION_EXIT, "Terminated");
+	*proceed = false;
+}
+
+static const struct {
+	const char *verb;
+	void (*cb)(uc_vm_t *, debug_breakpoint_t *, uc_value_t *, int, bool *);
+} proto_commands[] = {
+	{ "BREAK",             proto_cmd_break },
+	{ "DELETE",            proto_cmd_delete },
+	{ "LIST_BREAKPOINTS",  proto_cmd_list },
+	{ "NEXT",              proto_cmd_next },
+	{ "STEP",              proto_cmd_step },
+	{ "CONTINUE",          proto_cmd_continue },
+	{ "RETURN",            proto_cmd_return },
+	{ "BACKTRACE",         proto_cmd_backtrace },
+	{ "VARIABLES",         proto_cmd_variables },
+	{ "SOURCES",           proto_cmd_sources },
+	{ "PRINT",             proto_cmd_print },
+	{ "LINES",             proto_cmd_lines },
+	{ "THROW",             proto_cmd_throw },
+	{ "DISASSEMBLE",       proto_cmd_disasm },
+	{ "SOURCE",            proto_cmd_source },
+	{ "HELP",              proto_cmd_help },
+	{ "QUIT",              proto_cmd_quit },
+};
+
+/* Incremental read buffer for the current session connection - must persist
+ * across separate bk_enter_session() calls (one per breakpoint hit) for the
+ * same connection, exactly like the connection fd itself
+ * (debug_remote_{set,get}_active_fd()), since a single logical debug session
+ * spans many such calls (one per "next"/"step"/breakpoint hit). */
+static debug_proto_buf_t session_buf;
+
+static void
+bk_enter_session(uc_vm_t *vm, uc_breakpoint_t *bk)
 {
 	debug_breakpoint_t *dbk = (debug_breakpoint_t *)bk;
-	arg_t *argv = NULL;
-	ssize_t argc = 0;
 	uint8_t *entry_ip = bk->ip;
+	uc_value_t *paused;
+	int fd;
 
 	/* If a remote client is already connected - either because this is a
 	 * BK_STEP breakpoint hit during an ongoing "next"/"step" sequence, or a
-	 * reentrant SIGUSR1 while already attached - the stdio splice from that
-	 * earlier, separate bk_enter_cli() call (each breakpoint hit is a fresh
-	 * call from the VM's instruction decode loop, not a nested one) is still
-	 * in place; reuse it as-is instead of tearing it down to accept a
-	 * redundant second connection, which would just disconnect the live one
-	 * mid-session. */
+	 * reentrant SIGUSR1 while already attached - reuse it as-is instead of
+	 * tearing it down to accept a redundant second connection, which would
+	 * just disconnect the live one mid-session. */
 	if (debug_attach_mode && !debug_remote_has_active_connection()) {
-		int client_fd = -1;
-		int listen_fd = debug_remote_create_attach_socket();
+		int client_fd = debug_remote_handle_break(vm);
 
-		if (listen_fd < 0) {
-			fprintf(stderr, "Failed to create attach socket: %s\n", strerror(errno));
-		} else {
-			fd_set readfds;
-			struct timeval tv;
-			int ret;
+		if (client_fd < 0)
+			return; /* timeout or fatal error - resume unattended */
 
-			for (;;) {
-				FD_ZERO(&readfds);
-				FD_SET(listen_fd, &readfds);
-				tv.tv_sec = 30;
-				tv.tv_usec = 0;
+		debug_remote_set_active_fd(client_fd);
+		debug_proto_buf_init(&session_buf);
 
-				ret = select(listen_fd + 1, &readfds, NULL, NULL, &tv);
-
-				if (ret < 0 && errno == EINTR)
-					continue;
-
-				break;
-			}
-
-			if (ret > 0) {
-				client_fd = accept(listen_fd, NULL, NULL);
-				close(listen_fd);
-				if (client_fd < 0) {
-					debug_remote_cleanup_attach_socket();
-				} else {
-					fprintf(stderr, "Connected to ucode debugger\n\n");
-				}
-			} else {
-				close(listen_fd);
-				debug_remote_cleanup_attach_socket();
-				if (ret == 0)
-					fprintf(stderr, "Timeout waiting for debugger connection - continuing execution\n");
-				return;
-			}
-		}
-
-		/* Splice the accepted connection onto stdio for the duration of the
-		 * session, exactly as debug_cli_run_remote_session() does for
-		 * debug.listen() - term_getline()/term_printf() only ever touch
-		 * STDIN_FILENO/STDOUT_FILENO directly, so this is what actually
-		 * makes the CLI interact with the remote peer instead of the local
-		 * tty. The original fds are stashed in statics (not locals) since
-		 * whichever later, separate bk_enter_cli() call ends up tearing the
-		 * session down needs them back. */
-		if (client_fd >= 0) {
-			remote_attach_orig_stdin = dup(STDIN_FILENO);
-			remote_attach_orig_stdout = dup(STDOUT_FILENO);
-			remote_attach_orig_interactive = termstate.interactive;
-			remote_attach_orig_remote = termstate.remote;
-
-			dup2(client_fd, STDIN_FILENO);
-			dup2(client_fd, STDOUT_FILENO);
-
-			termstate.interactive = true;
-			termstate.remote = true;
-			termstate.cols = 0;
-			termstate.rows = 0;
-
-			debug_remote_set_active_fd(client_fd);
-		}
+		fprintf(stderr, "Connected to ucode debugger\n\n");
 	}
 
-	/* Only set terminal settings in interactive mode */
-	if (termstate.interactive && !termstate.remote)
-		term_isig(false);
+	fd = debug_remote_get_active_fd();
 
-	print_location(vm, "Paused execution in ", dbk);
+	/* No session fd available yet (e.g. local `-x` mode before its client
+	 * has been spawned) - nothing to do. */
+	if (fd < 0)
+		return;
 
-	while ((argc = term_getline("dbg > ", &argv, cli_tab_complete, vm)) >= 0) {
-		size_t l = (argc > 0) ? strlen(argv[0].sv) : 0, i;
+	paused = build_paused_payload(vm, dbk);
+	debug_proto_write(fd, vm, "PAUSED", paused);
+	ucv_put(paused);
+
+	for (;;) {
+		char *verb = NULL;
+		uc_value_t *payload = NULL;
+		int rv = debug_proto_read(fd, &session_buf, vm, &verb, &payload);
 		bool proceed = true;
+		bool handled = false;
 
-		/* EOF or error - exit gracefully */
-		if (argc < 0)
-			break;
+		if (rv <= 0) {
+			bool exiting = (vm->exception.type == EXCEPTION_EXIT);
 
-		for (i = 0; l > 0 && i < ARRAY_SIZE(commands); i++) {
-			bool match = false;
+			free(verb);
+			ucv_put(payload);
 
-			for (const char *c = commands[i].command; *c; c += strlen(c) + 1) {
-				if (strncmp(c, argv[0].sv, l) == 0) {
-					match = true;
-					break;
-				}
+			close(fd);
+			debug_remote_set_active_fd(-1);
+
+			if (debug_attach_mode && !exiting) {
+				/* The client dropped the connection without an explicit
+				 * QUIT - tear the dead connection down and go back to
+				 * waiting for a fresh one, rather than silently resuming
+				 * the paused script and losing the session for good. */
+				bk_enter_session(vm, bk);
+				return;
 			}
 
-			if (!match)
-				continue;
+			if (debug_attach_mode)
+				debug_remote_cleanup_attach_socket();
 
-			proceed = commands[i].cb(vm, dbk, argc, argv);
 			break;
 		}
 
-		if (l > 0 && i == ARRAY_SIZE(commands))
-			term_printf("Unrecognized command '%s'\n", argv[0].sv);
+		for (size_t i = 0; i < ARRAY_SIZE(proto_commands); i++) {
+			if (!strcmp(proto_commands[i].verb, verb)) {
+				proto_commands[i].cb(vm, dbk, payload, fd, &proceed);
+				handled = true;
+				break;
+			}
+		}
 
-		while (argc > 0)
-			free(argv[--argc].sv);
+		if (!handled) {
+			char msg[128];
 
-		free(argv);
+			snprintf(msg, sizeof(msg), "Unrecognized command '%s'", verb);
+			send_error(fd, vm, msg);
+		}
+
+		free(verb);
+		ucv_put(payload);
 
 		if (!proceed)
 			break;
 	}
 
-	/* Restore terminal settings in interactive mode */
-	if (termstate.interactive && !termstate.remote)
-		term_isig(true);
-
-	if (termstate.remote && debug_attach_mode) {
-		bool disconnected = (argc < 0);
-		bool exiting = (vm->exception.type == EXCEPTION_EXIT);
-
-		if (disconnected && !exiting) {
-			/* The client dropped the connection without an explicit "quit"
-			 * - rather than silently resuming the paused script (losing the
-			 * session for good), tear down the dead connection and go back
-			 * to waiting for a fresh one, exactly as if we had never
-			 * connected in the first place, so a spurious disconnect
-			 * doesn't strand the target. */
-			int client_fd = debug_remote_get_active_fd();
-
-			debug_remote_set_active_fd(-1);
-
-			dup2(remote_attach_orig_stdin, STDIN_FILENO);
-			dup2(remote_attach_orig_stdout, STDOUT_FILENO);
-			close(remote_attach_orig_stdin);
-			close(remote_attach_orig_stdout);
-			close(client_fd);
-
-			termstate.interactive = remote_attach_orig_interactive;
-			termstate.remote = remote_attach_orig_remote;
-			termstate.cols = 0;
-			termstate.rows = 0;
-
-			bk_enter_cli(vm, bk);
-			return;
-		}
-
-		if (disconnected || exiting) {
-			int client_fd = debug_remote_get_active_fd();
-
-			debug_remote_set_active_fd(-1);
-
-			dup2(remote_attach_orig_stdin, STDIN_FILENO);
-			dup2(remote_attach_orig_stdout, STDOUT_FILENO);
-			close(remote_attach_orig_stdin);
-			close(remote_attach_orig_stdout);
-			close(client_fd);
-
-			debug_remote_cleanup_attach_socket();
-
-			termstate.interactive = remote_attach_orig_interactive;
-			termstate.remote = remote_attach_orig_remote;
-			termstate.cols = 0;
-			termstate.rows = 0;
-		}
-
-		/* else: "next"/"step"/"continue" was issued - leave the splice in
-		 * place; the next breakpoint hit reenters bk_enter_cli() and reuses
-		 * it directly (see the has_active_connection() check above). */
-	}
-
-	/* If "delete" removed this very breakpoint during the session above, it
+	/* If "DELETE" removed this very breakpoint during the session above, it
 	 * only unlinked it and deferred the actual free() until now - see the
 	 * `deleted` field comment. Do that first and skip the kind-based checks
 	 * below entirely: dbk was already unlinked, so free_breakpoint() here
@@ -6983,34 +4619,15 @@ bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk)
 	else if (dbk->kind == BK_ONCE || (dbk->kind == BK_STEP && dbk->bk.ip == entry_ip)) {
 		free_breakpoint(vm, &dbk->bk);
 	}
-
-	if (!termstate.remote)
-		term_isig(true);
 }
 
-/* Run a full interactive debugger CLI session over an already-connected
- * remote client socket, reusing the exact same command set, tab completion
- * and readline-style editing as the local terminal debugger.
- *
- * This works because term_getline()/term_printf() only ever touch
- * STDIN_FILENO/STDOUT_FILENO directly via plain read()/write() - the only
- * tty-specific bits are the tcgetattr()/tcsetattr() calls in term_raw()/
- * term_isig()/term_reset(), which are skipped via termstate.remote since a
- * socket has no line discipline to configure; the remote peer (udbg) is
- * expected to put its own local terminal into raw mode and forward bytes
- * verbatim in both directions.
- *
- * Any breakpoints set during the session (via the "break"/"next"/"step"
- * commands) are handled transparently: they are dispatched directly from
- * uc_vm_execute_chunk()'s per-instruction breakpoint check (see vm.c),
- * nested inside the uc_vm_resume() call below, and will reenter
- * bk_enter_cli() using the very same dup'd file descriptors. */
+/* Run a full interactive debugger session over an already-connected remote
+ * client socket, reusing the exact same command set as the local session -
+ * see bk_enter_session() above. */
 void
-debug_cli_run_remote_session(uc_vm_t *vm, int client_fd)
+debug_run_session(uc_vm_t *vm, int client_fd)
 {
 	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
-	int orig_stdin, orig_stdout;
-	void (*orig_sigpipe)(int);
 	debug_breakpoint_t dbk;
 
 	if (!frame) {
@@ -7018,19 +4635,8 @@ debug_cli_run_remote_session(uc_vm_t *vm, int client_fd)
 		return;
 	}
 
-	orig_stdin = dup(STDIN_FILENO);
-	orig_stdout = dup(STDOUT_FILENO);
-	orig_sigpipe = signal(SIGPIPE, SIG_IGN);
-
-	dup2(client_fd, STDIN_FILENO);
-	dup2(client_fd, STDOUT_FILENO);
-
-	termstate.interactive = true;
-	termstate.remote = true;
-	termstate.cols = 0;
-	termstate.rows = 0;
-
 	debug_remote_set_active_fd(client_fd);
+	debug_proto_buf_init(&session_buf);
 
 	dbk = (debug_breakpoint_t){
 		.bk = { .ip = frame->ip },
@@ -7038,45 +4644,23 @@ debug_cli_run_remote_session(uc_vm_t *vm, int client_fd)
 		.kind = BK_USER
 	};
 
-	bk_enter_cli(vm, &dbk.bk);
+	bk_enter_session(vm, &dbk.bk);
 
-	/* Unless "quit" was issued (which already raised EXCEPTION_EXIT),
+	/* Unless "QUIT" was issued (which already raised EXCEPTION_EXIT),
 	 * resume script execution; further breakpoints hit during this call
-	 * reenter bk_enter_cli() directly, still using the fds set up above. */
+	 * reenter bk_enter_session() directly, still using the fd set up
+	 * above. */
 	if (vm->exception.type != EXCEPTION_EXIT)
 		uc_vm_resume(vm);
 
 	debug_remote_set_active_fd(-1);
-
-	dup2(orig_stdin, STDIN_FILENO);
-	dup2(orig_stdout, STDOUT_FILENO);
-	close(orig_stdin);
-	close(orig_stdout);
 	close(client_fd);
 
 	/* No-op unless this session came from the SIGUSR1 attach socket. */
 	debug_remote_cleanup_attach_socket();
-
-	signal(SIGPIPE, orig_sigpipe);
-
-	termstate.interactive = false;
-	termstate.remote = false;
-	termstate.cols = 0;
-	termstate.rows = 0;
-}
-
-static uc_value_t *
-uc_debug_sigusr1_handler(uc_vm_t *vm, size_t nargs)
-{
-	/* Request break via VM API - the actual debugger will be launched
-	 * by uloop or the VM execution loop */
-	uc_vm_break_request(vm);
-
-	return ucv_boolean_new(true);
 }
 
 static uc_value_t *uc_debug_sigint_handler(uc_vm_t *vm, size_t nargs);
-static uc_value_t *uc_debug_sigwinch_handler(uc_vm_t *vm, size_t nargs);
 
 static uc_value_t *
 uc_debug_sigusr1_attach_handler(uc_vm_t *vm, size_t nargs)
@@ -7092,10 +4676,12 @@ uc_debug_sigusr1_attach_handler(uc_vm_t *vm, size_t nargs)
 		.kind = BK_USER
 	};
 
-	bk_enter_cli(vm, &dbk.bk);
+	bk_enter_session(vm, &dbk.bk);
 
 	return NULL;
 }
+
+static bool debug_attach_initialized = false;
 
 static uc_value_t *
 uc_debug_attach(uc_vm_t *vm, size_t nargs)
@@ -7105,9 +4691,7 @@ uc_debug_attach(uc_vm_t *vm, size_t nargs)
 
 	debug_attach_mode = true;
 
-	if (termstate.initialized == false) {
-		termstate.interactive = isatty(STDIN_FILENO);
-
+	if (!debug_attach_initialized) {
 		uc_vm_stack_push(vm, ucv_string_new("SIGINT"));
 		uc_vm_registry_set(vm, "debug.orig_int_signal", ucsignal(vm, 1));
 		ucv_put(uc_vm_stack_pop(vm));
@@ -7115,17 +4699,6 @@ uc_debug_attach(uc_vm_t *vm, size_t nargs)
 		uc_vm_stack_push(vm, ucv_string_new("SIGINT"));
 		uc_vm_stack_push(vm,
 			ucv_cfunction_new("debug_sigint_handler", uc_debug_sigint_handler));
-		ucv_put(ucsignal(vm, 2));
-		ucv_put(uc_vm_stack_pop(vm));
-		ucv_put(uc_vm_stack_pop(vm));
-
-		uc_vm_stack_push(vm, ucv_string_new("SIGWINCH"));
-		uc_vm_registry_set(vm, "debug.orig_winch_signal", ucsignal(vm, 1));
-		ucv_put(uc_vm_stack_pop(vm));
-
-		uc_vm_stack_push(vm, ucv_string_new("SIGWINCH"));
-		uc_vm_stack_push(vm,
-			ucv_cfunction_new("debug_sigwinch_handler", uc_debug_sigwinch_handler));
 		ucv_put(ucsignal(vm, 2));
 		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(uc_vm_stack_pop(vm));
@@ -7138,25 +4711,20 @@ uc_debug_attach(uc_vm_t *vm, size_t nargs)
 		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(uc_vm_stack_pop(vm));
 
-		/* Unlike uc_debugger() (the local `-x` CLI), attach mode never
-		 * actually interacts over the target's own stdin/stdout - the CLI
-		 * session only ever runs over a client fd spliced onto stdio once
-		 * a remote debugger connects, at which point bk_enter_cli() marks
-		 * termstate.remote and skips tcsetattr() entirely (a socket has no
-		 * line discipline to configure - the remote peer manages its own
-		 * local terminal instead). Putting the target's own controlling
-		 * terminal into raw mode here, before any client has connected (or
-		 * even ever will), just leaves it in a broken, unechoed state with
-		 * nothing to ever undo it. */
+		/* Attach mode never actually interacts over the target's own
+		 * stdin/stdout - the debug session only ever runs over the client
+		 * fd accepted once a remote debugger connects (see
+		 * bk_enter_session()), so there is no local tty state to set up
+		 * here at all. */
 
 		install_uncaught_exception_breakpoint(vm);
 
-		termstate.initialized = true;
+		debug_attach_initialized = true;
 	}
 
 	if (ucv_type(mainfn) == UC_CLOSURE) {
 		uc_function_t *fn = ((uc_closure_t *)mainfn)->function;
-		update_breakpoint(vm, BK_STEP, bk_enter_cli, fn->chunk.entries, fn, 1);
+		update_breakpoint(vm, BK_STEP, bk_enter_session, fn->chunk.entries, fn, 1);
 	}
 
 	return ucv_boolean_new(true);
@@ -7176,7 +4744,7 @@ uc_debug_break(uc_vm_t *vm, size_t nargs)
 		.kind = BK_USER
 	};
 
-	bk_enter_cli(vm, &dbk.bk);
+	bk_enter_session(vm, &dbk.bk);
 
 	return ucv_boolean_new(true);
 }
@@ -7308,7 +4876,7 @@ uc_debug_listen_sigusr1_handler(uc_vm_t *vm, size_t nargs)
 	int client_fd = debug_remote_handle_break(vm);
 
 	if (client_fd >= 0)
-		debug_cli_run_remote_session(vm, client_fd);
+		debug_run_session(vm, client_fd);
 
 	return NULL;
 }
@@ -7368,7 +4936,7 @@ uc_debug_listen(uc_vm_t *vm, size_t nargs)
 		if (client_fd < 0)
 			return ucv_boolean_new(false);
 
-		debug_cli_run_remote_session(vm, client_fd);
+		debug_run_session(vm, client_fd);
 
 		return ucv_boolean_new(true);
 	}
@@ -7392,7 +4960,7 @@ uc_debug_listen(uc_vm_t *vm, size_t nargs)
 		int client_fd = debug_remote_handle_break(vm);
 
 		if (client_fd >= 0)
-			debug_cli_run_remote_session(vm, client_fd);
+			debug_run_session(vm, client_fd);
 	}
 
 	return ucv_boolean_new(true);
@@ -7412,32 +4980,13 @@ uc_debug_sigint_handler(uc_vm_t *vm, size_t nargs)
 		.kind = BK_USER
 	};
 
-	bk_enter_cli(vm, &dbk.bk);
+	bk_enter_session(vm, &dbk.bk);
 
 	uc_value_t *sigint_handler =
 		uc_vm_registry_get(vm, "debug.orig_int_signal");
 
 	if (ucv_is_callable(sigint_handler)) {
 		uc_vm_stack_push(vm, ucv_get(sigint_handler));
-		uc_vm_stack_push(vm, ucv_get(uc_fn_arg(0)));
-
-		if (uc_vm_call(vm, false, 1) == EXCEPTION_NONE)
-			return uc_vm_stack_pop(vm);
-	}
-
-	return NULL;
-}
-
-static uc_value_t *
-uc_debug_sigwinch_handler(uc_vm_t *vm, size_t nargs)
-{
-	term_dimensions();
-
-	uc_value_t *sigwinch_handler =
-		uc_vm_registry_get(vm, "debug.orig_winch_signal");
-
-	if (ucv_is_callable(sigwinch_handler)) {
-		uc_vm_stack_push(vm, ucv_get(sigwinch_handler));
 		uc_vm_stack_push(vm, ucv_get(uc_fn_arg(0)));
 
 		if (uc_vm_call(vm, false, 1) == EXCEPTION_NONE)
@@ -7476,15 +5025,68 @@ uc_debug_sigwinch_handler(uc_vm_t *vm, size_t nargs)
  * debug.debugger(test); // Install debug breakpoint in `test()` function
  * test();               // Starts debugger, breaking before `print(…)`
  */
+/* Fork a co-process running the interactive protocol client (the `udbg`
+ * binary, in its `--fd` mode) connected to us via a socketpair, and make it
+ * the current session connection - the local `-x` CLI counterpart to a
+ * remote `debug.listen()`/`-X` connection being accepted. The child owns the
+ * real controlling terminal (it never touches the inherited fd 3 for
+ * anything but the protocol connection, so its own stdin/stdout still are
+ * whatever tty invoked `ucode -x`); the parent (this process, running the
+ * debugged script) never sets up any tty state of its own and only ever
+ * speaks the line protocol over the session fd, exactly like the remote
+ * case. */
+static bool
+spawn_local_client(void)
+{
+	int sv[2];
+	pid_t pid;
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0)
+		return false;
+
+	pid = fork();
+
+	if (pid < 0) {
+		close(sv[0]);
+		close(sv[1]);
+
+		return false;
+	}
+
+	if (pid == 0) {
+		close(sv[0]);
+
+		if (sv[1] != 3) {
+			dup2(sv[1], 3);
+			close(sv[1]);
+		}
+
+		execlp("udbg", "udbg", "--fd", "3", NULL);
+		_exit(127);
+	}
+
+	close(sv[1]);
+
+	debug_remote_set_active_fd(sv[0]);
+	debug_proto_buf_init(&session_buf);
+
+	return true;
+}
+
+static bool debug_local_initialized = false;
+
 static uc_value_t *
 uc_debugger(uc_vm_t *vm, size_t nargs)
 {
 	uc_cfn_ptr_t ucsignal = uc_stdlib_function("signal");
 	uc_value_t *mainfn = uc_fn_arg(0);
 
-	if (termstate.initialized == false) {
-		/* Detect if we're in interactive mode (tty) */
-		termstate.interactive = isatty(STDIN_FILENO);
+	if (!debug_local_initialized) {
+		if (!spawn_local_client()) {
+			fprintf(stderr, "Failed to launch debugger client (udbg)\n");
+
+			return NULL;
+		}
 
 		uc_vm_stack_push(vm, ucv_string_new("SIGINT"));
 		uc_vm_registry_set(vm, "debug.orig_int_signal", ucsignal(vm, 1));
@@ -7497,38 +5099,14 @@ uc_debugger(uc_vm_t *vm, size_t nargs)
 		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(uc_vm_stack_pop(vm));
 
-		uc_vm_stack_push(vm, ucv_string_new("SIGWINCH"));
-		uc_vm_registry_set(vm, "debug.orig_winch_signal", ucsignal(vm, 1));
-		ucv_put(uc_vm_stack_pop(vm));
-
-		uc_vm_stack_push(vm, ucv_string_new("SIGWINCH"));
-		uc_vm_stack_push(vm,
-			ucv_cfunction_new("debug_sigwinch_handler", uc_debug_sigwinch_handler));
-		ucv_put(ucsignal(vm, 2));
-		ucv_put(uc_vm_stack_pop(vm));
-		ucv_put(uc_vm_stack_pop(vm));
-
-		uc_vm_stack_push(vm, ucv_string_new("SIGUSR1"));
-		uc_vm_stack_push(vm,
-			ucv_cfunction_new("debug_sigusr1_handler", uc_debug_sigusr1_handler));
-		ucv_put(ucsignal(vm, 2));
-		ucv_put(uc_vm_stack_pop(vm));
-		ucv_put(uc_vm_stack_pop(vm));
-
-		/* Only set raw mode if interactive */
-		if (termstate.interactive) {
-			term_raw();
-			term_isig(true);
-		}
-
 		install_uncaught_exception_breakpoint(vm);
 
-		termstate.initialized = true;
+		debug_local_initialized = true;
 	}
 
 	if (ucv_type(mainfn) == UC_CLOSURE) {
 		uc_function_t *fn = ((uc_closure_t *)mainfn)->function;
-		update_breakpoint(vm, BK_STEP, bk_enter_cli, fn->chunk.entries, fn, 1);
+		update_breakpoint(vm, BK_STEP, bk_enter_session, fn->chunk.entries, fn, 1);
 	}
 	else {
 		uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
@@ -7540,7 +5118,7 @@ uc_debugger(uc_vm_t *vm, size_t nargs)
 				.kind = BK_USER
 			};
 
-			bk_enter_cli(vm, &dbk.bk);
+			bk_enter_session(vm, &dbk.bk);
 		}
 	}
 
@@ -7570,7 +5148,7 @@ static const uc_function_list_t debug_fns[] = {
  * transport: it creates the attach socket and waits for a udbg client to
  * connect, returning the accepted client fd, -1 on timeout/no client, or
  * -2 on a fatal socket error. On success, the full interactive CLI session
- * is driven by debug_cli_run_remote_session() above, which also resumes
+ * is driven by debug_run_session() above, which also resumes
  * script execution once the session ends.
  * Returns 0 if execution should resume unattended, 1 if the program has
  * already finished or should exit. */
@@ -7585,7 +5163,7 @@ debug_server_handle_break(uc_vm_t *vm)
 	if (client_fd < 0)
 		return 1;
 
-	debug_cli_run_remote_session(vm, client_fd);
+	debug_run_session(vm, client_fd);
 
 	return 1;
 }
@@ -7597,7 +5175,6 @@ uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 
 	debug_setup(vm);
 
-	have_highlighting = compile_patterns();
 
 	/* Register break handler so main.c can find it via registry */
 	uc_vm_registry_set(vm, "debug.server_handle_break",

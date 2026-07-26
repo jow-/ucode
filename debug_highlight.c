@@ -1,0 +1,458 @@
+/*
+ * Copyright (C) 2026 Jo-Philipp Wich <jo@mein.io>
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ANY IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <regex.h>
+
+#include "debug_highlight.h"
+
+/* -- styling, ported verbatim from the pre-protocol lib/debug.c ---------- */
+
+enum {
+	BOLD  = (1 << 0),
+	FAINT = (1 << 1),
+	ULINE = (1 << 2),
+};
+
+typedef enum {
+	FG_NONE    =   0,
+	FG_BLACK   =  30,
+	FG_RED     =  31,
+	FG_GREEN   =  32,
+	FG_YELLOW  =  33,
+	FG_BLUE    =  34,
+	FG_MAGENTA =  35,
+	FG_CYAN    =  36,
+	FG_GRAY    =  37,
+	FG_BBLACK  =  90,
+	FG_BRED    =  91,
+	FG_BGREEN  =  92,
+	FG_BYELLOW =  93,
+	FG_BBLUE   =  94,
+	FG_BMAGENT =  95,
+	FG_BCYAN   =  96,
+	FG_BWHITE  =  97,
+} fg_color_t;
+
+typedef enum {
+	BG_NONE  =   0,
+	BG_BLACK =  40,
+	BG_GRAY  = 100,
+} bg_color_t;
+
+typedef struct {
+	fg_color_t fg;
+	bg_color_t bg;
+	unsigned int styles;
+} style_t;
+
+static void
+cs(FILE *out, const style_t *style)
+{
+	int codes[8] = { 0 };
+	size_t i = 0;
+
+	if (style == NULL) {
+		fputs("\033[0m", out);
+		return;
+	}
+
+	if ((style->styles & (BOLD | FAINT | ULINE)) == 0)
+		codes[i++] = 0;
+
+	if (style->styles & BOLD)  codes[i++] = 1;
+	if (style->styles & FAINT) codes[i++] = 2;
+	if (style->styles & ULINE) codes[i++] = 4;
+
+	codes[i++] = style->fg ? style->fg : 39;
+	codes[i++] = style->bg ? style->bg : 49;
+
+	fputs("\033[", out);
+
+	for (size_t n = 0; n < i; n++)
+		fprintf(out, "%s%d", n ? ";" : "", codes[n]);
+
+	fputc('m', out);
+}
+
+/* -- syntax highlighting rules, ported verbatim -------------------------- */
+
+static struct {
+	fg_color_t color;
+	const char *start, *end;
+} highlight_rules[] = {
+	{ FG_GRAY, "^#!.*", NULL },
+
+	/* declarations */
+	{ FG_GREEN, "\\<(let|const|function|this)\\>", NULL },
+
+	/* arrow functions */
+	{ FG_GREEN, "(\\<\\w+\\>|\\([[:alnum:][:space:]_,.]*\\))[[:space:]]*=>", NULL },
+
+	/* flow control */
+	{ FG_BYELLOW, "\\<(while|if|else|elif|switch|case|default|for|in|endif|endfor|endwhile|endfunction)\\>", NULL },
+
+	/* keywords */
+	{ FG_BYELLOW, "\\<(export|import|try|catch|delete)\\>", NULL },
+
+	/* exit points */
+	{ FG_MAGENTA, "\\<(break|continue|return)\\>", NULL },
+
+	/* numeric literals */
+	{ FG_CYAN, "\\<([0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0-9]+)\\>", NULL },
+	{ FG_CYAN, "\\<0[xX][[:xdigit:]]+(\\.[[:xdigit:]]+)?\\>", NULL },
+	{ FG_CYAN, "\\<(0[oO][0-7]+|0[bB][01]+|[0-9]+)\\>", NULL },
+
+	/* special values */
+	{ FG_CYAN, "\\<(true|false|null|NaN|Infinity)\\>", NULL },
+
+	/* strings */
+	{ FG_BMAGENT, "\"([^\"\\{%#}]|\\\\.|\\{[^\"\\{%#]|[%#}][^\"\\}]|[{%#}]\\\\.)*[{%#}]?\"", NULL },
+	{ FG_BMAGENT, "'([^'\\{%#}]|\\\\.|\\{[^'\\{%#]|[%#}][^'\\}]|[{%#}]\\\\.)*[{%#}]?'", NULL },
+	{ FG_BMAGENT, "`([^`\\{%#}]|\\\\.|\\{[^`\\{%#]|[%#}][^`\\}]|[{%#}]\\\\.)*[{%#}]?`", NULL },
+
+	/* template string expressions */
+	{ FG_BWHITE, "\\$\\{", "}" },
+
+	/* comments */
+	{ FG_BBLUE, "(^|[[:blank:]])//.*", NULL },
+	{ FG_BBLUE, "(^|[[:space:]])/\\*", "\\*/" },
+	{ FG_BBLUE, "\\{#", "#\\}" },
+
+	/* text outside template directives */
+	{ FG_GRAY, "[}%#]\\}", "\\{[{%#]" },
+	{ FG_GRAY, "^#!.*(\\<utpl\\>|[[:space:]]-[[:alnum:]]*T[[:alnum:]]*\\>)", "\\{[{%#]" },
+	{ FG_GRAY, "^([^{%#}]|\\{[^{%#]|[%#}][^}])+\\{[{%#]", NULL },
+
+	/* template tags */
+	{ FG_BWHITE, "\\{[{%][+-]?|-?[%}]\\}", NULL },
+	{ FG_BBLUE, "\\{#[+-]?|-?#\\}", NULL },
+};
+
+#define NRULES (sizeof(highlight_rules) / sizeof(highlight_rules[0]))
+
+static regex_t compiled_patterns[NRULES * 2];
+static bool have_highlighting = false;
+static bool init_attempted = false;
+
+bool
+debug_highlight_init(void)
+{
+	regex_t *re = NULL;
+	int err = 0;
+	size_t i;
+
+	if (init_attempted)
+		return have_highlighting;
+
+	init_attempted = true;
+
+	for (i = 0; i < NRULES; i++) {
+		re = &compiled_patterns[i * 2];
+		err = regcomp(re, highlight_rules[i].start, REG_EXTENDED);
+
+		if (err != 0)
+			goto err;
+
+		re = &compiled_patterns[i * 2 + 1];
+
+		if (highlight_rules[i].end) {
+			err = regcomp(re, highlight_rules[i].end, REG_EXTENDED);
+
+			if (err != 0)
+				goto err;
+		}
+	}
+
+	have_highlighting = true;
+
+	return true;
+
+err:
+	{
+		char errbuf[128];
+
+		regerror(err, re, errbuf, sizeof(errbuf));
+		fprintf(stderr, "debug_highlight: regex error: %s\n", errbuf);
+	}
+
+	for (i = 0; i < NRULES * 2; i++)
+		regfree(&compiled_patterns[i]);
+
+	have_highlighting = false;
+
+	return false;
+}
+
+/* -- source rendering, ported from print_source_location() --------------
+ *
+ * The original computed hl_start/hl_end/cursor_pos as byte offsets into
+ * the whole source file (it read lines off a live, seekable FILE*, so a
+ * single running byte counter was the natural coordinate space). This
+ * version instead receives an already-split line array and a per-line
+ * column range (`hl`, in the debug protocol's own {line, col} terms), so
+ * the equivalent bounds are recomputed per line instead of accumulated
+ * globally - the rendering logic itself (per-character style diffing, tab/
+ * control-char placeholders, truncation, background shading) is otherwise
+ * unchanged. The single ULINE-underlined "current instruction" character
+ * the original also drew is dropped: the protocol only ever hands clients
+ * a statement *range*, not that finer-grained instruction position. */
+
+typedef struct {
+	fg_color_t color;
+	ssize_t from, to;
+} color_span_t;
+
+static color_span_t *
+colors_grow(color_span_t *colors, size_t *count, size_t *cap)
+{
+	if (*count >= *cap) {
+		size_t newcap = *cap ? *cap * 2 : 16;
+		color_span_t *p = realloc(colors, newcap * sizeof(*p));
+
+		if (!p)
+			return colors;
+
+		colors = p;
+		*cap = newcap;
+	}
+
+	return colors;
+}
+
+void
+debug_highlight_print_source(FILE *out, char **lines, size_t nlines,
+                              size_t from, size_t to,
+                              const debug_highlight_span_t *hl,
+                              size_t left_pad, size_t columns)
+{
+	color_span_t *colors = NULL;
+	size_t colors_count = 0, colors_cap = 0;
+	regex_t *ml_rule_re_end = NULL;
+	fg_color_t ml_rule_color = FG_NONE;
+	style_t style = { FG_BWHITE, BG_BLACK, 0 };
+	size_t linenum;
+
+	if (from < 1)
+		from = 1;
+
+	if (to > nlines)
+		to = nlines;
+
+	for (linenum = 1; linenum <= to; linenum++) {
+		const char *linestr = lines[linenum - 1];
+		ssize_t linelen = (ssize_t)strlen(linestr);
+		size_t ml_rule_from = 0;
+		size_t line_hl_from = SIZE_MAX, line_hl_to = SIZE_MAX;
+		regmatch_t m;
+		const char *p;
+		int rf;
+
+		colors_count = 0;
+
+		/* apply highlighting rules */
+		if (have_highlighting) {
+			size_t i;
+
+			/* single line matches */
+			for (i = 0; i < NRULES; i++) {
+				regex_t *re = &compiled_patterns[i * 2];
+
+				if (highlight_rules[i].end != NULL)
+					continue;
+
+				for (rf = 0, p = linestr;
+				     regexec(re, p, 1, &m, rf) == 0;
+				     rf = REG_NOTBOL, p += m.rm_eo) {
+					colors = colors_grow(colors, &colors_count, &colors_cap);
+					colors[colors_count++] = (color_span_t){
+						.color = highlight_rules[i].color,
+						.from  = p + m.rm_so - linestr,
+						.to    = p + m.rm_eo - linestr
+					};
+
+					if (m.rm_eo == m.rm_so)
+						break;
+				}
+			}
+
+			/* multi line matches */
+			for (rf = 0, p = linestr, ml_rule_from = 0;
+			     rf == 0 || ml_rule_re_end != NULL;
+			     rf = REG_NOTBOL) {
+
+				if (ml_rule_re_end != NULL) {
+					if (regexec(ml_rule_re_end, p, 1, &m, 0) == 0) {
+						colors = colors_grow(colors, &colors_count, &colors_cap);
+						colors[colors_count++] = (color_span_t){
+							.color = ml_rule_color,
+							.from  = (ssize_t)ml_rule_from,
+							.to    = p + m.rm_eo - linestr
+						};
+
+						ml_rule_re_end = NULL;
+						ml_rule_color = FG_NONE;
+						ml_rule_from = 0;
+						p += m.rm_eo;
+					}
+					else {
+						colors = colors_grow(colors, &colors_count, &colors_cap);
+						colors[colors_count++] = (color_span_t){
+							.color = ml_rule_color,
+							.from  = (ssize_t)ml_rule_from,
+							.to    = linelen
+						};
+
+						break;
+					}
+				}
+
+				{
+					size_t i;
+					bool found = false;
+
+					for (i = 0; i < NRULES; i++) {
+						regex_t *re_start = &compiled_patterns[i * 2];
+						regex_t *re_end = &compiled_patterns[i * 2 + 1];
+
+						if (highlight_rules[i].end == NULL)
+							continue;
+
+						if (regexec(re_start, p, 1, &m, rf) == 0) {
+							ml_rule_re_end = re_end;
+							ml_rule_color = highlight_rules[i].color;
+							ml_rule_from = (size_t)(p + m.rm_so - linestr);
+							p += m.rm_eo;
+							found = true;
+							break;
+						}
+					}
+
+					if (!found && ml_rule_re_end == NULL)
+						break;
+				}
+			}
+		}
+
+		if (linenum < from)
+			continue;
+
+		/* per-line highlight bounds, translated from the {line,col}
+		 * range (see comment above) */
+		if (hl && hl->from_line > 0 && linenum >= hl->from_line && linenum <= hl->to_line) {
+			line_hl_from = (linenum == hl->from_line) ? hl->from_col : 0;
+			line_hl_to = (linenum == hl->to_line) ? hl->to_col : SIZE_MAX;
+		}
+
+		size_t trunc = 0;
+
+		/* determine display width of line and whether it is too long */
+		if (columns > 6) {
+			size_t c;
+			ssize_t i;
+
+			for (i = 0, c = 0; i < linelen; i++) {
+				c += (linestr[i] == '\t') ? 4 : 1;
+
+				if (c > columns - 6) {
+					trunc = (size_t)(linelen - i);
+					linelen = i;
+					break;
+				}
+			}
+		}
+
+		size_t linecols = 0;
+		ssize_t last_indent = -1;
+		ssize_t i;
+
+		for (i = 0; i < (ssize_t)left_pad; i++)
+			fputc(' ', out);
+
+		cs(out, &((style_t){ FG_GRAY, BG_BLACK, FAINT }));
+		fprintf(out, "%4zu ", linenum);
+		cs(out, &style);
+
+		for (i = 0; i < linelen; i++) {
+			style_t newstyle = {
+				.fg = FG_BWHITE,
+				.bg = ((size_t)i >= line_hl_from && (size_t)i < line_hl_to)
+					? BG_GRAY : BG_BLACK,
+				.styles = 0
+			};
+			size_t j;
+
+			for (j = 0; j < colors_count; j++)
+				if (colors[j].from <= i && colors[j].to > i)
+					newstyle.fg = colors[j].color;
+
+			if (memcmp(&style, &newstyle, sizeof(style))) {
+				style = newstyle;
+				cs(out, &style);
+			}
+
+			if (linestr[i] == '\t') {
+				linecols += 4;
+				cs(out, &((style_t){ FG_BBLACK, style.bg, FAINT }));
+				fputs("<-> ", out);
+				cs(out, &style);
+			}
+			else if (linestr[i] < ' ' || linestr[i] == 0x7f) {
+				linecols++;
+				cs(out, &((style_t){ FG_BBLACK, style.bg, FAINT }));
+				fputc('.', out);
+				cs(out, &style);
+			}
+			else {
+				if (last_indent == -1)
+					last_indent = (ssize_t)linecols;
+
+				linecols++;
+				fputc(linestr[i], out);
+			}
+		}
+
+		/* reset char styles */
+		style.styles = 0;
+		style.bg = ((size_t)linelen >= line_hl_from && (size_t)(linelen) + trunc <= line_hl_to)
+			? BG_GRAY : BG_BLACK;
+		cs(out, &style);
+
+		if (trunc > 0) {
+			if (columns > 6 && linecols < columns - 6)
+				for (i = 0; i < (ssize_t)((columns - 6) - linecols); i++)
+					fputc(' ', out);
+
+			fputs("\xe2\x80\xa6" /* U+2026 HORIZONTAL ELLIPSIS */, out);
+		}
+		else if (columns > 5 && linecols < columns - 5) {
+			if (style.bg != BG_BLACK) {
+				style.bg = BG_BLACK;
+				cs(out, &style);
+			}
+
+			for (i = 0; i < (ssize_t)((columns - 5) - linecols); i++)
+				fputc(' ', out);
+		}
+
+		cs(out, &((style_t){ FG_NONE, BG_NONE, 0 }));
+		fputc('\n', out);
+	}
+
+	free(colors);
+}

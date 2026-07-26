@@ -1,5 +1,5 @@
 /*
- * udbg - ucode remote debugger client
+ * udbg - ucode debugger client
  *
  * Copyright (C) 2026 Jo-Philipp Wich <jo@mein.io>
  *
@@ -14,6 +14,25 @@
  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ * ---
+ *
+ * Interactive client for ucode's line-based debug protocol (one uppercase
+ * VERB, optionally followed by a space and a JSON object, per '\n'-terminated
+ * line - see lib/debug_proto.h). This client owns all user-facing rendering:
+ * the server-side debug core never emits ANSI, source text or formatted
+ * columns, only structured data. This is deliberately a plain, functional
+ * client (typed commands, unadorned printed responses, no line-editing/
+ * history/syntax-highlighting) rather than a port of the previous ANSI
+ * terminal UI - a faithful rendering-rich port is follow-up work that can be
+ * built against this same protocol without touching the server again.
+ *
+ * Three ways to obtain a connection:
+ *   udbg <pid>    - SIGUSR1-attach to a running `-X` process (gdb -p style)
+ *   udbg <path>   - connect to an explicit debug.listen(path) socket
+ *   udbg --fd N   - use an already-connected, inherited fd N (used
+ *                   internally by the local `-x` CLI, which forks this
+ *                   binary with one end of a socketpair on fd 3)
  */
 
 #include <stdio.h>
@@ -27,41 +46,826 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/select.h>
-#include <sys/wait.h>
-#include <termios.h>
+#include <sys/ioctl.h>
+#include <ctype.h>
+#include <inttypes.h>
+#include <stdbool.h>
 
-#define SOCKET_PATH_ARG 1
-#define MAX_LINE 4096
+#include <json-c/json.h>
+
+#include "debug_highlight.h"
+
+/* -- ANSI colors ----------------------------------------------------------- */
+
+#define C_RESET   "\033[0m"
+#define C_DIM     "\033[2m"
+#define C_BOLD    "\033[1m"
+#define C_RED     "\033[31m"
+#define C_GREEN   "\033[32m"
+#define C_YELLOW  "\033[33m"
+#define C_BLUE    "\033[34m"
+#define C_MAGENTA "\033[35m"
+#define C_CYAN    "\033[36m"
+
+#define MAX_LINE 65536
 #define DEFAULT_SOCKET_DIR "/tmp"
 #define MAX_WAIT_TIME 30
 
-static int connected = 1;
-static struct termios orig_termios;
+/* -- wire framing ----------------------------------------------------------
+ *
+ * Mirrors lib/debug_proto.c's framing without depending on it: this client
+ * has no ucode VM of its own to hand `ucv_*` helpers, so it talks the wire
+ * format directly in terms of json-c objects instead. */
 
 static void
-disable_raw_mode(void)
+proto_write(int fd, const char *verb, struct json_object *payload)
 {
-	tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+	const char *json;
+	char *line;
+	size_t len;
+	ssize_t n;
+	const char *p;
+
+	if (payload) {
+		json = json_object_to_json_string_ext(payload, JSON_C_TO_STRING_PLAIN);
+		len = strlen(verb) + 1 + strlen(json) + 1;
+		line = malloc(len + 1);
+		snprintf(line, len + 1, "%s %s\n", verb, json);
+	}
+	else {
+		len = strlen(verb) + 1;
+		line = malloc(len + 1);
+		snprintf(line, len + 1, "%s\n", verb);
+	}
+
+	p = line;
+
+	while (len > 0) {
+		n = write(fd, p, len);
+
+		if (n < 0) {
+			if (errno == EINTR)
+				continue;
+
+			break;
+		}
+
+		p += n;
+		len -= (size_t)n;
+	}
+
+	free(line);
 }
 
-static void
-enable_raw_mode(void)
-{
-	struct termios raw;
+/* Growable line-buffered reader, one instance per connection. */
+typedef struct {
+	char *data;
+	size_t len, cap;
+} linebuf_t;
 
-	if (!isatty(STDIN_FILENO))
+static bool
+linebuf_append(linebuf_t *lb, const char *data, size_t n)
+{
+	if (lb->len + n > lb->cap) {
+		size_t newcap = lb->cap ? lb->cap : 4096;
+
+		while (newcap < lb->len + n)
+			newcap *= 2;
+
+		char *p = realloc(lb->data, newcap);
+
+		if (!p)
+			return false;
+
+		lb->data = p;
+		lb->cap = newcap;
+	}
+
+	memcpy(lb->data + lb->len, data, n);
+	lb->len += n;
+
+	return true;
+}
+
+/* Extract one already-buffered "VERB [json]" line, if any, without touching
+ * the fd. Returns false if no full line is buffered yet. */
+static bool
+linebuf_pop(linebuf_t *lb, char **verb_out, struct json_object **payload_out)
+{
+	char *nl = memchr(lb->data, '\n', lb->len);
+	size_t linelen, verblen;
+	char *line, *sp;
+
+	if (!nl)
+		return false;
+
+	linelen = (size_t)(nl - lb->data);
+	line = malloc(linelen + 1);
+	memcpy(line, lb->data, linelen);
+	line[linelen] = '\0';
+
+	memmove(lb->data, lb->data + linelen + 1, lb->len - linelen - 1);
+	lb->len -= linelen + 1;
+
+	if (linelen > 0 && line[linelen - 1] == '\r')
+		line[--linelen] = '\0';
+
+	sp = memchr(line, ' ', linelen);
+	verblen = sp ? (size_t)(sp - line) : linelen;
+
+	*verb_out = malloc(verblen + 1);
+	memcpy(*verb_out, line, verblen);
+	(*verb_out)[verblen] = '\0';
+
+	*payload_out = NULL;
+
+	if (sp && *(sp + 1))
+		*payload_out = json_tokener_parse(sp + 1);
+
+	free(line);
+
+	return true;
+}
+
+/* Block until a full message is available on `fd`/`lb` and pop it - used for
+ * the synchronous SOURCE request/response round-trip triggered from within
+ * rendering. Only safe to call while the session is paused and no other
+ * request is outstanding (true for every call site below): the server only
+ * ever answers strictly in request order while paused, so the first message
+ * to arrive is the one we asked for, barring the rare case of an async
+ * EVENT interleaving, which is not handled specially here. */
+static const char *
+jstr(struct json_object *obj, const char *key, const char *dflt)
+{
+	struct json_object *v;
+
+	if (obj && json_object_object_get_ex(obj, key, &v) && json_object_is_type(v, json_type_string))
+		return json_object_get_string(v);
+
+	return dflt;
+}
+
+static int64_t
+jint(struct json_object *obj, const char *key, int64_t dflt)
+{
+	struct json_object *v;
+
+	if (obj && json_object_object_get_ex(obj, key, &v))
+		return json_object_get_int64(v);
+
+	return dflt;
+}
+
+/* -- source cache & syntax highlighting ----------------------------------- */
+
+typedef struct source_cache_entry {
+	char *file;
+	char **lines;
+	size_t nlines;
+	struct source_cache_entry *next;
+} source_cache_entry_t;
+
+static source_cache_entry_t *source_cache = NULL;
+
+static char **
+split_lines(const char *text, size_t *nlines_out)
+{
+	size_t count = 1, i;
+	char **lines;
+	const char *p, *start;
+
+	for (p = text; *p; p++)
+		if (*p == '\n')
+			count++;
+
+	lines = calloc(count, sizeof(char *));
+	i = 0;
+	start = text;
+
+	for (p = text; ; p++) {
+		if (*p == '\n' || *p == '\0') {
+			size_t len = (size_t)(p - start);
+
+			if (len > 0 && start[len - 1] == '\r')
+				len--;
+
+			lines[i] = malloc(len + 1);
+			memcpy(lines[i], start, len);
+			lines[i][len] = '\0';
+			i++;
+
+			if (*p == '\0')
+				break;
+
+			start = p + 1;
+		}
+	}
+
+	*nlines_out = i;
+
+	return lines;
+}
+
+static char **
+find_cached_source(const char *file, size_t *nlines_out)
+{
+	source_cache_entry_t *e;
+
+	for (e = source_cache; e; e = e->next) {
+		if (!strcmp(e->file, file)) {
+			*nlines_out = e->nlines;
+
+			return e->lines;
+		}
+	}
+
+	return NULL;
+}
+
+/* Split and cache already-known source `text` for `file` (e.g. from a
+ * SOURCE response the caller already has in hand), so a later
+ * render_source_lines() call for the same file doesn't re-request it. */
+static char **
+cache_source_text(const char *file, const char *text, size_t *nlines_out)
+{
+	source_cache_entry_t *e;
+	char **cached = find_cached_source(file, nlines_out);
+
+	if (cached)
+		return cached;
+
+	e = malloc(sizeof(source_cache_entry_t));
+	e->file = strdup(file);
+	e->lines = split_lines(text, &e->nlines);
+	e->next = source_cache;
+	source_cache = e;
+
+	*nlines_out = e->nlines;
+
+	return e->lines;
+}
+
+/* Rendering a source range/context needs the actual text, which only ever
+ * arrives asynchronously as a SOURCE response processed by the normal main
+ * loop - never via a nested blocking round-trip from inside another
+ * response's rendering, which would re-enter the single shared connection
+ * state from two places at once. So when the file isn't cached yet, a
+ * render call fires off a SOURCE request and remembers what it wanted to
+ * show as `pending_source`; the main loop's SOURCE handler finishes the
+ * render once the response actually arrives. */
+typedef struct {
+	bool active;
+	char *file;
+	int64_t from, to;
+	debug_highlight_span_t hl;
+	bool have_hl;
+} pending_source_t;
+
+static pending_source_t pending_source = { 0 };
+
+static void
+request_source(int fd, const char *file, int64_t from, int64_t to,
+                const debug_highlight_span_t *hl)
+{
+	struct json_object *payload;
+
+	/* A fetch for this exact file is already in flight (e.g. the initial
+	 * PAUSED's own auto-context request hasn't resolved yet when a
+	 * "lines" response also wants it) - don't send a second SOURCE
+	 * request that would only overwrite this same pending_source's
+	 * tracking with no way to reconcile the two, just adopt whichever
+	 * range was asked for most recently and let the one response in
+	 * flight satisfy it. */
+	if (pending_source.active && !strcmp(pending_source.file, file)) {
+		pending_source.from = from;
+		pending_source.to = to;
+		pending_source.have_hl = (hl != NULL);
+
+		if (hl)
+			pending_source.hl = *hl;
+
 		return;
+	}
 
-	tcgetattr(STDIN_FILENO, &orig_termios);
-	atexit(disable_raw_mode);
+	payload = json_object_new_object();
+	json_object_object_add(payload, "file", json_object_new_string(file));
+	proto_write(fd, "SOURCE", payload);
+	json_object_put(payload);
 
-	raw = orig_termios;
-	raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-	raw.c_lflag &= ~(ECHO | ICANON);
-	raw.c_cc[VMIN] = 1;
-	raw.c_cc[VTIME] = 0;
-	tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+	free(pending_source.file);
+	pending_source.active = true;
+	pending_source.file = strdup(file);
+	pending_source.from = from;
+	pending_source.to = to;
+	pending_source.have_hl = (hl != NULL);
+
+	if (hl)
+		pending_source.hl = *hl;
 }
+
+/* Current terminal width, for the same wrap/pad behavior
+ * debug_highlight_print_source()'s ported original had via term_width().
+ * Falls back to 80 columns when stdout isn't a tty (e.g. piped output). */
+static size_t
+term_columns(void)
+{
+	struct winsize w;
+
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_col > 0)
+		return w.ws_col;
+
+	return 80;
+}
+
+/* Print source lines [from, to] (1-based, inclusive) from `file`, shading
+ * the `hl` statement span if given. If the text isn't cached yet,
+ * asynchronously requests it (see `pending_source` above) and returns
+ * without printing anything - the main loop's SOURCE response handler
+ * re-invokes this once the text has actually arrived. */
+static void
+render_source_lines(int fd, const char *file, int64_t from, int64_t to,
+                     const debug_highlight_span_t *hl)
+{
+	size_t nlines;
+	char **lines = find_cached_source(file, &nlines);
+
+	if (!lines) {
+		request_source(fd, file, from, to, hl);
+		return;
+	}
+
+	if (from < 1)
+		from = 1;
+
+	debug_highlight_print_source(stdout, lines, nlines,
+		(size_t)from, (size_t)to, hl, 0, term_columns());
+}
+
+/* -- response rendering ------------------------------------------------- */
+
+static void
+render_paused(int fd, struct json_object *p)
+{
+	int64_t line = jint(p, "line", 0);
+	const char *file = jstr(p, "file", NULL);
+
+	printf(C_BOLD "Paused" C_RESET " (%s) in " C_BOLD "%s()" C_RESET ", %s:%" PRId64 ":%" PRId64 "\n",
+		jstr(p, "reason", "?"),
+		jstr(p, "function", "?"),
+		file ? file : "?",
+		line,
+		jint(p, "col", 0));
+
+	if (json_object_object_get_ex(p, "breakpoint_id", NULL))
+		printf("  " C_GREEN "breakpoint #%" PRId64 C_RESET "\n", jint(p, "breakpoint_id", 0));
+
+	if (json_object_object_get_ex(p, "exception_message", NULL))
+		printf("  " C_RED "exception: %s" C_RESET "\n", jstr(p, "exception_message", ""));
+
+	if (file && line > 0) {
+		debug_highlight_span_t hl = {
+			.from_line = (size_t)line, .from_col = 0,
+			.to_line = (size_t)line, .to_col = SIZE_MAX
+		};
+
+		render_source_lines(fd, file, line - 2, line + 2, &hl);
+	}
+}
+
+static void
+render_breakpoints(struct json_object *p)
+{
+	struct json_object *items = NULL;
+	size_t i, n;
+
+	json_object_object_get_ex(p, "items", &items);
+	n = items ? json_object_array_length(items) : 0;
+
+	if (n == 0) {
+		printf("No breakpoints set\n");
+		return;
+	}
+
+	for (i = 0; i < n; i++) {
+		struct json_object *it = json_object_array_get_idx(items, i);
+		struct json_object *idv = NULL;
+
+		if (json_object_object_get_ex(it, "id", &idv))
+			printf(C_BOLD "#%-4" PRId64 C_RESET " ", json_object_get_int64(idv));
+		else
+			printf(C_DIM "(%-4s)" C_RESET " ", jstr(it, "kind", "?"));
+
+		if (json_object_object_get_ex(it, "file", NULL))
+			printf("%s:%" PRId64 ":%" PRId64 " - %s\n",
+				jstr(it, "file", "?"), jint(it, "line", 0),
+				jint(it, "col", 0), jstr(it, "function", "?"));
+		else
+			printf("<next instruction>\n");
+	}
+}
+
+static const char *
+variable_color(const char *kind)
+{
+	if (!strcmp(kind, "upvalue"))
+		return C_CYAN;
+
+	if (!strcmp(kind, "internal"))
+		return C_DIM;
+
+	return "";
+}
+
+static void
+render_variables_array(struct json_object *items, const char *indent)
+{
+	size_t i, n = items ? json_object_array_length(items) : 0;
+
+	for (i = 0; i < n; i++) {
+		struct json_object *it = json_object_array_get_idx(items, i);
+		const char *kind = jstr(it, "kind", "?");
+
+		printf("%s%s%-16s" C_RESET " (%s%-8s" C_RESET ") : %s\n", indent,
+			variable_color(kind), jstr(it, "name", "?"),
+			variable_color(kind), kind,
+			jstr(it, "value_repr", ""));
+	}
+}
+
+static void
+render_backtrace(struct json_object *p)
+{
+	struct json_object *frames = NULL;
+	size_t i, n;
+
+	json_object_object_get_ex(p, "frames", &frames);
+	n = frames ? json_object_array_length(frames) : 0;
+
+	for (i = 0; i < n; i++) {
+		struct json_object *fr = json_object_array_get_idx(frames, i);
+		struct json_object *vars = NULL;
+
+		if (!strcmp(jstr(fr, "kind", ""), "native")) {
+			printf(C_BOLD "#%-2" PRId64 C_RESET " in %s, function " C_BOLD "%s()" C_RESET "\n",
+				jint(fr, "index", 0), jstr(fr, "module", "?"),
+				jstr(fr, "function", "?"));
+		}
+		else {
+			printf(C_BOLD "#%-2" PRId64 C_RESET " in %s:%" PRId64 ":%" PRId64 " " C_BOLD "%s()" C_RESET "\n",
+				jint(fr, "index", 0), jstr(fr, "file", "?"),
+				jint(fr, "line", 0), jint(fr, "col", 0),
+				jstr(fr, "function", "?"));
+		}
+
+		if (json_object_object_get_ex(fr, "variables", &vars))
+			render_variables_array(vars, "     - ");
+	}
+}
+
+static void
+render_source_range(int fd, struct json_object *p)
+{
+	const char *file = jstr(p, "file", NULL);
+	struct json_object *cursor = json_object_object_get(p, "cursor");
+	int64_t from = jint(p, "from", 0);
+	int64_t to = jint(p, "to", 0);
+	debug_highlight_span_t hl;
+
+	if (!file) {
+		printf("(no source range)\n");
+		return;
+	}
+
+	if (cursor) {
+		hl.from_line = (size_t)jint(cursor, "from_line", 0);
+		hl.from_col = (size_t)jint(cursor, "from_col", 0);
+		hl.to_line = (size_t)jint(cursor, "to_line", 0);
+		hl.to_col = (size_t)jint(cursor, "to_col", 0);
+
+		render_source_lines(fd, file, from, to, &hl);
+	}
+	else {
+		render_source_lines(fd, file, from, to, NULL);
+	}
+}
+
+static void
+render_disassembly(struct json_object *p)
+{
+	struct json_object *insns = NULL;
+	size_t i, n;
+
+	printf("Function: %s\n", jstr(p, "function", "?"));
+
+	json_object_object_get_ex(p, "instructions", &insns);
+	n = insns ? json_object_array_length(insns) : 0;
+
+	for (i = 0; i < n; i++) {
+		struct json_object *ins = json_object_array_get_idx(insns, i);
+		struct json_object *operand = NULL;
+
+		printf("%06" PRId64 ": %-8s", jint(ins, "offset", 0), jstr(ins, "mnemonic", "?"));
+
+		if (json_object_object_get_ex(ins, "operand", &operand))
+			printf(" %s", json_object_get_string(operand));
+
+		if (json_object_object_get_ex(ins, "variable_name", NULL))
+			printf("  ; %s %s", jstr(ins, "variable_kind", ""), jstr(ins, "variable_name", ""));
+
+		printf("\n");
+	}
+}
+
+static void
+render_response(int fd, const char *verb, struct json_object *payload)
+{
+	if (!strcmp(verb, "PAUSED"))
+		render_paused(fd, payload);
+	else if (!strcmp(verb, "BREAKPOINTS"))
+		render_breakpoints(payload);
+	else if (!strcmp(verb, "VARIABLES"))
+		render_variables_array(json_object_object_get(payload, "vars"), "");
+	else if (!strcmp(verb, "BACKTRACE"))
+		render_backtrace(payload);
+	else if (!strcmp(verb, "SOURCE_RANGE"))
+		render_source_range(fd, payload);
+	else if (!strcmp(verb, "DISASSEMBLY"))
+		render_disassembly(payload);
+	else if (!strcmp(verb, "ERROR"))
+		printf(C_RED "Error: %s" C_RESET "\n", jstr(payload, "message", "(unknown error)"));
+	else if (!strcmp(verb, "VALUE"))
+		printf("%s\n", jstr(payload, "repr", ""));
+	else if (!strcmp(verb, "BREAKPOINT_ADDED"))
+		printf(C_GREEN "Breakpoint #%" PRId64 " added" C_RESET "\n", jint(payload, "id", 0));
+	else if (!strcmp(verb, "EVENT"))
+		printf("[event: %s] %s\n", jstr(payload, "event", "?"),
+			json_object_to_json_string_ext(payload, JSON_C_TO_STRING_SPACED));
+	else if (!strcmp(verb, "SOURCE")) {
+		const char *text = jstr(payload, "text", NULL);
+		const char *file = jstr(payload, "file", "?");
+
+		if (text) {
+			size_t nlines;
+
+			cache_source_text(file, text, &nlines);
+
+			/* Finishing an auto-fetch triggered by render_paused()/
+			 * render_source_range() (see pending_source) is distinct from
+			 * a direct response to a user-typed "source <file>" command:
+			 * the former re-renders exactly the range that was originally
+			 * requested, the latter shows the whole file. */
+			if (pending_source.active && !strcmp(pending_source.file, file)) {
+				int64_t from = pending_source.from;
+				int64_t to = pending_source.to;
+				bool have_hl = pending_source.have_hl;
+				debug_highlight_span_t hl = pending_source.hl;
+
+				pending_source.active = false;
+				render_source_lines(fd, file, from, to, have_hl ? &hl : NULL);
+			}
+			else {
+				printf("--- %s ---\n", file);
+				render_source_lines(fd, file, 1, (int64_t)nlines, NULL);
+			}
+		}
+		else {
+			printf("(source unavailable: %s)\n", jstr(payload, "error", "?"));
+			pending_source.active = false;
+		}
+	}
+	else if (!strcmp(verb, "HELP")) {
+		struct json_object *cmds = json_object_object_get(payload, "commands");
+		size_t i, n = cmds ? json_object_array_length(cmds) : 0;
+
+		for (i = 0; i < n; i++) {
+			struct json_object *c = json_object_array_get_idx(cmds, i);
+
+			printf("%-16s %s\n", jstr(c, "verb", "?"), jstr(c, "help", ""));
+		}
+	}
+	else if (!strcmp(verb, "SOURCES")) {
+		struct json_object *items = json_object_object_get(payload, "items");
+		size_t i, n = items ? json_object_array_length(items) : 0;
+
+		for (i = 0; i < n; i++) {
+			struct json_object *it = json_object_array_get_idx(items, i);
+
+			printf("#%-2" PRId64 " %s\n", jint(it, "index", 0), jstr(it, "file", "?"));
+		}
+	}
+	else if (!strcmp(verb, "OK")) {
+		printf("OK\n");
+	}
+	else if (!strcmp(verb, "RESUME")) {
+		printf("(resumed)\n");
+	}
+	else if (payload) {
+		printf("%s %s\n", verb, json_object_to_json_string_ext(payload, JSON_C_TO_STRING_SPACED));
+	}
+	else {
+		printf("%s\n", verb);
+	}
+}
+
+/* -- typed command line -> VERB {payload} translation -------------------- */
+
+static char *
+trim(char *s)
+{
+	char *end;
+
+	while (isspace((unsigned char)*s))
+		s++;
+
+	end = s + strlen(s);
+
+	while (end > s && isspace((unsigned char)end[-1]))
+		*--end = '\0';
+
+	return s;
+}
+
+/* Split off the first whitespace-delimited word from *rest, returning it and
+ * advancing *rest to the remainder (leading space trimmed). */
+static char *
+shift_word(char **rest)
+{
+	char *p = *rest;
+	char *word;
+
+	while (isspace((unsigned char)*p))
+		p++;
+
+	word = p;
+
+	while (*p && !isspace((unsigned char)*p))
+		p++;
+
+	if (*p) {
+		*p = '\0';
+		p++;
+
+		while (isspace((unsigned char)*p))
+			p++;
+	}
+
+	*rest = p;
+
+	return word;
+}
+
+static bool
+send_command(int fd, char *line, bool *resuming)
+{
+	char *cmd = shift_word(&line);
+	struct json_object *payload = NULL;
+
+	*resuming = false;
+
+	if (!*cmd)
+		return true;
+
+	if (!strcmp(cmd, "help") || !strcmp(cmd, "h") || !strcmp(cmd, "?")) {
+		if (*line) {
+			payload = json_object_new_object();
+			json_object_object_add(payload, "command", json_object_new_string(line));
+		}
+
+		proto_write(fd, "HELP", payload);
+	}
+	else if (!strcmp(cmd, "break") || !strcmp(cmd, "b")) {
+		payload = json_object_new_object();
+		json_object_object_add(payload, "spec", json_object_new_string(line));
+		proto_write(fd, "BREAK", payload);
+	}
+	else if (!strcmp(cmd, "delete") || !strcmp(cmd, "d")) {
+		if (*line) {
+			payload = json_object_new_object();
+			json_object_object_add(payload, "id", json_object_new_int64(strtoll(line, NULL, 10)));
+		}
+
+		proto_write(fd, "DELETE", payload);
+	}
+	else if (!strcmp(cmd, "list") || !strcmp(cmd, "ls")) {
+		proto_write(fd, "LIST_BREAKPOINTS", NULL);
+	}
+	else if (!strcmp(cmd, "next") || !strcmp(cmd, "n")) {
+		proto_write(fd, "NEXT", NULL);
+		*resuming = true;
+	}
+	else if (!strcmp(cmd, "step") || !strcmp(cmd, "s")) {
+		proto_write(fd, "STEP", NULL);
+		*resuming = true;
+	}
+	else if (!strcmp(cmd, "continue") || !strcmp(cmd, "c")) {
+		proto_write(fd, "CONTINUE", NULL);
+		*resuming = true;
+	}
+	else if (!strcmp(cmd, "return")) {
+		proto_write(fd, "RETURN", NULL);
+		*resuming = true;
+	}
+	else if (!strcmp(cmd, "backtrace") || !strcmp(cmd, "bt")) {
+		payload = json_object_new_object();
+		json_object_object_add(payload, "full",
+			json_object_new_boolean(!strcmp(trim(line), "full")));
+		proto_write(fd, "BACKTRACE", payload);
+	}
+	else if (!strcmp(cmd, "variables") || !strcmp(cmd, "vars")) {
+		proto_write(fd, "VARIABLES", NULL);
+	}
+	else if (!strcmp(cmd, "sources") || !strcmp(cmd, "src")) {
+		proto_write(fd, "SOURCES", NULL);
+	}
+	else if (!strcmp(cmd, "print") || !strcmp(cmd, "p")) {
+		payload = json_object_new_object();
+		json_object_object_add(payload, "expr", json_object_new_string(line));
+		proto_write(fd, "PRINT", payload);
+	}
+	else if (!strcmp(cmd, "lines") || !strcmp(cmd, "ln")) {
+		char *spec = shift_word(&line);
+		char *before = shift_word(&line);
+		char *after = shift_word(&line);
+
+		payload = json_object_new_object();
+
+		if (*spec)
+			json_object_object_add(payload, "spec", json_object_new_string(spec));
+
+		if (*before)
+			json_object_object_add(payload, "before", json_object_new_int64(strtoll(before, NULL, 10)));
+
+		if (*after)
+			json_object_object_add(payload, "after", json_object_new_int64(strtoll(after, NULL, 10)));
+
+		proto_write(fd, "LINES", payload);
+	}
+	else if (!strcmp(cmd, "throw")) {
+		char *first = shift_word(&line);
+		static const char *types[] = {
+			"syntax", "runtime", "type", "reference", "user", "exit"
+		};
+		size_t i;
+		bool is_type = false;
+
+		for (i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
+			if (!strncmp(types[i], first, strlen(first))) {
+				is_type = true;
+				break;
+			}
+		}
+
+		payload = json_object_new_object();
+
+		if (is_type && *line) {
+			json_object_object_add(payload, "type", json_object_new_string(first));
+			json_object_object_add(payload, "message", json_object_new_string(line));
+		}
+		else {
+			char *msg = *line ? line : first;
+
+			json_object_object_add(payload, "message", json_object_new_string(msg));
+		}
+
+		proto_write(fd, "THROW", payload);
+	}
+	else if (!strcmp(cmd, "disassemble") || !strcmp(cmd, "disasm")) {
+		if (*line) {
+			payload = json_object_new_object();
+			json_object_object_add(payload, "spec", json_object_new_string(line));
+		}
+
+		proto_write(fd, "DISASSEMBLE", payload);
+	}
+	else if (!strcmp(cmd, "source")) {
+		payload = json_object_new_object();
+		json_object_object_add(payload, "file", json_object_new_string(line));
+		proto_write(fd, "SOURCE", payload);
+	}
+	else if (!strcmp(cmd, "quit") || !strcmp(cmd, "q")) {
+		bool force = !strcmp(trim(line), "-f");
+
+		if (!force && isatty(STDIN_FILENO)) {
+			char confirm[16];
+
+			printf("Terminate program? (y/n) > ");
+			fflush(stdout);
+
+			if (!fgets(confirm, sizeof(confirm), stdin) || tolower((unsigned char)confirm[0]) != 'y')
+				return true;
+		}
+
+		proto_write(fd, "QUIT", NULL);
+		return false;
+	}
+	else {
+		printf("Unrecognized command '%s' (try 'help')\n", cmd);
+	}
+
+	return true;
+}
+
+/* -- connection setup ----------------------------------------------------- */
 
 static int
 connect_socket(const char *path)
@@ -70,6 +874,7 @@ connect_socket(const char *path)
 	int fd;
 
 	fd = socket(AF_UNIX, SOCK_STREAM, 0);
+
 	if (fd < 0)
 		return -1;
 
@@ -79,6 +884,7 @@ connect_socket(const char *path)
 
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		close(fd);
+
 		return -1;
 	}
 
@@ -89,7 +895,9 @@ static char *
 get_socket_path_for_pid(pid_t pid)
 {
 	static char path[256];
+
 	snprintf(path, sizeof(path), "%s/ucode-debug-%d.sock", DEFAULT_SOCKET_DIR, pid);
+
 	return path;
 }
 
@@ -114,26 +922,14 @@ static void
 print_usage(const char *prog)
 {
 	fprintf(stderr, "Usage: %s <pid>\n", prog);
+	fprintf(stderr, "       %s <socket-path>\n", prog);
+	fprintf(stderr, "       %s --fd <n>\n", prog);
 	fprintf(stderr, "\n");
-	fprintf(stderr, "Remote debugger client for ucode.\n");
+	fprintf(stderr, "Debugger client for ucode, speaking the line-based debug protocol.\n");
 	fprintf(stderr, "\n");
-	fprintf(stderr, "Attach to a running ucode process and start an interactive\n");
-	fprintf(stderr, "debugging session. The target process must have been started\n");
-	fprintf(stderr, "with the -X flag to enable debugger infrastructure.\n");
-	fprintf(stderr, "\n");
-	fprintf(stderr, "This works like 'gdb -p' - send SIGUSR1 to the target process\n");
-	fprintf(stderr, "to trigger the debugger, then connect to the created socket.\n");
-	fprintf(stderr, "\n");
-	fprintf(stderr, "Example:\n");
-	fprintf(stderr, "  # Start ucode script with debugger support:\n");
-	fprintf(stderr, "  ucode -X script.uc &\n");
-	fprintf(stderr, "\n");
-	fprintf(stderr, "  # Attach debugger in another terminal:\n");
-	fprintf(stderr, "  udbg <pid>\n");
-	fprintf(stderr, "\n");
-	fprintf(stderr, "  # Or use debug.attach() in script:\n");
-	fprintf(stderr, "  import * as debug from 'debug';\n");
-	fprintf(stderr, "  debug.attach(() => { /* code to debug */ });\n");
+	fprintf(stderr, "  <pid>           SIGUSR1-attach to a running `-X` process, gdb -p style.\n");
+	fprintf(stderr, "  <socket-path>   connect to an explicit debug.listen(path) socket.\n");
+	fprintf(stderr, "  --fd <n>        use an already-connected fd (internal, used by `-x`).\n");
 }
 
 int
@@ -142,107 +938,178 @@ main(int argc, char **argv)
 	int fd;
 	fd_set readfds;
 	char buf[MAX_LINE];
-	pid_t pid;
-	char *socket_path;
+	linebuf_t lb = { 0 };
 
-	if (argc < 2) {
+	signal(SIGPIPE, SIG_IGN);
+	setvbuf(stdout, NULL, _IOLBF, 0);
+	debug_highlight_init();
+
+	if (argc < 2 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
 		print_usage(argv[0]);
-		return 1;
+
+		return (argc < 2) ? 1 : 0;
 	}
 
-	if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
-		print_usage(argv[0]);
-		return 0;
+	if (!strcmp(argv[1], "--fd")) {
+		if (argc < 3) {
+			print_usage(argv[0]);
+
+			return 1;
+		}
+
+		fd = atoi(argv[2]);
 	}
+	else if (strchr(argv[1], '/')) {
+		fd = connect_socket(argv[1]);
 
-	pid = atoi(argv[1]);
-	if (pid <= 0) {
-		fprintf(stderr, "Invalid PID: %s\n", argv[1]);
-		return 1;
-	}
+		if (fd < 0) {
+			fprintf(stderr, "Failed to connect to %s: %s\n", argv[1], strerror(errno));
 
-	socket_path = get_socket_path_for_pid(pid);
-
-	/* If the attach socket already exists, the target already has a
-	 * breakpoint session waiting (e.g. `-X <expr>`/debug.attach()) - just
-	 * connect to it. Sending SIGUSR1 in that case would still be delivered
-	 * eventually, but only *after* this session ends and script execution
-	 * resumes (signal dispatch only happens from within the bytecode
-	 * execution loop, not while blocked waiting for us to connect), so it
-	 * would surface later as a confusing extra, unrequested pause. Only
-	 * fall back to the SIGUSR1 kick for the classic bare `-X` flow, where
-	 * nothing is listening yet until asked to. */
-	struct stat st;
-
-	if (stat(socket_path, &st) == 0 && S_ISSOCK(st.st_mode)) {
-		fprintf(stderr, "Debugger socket already present, connecting...\n");
+			return 1;
+		}
 	}
 	else {
-		if (kill(pid, SIGUSR1) < 0) {
-			fprintf(stderr, "Failed to send SIGUSR1 to process %d: %s\n", pid, strerror(errno));
+		pid_t pid = atoi(argv[1]);
+		char *socket_path;
+		struct stat st;
+
+		if (pid <= 0) {
+			fprintf(stderr, "Invalid PID: %s\n", argv[1]);
+
 			return 1;
 		}
 
-		fprintf(stderr, "Sent SIGUSR1 to process %d, waiting for debugger socket...\n", pid);
+		socket_path = get_socket_path_for_pid(pid);
 
-		/* Wait for socket to appear */
-		if (wait_for_socket(socket_path, MAX_WAIT_TIME) < 0) {
-			fprintf(stderr, "Timeout waiting for debugger socket at %s\n", socket_path);
+		/* If the attach socket already exists, the target already has a
+		 * session waiting (e.g. `-X <expr>`/debug.attach()) - just connect.
+		 * Only send SIGUSR1 for the classic bare `-X` flow, where nothing is
+		 * listening yet until asked to. */
+		if (stat(socket_path, &st) == 0 && S_ISSOCK(st.st_mode)) {
+			fprintf(stderr, "Debugger socket already present, connecting...\n");
+		}
+		else {
+			if (kill(pid, SIGUSR1) < 0) {
+				fprintf(stderr, "Failed to send SIGUSR1 to process %d: %s\n", pid, strerror(errno));
+
+				return 1;
+			}
+
+			fprintf(stderr, "Sent SIGUSR1 to process %d, waiting for debugger socket...\n", pid);
+
+			if (wait_for_socket(socket_path, MAX_WAIT_TIME) < 0) {
+				fprintf(stderr, "Timeout waiting for debugger socket at %s\n", socket_path);
+
+				return 1;
+			}
+		}
+
+		fd = connect_socket(socket_path);
+
+		if (fd < 0) {
+			fprintf(stderr, "Failed to connect to %s: %s\n", socket_path, strerror(errno));
+
 			return 1;
 		}
-	}
-
-	fprintf(stderr, "Debugger socket ready, connecting...\n");
-
-	fd = connect_socket(socket_path);
-	if (fd < 0) {
-		fprintf(stderr, "Failed to connect to %s: %s\n", socket_path, strerror(errno));
-		return 1;
 	}
 
 	fprintf(stderr, "Connected to ucode debugger\n\n");
 
-	/* The remote debugger renders the exact same interactive CLI as a
-	 * local session - prompts, tab completion, history navigation, ANSI
-	 * cursor control - over the socket. All udbg has to do is put the
-	 * local terminal into raw mode and transparently pump raw bytes in
-	 * both directions; the server does all of the actual rendering. */
-	enable_raw_mode();
+	bool stdin_done = false;
+	/* True whenever the session is sitting at a PAUSED prompt waiting for
+	 * a command - i.e. exactly when a "dbg > " prompt should be visible.
+	 * Cleared the instant a resuming command (next/step/continue/return)
+	 * is sent, since there is no synchronous ack for those (see
+	 * lib/debug_proto.h) - the prompt only comes back once a new PAUSED
+	 * (or the connection closing) says so. */
+	bool paused = false;
+	/* True from the moment any command is sent until its response has
+	 * actually been drained and rendered - keeps the prompt from
+	 * reappearing (and racing ahead of) a response that just hasn't
+	 * arrived over the socket yet. */
+	bool awaiting_response = false;
 
-	while (connected) {
+	for (;;) {
+		char *verb;
+		struct json_object *payload;
+
+		while (linebuf_pop(&lb, &verb, &payload)) {
+			render_response(fd, verb, payload);
+			awaiting_response = false;
+
+			if (!strcmp(verb, "PAUSED"))
+				paused = true;
+			else if (!strcmp(verb, "RESUME") || !strcmp(verb, "EVENT"))
+				paused = false;
+
+			free(verb);
+			json_object_put(payload);
+		}
+
+		/* Only accept (and select on) stdin while actually sitting at a
+		 * prompt: gating this on the exact same condition that shows the
+		 * prompt is what stops a command from racing ahead of - and
+		 * getting interleaved with - the connection's own initial PAUSED
+		 * message or a still-in-flight response to a previous command. */
+		bool accepting_input = paused && !stdin_done && !awaiting_response
+			&& !pending_source.active;
+
+		if (accepting_input) {
+			printf("dbg > ");
+			fflush(stdout);
+		}
+
 		FD_ZERO(&readfds);
-		FD_SET(STDIN_FILENO, &readfds);
+
+		if (accepting_input)
+			FD_SET(STDIN_FILENO, &readfds);
+
 		FD_SET(fd, &readfds);
 
-		if (select(fd + 1, &readfds, NULL, NULL, NULL) < 0)
+		if (select(fd + 1, &readfds, NULL, NULL, NULL) < 0) {
+			if (errno == EINTR)
+				continue;
+
 			break;
-
-		if (FD_ISSET(STDIN_FILENO, &readfds)) {
-			int n = read(STDIN_FILENO, buf, sizeof(buf));
-
-			if (n <= 0)
-				break;
-
-			if (write(fd, buf, n) != n)
-				break;
 		}
 
 		if (FD_ISSET(fd, &readfds)) {
-			int n = read(fd, buf, sizeof(buf));
+			ssize_t n = read(fd, buf, sizeof(buf));
 
 			if (n <= 0) {
-				connected = 0;
+				printf("\nConnection closed\n");
 				break;
 			}
 
-			if (write(STDOUT_FILENO, buf, n) != n)
-				break;
+			linebuf_append(&lb, buf, (size_t)n);
+		}
+
+		if (!stdin_done && FD_ISSET(STDIN_FILENO, &readfds)) {
+			if (!fgets(buf, sizeof(buf), stdin)) {
+				proto_write(fd, "QUIT", NULL);
+				stdin_done = true;
+			}
+			else if (*trim(buf)) {
+				bool resuming;
+				bool keep_going = send_command(fd, trim(buf), &resuming);
+
+				awaiting_response = true;
+
+				if (resuming)
+					paused = false;
+
+				if (!keep_going) {
+					/* QUIT was sent - keep looping (without reading
+					 * further stdin) to drain and render any trailing
+					 * responses (e.g. a final EVENT exit) until the
+					 * server closes the connection, instead of exiting
+					 * immediately and losing output that was already in
+					 * flight. */
+					stdin_done = true;
+				}
+			}
 		}
 	}
-
-	disable_raw_mode();
-
-	fprintf(stderr, "\r\nConnection closed\n");
 
 	close(fd);
 

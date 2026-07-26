@@ -1,332 +1,151 @@
-# UCode Interactive Debugger Implementation Status
+# UCode Debugger
 
 ## Overview
 
-The UCode interpreter includes a fully-featured interactive command-line debugger implemented in `lib/debug.c` (~6,500 lines of code). The debugger provides source-level debugging capabilities with breakpoints, stepping, stack inspection, and runtime value evaluation.
+The ucode interpreter includes source-level debugging support: breakpoints,
+stepping, stack inspection, and runtime expression evaluation. The
+implementation is split into a **server** (the debug core, `lib/debug.c` +
+`lib/debug_remote.c` + `lib/debug_proto.c`, loaded as the `debug` module) and
+a **client** (`udbg`, at the repository root) that talks to it over a simple,
+line-based text protocol.
+
+The server never renders anything - no ANSI escapes, no syntax highlighting,
+no formatted columns. It only emits and consumes structured protocol
+messages (see "Wire Protocol" below). All rendering, source buffer handling
+and interactive line editing live in the client. This split exists so that
+alternative clients - IDE integrations, editor plugins, other tooling - can
+drive the exact same debug core without reimplementing any of its logic, and
+so the client can be tested and evolved independently of the VM-side
+breakpoint machinery.
+
+There is exactly one way a session is driven, regardless of how it was
+reached: a connected file descriptor is handed to `bk_enter_session()`
+(`lib/debug.c`), which writes a `PAUSED` message and then reads and dispatches
+protocol commands until the client tells it to resume or quit. Three things
+differ only in *how that fd is obtained*:
+
+- **Local (`ucode -x script.uc`)** - `uc_debugger()` creates a `socketpair()`,
+  forks, and execs `udbg --fd 3` in the child with one end of the pair on fd
+  3; the parent (running the script) keeps the other end as the session fd.
+  The child owns the real controlling terminal and is the interactive
+  client; the parent never touches its own stdin/stdout for protocol
+  traffic.
+- **Remote, explicit path (`debug.listen(path)`)** - accepts a single
+  connection on an arbitrary, caller-chosen Unix domain socket path and hands
+  it to the same session driver.
+- **Remote, SIGUSR1 attach (`ucode -X`, `debug.attach()`, `debug.listen()`
+  with no path)** - arms a breakpoint and/or a `SIGUSR1` handler; once
+  triggered, waits (up to 30s) for a client to connect to the PID-derived
+  attach socket `/tmp/ucode-debug-<pid>.sock`, then hands off the accepted fd
+  the same way. `udbg <pid>` automates sending the signal and connecting.
 
 ---
 
-## Architecture
+## Wire Protocol
 
-### Core Components
+One message per line, `\n`-terminated: an uppercase **VERB**, optionally
+followed by a single space and a JSON object payload.
 
-#### 1. Breakpoint System (`include/ucode/types.h`)
-
-```c
-typedef struct uc_breakpoint {
-    uint8_t *ip;                    // Instruction pointer where breakpoint is set
-    void (*cb)(uc_vm_t *, struct uc_breakpoint *);  // Callback when hit
-} uc_breakpoint_t;
-
-uc_declare_vector(uc_breakpoints_t, uc_breakpoint_t *);
+```
+PAUSED {"reason":"breakpoint","file":"script.uc","line":12,"col":3,"function":"main","breakpoint_id":1}
+BREAK {"spec":"script.uc:12"}
+BREAKPOINT_ADDED {"id":1}
 ```
 
-Breakpoints are stored in the VM structure:
-```c
-struct uc_vm {
-    ...
-    uc_breakpoints_t breakpoints;   // Active breakpoints
-    ...
-};
-```
+A payload, when present, is always a JSON *object* (never a bare
+array/string/number), so new fields can be added without breaking existing
+clients. `file` fields are the source's display path exactly as the server
+resolves it (repository-relative when the source lives under the current
+working directory, absolute otherwise) - clients should treat it as an
+opaque key for the `SOURCE` verb, not derive anything from its shape.
 
-#### 2. Breakpoint Kinds
+### Client → server commands
 
-```c
-typedef enum {
-    BK_ONCE,     // Single-use breakpoint
-    BK_USER,     // User-defined breakpoint
-    BK_STEP,     // Internal step breakpoint
-    BK_CATCH,    // Exception catch breakpoint
-} debug_breakpoint_kind_t;
-```
+| Verb | Payload | Response |
+|---|---|---|
+| `BREAK` | `{"spec":"path[:line[:col]]"\|"expr"}` | `BREAKPOINT_ADDED {"id"}` or `ERROR` |
+| `DELETE` | `{"id":N}` (omit for the current breakpoint) | `OK` or `ERROR` |
+| `LIST_BREAKPOINTS` | none | `BREAKPOINTS {"items":[{"id"?,"kind","file"?,"line"?,"col"?,"function"?}]}` |
+| `NEXT` | none | none synchronously - see "No synchronous step acks" below |
+| `STEP` | none | none synchronously |
+| `CONTINUE` | none | none synchronously |
+| `RETURN` | none | none synchronously |
+| `BACKTRACE` | `{"full":bool}` | `BACKTRACE {"frames":[...]}` (see below) |
+| `VARIABLES` | none | `VARIABLES {"vars":[...]}` (see below) |
+| `SOURCES` | none | `SOURCES {"items":[{"index","file"}]}` |
+| `PRINT` | `{"expr":"..."}` | `VALUE {"repr"}` or `ERROR` |
+| `LINES` | `{"spec"?,"before"?,"after"?}` | `SOURCE_RANGE {"file","from","to","cursor"?}` - no source text, see "Source Resolution" |
+| `THROW` | `{"type"?,"message"}` | raises the exception; no direct response |
+| `DISASSEMBLE` | `{"spec"?}` | `DISASSEMBLY {"function","instructions":[...]}` |
+| `SOURCE` | `{"file"}` | `SOURCE {"file","text"\|null,"error"?}` |
+| `HELP` | `{"command"?}` | `HELP {"commands":[{"verb","help"}]}` |
+| `QUIT` | none | terminates the debugged program (like `exit()`); no confirmation prompt - a client that wants one must ask the user itself before sending this |
 
-#### 3. Debug Breakpoint Structure
+`BACKTRACE` frame shape: `{"kind":"script"|"native","index","file"?,"line"?,
+"col"?,"insn"?,"function"?,"module"?,"variables"?}` - `variables` is only
+present when `full:true` was requested, and has the same shape as
+`VARIABLES`'s `vars` array.
 
-```c
-typedef struct debug_breakpoint {
-    uc_breakpoint_t bk;             // Base breakpoint
-    uc_function_t *fn;              // Function containing breakpoint
-    size_t depth;                   // Call stack depth
-    debug_breakpoint_kind_t kind;   // Breakpoint type
-} debug_breakpoint_t;
-```
+`VARIABLES`/backtrace-`variables` entry shape: `{"name","kind":"this"|
+"local"|"internal"|"upvalue","value_repr"}` - `value_repr` is a pre-rendered
+string (via the same formatter `print()`/`printf()` use) since ucode values
+include closures, resources and regexes that don't round-trip through JSON;
+there is no separate machine-typed `value` field.
+
+### Server → client events
+
+| Verb | Payload |
+|---|---|
+| `PAUSED` | `{"reason":"entry"\|"breakpoint"\|"step"\|"exception"\|"uncaught","file"?,"line"?,"col"?,"function"?,"breakpoint_id"?,"exception_type"?,"exception_message"?}` |
+| `EVENT` | `{"event":"exception"\|"exit"\|"signal", ...}` - unsolicited, can arrive at any time (e.g. right before the process exits) |
+| `ERROR` | `{"message"}` - the uniform failure shape for every command above |
+
+### No synchronous step acks
+
+`NEXT`/`STEP`/`CONTINUE`/`RETURN` do not get an immediate acknowledgement.
+The next thing a client sees is whatever actually happens next: a new
+`PAUSED` if execution hits another breakpoint/step boundary, an `EVENT`
+carrying `"event":"exit"` if the program ends, or nothing further for a
+while if it just keeps running. This mirrors the real control flow exactly
+- there is no "done stepping" moment to report before that.
+
+### Source resolution
+
+The server resolves `{file, line, col}` locations from the running program's
+debug info, but **never sends rendered or highlighted source text** for a
+`PAUSED`/`SOURCE_RANGE`/backtrace frame - only the coordinates. A client
+that wants to display source has two options:
+
+- **It already has the file** (the common IDE case: the project is checked
+  out locally and the file may already be open in an editor buffer) - just
+  use its own copy, keyed by the `file` string from any location payload.
+  No round-trip to the server needed at all.
+- **It doesn't** (a plain remote CLI client with no local checkout) - send
+  `SOURCE {"file":"..."}` and use the returned raw `text`. If the server
+  itself has no source available either (running precompiled bytecode with
+  no embedded source and no matching local file), `text` is `null` and
+  `error` explains why - this lets a client that *does* have a local copy
+  fall back to it instead of showing a misleading blank buffer.
 
 ---
 
-## Debugger API (module:debug)
-
-### Functions
+## Debugger API (`module:debug`)
 
 | Function | Description |
 |----------|-------------|
 | `debug.memdump(path)` | Dump VM heap state to file for analysis |
-| `debug.traceback([level])` | Get current call stack trace |
+| `debug.traceback([level])` | Get current call stack trace (structured data, not the CLI's `BACKTRACE` output) |
 | `debug.sourcepos()` | Get current source position (filename, line, byte) |
 | `debug.getinfo(value)` | Query internal value information |
-| `debug.getlocal(level, var)` | Get local variable value |
-| `debug.setlocal(level, var, value)` | Set local variable value |
-| `debug.getupval(target, var)` | Get upvalue (closure variable) |
-| `debug.setupval(target, var, value)` | Set upvalue |
-| `debug.debugger([target])` | Launch interactive debugger |
-| `debug.attach(mainfn)` | Break on entry to `mainfn`, driven by a local terminal or the SIGUSR1 attach socket |
-| `debug.break()` | Pause execution right here and launch the local terminal CLI |
-| `debug.listen([wait\|path])` | Enable remote debugging (see "Remote Debugging" below) |
+| `debug.getlocal(level, var)` / `debug.setlocal(level, var, value)` | Get/set a local variable |
+| `debug.getupval(target, var)` / `debug.setupval(target, var, value)` | Get/set an upvalue |
+| `debug.debugger([target])` | Local interactive session: forks and execs `udbg --fd N` over a socketpair, then pauses (immediately, or at entry to `target` if given) |
+| `debug.attach(mainfn)` | Arm `SIGUSR1`-triggered attach and break on entry to `mainfn` |
+| `debug.break()` | Pause execution right here, waiting for an attach-socket client |
+| `debug.breakpoint(spec[, mainfn])` | Install a breakpoint from a location spec, usable before the program starts running |
+| `debug.listen([wait\|path])` | Enable remote debugging - explicit path, `SIGUSR1`-armed, or block-until-attached (see below) |
 
-### Data Types
-
-#### StackTraceEntry
-```javascript
-{
-    callee: function,      // Called function
-    this: *,               // 'this' context
-    mcall: boolean,        // Method call flag
-    strict: boolean,       // Strict mode flag (ucode only)
-    filename: string,      // Source file
-    line: number,          // Source line
-    byte: number,          // Byte offset
-    context: string        // Source context snippet
-}
-```
-
-#### SourcePosition
-```javascript
-{
-    filename: string,
-    line: number,
-    byte: number
-}
-```
-
-#### UpvalRef
-```javascript
-{
-    name: string,          // Variable name
-    closed: boolean,       // Is upvalue closed?
-    value: *,              // Current value
-    slot: number           // Stack slot (if open)
-}
-```
-
-#### ValueInformation
-```javascript
-{
-    type: string,          // Type name
-    value: *,              // The value
-    tagged: boolean,       // Tagged pointer?
-    mark: boolean,         // GC mark bit
-    refcount: number,      // Reference count
-    unsigned: boolean,     // Unsigned integer?
-    address: number,       // Memory address
-    length: number,        // String/array length
-    count: number,         // Element count
-    constant: boolean,     // Immutable?
-    prototype: *,          // Prototype object
-    ...
-}
-```
-
----
-
-## Interactive Debugger Commands
-
-### Navigation Commands
-
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| `next` | - | Execute next statement, step over function calls |
-| `step` | - | Execute next statement, step into function calls |
-| `continue` | - | Continue execution until next breakpoint |
-| `return` | - | Continue until current function returns |
-| `quit` | - | Terminate program execution |
-
-### Breakpoint Commands
-
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| `break` | - | Set breakpoint at location |
-| `delete` | - | Delete breakpoint (current or by index) |
-| `list` | ls | List all breakpoints |
-
-### Inspection Commands
-
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| `backtrace` | bt | Print call stack trace |
-| `variables` | - | Show local variables and values |
-| `print` | - | Evaluate and print expression |
-| `lines` | ln | Show source code around location |
-| `sources` | src | List loaded source buffers |
-| `disassemble` | disasm | Disassemble function to bytecode |
-| `throw` | - | Raise exception at current position |
-| `help` | - | Show command help |
-
-### Breakpoint Location Syntax
-
-```
-break <location>
-
-Locations can be:
-  - file.uc:line[:column]    # File and line number
-  - line[:column]            # Line in current file
-  - expression               # Function expression (e.g., obj.method)
-  - (expression)             # Disambiguated expression
-  - #offset                  # Instruction offset
-```
-
-### Line Display Syntax
-
-```
-lines [location] [before] [after]
-
-Examples:
-  lines              # Current location
-  lines foo 5 8      # 5 lines before, 8 after function foo
-  lines +0 3 3       # 3 lines before and after current
-  lines -5           # 5 lines before current
-  lines +3           # 3 lines after current
-```
-
----
-
-## Implementation Details
-
-### Main Entry Point
-
-The debugger is invoked via `debug.debugger()`:
-
-```c
-static uc_value_t *uc_debugger(uc_vm_t *vm, size_t nargs)
-{
-    // 1. Setup signal handlers (SIGINT, SIGWINCH)
-    // 2. Configure terminal for raw input
-    // 3. Install breakpoint at target function or current location
-    // 4. Transfer control to CLI loop
-}
-```
-
-### CLI Loop
-
-```c
-static void bk_enter_cli(uc_vm_t *vm, uc_breakpoint_t *bk)
-{
-    term_isig(false);                    // Disable signals
-    print_location(vm, "Paused in ", dbk);
-
-    while ((argc = term_getline("dbg > ", ...)) > -1) {
-        // Parse command
-        // Dispatch to command handler
-        // Execute command callback
-        // Check if should proceed
-    }
-
-    // Cleanup breakpoint if BK_ONCE
-    term_isig(true);                     // Re-enable signals
-}
-```
-
-### Breakpoint Callbacks
-
-| Callback | Purpose |
-|----------|---------|
-| `bk_enter_cli` | Main debugger CLI entry |
-| `bk_enter_function` | Step into function entry |
-| `bk_leave_function` | Step at function return |
-| `bk_follow_jump` | Step across jumps |
-| `bk_handle_catch` | Catch exception at handler |
-
-### Terminal Handling
-
-The debugger implements a custom terminal interface with:
-
-- **Raw mode input** - Direct character reading without line buffering
-- **Command history** - Up to 100 commands with arrow key navigation
-- **Tab completion** - Command and expression completion
-- **ANSI color output** - Syntax highlighting for values and source
-- **Line wrapping** - Multi-line output support
-- **SIGWINCH handling** - Terminal resize detection
-
-### Expression Evaluation
-
-The `print` command evaluates ucode expressions in the current context:
-
-```c
-// Parses expression
-// Executes in VM with current scope
-// Formats result with type-aware printing
-```
-
-### Source Code Display
-
-```c
-// Resolves location to source buffer
-// Retrieves line content
-// Highlights current position
-// Displays context lines
-```
-
----
-
-## Integration with VM
-
-### Instruction Execution Hook
-
-Breakpoints are checked in `uc_vm_decode_insn()`:
-
-```c
-uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
-{
-    uc_breakpoints_t *bks = &vm->breakpoints;
-
-    for (size_t i = 0; i < bks->count; i++) {
-        uc_breakpoint_t *bk = bks->entries[i];
-        if (bk->ip == frame->ip)
-            bk->cb(vm, bk);  // Invoke breakpoint handler
-    }
-    ...
-}
-```
-
-### Signal Integration
-
-- **SIGINT** - Invokes debugger at current location
-- **SIGWINCH** - Refreshes terminal display on resize
-
----
-
-## Recent Changes (from origin/debugger)
-
-The remote branch contains 11 commits with improvements:
-
-1. **Source position tracking simplification** - Removed redundant `prev_endpos/curr_endpos` fields
-2. **Line context argument processing fix** - Improved relative line navigation
-3. **Require function memory access fix** - Fixed potential invalid access in `uc_require_ucode()`
-4. **Instruction format table export** - Made `uc_vm_insn_format` available for disassembly
-
----
-
-## Limitations and TODO Areas
-
-1. **Conditional breakpoints** - Not yet implemented
-2. **Watch expressions** - No automatic value watching
-3. **Multi-thread debugging** - Single VM focus only
-4. **Source maps** - No support for transpiled code
-5. **Reverse debugging** - No time-travel debugging
-
----
-
-## Remote Debugging (`-X`, `udbg`)
-
-In addition to the local interactive debugger, `ucode -X script.uc` runs the
-script with break infrastructure enabled but without launching the CLI
-directly. Sending `SIGUSR1` to the process (e.g. via `udbg <pid>`, which does
-this automatically) makes the VM pause at the next instruction boundary and
-open a Unix domain socket at `/tmp/ucode-debug-<pid>.sock`.
-
-The same thing is available from script code via `debug.listen()`, without
-needing `-X` at all - this is the primary way to enable remote debugging in
-a host application that embeds the ucode VM directly (uhttpd, uwsd, ...) and
-therefore has no `-X` flag of its own:
+`debug.listen()` usage:
 
 ```ucode
 import { listen } from 'debug';
@@ -344,214 +163,98 @@ listen(true);
 listen("/tmp/ucode-debug.sock");
 ```
 
-### Full command parity, not a reduced protocol
-
-A client such as `udbg` connects to that socket and gets the *exact same*
-interactive session as the local terminal debugger: all 16 commands (`help`,
-`break`, `delete`, `list`/`ls`, `next`, `step`, `continue`, `return`,
-`backtrace`/`bt`, `variables`, `sources`/`src`, `print`, `lines`/`ln`,
-`throw`, `disassemble`/`disasm`, `quit`), including tab completion, arrow-key
-history navigation, and the same ANSI-highlighted source/backtrace output.
-
-This works because the interactive CLI (`term_getline`/`term_printf` in
-`lib/debug.c`) only ever does plain `read()`/`write()` on `STDIN_FILENO`/
-`STDOUT_FILENO` - once a client connects, the accepted socket fd is `dup2`'d
-onto both for the duration of the session
-(`debug_cli_run_remote_session()`), and the exact same `bk_enter_cli()`
-dispatcher used locally handles it. The only tty-specific calls
-(`tcgetattr`/`tcsetattr` for local raw-mode setup) are skipped for remote
-sessions via a `termstate.remote` flag, since a socket has no line
-discipline to configure - the remote peer is expected to put its own local
-terminal into raw mode and forward bytes verbatim in both directions, which
-is exactly what `udbg` does (`enable_raw_mode()` + a transparent two-way
-byte pump). No real PTY is required: raw single-key reads, ANSI escape
-rendering and history/tab-completion all work identically over a plain
-socket once the tty ioctls are skipped.
-
-Breakpoints set during a session (`break`, `next`, `step`) work transparently
-across a `continue`: they are dispatched directly from
-`uc_vm_execute_chunk()`'s per-instruction breakpoint check (see `vm.c`),
-nested inside the `uc_vm_resume()` call that `debug_cli_run_remote_session()`
-makes after the initial `bk_enter_cli()` call returns, so they reenter the
-CLI using the very same file descriptors.
-
-### Asynchronous push notifications
-
-On top of the interactive session, the server can push unsolicited
-notification lines at any time, prefixed with `EVENT `, so a client does not
-need to poll:
-
-- `EVENT exception <Type>: <message>` - an uncaught exception propagated to
-  the top of the call stack while the program was running (e.g. after
-  `continue`). The process exits after sending this.
-- `EVENT signal SIGUSR1 received (already attached, ignoring)` - a second
-  `SIGUSR1` arrived while a debugger client was already attached; the
-  process keeps running/waiting for commands as before instead of pausing
-  again.
-
-`udbg` forwards raw bytes bidirectionally without interpreting them, so any
-`EVENT ` line simply appears inline in the terminal output as soon as it
-arrives.
-
-When the client disconnects (or the 30s connect timeout elapses without a
-connection), the debug server tears itself down and the script resumes
-running unattended - this is the "detach" behavior.
-
-### Safe to use from an embedding host application
-
-`-X`'s `SIGUSR1` handling works by setting `vm->break_requested`, which
-`uc_vm_execute_chunk()` checks per-instruction and, if set, unwinds the
-*entire* C call stack back to whoever called `uc_vm_execute()`/
-`uc_vm_resume()` by returning `STATUS_BREAK`. That is fine for `main.c`'s own
-`-X` loop, which knows what to do with it, but a host application that calls
-`uc_vm_call()`/`uc_vm_execute()` directly from its own request-handling code
-(uhttpd, uwsd, ...) has no way to handle an unexpected `STATUS_BREAK`
-bubbling out of what it thought was a normal call - it would very likely be
-treated as an error and abort the request or the whole process.
-
-`debug.listen()`'s `SIGUSR1` handling therefore does *not* use that
-mechanism. Instead it registers a handler through ucode's own `signal()`
-builtin, which is dispatched from `uc_vm_signal_dispatch()` - itself only
-ever called from *within* `uc_vm_execute_chunk()`'s per-instruction loop,
-nested inside whatever `uc_vm_call()`/`uc_vm_execute()` invocation is
-currently running. It never unwinds the host's C call stack, and returns
-normally, exactly like any other completed call, once the debug session
-ends. See `uc_debug_listen_sigusr1_handler()` in `lib/debug.c`, which mirrors
-`debug.attach()`'s existing `uc_debug_sigusr1_attach_handler()`.
-
-This depends on the VM's signal self-pipe and dispatch machinery actually
-being initialized, which normally only happens when the embedding host opts
-in via `uc_parse_config_t.setup_signal_handlers`. Hosts that just call
-`uc_vm_init(vm, NULL)` (uwsd, uhttpd) get that flag unset by default -
-without further changes, installing a handler through `signal()` in that
-case would silently end up with a `NULL`/`SIG_DFL` disposition for the
-signal, **terminating the process** the next time that signal is delivered,
-instead of invoking the handler. `debug_setup()` in `lib/debug.c` therefore
-calls the new `uc_vm_signal_handlers_ensure()` (`vm.c`) unconditionally at
-debug module load time, lazily wiring up the self-pipe and handler array
-regardless of what the host originally configured - and `uc_vm_signal_dispatch()`
-checks whether that pipe actually exists rather than re-checking the
-original config flag, so signals raised this way get properly dispatched
-too. This fixes not just `debug.listen()` but also `debug.attach()` and the
-memory-dump signal handler (`UCODE_DEBUG_MEMDUMP_SIGNAL`, `SIGUSR2` by
-default), which had the exact same latent crash for any host with
-`setup_signal_handlers` unset.
-
-Verified end-to-end against a real `uwsd` worker process (which embeds the
-VM via `uc_vm_init(&ctx.vm, NULL)` and drives request handlers through
-`uc_vm_call()` from its own uloop event loop, with no `-X` flag or CLI of
-its own): a `debug.listen()`-armed handler script paused mid-request on
-`SIGUSR1`, `udbg` attached and ran `backtrace`/`continue` against it,
-showing the real `onBody(request=<uwsd.connection ...>, data=...)` call
-stack, and the worker process resumed and remained healthy afterwards.
+This is the primary way to enable remote debugging in a host application
+that embeds the ucode VM directly (uhttpd, uwsd, ...) and therefore has no
+`-X` flag of its own. `debug.listen()`'s `SIGUSR1` handling is dispatched
+through ucode's own `signal()` builtin (`uc_vm_signal_dispatch()`, itself
+only ever called from *within* the VM's per-instruction loop) rather than
+the `-X` flag's `uc_vm_break_request()`/`STATUS_BREAK` mechanism, since the
+latter unwinds the *entire* C call stack back to whoever called
+`uc_vm_execute()` - fine for `main.c`'s own `-X` loop, but not safe for a
+host calling `uc_vm_call()` from its own request-handling code, which would
+have no way to handle an unexpected `STATUS_BREAK` bubbling out of what it
+thought was a normal call.
 
 ---
 
-## File Structure
+## `udbg` Client
+
+`udbg` is a plain, functional protocol client: typed commands, unadorned
+printed responses, no line-editing/history/syntax-highlighting. It exists to
+prove out and exercise the protocol end-to-end and to serve as the local
+`-x` CLI's client process - a rendering-rich port (ANSI, syntax
+highlighting, readline-style editing) is follow-up work that can be built
+against this same protocol without touching the server again.
 
 ```
-lib/debug.c        - Main debugger implementation (6,511 lines)
-include/ucode/types.h - Breakpoint and VM structures
-include/ucode/chunk.h - Debug variable lookup API
-include/ucode/lib.h - Source context formatting API
-include/ucode/program.h - Source position API
-include/ucode/vm.h - VM breakpoint vector declaration
-main.c             - Debugger CLI argument handling
+udbg <pid>           # SIGUSR1-attach to a running `-X` process, gdb -p style
+udbg <socket-path>    # connect to an explicit debug.listen(path) socket
+udbg --fd <n>         # use an inherited, already-connected fd (internal, used by `-x`)
 ```
+
+Typed commands at the `dbg >` prompt map directly onto the protocol verbs
+above (`break <spec>`, `delete [id]`, `list`, `next`, `step`, `continue`,
+`return`, `backtrace [full]`, `variables`, `sources`, `print <expr>`,
+`lines [spec] [before] [after]`, `throw [type] <message>`, `disassemble
+[spec]`, `source <file>`, `help [verb]`, `quit`).
 
 ---
 
-## Usage Example
+## Breakpoint Location Syntax
 
-```javascript
-// Start program with debugger
-$ ucode -d script.uc
+Used by `BREAK`'s `spec` field, `debug.breakpoint()`, and the `-x`/`-X`
+command-line breakpoint argument:
 
-// Or from code:
-debug.debugger();           // Launch immediately
-debug.debugger(myFunc);     // Break when myFunc is called
-
-// At debugger prompt:
-dbg > break script.uc:42    # Set breakpoint
-dbg > continue              # Run until breakpoint
-dbg > variables             # Inspect locals
-dbg > print myVar           # Evaluate expression
-dbg > lines +5 -5           # Show context
-dbg > backtrace             # View call stack
-dbg > step                  # Step to next line
-dbg > quit                  # Exit
 ```
+path[:line[:col]]   # File and line number (path optional if a frame is active)
+line[:col]          # Line in the current file (requires an active frame)
+expression          # ucode expression evaluating to a function (e.g. obj.method)
+(expression)        # Parens to disambiguate an expression from a bare path
+```
+
+A `path`/`line` spec resolves to the next real bytecode statement at or
+after that position - breaking on a comment-only or blank line lands on the
+next actual statement, not an error.
+
+---
+
+## Building on the Protocol: Local `-x` Wiring
+
+`uc_debugger()` (`lib/debug.c`) does the following once, on first call:
+
+1. `socketpair(AF_UNIX, SOCK_STREAM, 0, sv)`.
+2. `fork()`; the child `dup2(sv[1], 3)` and `execlp("udbg", "udbg", "--fd",
+   "3", NULL)`.
+3. The parent closes its copy of `sv[1]`, keeps `sv[0]` as the session fd
+   (`debug_remote_set_active_fd()`), and proceeds exactly like the
+   remote-attach case from here on.
+
+Neither process ever manipulates the *debuggee's* own stdin/stdout for
+protocol traffic - the child (client) inherits the real controlling
+terminal for its own I/O, and the parent (VM) only ever reads/writes the
+socketpair fd. If the client process dies or disconnects, this is treated
+like a remote client dropping the connection: the script is resumed
+unattended rather than left hanging.
 
 ---
 
 ## Testing
 
-Debug functionality can be tested via:
-
-1. **Integration tests** in `tests/custom/99_debugger/run_debugger_tests.uc` (45 test cases)
-2. Manual testing with `-x` flag
-3. Unit tests for debug API functions
-
-### Current Test Results
-
-```
-Ran 45 tests: 17 passed, 28 failed
-```
-
-**Passing tests:**
-- `delete_breakpoint` - Delete breakpoint by number
-- `quit_command` - Quit debugger
-- `empty_commands` - Handle empty commands
-- `rapid_breakpoints` - Set multiple breakpoints quickly
-- `invalid_breakpoint` - Handle invalid breakpoint syntax
-- `delete_invalid` - Delete invalid breakpoint
-- `print_undefined` - Print undefined variable
-- `deep_recursion` - Handle deep recursion
-- `large_object` - Inspect large objects
-- `closure_upvalues` - Inspect closure upvalues
-- `repeated_inspection` - Repeated variable inspection
-- `disasm_variants` - Disassembly variants
-- `mixed_frames` - Mixed frame types
-
-**Known issues affecting tests:**
-- Terminal raw mode causes input buffering issues when running from pipes
-- ANSI color codes in output need stripping for text comparison
-- `debug.traceback()` returns structured data (array), not formatted string
-
-### Build and Run Tests
+`tests/custom/99_debugger/run_debugger_tests.uc` is a standalone (non-cram)
+integration suite that starts real target scripts via `ucode -X<file>:1`
+(the same attach-socket mechanism `-X`/`udbg` use), connects to the
+resulting PID-derived Unix domain socket with the `socket` module, sends
+batches of protocol messages, and asserts on the *parsed* JSON responses
+and/or the target script's own stdout - never on rendered text, since
+nothing is rendered server-side. Run it directly with:
 
 ```bash
-# Build debug version
-mkdir build-debug && cd build-debug
-cmake -DCMAKE_BUILD_TYPE=Debug ..
-make -j$(nproc)
-
-# Run debugger tests
-./ucode -L build-debug tests/custom/99_debugger/run_debugger_tests.uc
+UCODE_BIN=/path/to/build/ucode ./build/ucode -L build tests/custom/99_debugger/run_debugger_tests.uc
 ```
 
----
-
-## Known Issues and Limitations
-
-### Current Issues
-
-1. **Non-interactive input** - The debugger uses terminal raw mode which causes input buffering issues when reading from pipes or redirected input. For scripted testing, use `quit -f` flag to force quit without confirmation.
-
-2. **ANSI color codes** - Output contains ANSI escape sequences for syntax highlighting. Test frameworks need to strip these codes for text comparison.
-
-3. **debug.traceback() API** - Returns structured data (array of stack frames) rather than formatted string. Use `backtrace` CLI command for formatted output.
-
-4. **Terminal requirements** - Requires a proper terminal (TTY) for full functionality. Features like tab completion, history, and color output may not work correctly in non-interactive environments.
-
-### Planned Enhancements
-
-1. **Non-interactive mode** - Add `--batch` or similar flag for scripted debugging sessions
-2. **Machine-readable output** - Add JSON output format for programmatic access
-3. **Remote debugging** - Add network protocol support for remote debugging
-4. **Source maps** - Support for transpiled code debugging
-5. **Reverse debugging** - Time-travel debugging capabilities
-
----
-
-*Document generated from codebase inspection. Last updated: $(date)*
+Note for anyone writing new cases: a bare line-number `BREAK`/`-X` spec
+against a script that is *only* variable declarations (no function calls or
+other statements) is a narrow, pre-existing edge case in
+`resolve_breakpoint()`/`lookup_stmt_boundary()` that doesn't always resolve
+reliably - prefer `STEP` to advance past declarations, or target a function
+name instead, both of which are unaffected.
