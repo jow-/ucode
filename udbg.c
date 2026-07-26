@@ -45,6 +45,7 @@
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <sys/ioctl.h>
+#include <termios.h>
 #include <ctype.h>
 #include <inttypes.h>
 #include <stdbool.h>
@@ -52,6 +53,7 @@
 #include <json-c/json.h>
 
 #include "debug_highlight.h"
+#include "debug_lineedit.h"
 
 /* -- ANSI colors ----------------------------------------------------------- */
 
@@ -1301,6 +1303,18 @@ static const struct {
 		"  print myobj.prop     # Print `prop` property of `myobj`\n"
 		"  print keys(myobj)    # Invoke a stdlib function"
 	},
+	{ "set\0",
+		"Assign the value of an ucode expression to a variable - the "
+		"idiomatic way to change a variable's value while paused, instead "
+		"of misusing 'print' with an assignment expression. `name` may be "
+		"any local, upvalue or global variable visible at the current "
+		"location; if it isn't declared anywhere in scope, a new global "
+		"variable is created (or, in strict mode, this is an error) - the "
+		"same rule plain assignment in script code follows.\n\n"
+		"Examples:\n"
+		"  set x 5               # Assign the number 5 to variable 'x'\n"
+		"  set x y + 1           # Assign the value of 'y + 1' to 'x'"
+	},
 	{ "lines\0ln\0",
 		"Print source code lines surrounding the given location specified "
 		"either as filename with line number or as expression evaluating to a "
@@ -1477,6 +1491,20 @@ send_command(int fd, char *line, bool *resuming, bool *sent)
 		json_object_object_add(payload, "expr", json_object_new_string(line));
 		proto_write(fd, "PRINT", payload);
 	}
+	else if (match_cmd("set\0", cmd)) {
+		char *name = shift_word(&line);
+
+		if (!*name || !*line) {
+			printf("Usage: set <name> <expr>\n");
+			*sent = false;
+			return true;
+		}
+
+		payload = json_object_new_object();
+		json_object_object_add(payload, "name", json_object_new_string(name));
+		json_object_object_add(payload, "expr", json_object_new_string(line));
+		proto_write(fd, "SET", payload);
+	}
 	else if (match_cmd("lines\0ln\0", cmd)) {
 		char *spec = shift_word(&line);
 		char *before = shift_word(&line);
@@ -1543,10 +1571,20 @@ send_command(int fd, char *line, bool *resuming, bool *sent)
 		if (!force && isatty(STDIN_FILENO)) {
 			char confirm[16];
 
+			/* This wants a plain, cooked-mode, blocking fgets() prompt of
+			 * its own - drop out of lineedit's raw/non-blocking mode for
+			 * it, then re-engage before returning. */
+			lineedit_suspend();
+
 			printf("Terminate program? (y/n) > ");
 			fflush(stdout);
 
-			if (!fgets(confirm, sizeof(confirm), stdin) || tolower((unsigned char)confirm[0]) != 'y') {
+			bool confirmed = fgets(confirm, sizeof(confirm), stdin) &&
+				tolower((unsigned char)confirm[0]) == 'y';
+
+			lineedit_resume();
+
+			if (!confirmed) {
 				*sent = false;
 				return true;
 			}
@@ -1648,6 +1686,18 @@ main(int argc, char **argv)
 	signal(SIGPIPE, SIG_IGN);
 	setvbuf(stdout, NULL, _IOLBF, 0);
 	debug_highlight_init();
+
+	{
+		size_t n = sizeof(cli_help_table) / sizeof(cli_help_table[0]);
+		static lineedit_completion_t comps[sizeof(cli_help_table) / sizeof(cli_help_table[0])];
+
+		for (size_t i = 0; i < n; i++)
+			comps[i].names = cli_help_table[i].names;
+
+		lineedit_set_completions(comps, n);
+	}
+
+	lineedit_init();
 
 	/* Pull -s/--srcdir DIR out of argv wherever it appears, leaving the
 	 * rest of argument parsing below untouched. */
@@ -1757,6 +1807,11 @@ main(int argc, char **argv)
 	 * reappearing (and racing ahead of) a response that just hasn't
 	 * arrived over the socket yet. */
 	bool awaiting_response = false;
+	/* Tracks whether lineedit_begin() has already been called for the
+	 * current accepting_input span, so the prompt (and a fresh, empty
+	 * edit line) is (re)started exactly once per command, not on every
+	 * select() wakeup while still mid-edit. */
+	bool prompt_shown = false;
 
 	for (;;) {
 		char *verb;
@@ -1783,9 +1838,11 @@ main(int argc, char **argv)
 		bool accepting_input = paused && !stdin_done && !awaiting_response
 			&& !pending_source.active && !pending_backtrace.active;
 
-		if (accepting_input) {
-			printf("dbg > ");
-			fflush(stdout);
+		if (!accepting_input)
+			prompt_shown = false;
+		else if (!prompt_shown) {
+			lineedit_begin("dbg > ");
+			prompt_shown = true;
 		}
 
 		FD_ZERO(&readfds);
@@ -1814,33 +1871,39 @@ main(int argc, char **argv)
 		}
 
 		if (!stdin_done && FD_ISSET(STDIN_FILENO, &readfds)) {
-			if (!fgets(buf, sizeof(buf), stdin)) {
+			bool eof = false;
+
+			if (lineedit_feed(buf, sizeof(buf), &eof)) {
+				prompt_shown = false;
+
+				if (*trim(buf)) {
+					bool resuming, sent;
+					bool keep_going = send_command(fd, trim(buf), &resuming, &sent);
+
+					/* An unrecognized/empty command (or "quit" declined at its
+					 * confirmation prompt) never reaches the server, so there
+					 * is no response to wait for - re-show the prompt right
+					 * away instead of waiting forever for one that isn't
+					 * coming. */
+					awaiting_response = sent;
+
+					if (resuming)
+						paused = false;
+
+					if (!keep_going) {
+						/* QUIT was sent - keep looping (without reading
+						 * further stdin) to drain and render any trailing
+						 * responses (e.g. a final EVENT exit) until the
+						 * server closes the connection, instead of exiting
+						 * immediately and losing output that was already in
+						 * flight. */
+						stdin_done = true;
+					}
+				}
+			}
+			else if (eof) {
 				proto_write(fd, "QUIT", NULL);
 				stdin_done = true;
-			}
-			else if (*trim(buf)) {
-				bool resuming, sent;
-				bool keep_going = send_command(fd, trim(buf), &resuming, &sent);
-
-				/* An unrecognized/empty command (or "quit" declined at its
-				 * confirmation prompt) never reaches the server, so there
-				 * is no response to wait for - re-show the prompt right
-				 * away instead of waiting forever for one that isn't
-				 * coming. */
-				awaiting_response = sent;
-
-				if (resuming)
-					paused = false;
-
-				if (!keep_going) {
-					/* QUIT was sent - keep looping (without reading
-					 * further stdin) to drain and render any trailing
-					 * responses (e.g. a final EVENT exit) until the
-					 * server closes the connection, instead of exiting
-					 * immediately and losing output that was already in
-					 * flight. */
-					stdin_done = true;
-				}
 			}
 		}
 	}

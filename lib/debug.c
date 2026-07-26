@@ -3253,6 +3253,86 @@ send_error(int fd, uc_vm_t *vm, const char *msg)
 	ucv_put(obj);
 }
 
+/* eval_expr() below runs the compiled expression through the exact same
+ * instruction dispatch loop as normal script code, with its callframes/
+ * stack swapped out for a fresh, empty set (see uc_vm_call() there) - so
+ * from the dispatch loop's point of view, an exception raised inside it
+ * looks exactly like *the whole program* running out of callframes to
+ * unwind to, which is precisely the condition the debugger's dedicated
+ * "pause on uncaught exception" system breakpoint (BK_UNCAUGHT, see
+ * install_uncaught_exception_breakpoint()) exists to catch. Left armed,
+ * a throwing PRINT/SET expression would pause into a confusing nested
+ * debug session (with a fake "[eval expression]" frame) instead of just
+ * being reported back as part of that command's own reply, the way
+ * eval_expr()'s caller (and its own EXCEPTION_NONE check just below)
+ * already expects.
+ *
+ * eval_sandbox_enter()/_leave() bracket the call to temporarily disarm
+ * that breakpoint - and, defensively, BK_CATCH's currently-armed
+ * catchpoint too, even though it targets a real instruction address
+ * within the *original* paused frame's function and so could only ever
+ * spuriously match here by an astronomically unlikely pointer collision
+ * with the expression's own freshly compiled chunk. Sandboxing this way
+ * only touches which breakpoints can fire; it does not change what the
+ * expression itself is allowed to do (see the PRINT/SET help text on
+ * that - this is not a security boundary, just about not derailing the
+ * command's own request/response shape).
+ *
+ * Disarming means pointing `bk.ip` at eval_sandbox_disabled_marker's
+ * address, *not* NULL: uc_vm_decode_insn()'s generic per-instruction
+ * breakpoint check (vm.c) treats a NULL ip as "fire on every single
+ * instruction" (that's how BK_STEP free-runs until it decides to stop),
+ * the opposite of disabled - so a real, otherwise-unused address is
+ * needed as the inert value instead, the same trick
+ * UC_BREAKPOINT_UNCAUGHT_EXCEPTION itself uses to guarantee it never
+ * collides with an actual bytecode address. */
+static uint8_t eval_sandbox_disabled_marker;
+
+typedef struct {
+	uint8_t *uncaught_ip;
+	uint8_t *catch_ip;
+} eval_sandbox_t;
+
+static eval_sandbox_t
+eval_sandbox_enter(uc_vm_t *vm)
+{
+	eval_sandbox_t saved = { 0 };
+
+	for (size_t i = 0; i < vm->breakpoints.count; i++) {
+		debug_breakpoint_t *dbk = (debug_breakpoint_t *)vm->breakpoints.entries[i];
+
+		if (!dbk)
+			continue;
+
+		if (dbk->kind == BK_UNCAUGHT) {
+			saved.uncaught_ip = dbk->bk.ip;
+			dbk->bk.ip = &eval_sandbox_disabled_marker;
+		}
+		else if (dbk->kind == BK_CATCH) {
+			saved.catch_ip = dbk->bk.ip;
+			dbk->bk.ip = &eval_sandbox_disabled_marker;
+		}
+	}
+
+	return saved;
+}
+
+static void
+eval_sandbox_leave(uc_vm_t *vm, eval_sandbox_t saved)
+{
+	for (size_t i = 0; i < vm->breakpoints.count; i++) {
+		debug_breakpoint_t *dbk = (debug_breakpoint_t *)vm->breakpoints.entries[i];
+
+		if (!dbk)
+			continue;
+
+		if (dbk->kind == BK_UNCAUGHT)
+			dbk->bk.ip = saved.uncaught_ip;
+		else if (dbk->kind == BK_CATCH)
+			dbk->bk.ip = saved.catch_ip;
+	}
+}
+
 static bool
 eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
           char **errmsg)
@@ -3283,15 +3363,15 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 	uc_value_t *exprfn = ucv_closure_new(vm, uc_program_entry(prog), false);
 	uc_chunk_t *chunk = &((uc_closure_t *)exprfn)->function->chunk;
 
-	if (chunk->entries[0] != I_LVAR && chunk->entries[0] != I_LTHIS) {
-		*errmsg = xstrdup("Expecting expression");
-		uc_program_put(prog);
-		ucv_put(exprfn);
-		*res = NULL;
-
-		return false;
-	}
-
+	/* No restriction on the compiled shape here: raw_mode compiles `expr`
+	 * as an ordinary sequence of ucode statements, so a bare literal
+	 * ("1+2", "[1,2,3]", "\"hi\"") is just as valid as an identifier-rooted
+	 * one ("varname", "myobj.prop") - either way, calling the compiled
+	 * entry below always leaves *some* value on the stack to report back
+	 * (the closing statement's value, or null for a plain statement with
+	 * none), and the "referenced variables" scan just below only cares
+	 * about I_LVAR occurring *anywhere* in the chunk, not about what its
+	 * first instruction happens to be. */
 	uc_value_t *scope = ucv_object_new(NULL);
 
 	/* determine referenced variables */
@@ -3374,8 +3454,12 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 	uc_vm_stack_push(vm, ucv_get(exprfn));
 
 	bool rv;
+	eval_sandbox_t sandbox = eval_sandbox_enter(vm);
+	uc_exception_type_t ex = uc_vm_call(vm, true, 0);
 
-	if (uc_vm_call(vm, true, 0) == EXCEPTION_NONE) {
+	eval_sandbox_leave(vm, sandbox);
+
+	if (ex == EXCEPTION_NONE) {
 		*res = uc_vm_stack_pop(vm);
 		rv = true;
 	}
@@ -3592,6 +3676,10 @@ proto_cmd_help(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd
 			"List loaded source buffers." },
 		{ "PRINT",
 			"Evaluate an expression. Payload: {\"expr\":\"...\"}." },
+		{ "SET",
+			"Assign an expression's value to a variable. Payload: "
+			"{\"name\":\"...\",\"expr\":\"...\"}. Response: VALUE {\"name\",\"repr\"} "
+			"or ERROR." },
 		{ "LINES",
 			"Resolve a source range. Payload: {\"spec\",\"before\",\"after\"}." },
 		{ "THROW",
@@ -3995,6 +4083,142 @@ proto_cmd_print(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int f
 	}
 
 	free(errmsg);
+}
+
+static void
+proto_cmd_set(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_value_t *namev = ucv_object_get(payload, "name", NULL);
+	uc_value_t *exprv = ucv_object_get(payload, "expr", NULL);
+	uc_value_t *res = NULL;
+	char *errmsg = NULL;
+	const char *name;
+
+	if (!frame) {
+		send_error(fd, vm, "No active call frame");
+		return;
+	}
+
+	if (ucv_type(namev) != UC_STRING || ucv_type(exprv) != UC_STRING) {
+		send_error(fd, vm, "Usage: SET {\"name\":\"...\",\"expr\":\"...\"}");
+		return;
+	}
+
+	name = ucv_string_get(namev);
+
+	if (!eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg)) {
+		send_error(fd, vm, errmsg ? errmsg : "Evaluation failed");
+		free(errmsg);
+		return;
+	}
+
+	/* Find `name` among the current frame's in-scope local/upvalue slots -
+	 * same declaration scan build_variables_json() uses - and, if found,
+	 * write straight into that stack slot/upvalue ref the same way
+	 * I_SLOC/I_SUPV do (see uc_vm_insn_store_local()/_store_upval() in
+	 * vm.c); otherwise fall back to the same undeclared-variable handling
+	 * I_SVAR uses (uc_vm_insn_store_var()) - walk the assigning scope's
+	 * prototype chain for an existing binding, or create one on
+	 * vm->globals in non-strict mode. */
+	uc_chunk_t *chunk = &frame->closure->function->chunk;
+	uc_variables_t *decls = &chunk->debuginfo.variables;
+	uc_value_list_t *names = &chunk->debuginfo.varnames;
+	size_t pos = frame->ip - chunk->entries;
+	bool found = false;
+
+	for (size_t i = 0; !found && i < decls->count; i++) {
+		if (decls->entries[i].from > pos || decls->entries[i].to < pos)
+			continue;
+
+		uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
+
+		if (!vname || strcmp(ucv_string_get(vname), name)) {
+			ucv_put(vname);
+			continue;
+		}
+
+		ucv_put(vname);
+		found = true;
+
+		size_t slot = decls->entries[i].slot;
+
+		/* is local variable */
+		if (slot < (size_t)-1 / 2) {
+			slot += frame->stackframe;
+
+			if (slot < vm->stack.count) {
+				ucv_put(vm->stack.entries[slot]);
+				vm->stack.entries[slot] = ucv_get(res);
+			}
+		}
+
+		/* is upvalue */
+		else {
+			slot -= ((size_t)-1 / 2);
+
+			if (slot < frame->closure->function->nupvals) {
+				uc_upvalref_t *ref = frame->closure->upvals[slot];
+
+				if (ref) {
+					if (ref->closed) {
+						ucv_put(ref->value);
+						ref->value = ucv_get(res);
+					}
+					else if (ref->slot < vm->stack.count) {
+						ucv_put(vm->stack.entries[ref->slot]);
+						vm->stack.entries[ref->slot] = ucv_get(res);
+					}
+				}
+			}
+		}
+	}
+
+	if (!found) {
+		uc_value_t *scope = vm->globals, *next;
+		bool exists;
+
+		while (true) {
+			ucv_object_get(scope, name, &exists);
+
+			if (exists)
+				break;
+
+			next = ucv_prototype_get(scope);
+
+			if (!next) {
+				if (frame->strict) {
+					char msg[128];
+
+					snprintf(msg, sizeof(msg),
+						"Reference error: access to undeclared variable %s", name);
+					send_error(fd, vm, msg);
+					ucv_put(res);
+
+					return;
+				}
+
+				break;
+			}
+
+			scope = next;
+		}
+
+		ucv_object_add(scope, name, ucv_get(res));
+	}
+
+	uc_stringbuf_t vb = { 0 };
+	uc_value_t *obj = ucv_object_new(vm);
+
+	ucv_to_stringbuf_formatted(vm, &vb, res, 0, ' ', 2);
+
+	ucv_object_add(obj, "name", ucv_string_new(name));
+	ucv_object_add(obj, "repr", ucv_string_new_length(vb.buf, vb.bpos));
+	debug_proto_write(fd, vm, "VALUE", obj);
+
+	ucv_put(obj);
+	ucv_put(res);
+	free(vb.buf);
 }
 
 static void
@@ -4567,6 +4791,7 @@ static const struct {
 	{ "VARIABLES",         proto_cmd_variables },
 	{ "SOURCES",           proto_cmd_sources },
 	{ "PRINT",             proto_cmd_print },
+	{ "SET",               proto_cmd_set },
 	{ "LINES",             proto_cmd_lines },
 	{ "THROW",             proto_cmd_throw },
 	{ "DISASSEMBLE",       proto_cmd_disasm },

@@ -452,7 +452,7 @@ if(UNIT_TESTING)
   endif()
 endif()
 
-add_executable(udbg udbg.c debug_highlight.c)
+add_executable(udbg udbg.c debug_highlight.c debug_lineedit.c)
 target_link_libraries(udbg PRIVATE libucode ${JSONC_LINK_LIBRARIES})
 install(TARGETS ucode udbg RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(TARGETS libucode LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
