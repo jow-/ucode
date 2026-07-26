@@ -3408,8 +3408,21 @@ update_catchpoint(uc_vm_t *vm, uc_function_t *fn, uint8_t *ip)
 
 	for (size_t i = 0; i < eh->count; i++) {
 		if (off >= eh->entries[i].from && off < eh->entries[i].to) {
-			update_breakpoint(vm, BK_CATCH, bk_handle_catch,
-				fn->chunk.entries + eh->entries[i].target, fn, 0);
+			debug_breakpoint_t *dbk = get_breakpoint(vm, BK_CATCH);
+
+			/* Just (re)arm the real bytecode breakpoint so the VM's own
+			 * dispatch loop fires it when execution actually reaches the
+			 * catch handler - never invoke the handler synchronously from
+			 * here via update_breakpoint()'s "already armed to this ip ->
+			 * fire now" shortcut. This runs on every pause, and the target
+			 * is often unchanged across pauses (e.g. a whole function body
+			 * wrapped in one try/catch), so that shortcut would otherwise
+			 * trigger bk_handle_catch() -> bk_enter_session() recursively
+			 * without the VM ever advancing, overflowing the stack. */
+			dbk->bk.cb = bk_handle_catch;
+			dbk->bk.ip = fn->chunk.entries + eh->entries[i].target;
+			dbk->fn = fn;
+			dbk->depth = 0;
 
 			break;
 		}
