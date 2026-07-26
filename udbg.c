@@ -20,12 +20,10 @@
  * Interactive client for ucode's line-based debug protocol (one uppercase
  * VERB, optionally followed by a space and a JSON object, per '\n'-terminated
  * line - see lib/debug_proto.h). This client owns all user-facing rendering:
- * the server-side debug core never emits ANSI, source text or formatted
- * columns, only structured data. This is deliberately a plain, functional
- * client (typed commands, unadorned printed responses, no line-editing/
- * history/syntax-highlighting) rather than a port of the previous ANSI
- * terminal UI - a faithful rendering-rich port is follow-up work that can be
- * built against this same protocol without touching the server again.
+ * the server-side debug core never emits ANSI or formatted columns, only
+ * structured data (plus, where a rendering-rich port needed more than the
+ * original data model had - e.g. DISASSEMBLE's raw instruction bytes - a
+ * small additive extension of that same structured data, never markup).
  *
  * Three ways to obtain a connection:
  *   udbg <pid>    - SIGUSR1-attach to a running `-X` process (gdb -p style)
@@ -673,32 +671,22 @@ render_breakpoints(struct json_object *p)
 	}
 }
 
-static const char *
-variable_color(const char *kind)
-{
-	if (!strcmp(kind, "upvalue"))
-		return C_CYAN;
-
-	if (!strcmp(kind, "internal"))
-		return C_DIM;
-
-	return "";
-}
-
 static void
 render_variables_array(struct json_object *items, const char *indent)
 {
 	size_t i, n = items ? json_object_array_length(items) : 0;
+	debug_variable_t *vars = calloc(n ? n : 1, sizeof(*vars));
 
 	for (i = 0; i < n; i++) {
 		struct json_object *it = json_object_array_get_idx(items, i);
-		const char *kind = jstr(it, "kind", "?");
 
-		printf("%s%s%-16s" C_RESET " (%s%-8s" C_RESET ") : %s\n", indent,
-			variable_color(kind), jstr(it, "name", "?"),
-			variable_color(kind), kind,
-			jstr(it, "value_repr", ""));
+		vars[i].name = jstr(it, "name", "?");
+		vars[i].kind = jstr(it, "kind", "");
+		vars[i].value_repr = jstr(it, "value_repr", "");
 	}
+
+	debug_highlight_print_variables(stdout, vars, n, indent, term_columns());
+	free(vars);
 }
 
 /* Async multi-file fetch for render_backtrace(): a backtrace can span
@@ -743,12 +731,26 @@ render_backtrace_final(int fd, struct json_object *p)
 		bool native = !strcmp(jstr(fr, "kind", ""), "native");
 		char signature[256];
 
+		char prefix[16];
+		size_t prefix_len, columns = term_columns();
+
 		snprintf(signature, sizeof(signature), "%s()", jstr(fr, "function", "?"));
 
-		printf(C_BOLD "#%-2" PRId64 C_RESET " ", jint(fr, "index", 0));
+		/* "#N " is printed right before the header bar, on the same line -
+		 * left_pad itself would make the bar draw *another* copy of that
+		 * indentation (it is meant for a bar that draws its own leading
+		 * blanks, see render_paused() above for that usage), so instead
+		 * just shrink the width budget by the prefix that already went
+		 * out via printf() below, and leave left_pad at 0. Without this,
+		 * the bar is sized for the full terminal width and the combined
+		 * line overflows it by exactly the prefix's length. */
+		prefix_len = (size_t)snprintf(prefix, sizeof(prefix), "#%-2" PRId64 " ", jint(fr, "index", 0));
+		columns = (columns > prefix_len) ? columns - prefix_len : 0;
+
+		printf(C_BOLD "%s" C_RESET, prefix);
 
 		debug_highlight_print_header_bar(stdout,
-			native ? "C" : (file ? file : "?"), signature, 0, term_columns());
+			native ? "C" : (file ? file : "?"), signature, 0, columns);
 
 		if (!native && file && line > 0) {
 			debug_highlight_span_t hl = {
@@ -859,31 +861,109 @@ render_source_range(int fd, struct json_object *p)
 	}
 }
 
+/* Fill in the raw byte array fields of a debug_disasm_insn_t (or a
+ * capture/unpack sub-entry) from a JSON array of small integers. `dst` must
+ * already point at storage for at least `cap` bytes; only the first
+ * min(array length, cap) entries are filled. */
+static void
+jbytes(struct json_object *arr, unsigned char *dst, size_t cap)
+{
+	size_t n = arr ? json_object_array_length(arr) : 0;
+
+	if (n > cap)
+		n = cap;
+
+	for (size_t i = 0; i < n; i++)
+		dst[i] = (unsigned char)json_object_get_int64(json_object_array_get_idx(arr, i));
+}
+
 static void
 render_disassembly(struct json_object *p)
 {
-	struct json_object *insns = NULL;
-	size_t i, n;
+	struct json_object *insns_j = NULL;
+	debug_disasm_insn_t *insns;
+	size_t n;
 
-	printf("Function: %s\n", jstr(p, "function", "?"));
+	json_object_object_get_ex(p, "instructions", &insns_j);
+	n = insns_j ? json_object_array_length(insns_j) : 0;
+	insns = calloc(n, sizeof(*insns));
 
-	json_object_object_get_ex(p, "instructions", &insns);
-	n = insns ? json_object_array_length(insns) : 0;
+	for (size_t i = 0; i < n; i++) {
+		struct json_object *ins = json_object_array_get_idx(insns_j, i);
+		struct json_object *bytes_j = json_object_object_get(ins, "bytes");
+		struct json_object *constant_j = NULL;
+		struct json_object *captures_j = json_object_object_get(ins, "captures");
+		struct json_object *unpacks_j = json_object_object_get(ins, "unpacks");
+		debug_disasm_insn_t *d = &insns[i];
+		size_t nbytes = bytes_j ? json_object_array_length(bytes_j) : 0;
+		unsigned char *bytes = malloc(nbytes ? nbytes : 1);
 
-	for (i = 0; i < n; i++) {
-		struct json_object *ins = json_object_array_get_idx(insns, i);
-		struct json_object *operand = NULL;
+		jbytes(bytes_j, bytes, nbytes);
 
-		printf("%06" PRId64 ": %-8s", jint(ins, "offset", 0), jstr(ins, "mnemonic", "?"));
+		d->offset = (size_t)jint(ins, "offset", 0);
+		d->mnemonic = jstr(ins, "mnemonic", "?");
+		d->format = (int)jint(ins, "format", 0);
+		d->bytes = bytes;
+		d->nbytes = nbytes;
+		d->operand = jint(ins, "operand", 0);
 
-		if (json_object_object_get_ex(ins, "operand", &operand))
-			printf(" %s", json_object_get_string(operand));
+		if (json_object_object_get_ex(ins, "constant", &constant_j)) {
+			d->have_constant = true;
+			d->constant_repr = json_object_to_json_string(constant_j);
+			d->constant_is_string = (json_object_get_type(constant_j) == json_type_string);
+		}
 
-		if (json_object_object_get_ex(ins, "variable_name", NULL))
-			printf("  ; %s %s", jstr(ins, "variable_kind", ""), jstr(ins, "variable_name", ""));
+		if (json_object_object_get_ex(ins, "variable_kind", NULL)) {
+			d->variable_kind = jstr(ins, "variable_kind", NULL);
+			d->variable_name = jstr(ins, "variable_name", NULL);
+		}
 
-		printf("\n");
+		if (json_object_object_get_ex(ins, "closure_index", NULL)) {
+			d->have_closure = true;
+			d->closure_kind = jstr(ins, "closure_kind", "closure");
+			d->closure_index = (uint32_t)jint(ins, "closure_index", 0);
+		}
+
+		if (json_object_object_get_ex(ins, "call_nargs", NULL)) {
+			struct json_object *mcall_j = json_object_object_get(ins, "call_mcall");
+
+			d->have_call = true;
+			d->call_mcall = mcall_j && json_object_get_boolean(mcall_j);
+			d->call_nargs = (uint32_t)jint(ins, "call_nargs", 0);
+		}
+
+		d->ncaptures = captures_j ? json_object_array_length(captures_j) : 0;
+		d->captures = calloc(d->ncaptures ? d->ncaptures : 1, sizeof(*d->captures));
+
+		for (size_t j = 0; j < d->ncaptures; j++) {
+			struct json_object *cap = json_object_array_get_idx(captures_j, j);
+
+			d->captures[j].slot = jint(cap, "slot", 0);
+			d->captures[j].upval = !strcmp(jstr(cap, "kind", ""), "upval");
+			d->captures[j].name = jstr(cap, "name", "(unknown)");
+			jbytes(json_object_object_get(cap, "bytes"), d->captures[j].bytes, 4);
+		}
+
+		d->nunpacks = unpacks_j ? json_object_array_length(unpacks_j) : 0;
+		d->unpacks = calloc(d->nunpacks ? d->nunpacks : 1, sizeof(*d->unpacks));
+
+		for (size_t j = 0; j < d->nunpacks; j++) {
+			struct json_object *u = json_object_array_get_idx(unpacks_j, j);
+
+			d->unpacks[j].slot = (uint16_t)jint(u, "slot", 0);
+			jbytes(json_object_object_get(u, "bytes"), d->unpacks[j].bytes, 2);
+		}
 	}
+
+	debug_highlight_print_disassembly(stdout, jstr(p, "function", "?"), insns, n, term_columns());
+
+	for (size_t i = 0; i < n; i++) {
+		free((void *)insns[i].bytes);
+		free(insns[i].captures);
+		free(insns[i].unpacks);
+	}
+
+	free(insns);
 }
 
 /* Async server events (see EVENT in lib/debug_proto.h) can land at any
@@ -1136,6 +1216,200 @@ match_cmd(const char *names, const char *typed)
 	return false;
 }
 
+/* CLI usage documentation, ported verbatim from the pre-protocol interactive
+ * debugger's `commands[]`/cmd_help() (formerly lib/debug.c) - this describes
+ * *this client's* typed command syntax, so unlike everything else in this
+ * file it is never fetched from the server: the server's own HELP verb
+ * answers a different question (the wire protocol's verbs and payload
+ * shapes, for anything else that might speak the protocol directly) and
+ * showing that to an interactive user here just reads as raw protocol
+ * internals. `names` is a NUL-separated list of aliases, primary name
+ * first - match_cmd() already implements the exact prefix-matching lookup
+ * this needs, so it is reused here for `help <partial-name>` filtering. */
+static const struct {
+	const char *names;
+	const char *help;
+} cli_help_table[] = {
+	{ "help\0h\0?\0",
+		"Print help information." },
+	{ "break\0b\0",
+		"The break command sets a breakpoint at the given location, "
+		"instructing the virtual machine to stop execution at this "
+		"point and handing control to the debugger.\n\n"
+		"Breakpoint locations may be specified either as filename, "
+		"line number and optional character offset within the line "
+		"or as a ucode expression that evaluates to a function in "
+		"which a breakpoint is set.\n\n"
+		"Examples:\n"
+		"  break example.uc:13  # Set breakpoint in line 13 of example.uc\n"
+		"  break 4:17           # Break in line in 4, char 17 of current file\n"
+		"  break myobj.method   # Break in function `method` of `myobj`\n"
+		"  break (string.uc)    # Parens to disambiguate expression from path"
+	},
+	{ "delete\0d\0",
+		"Delete a breakpoint. When no argument is given, the current "
+		"breakpoint is deleted, otherwise this function deletes the breakpoint "
+		"with the given index.\n\n"
+		"Examples:\n"
+		"  delete               # Delete current breakpoint\n"
+		"  delete 2             # Delete breakpoint #2"
+	},
+	{ "list\0ls\0",
+		"List all currently set breakpoints. User defined breakpoints are "
+		"prefixed with a number identifying the breakpoint, internal "
+		"breakpoints used by the debugger are prefixed with a breakpoint type "
+		"enclosed in parens, e.g. '(step)'."
+	},
+	{ "next\0n\0",
+		"Execute the next statement and stop again."
+	},
+	{ "step\0s\0",
+		"Execute the next statement, in case of function calls step into the "
+		"called function and stop there."
+	},
+	{ "continue\0c\0",
+		"Continue execution until the next breakpoint or end of program."
+	},
+	{ "return\0",
+		"Continue executing the current function until it returns, then stop "
+		"in the calling function. If the current function is the program entry "
+		"function, then run until the end of the program."
+	},
+	{ "backtrace\0bt\0",
+		"Print a trace of the current callstack, with most recent callframes "
+		"output first. If the optional 'full' argument is specified, "
+		"additional information about each call frame is printed.\n\n"
+		"Examples:\n"
+		"  backtrace            # Print backtrace\n"
+		"  backtrace full       # Print backtrace with additional information"
+	},
+	{ "variables\0vars\0",
+		"Print local variables and their contents for the current execution "
+		"context. Internal variables which are unreachable by script code "
+		"are shown faint, upvalues (variables captured from parent scopes) "
+		"are shown in bold cyan and ordinary variables use the default color.\n\n"
+		"Examples:\n"
+		"  variables            # Print local variables"
+	},
+	{ "sources\0src\0",
+		"Print a list of loaded source buffers."
+	},
+	{ "print\0p\0",
+		"Evaluate an ucode expression and print the resulting value.\n\n"
+		"Examples:\n"
+		"  print varname        # Print value of variable 'varname'\n"
+		"  print myobj.prop     # Print `prop` property of `myobj`\n"
+		"  print keys(myobj)    # Invoke a stdlib function"
+	},
+	{ "lines\0ln\0",
+		"Print source code lines surrounding the given location specified "
+		"either as filename with line number or as expression evaluating to a "
+		"function value.\n\n"
+		"The amount of preceding and following lines to print may be "
+		"specified as second and third argument respectively. By default, two "
+		"lines of context are printed before and after the location.\n\n"
+		"Examples:\n"
+		"  lines                # Output lines surrounding current line\n"
+		"  lines example.uc     # Print first three lines of example.uc\n"
+		"  lines (obj.func)     # Parens to disambiguate expression from path\n"
+		"  lines foo 5 8        # Print 5 lines before foo() till 8 lines in\n"
+		"  lines #123           # Print source of instruction offset 123\n"
+		"  lines +0 3 3         # Print 3 lines before and after current line\n"
+		"  lines -5             # Print source 5 lines before current line\n"
+		"  lines +3             # Print source 3 lines after current line"
+	},
+	{ "throw\0",
+		"Raise an exception at the current instruction offset.\n\n"
+		"Examples:\n"
+		"  throw \"Message\"    # Throw exception with given message"
+	},
+	{ "disassemble\0disasm\0",
+		"Disassemble the given function or statement location and output the "
+		"corresponding byte code in a human readable manner. The location to "
+		"disassemble may be either a function name, a single instruction "
+		"offset, an instruction offset range or a ucode expression.\n\n"
+		"Examples:\n"
+		"  disassemble          # Disassemble current statment\n"
+		"  disassemble foo      # Disassemble body of foo()\n"
+		"  disassemble foo+100  # Disassemble first 100 byte of function foo()\n"
+		"  disassemble #5       # Disassemble statement containing instruction 5\n"
+		"  disassemble #2-10    # Disassemble instructions 2 to 10\n"
+		"  disassemble #22+100  # Disassemble instructions 22 to 122\n"
+		"  disassemble (12/3*4) # Disassemble ucode expression"
+	},
+	{ "source\0",
+		"Fetch and print the raw source text the server has for a file path, "
+		"without syntax highlighting - mostly useful to check exactly what "
+		"the server sees when it differs from the local copy."
+	},
+	{ "quit\0q\0",
+		"Forcibly terminate the currently running program. The termination "
+		"happens in the same manner as if 'exit()' has been called from "
+		"script code."
+	},
+};
+
+/* Word-wrap and print one help entry's body to `columns`, preserving
+ * existing line breaks (so an "Examples:" block's indentation survives)
+ * and paragraph gaps - ported verbatim from cmd_help(), formerly
+ * lib/debug.c, with term_printf()/term_print() replaced by printf(). */
+static void
+print_help_entry(const char *names, const char *help, size_t columns)
+{
+	const char *p = help;
+
+	printf(C_BOLD "%s" C_RESET "\n\n", names);
+
+	while (*p != '\0') {
+		size_t pad = strspn(p, " ");
+		size_t len = strcspn(p, "\r\n") - pad;
+
+		if (pad + len <= columns) {
+			printf("%.*s\n", (int)(pad + len), p);
+			p += pad + len + (p[pad + len] == '\n');
+		}
+		else {
+			if (pad > columns)
+				pad = 1;
+
+			const char *l = p + pad;
+
+			while (len > columns - pad) {
+				printf("%.*s", (int)pad, p);
+
+				for (size_t j = columns - pad; j > 0; j--) {
+					if (l[j - 1] == ' ') {
+						printf("%.*s\n", (int)j, l);
+						l += j;
+						len -= j;
+						break;
+					}
+				}
+			}
+
+			printf("%.*s", (int)pad, p);
+			printf("%.*s\n", (int)len, l);
+			p = l + len + (l[len] == '\n');
+		}
+	}
+
+	printf("\n\n");
+}
+
+static void
+print_help(const char *cmd)
+{
+	size_t columns = term_columns();
+	size_t n = sizeof(cli_help_table) / sizeof(cli_help_table[0]);
+
+	for (size_t i = 0; i < n; i++) {
+		if (cmd && *cmd && !match_cmd(cli_help_table[i].names, cmd))
+			continue;
+
+		print_help_entry(cli_help_table[i].names, cli_help_table[i].help, columns);
+	}
+}
+
 static bool
 send_command(int fd, char *line, bool *resuming, bool *sent)
 {
@@ -1151,12 +1425,8 @@ send_command(int fd, char *line, bool *resuming, bool *sent)
 	}
 
 	if (match_cmd("help\0h\0?\0", cmd)) {
-		if (*line) {
-			payload = json_object_new_object();
-			json_object_object_add(payload, "command", json_object_new_string(line));
-		}
-
-		proto_write(fd, "HELP", payload);
+		print_help(*line ? line : NULL);
+		*sent = false;
 	}
 	else if (match_cmd("break\0b\0", cmd)) {
 		payload = json_object_new_object();

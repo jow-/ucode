@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /* A statement span to shade, in 1-based line numbers and 0-based byte
  * columns within those lines (matching the debug protocol's "col" fields).
@@ -102,5 +103,83 @@ void debug_highlight_print_source_ranges(FILE *out, char **lines, size_t nlines,
 void debug_highlight_print_header_bar(FILE *out, const char *bracket,
                                        const char *rest,
                                        size_t left_pad, size_t columns);
+
+/* A single decoded bytecode instruction, as reported by the DISASSEMBLE
+ * protocol response's "instructions" array, for
+ * debug_highlight_print_disassembly() below. Which of the optional fields
+ * are populated selects what annotation (if any) is shown after the raw
+ * operand - the renderer itself has no notion of opcode names or their
+ * meaning, it only reacts to which fields the caller filled in. */
+typedef struct {
+	size_t offset;
+	const char *mnemonic;
+	int format;                 /* uc_vm_insn_format[] value: 0, 1, 2, 4 or -4 */
+	const unsigned char *bytes; size_t nbytes;   /* raw instruction bytes */
+	int64_t operand;             /* decoded operand; sign only meaningful for format -4;
+	                              * unused when format == 0 */
+
+	bool have_constant;
+	const char *constant_repr;   /* JSON text of the constant value */
+	bool constant_is_string;
+
+	const char *variable_kind;   /* "local", "upval", "global", or NULL */
+	const char *variable_name;
+
+	bool have_closure;
+	const char *closure_kind;    /* "closure" or "arrow" */
+	uint32_t closure_index;
+
+	bool have_call;
+	bool call_mcall;             /* method call: an implicit `this` arg follows */
+	uint32_t call_nargs;
+
+	struct {
+		int64_t slot;
+		bool upval;
+		const char *name;
+		unsigned char bytes[4];
+	} *captures; size_t ncaptures;
+
+	struct {
+		uint16_t slot;
+		unsigned char bytes[2];
+	} *unpacks; size_t nunpacks;
+} debug_disasm_insn_t;
+
+/* Print a disassembly listing exactly as the pre-protocol interactive
+ * debugger's `disassemble` command did: address, a color-coded raw byte
+ * dump (opcode byte plain, operand bytes bright magenta), the mnemonic,
+ * the decoded operand, and - when the caller supplied it - a semantic
+ * annotation (constant value, local/upval/global name, closure/arrow
+ * index) plus extra indented lines for closure upvalue captures or call
+ * argument unpacks. `columns` is the terminal width to wrap to (pass 0
+ * for "don't know", which disables truncation). */
+void debug_highlight_print_disassembly(FILE *out, const char *function,
+                                        const debug_disasm_insn_t *insns,
+                                        size_t ninsns, size_t columns);
+
+/* One entry of a VARIABLES (or a BACKTRACE frame's inline "variables")
+ * protocol response, for debug_highlight_print_variables() below. `kind`
+ * is one of "this", "local", "internal" (a synthetic, parenthesized slot
+ * name such as a `for`-loop's hidden iterator) or "upvalue". */
+typedef struct {
+	const char *name;
+	const char *kind;
+	const char *value_repr;
+} debug_variable_t;
+
+/* Print a "name : value" variable listing exactly as the pre-protocol
+ * interactive debugger's print_variables() did: the name in a fixed
+ * 16-column field (tail-truncated with an ellipsis if longer), styled
+ * bold cyan for an upvalue or faint white for "this"/an internal slot
+ * (plain otherwise), a faint " : " separator, then the value - styled
+ * bold red instead of truncated when it is the literal sentinel
+ * "<out of range>". Every line is prefixed with `indent`. `columns` is
+ * the terminal width the value is truncated to fit (pass 0 for "don't
+ * know", which disables value truncation only - the name field is
+ * always truncated to 16 regardless). */
+void debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
+                                      size_t nvars, const char *indent,
+                                      size_t columns);
 
 #endif

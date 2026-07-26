@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdarg.h>
+#include <inttypes.h>
 #include <regex.h>
 
 #include "debug_highlight.h"
@@ -579,4 +581,423 @@ debug_highlight_print_header_bar(FILE *out, const char *bracket, const char *res
 
 	cs(out, NULL);
 	fputc('\n', out);
+}
+
+/* -- disassembly, ported from cmd_disasm() (formerly lib/debug.c) -------- */
+
+/* Minimal growable byte buffer, used to build one disassembly line at a
+ * time (with real "\033[...m" sequences already embedded) so it can be
+ * measured and truncated to `columns` before being written out - mirrors
+ * what the pre-protocol version did with a uc_stringbuf_t. */
+typedef struct {
+	char *buf;
+	size_t len, cap;
+} dbuf_t;
+
+static void
+dbuf_reserve(dbuf_t *b, size_t extra)
+{
+	if (b->len + extra + 1 > b->cap) {
+		size_t newcap = b->cap ? b->cap * 2 : 128;
+
+		while (newcap < b->len + extra + 1)
+			newcap *= 2;
+
+		b->buf = realloc(b->buf, newcap);
+		b->cap = newcap;
+	}
+}
+
+static void
+dbuf_style(dbuf_t *b, const style_t *style)
+{
+	char tmp[32];
+	int codes[8] = { 0 };
+	size_t i = 0, n = 0;
+
+	if (style == NULL) {
+		dbuf_reserve(b, 4);
+		memcpy(b->buf + b->len, "\033[0m", 4);
+		b->len += 4;
+		return;
+	}
+
+	if ((style->styles & (BOLD | FAINT | ULINE)) == 0)
+		codes[i++] = 0;
+
+	if (style->styles & BOLD)  codes[i++] = 1;
+	if (style->styles & FAINT) codes[i++] = 2;
+	if (style->styles & ULINE) codes[i++] = 4;
+
+	codes[i++] = style->fg ? style->fg : 39;
+	codes[i++] = style->bg ? style->bg : 49;
+
+	n += sprintf(tmp + n, "\033[");
+
+	for (size_t k = 0; k < i; k++)
+		n += sprintf(tmp + n, "%s%d", k ? ";" : "", codes[k]);
+
+	n += sprintf(tmp + n, "m");
+
+	dbuf_reserve(b, n);
+	memcpy(b->buf + b->len, tmp, n);
+	b->len += n;
+}
+
+static void
+dbuf_printf(dbuf_t *b, const char *fmt, ...)
+{
+	va_list ap, ap2;
+	int n;
+
+	va_start(ap, fmt);
+	va_copy(ap2, ap);
+	n = vsnprintf(NULL, 0, fmt, ap2);
+	va_end(ap2);
+
+	if (n > 0) {
+		dbuf_reserve(b, (size_t)n);
+		vsnprintf(b->buf + b->len, (size_t)n + 1, fmt, ap);
+		b->len += (size_t)n;
+	}
+
+	va_end(ap);
+}
+
+/* Byte-based visible-width truncation with a trailing ellipsis, skipping
+ * embedded "\033[...m" escape sequences when counting columns - the same
+ * "reasonable simplification" truncate_head() above documents, since
+ * disassembly text (mnemonics, hex, identifiers) is normally plain ASCII. */
+static void
+dbuf_truncate_tail(dbuf_t *b, size_t maxcols)
+{
+	size_t col = 0, i = 0, cut = SIZE_MAX;
+
+	if (maxcols == 0)
+		return;
+
+	while (i < b->len) {
+		if (b->buf[i] == '\033') {
+			size_t j = i + 1;
+
+			if (j < b->len && b->buf[j] == '[') {
+				j++;
+
+				while (j < b->len && b->buf[j] != 'm')
+					j++;
+
+				if (j < b->len)
+					j++;
+			}
+
+			i = j;
+			continue;
+		}
+
+		if (col + 1 == maxcols && cut == SIZE_MAX)
+			cut = i;
+
+		col++;
+		i++;
+	}
+
+	if (col > maxcols && cut != SIZE_MAX) {
+		b->len = cut;
+		dbuf_printf(b, "\xe2\x80\xa6" /* U+2026 HORIZONTAL ELLIPSIS */);
+	}
+}
+
+static void
+dbuf_flush(dbuf_t *b, FILE *out, size_t columns)
+{
+	dbuf_truncate_tail(b, columns);
+	dbuf_style(b, NULL);
+	fwrite(b->buf, 1, b->len, out);
+	fputc('\n', out);
+	b->len = 0;
+}
+
+void
+debug_highlight_print_disassembly(FILE *out, const char *function,
+                                   const debug_disasm_insn_t *insns,
+                                   size_t ninsns, size_t columns)
+{
+	dbuf_t line = { 0 };
+	static const style_t st_none   = { FG_NONE, 0, 0 };
+	static const style_t st_op     = { FG_BMAGENT, 0, 0 };
+	static const style_t st_cyan   = { FG_CYAN, 0, 0 };
+	static const style_t st_white  = { FG_BWHITE, 0, 0 };
+	static const style_t st_yellow = { FG_YELLOW, 0, 0 };
+	static const style_t st_red    = { FG_RED, 0, 0 };
+
+	fprintf(out, "Function: %s\n", function ? function : "?");
+
+	for (size_t idx = 0; idx < ninsns; idx++) {
+		const debug_disasm_insn_t *ins = &insns[idx];
+		int fmt = ins->format;
+		int absfmt = (fmt < 0) ? -fmt : fmt;
+
+		if (absfmt > 4)
+			absfmt = 4;
+
+		dbuf_printf(&line, "%06zu:", ins->offset);
+
+		/* Only the base instruction (opcode + its fixed-width operand, per
+		 * `format`) is shown here - CLFN/ARFN's per-upvalue-capture bytes
+		 * and CALL's per-argument unpack bytes that may follow in `bytes`
+		 * (uc_vm_insn_call() needs the *full* instruction length to skip
+		 * over them) get their own indented hex dump below instead. */
+		for (size_t j = 0; j < ins->nbytes && j <= (size_t)absfmt; j++) {
+			dbuf_printf(&line, " ");
+			dbuf_style(&line, (j == 0) ? &st_none : &st_op);
+			dbuf_printf(&line, "%02x", ins->bytes[j]);
+			dbuf_style(&line, NULL);
+		}
+
+		for (int j = 0; j < 3 * (4 - absfmt); j++)
+			dbuf_printf(&line, " ");
+
+		dbuf_printf(&line, "  %7s", ins->mnemonic ? ins->mnemonic : "?");
+
+		switch (fmt) {
+		case 0:
+			break;
+
+		case -4: {
+			int64_t v = ins->operand;
+			uint32_t mag = (uint32_t)((v < 0) ? -v : v);
+
+			dbuf_printf(&line, " {");
+			dbuf_style(&line, &st_op);
+			dbuf_printf(&line, "%c0x%x", (v < 0) ? '-' : '+', mag);
+			dbuf_style(&line, NULL);
+			dbuf_printf(&line, "}");
+			break;
+		}
+
+		case 1:
+			dbuf_printf(&line, " {");
+			dbuf_style(&line, &st_op);
+			dbuf_printf(&line, "%" PRIu64, (uint64_t)ins->operand);
+			dbuf_style(&line, NULL);
+			dbuf_printf(&line, "}");
+			break;
+
+		case 2:
+			dbuf_printf(&line, " {");
+			dbuf_style(&line, &st_op);
+			dbuf_printf(&line, "0x%" PRIx64, (uint64_t)ins->operand);
+			dbuf_style(&line, NULL);
+			dbuf_printf(&line, "}");
+			break;
+
+		case 4:
+			dbuf_printf(&line, " {");
+			dbuf_style(&line, &st_op);
+			dbuf_printf(&line, "0x%" PRIx64, (uint64_t)ins->operand);
+			dbuf_style(&line, NULL);
+
+			if (ins->have_constant) {
+				dbuf_printf(&line, " : ");
+				dbuf_style(&line, ins->constant_is_string ? &st_op : &st_cyan);
+				dbuf_printf(&line, "%s", ins->constant_repr ? ins->constant_repr : "null");
+				dbuf_style(&line, NULL);
+			}
+			else if (ins->variable_kind && strcmp(ins->variable_kind, "global") == 0) {
+				dbuf_printf(&line, " : global ");
+				dbuf_style(&line, &st_white);
+				dbuf_printf(&line, "%s", ins->variable_name ? ins->variable_name : "(unknown)");
+				dbuf_style(&line, NULL);
+			}
+			else if (ins->variable_kind) {
+				bool upval = !strcmp(ins->variable_kind, "upval");
+
+				dbuf_printf(&line, " : %s ", ins->variable_kind);
+				dbuf_style(&line, upval ? &st_cyan : &st_white);
+				dbuf_printf(&line, "%s", ins->variable_name ? ins->variable_name : "(unknown)");
+				dbuf_style(&line, NULL);
+			}
+			else if (ins->have_closure) {
+				dbuf_printf(&line, " : %s ", ins->closure_kind ? ins->closure_kind : "closure");
+				dbuf_style(&line, &st_op);
+				dbuf_printf(&line, "#%" PRIu32, ins->closure_index);
+				dbuf_style(&line, NULL);
+			}
+			else if (ins->have_call) {
+				dbuf_printf(&line, " : ");
+
+				if (ins->call_mcall)
+					dbuf_printf(&line, "mcall, ");
+
+				dbuf_style(&line, &st_op);
+				dbuf_printf(&line, "%" PRIu32, ins->call_nargs);
+				dbuf_style(&line, NULL);
+				dbuf_printf(&line, " arg%s", (ins->call_nargs == 1) ? "" : "s");
+			}
+
+			dbuf_printf(&line, "}");
+			break;
+
+		default:
+			dbuf_style(&line, &st_red);
+			dbuf_printf(&line, " (unknown operand format: %d)", fmt);
+			dbuf_style(&line, NULL);
+			break;
+		}
+
+		dbuf_flush(&line, out, columns);
+
+		for (size_t j = 0; j < ins->ncaptures; j++) {
+			bool upval = ins->captures[j].upval;
+			int64_t slot = ins->captures[j].slot;
+			uint32_t mag = (uint32_t)((slot < 0) ? -slot : slot);
+
+			dbuf_printf(&line, "         \xe2\x80\xa6 " /* "   … " */);
+			dbuf_style(&line, &st_yellow);
+
+			for (size_t k = 0; k < 4; k++)
+				dbuf_printf(&line, "%s%02x", k ? " " : "", ins->captures[j].bytes[k]);
+
+			dbuf_style(&line, NULL);
+			dbuf_printf(&line, "  capture {");
+			dbuf_style(&line, &st_yellow);
+			dbuf_printf(&line, "%c0x%x", (slot < 0) ? '-' : '+', mag);
+			dbuf_style(&line, NULL);
+			dbuf_printf(&line, " : %s ", upval ? "upval" : "local");
+			dbuf_style(&line, upval ? &st_cyan : &st_white);
+			dbuf_printf(&line, "%s", ins->captures[j].name ? ins->captures[j].name : "(unknown)");
+			dbuf_style(&line, NULL);
+			dbuf_printf(&line, "}");
+
+			dbuf_flush(&line, out, columns);
+		}
+
+		for (size_t j = 0; j < ins->nunpacks; j++) {
+			uint16_t slot = ins->unpacks[j].slot;
+
+			dbuf_printf(&line, "         \xe2\x80\xa6 " /* "   … " */);
+			dbuf_style(&line, &st_yellow);
+			dbuf_printf(&line, "%02x %02x", ins->unpacks[j].bytes[0], ins->unpacks[j].bytes[1]);
+			dbuf_style(&line, NULL);
+			dbuf_printf(&line, "         unpack {");
+			dbuf_style(&line, &st_yellow);
+			dbuf_printf(&line, "0x%x", slot);
+			dbuf_style(&line, NULL);
+			dbuf_printf(&line, " : stack slot ");
+			dbuf_style(&line, &st_op);
+			dbuf_printf(&line, "-0x%x", (unsigned)(slot + 1));
+			dbuf_style(&line, NULL);
+			dbuf_printf(&line, "}");
+
+			dbuf_flush(&line, out, columns);
+		}
+	}
+
+	free(line.buf);
+}
+
+/* -- variables listing, ported from print_variables() (formerly
+ * lib/debug.c) ------------------------------------------------------------ */
+
+/* Like dbuf_truncate_tail(), but for a compact JSON-ish value repr: places
+ * the ellipsis just before a synthetic closing bracket/quote so a truncated
+ * object/array/string still visually reads as one and stays on a single
+ * line, matching printbuf_append_uv()'s (formerly lib/debug.c) truncation
+ * exactly. Byte-based rather than UTF-8-aware, the same simplification
+ * truncate_head() above documents. */
+static void
+dbuf_truncate_value(dbuf_t *b, size_t maxcols)
+{
+	const char *end;
+	size_t keep;
+
+	if (maxcols == 0 || b->len <= maxcols)
+		return;
+
+	switch (b->buf[0]) {
+	case '{': keep = (maxcols > 3) ? maxcols - 3 : 0; end = "\xe2\x80\xa6 }"; break;
+	case '[': keep = (maxcols > 3) ? maxcols - 3 : 0; end = "\xe2\x80\xa6 ]"; break;
+	case '"': keep = (maxcols > 2) ? maxcols - 2 : 0; end = "\xe2\x80\xa6\""; break;
+	default:  keep = (maxcols > 1) ? maxcols - 1 : 0; end = "\xe2\x80\xa6";   break;
+	}
+
+	b->len = keep;
+	dbuf_printf(b, "%s", end);
+}
+
+void
+debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
+                                 size_t nvars, const char *indent,
+                                 size_t columns)
+{
+	static const style_t st_upval = { FG_CYAN, 0, BOLD };
+	static const style_t st_faint = { FG_BWHITE, 0, FAINT };
+	static const style_t st_err   = { FG_RED, 0, BOLD };
+	size_t indent_len = indent ? strlen(indent) : 0;
+	size_t value_cols = 0;
+	dbuf_t namebuf = { 0 }, valuebuf = { 0 };
+
+	if (columns > indent_len + 19)
+		value_cols = columns - indent_len - 19;
+
+	for (size_t i = 0; i < nvars; i++) {
+		const debug_variable_t *v = &vars[i];
+		const char *kind = v->kind ? v->kind : "";
+		const char *name = v->name ? v->name : "?";
+		const char *repr = v->value_repr ? v->value_repr : "";
+		bool upval = !strcmp(kind, "upvalue");
+		bool faint = !strcmp(kind, "this") || !strcmp(kind, "internal");
+		bool err = !strcmp(repr, "<out of range>");
+		size_t namelen;
+
+		namebuf.len = 0;
+		valuebuf.len = 0;
+
+		dbuf_printf(&namebuf, "%s", name);
+		namelen = namebuf.len;
+		dbuf_truncate_tail(&namebuf, 16);
+
+		if (indent)
+			fputs(indent, out);
+
+		if (upval)
+			cs(out, &st_upval);
+		else if (faint)
+			cs(out, &st_faint);
+
+		fwrite(namebuf.buf, 1, namebuf.len, out);
+
+		if (upval || faint)
+			cs(out, NULL);
+
+		for (; namelen < 16; namelen++)
+			fputc(' ', out);
+
+		cs(out, &st_faint);
+		fputs(" : ", out);
+		cs(out, NULL);
+
+		if (err) {
+			cs(out, &st_err);
+			fputs(repr, out);
+			cs(out, NULL);
+		}
+		else {
+			dbuf_printf(&valuebuf, "%s", repr);
+
+			/* value_repr is always the compact, single-line repr (see
+			 * build_variables_json() in lib/debug.c) - guard against a
+			 * literal embedded newline anyway, since byte-counting
+			 * truncation across one would garble rather than shorten it. */
+			if (columns > 0 && !strchr(repr, '\n'))
+				dbuf_truncate_value(&valuebuf, value_cols);
+
+			fwrite(valuebuf.buf, 1, valuebuf.len, out);
+		}
+
+		fputc('\n', out);
+	}
+
+	free(namebuf.buf);
+	free(valuebuf.buf);
 }

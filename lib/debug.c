@@ -3049,7 +3049,11 @@ build_variables_json(uc_vm_t *vm, uc_callframe_t *frame)
 		uc_value_t *item = ucv_object_new(vm);
 		uc_stringbuf_t vb = { 0 };
 
-		ucv_to_stringbuf_formatted(vm, &vb, frame->ctx, 0, ' ', 2);
+		/* Compact, single-line repr, matching the pre-protocol variables
+		 * listing's default (non-"full") mode - the client truncates long
+		 * aggregate values rather than ever wrapping them onto several
+		 * lines, so pretty-printing here would defeat that. */
+		ucv_to_stringbuf(vm, &vb, frame->ctx, false);
 
 		ucv_object_add(item, "name", ucv_string_new("this"));
 		ucv_object_add(item, "kind", ucv_string_new("this"));
@@ -3106,7 +3110,7 @@ build_variables_json(uc_vm_t *vm, uc_callframe_t *frame)
 		if (vval) {
 			uc_stringbuf_t vb = { 0 };
 
-			ucv_to_stringbuf_formatted(vm, &vb, vval, 0, ' ', 2);
+			ucv_to_stringbuf(vm, &vb, vval, false);
 			ucv_object_add(item, "value_repr", ucv_string_new_length(vb.buf, vb.bpos));
 			free(vb.buf);
 		}
@@ -4354,9 +4358,15 @@ proto_cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int 
 		uint8_t insn = bytecode[i];
 		uc_value_t *item = ucv_object_new(vm);
 		uc_value_t *operand = NULL;
+		uc_value_t *rawbytes = ucv_array_new_length(vm, n);
+
+		for (size_t j = 0; j < n; j++)
+			ucv_array_push(rawbytes, ucv_uint64_new(bytecode[i + j]));
 
 		ucv_object_add(item, "offset", ucv_uint64_new(i));
 		ucv_object_add(item, "mnemonic", ucv_string_new(insn_names[insn]));
+		ucv_object_add(item, "format", ucv_int64_new(uc_vm_insn_format[insn]));
+		ucv_object_add(item, "bytes", rawbytes);
 
 		switch (uc_vm_insn_format[insn]) {
 		case 0:
@@ -4404,6 +4414,18 @@ proto_cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int 
 			}
 			else if (insn == I_CLFN || insn == I_ARFN) {
 				ucv_object_add(item, "closure_index", ucv_uint64_new(arg.u32));
+				ucv_object_add(item, "closure_kind",
+					ucv_string_new((insn == I_CLFN) ? "closure" : "arrow"));
+			}
+			else if (insn == I_CALL) {
+				/* See uc_vm_insn_call() in vm.c: top bit is the method-call
+				 * flag (this-context passed as an implicit extra argument
+				 * below the callee on the stack), low 16 bits are the
+				 * argument count. */
+				ucv_object_add(item, "call_mcall",
+					ucv_boolean_new((arg.u32 & 0x80000000) != 0));
+				ucv_object_add(item, "call_nargs",
+					ucv_uint64_new(arg.u32 & 0xffff));
 			}
 
 			break;
@@ -4432,11 +4454,16 @@ proto_cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int 
 				uc_value_t *vn = uc_chunk_debug_get_variable(
 					&target->chunk, i, (slot < 0) ? -(slot + 1) : slot, upval);
 				uc_value_t *cap = ucv_object_new(vm);
+				uc_value_t *capbytes = ucv_array_new_length(vm, 4);
+
+				for (size_t k = 0; k < 4; k++)
+					ucv_array_push(capbytes, ucv_uint64_new(bytecode[i + 5 + j * 4 + k]));
 
 				ucv_object_add(cap, "slot", ucv_int64_new(slot));
 				ucv_object_add(cap, "kind", ucv_string_new(upval ? "upval" : "local"));
 				ucv_object_add(cap, "name",
 					ucv_string_new(vn ? ucv_string_get(vn) : "(unknown)"));
+				ucv_object_add(cap, "bytes", capbytes);
 				ucv_array_push(captures, cap);
 			}
 
@@ -4448,8 +4475,14 @@ proto_cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int 
 			for (size_t j = 0; j < ((arg.u32 >> 16) & 0x7fff); j++) {
 				uint16_t slot = insn_u16(bytecode + i + 5 + j * 2);
 				uc_value_t *u = ucv_object_new(vm);
+				uc_value_t *ubytes = ucv_array_new_length(vm, 2);
 
+				for (size_t k = 0; k < 2; k++)
+					ucv_array_push(ubytes, ucv_uint64_new(bytecode[i + 5 + j * 2 + k]));
+
+				ucv_object_add(u, "slot", ucv_uint64_new(slot));
 				ucv_object_add(u, "stack_slot", ucv_int64_new(-(int64_t)(slot + 1)));
+				ucv_object_add(u, "bytes", ubytes);
 				ucv_array_push(unpacks, u);
 			}
 
