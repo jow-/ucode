@@ -306,6 +306,85 @@ cache_source_text(const char *file, const char *text, size_t *nlines_out)
 	return e->lines;
 }
 
+/* Local source root override (-s/--srcdir), used when the path the server
+ * reports doesn't exist as-is on this machine - see try_load_local_file(). */
+static const char *opt_srcdir = NULL;
+
+static char *
+read_whole_file(FILE *fp)
+{
+	char buf[65536];
+	size_t n, cap = 0, len = 0;
+	char *text = NULL;
+
+	while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) {
+		if (len + n + 1 > cap) {
+			cap = cap ? cap * 2 : 65536;
+
+			while (cap < len + n + 1)
+				cap *= 2;
+
+			text = realloc(text, cap);
+		}
+
+		memcpy(text + len, buf, n);
+		len += n;
+	}
+
+	if (!text)
+		text = malloc(1);
+
+	text[len] = '\0';
+
+	return text;
+}
+
+/* Debugging usually either runs fully locally (the client and the debugged
+ * script share the same filesystem - the common `-x`/`udbg <pid>`-on-the-
+ * same-box case) or from a development checkout against a remote target
+ * (the *client* has the better/only real source access, not the server) -
+ * in both cases, the client reading the file itself is at least as likely
+ * to succeed as asking the server for it, and doesn't need a round trip.
+ * Only once this fails do callers fall back to requesting SOURCE from the
+ * server (e.g. the target is a remote embedded device with no shared
+ * filesystem, or running precompiled bytecode with only embedded source).
+ *
+ * Tries the path exactly as the server reported it first (already correct
+ * for the local case, and for absolute paths that happen to also exist on
+ * this machine), then, if `-s/--srcdir DIR` was given, DIR joined with
+ * just the reported path's basename - a simple heuristic for "the server's
+ * path is from a different checkout/build root than this one". */
+static char **
+try_load_local_file(const char *file, size_t *nlines_out)
+{
+	FILE *fp = fopen(file, "rb");
+	char *joined = NULL;
+
+	if (!fp && opt_srcdir) {
+		const char *base = strrchr(file, '/');
+
+		base = base ? base + 1 : file;
+		joined = malloc(strlen(opt_srcdir) + 1 + strlen(base) + 1);
+		sprintf(joined, "%s/%s", opt_srcdir, base);
+		fp = fopen(joined, "rb");
+	}
+
+	free(joined);
+
+	if (!fp)
+		return NULL;
+
+	{
+		char *text = read_whole_file(fp);
+		char **lines = cache_source_text(file, text, nlines_out);
+
+		fclose(fp);
+		free(text);
+
+		return lines;
+	}
+}
+
 /* Rendering a source range/context needs the actual text, which only ever
  * arrives asynchronously as a SOURCE response processed by the normal main
  * loop - never via a nested blocking round-trip from inside another
@@ -392,6 +471,9 @@ render_source_lines(int fd, const char *file, int64_t from, int64_t to,
 {
 	size_t nlines;
 	char **lines = find_cached_source(file, &nlines);
+
+	if (!lines)
+		lines = try_load_local_file(file, &nlines);
 
 	if (!lines) {
 		request_source(fd, file, from, to, hl, left_pad);
@@ -628,6 +710,9 @@ render_backtrace(int fd, struct json_object *p)
 			continue;
 
 		if (find_cached_source(file, &dummy))
+			continue;
+
+		if (try_load_local_file(file, &dummy))
 			continue;
 
 		for (j = 0; j < n_missing; j++)
@@ -1152,15 +1237,22 @@ wait_for_socket(const char *path, int timeout_sec)
 static void
 print_usage(const char *prog)
 {
-	fprintf(stderr, "Usage: %s <pid>\n", prog);
-	fprintf(stderr, "       %s <socket-path>\n", prog);
-	fprintf(stderr, "       %s --fd <n>\n", prog);
+	fprintf(stderr, "Usage: %s [-s DIR] <pid>\n", prog);
+	fprintf(stderr, "       %s [-s DIR] <socket-path>\n", prog);
+	fprintf(stderr, "       %s [-s DIR] --fd <n>\n", prog);
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Debugger client for ucode, speaking the line-based debug protocol.\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "  <pid>           SIGUSR1-attach to a running `-X` process, gdb -p style.\n");
 	fprintf(stderr, "  <socket-path>   connect to an explicit debug.listen(path) socket.\n");
 	fprintf(stderr, "  --fd <n>        use an already-connected fd (internal, used by `-x`).\n");
+	fprintf(stderr, "  -s, --srcdir DIR\n");
+	fprintf(stderr, "                  Local directory to also look for source files under\n");
+	fprintf(stderr, "                  (by basename) when the path the server reports doesn't\n");
+	fprintf(stderr, "                  exist as-is on this machine - e.g. the target runs on a\n");
+	fprintf(stderr, "                  different host/root than this checkout. Source is always\n");
+	fprintf(stderr, "                  tried locally first (at the server's exact reported path)\n");
+	fprintf(stderr, "                  before ever asking the server for it.\n");
 }
 
 int
@@ -1174,6 +1266,30 @@ main(int argc, char **argv)
 	signal(SIGPIPE, SIG_IGN);
 	setvbuf(stdout, NULL, _IOLBF, 0);
 	debug_highlight_init();
+
+	/* Pull -s/--srcdir DIR out of argv wherever it appears, leaving the
+	 * rest of argument parsing below untouched. */
+	{
+		int ai = 1;
+
+		while (ai < argc) {
+			if (!strcmp(argv[ai], "-s") || !strcmp(argv[ai], "--srcdir")) {
+				if (ai + 1 >= argc) {
+					print_usage(argv[0]);
+
+					return 1;
+				}
+
+				opt_srcdir = argv[ai + 1];
+				memmove(&argv[ai], &argv[ai + 2], (size_t)(argc - ai - 2) * sizeof(char *));
+				argc -= 2;
+
+				continue;
+			}
+
+			ai++;
+		}
+	}
 
 	if (argc < 2 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
 		print_usage(argv[0]);

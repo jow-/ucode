@@ -116,16 +116,23 @@ debug info, but **never sends rendered or highlighted source text** for a
 `PAUSED`/`SOURCE_RANGE`/backtrace frame - only the coordinates. A client
 that wants to display source has two options:
 
-- **It already has the file** (the common IDE case: the project is checked
-  out locally and the file may already be open in an editor buffer) - just
-  use its own copy, keyed by the `file` string from any location payload.
-  No round-trip to the server needed at all.
-- **It doesn't** (a plain remote CLI client with no local checkout) - send
-  `SOURCE {"file":"..."}` and use the returned raw `text`. If the server
-  itself has no source available either (running precompiled bytecode with
-  no embedded source and no matching local file), `text` is `null` and
-  `error` explains why - this lets a client that *does* have a local copy
-  fall back to it instead of showing a misleading blank buffer.
+- **It already has the file** - the common case either way debugging is
+  actually done: fully locally (client and target share a filesystem, e.g.
+  `-x`/`udbg <pid>` on the same box) or from a development checkout against
+  a remote target (the *client*, not the target, has the real/better
+  source access - think a stripped production device). Either way the
+  client should try reading the file itself first, keyed by the `file`
+  string from any location payload, and never needs a round-trip to the
+  server for it. `udbg` does this (see `-s`/`--srcdir` below for path
+  mapping when the reported path doesn't exist as-is locally).
+- **It doesn't** (no local access at all) - send `SOURCE {"file":"..."}`
+  and use the returned raw `text`. If the server itself has no source
+  available either (running precompiled bytecode with no embedded source
+  and no matching local file), `text` is `null` and `error` explains why.
+
+`udbg` implements this as: try the exact reported path; if that fails and
+`-s DIR`/`--srcdir DIR` was given, try `DIR/<basename of the reported
+path>`; only then fall back to asking the server.
 
 ---
 
@@ -179,18 +186,21 @@ thought was a normal call.
 
 ## `udbg` Client
 
-`udbg` is a plain, functional protocol client: typed commands, unadorned
-printed responses, no line-editing/history/syntax-highlighting. It exists to
-prove out and exercise the protocol end-to-end and to serve as the local
-`-x` CLI's client process - a rendering-rich port (ANSI, syntax
-highlighting, readline-style editing) is follow-up work that can be built
+`udbg` is a typed-command protocol client with ANSI source rendering (the
+original interactive debugger's exact ucode/utpl syntax highlighter and
+statement/header-bar styling, ported into `debug_highlight.c` - see below)
+but no line-editing or history yet; that's follow-up work that can be built
 against this same protocol without touching the server again.
 
 ```
-udbg <pid>           # SIGUSR1-attach to a running `-X` process, gdb -p style
-udbg <socket-path>    # connect to an explicit debug.listen(path) socket
-udbg --fd <n>         # use an inherited, already-connected fd (internal, used by `-x`)
+udbg [-s DIR] <pid>           # SIGUSR1-attach to a running `-X` process, gdb -p style
+udbg [-s DIR] <socket-path>   # connect to an explicit debug.listen(path) socket
+udbg [-s DIR] --fd <n>        # use an inherited, already-connected fd (internal, used by `-x`)
 ```
+
+`-s DIR`/`--srcdir DIR` gives a local directory to also look for source
+files under (by basename) when the server-reported path doesn't exist
+as-is on this machine - see "Source resolution" above.
 
 Typed commands at the `dbg >` prompt map directly onto the protocol verbs
 above (`break <spec>`, `delete [id]`, `list`, `next`, `step`, `continue`,
