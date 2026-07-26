@@ -44,25 +44,9 @@
 #include "ucode/util.h"
 #include "ucode/vm.h"
 #include "debug_remote.h"
+#include "debug_proto.h"
 
 static int remote_debug_fd = -1;
-
-
-static void
-debug_write_response(int fd, const char *fmt, ...)
-{
-	va_list ap;
-	char buf[4096];
-	ssize_t len;
-
-	va_start(ap, fmt);
-	len = vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-
-	if (len > 0 && (size_t)len < sizeof(buf)) {
-		if (write(fd, buf, len) == -1) {}
-	}
-}
 
 
 void
@@ -273,8 +257,7 @@ object_shallow_copy_no_proto(uc_vm_t *vm, uc_value_t *obj)
 void
 debug_remote_notify_exception(uc_vm_t *vm, uc_exception_t *ex)
 {
-	uc_value_t *exo, *plain;
-	char *json;
+	uc_value_t *exo, *plain, *evo;
 
 	(void)ex;
 
@@ -285,23 +268,24 @@ debug_remote_notify_exception(uc_vm_t *vm, uc_exception_t *ex)
 	plain = object_shallow_copy_no_proto(vm, exo);
 	ucv_put(exo);
 
-	json = ucv_to_jsonstring(vm, plain);
-	ucv_put(plain);
+	evo = ucv_object_new(vm);
+	ucv_object_add(evo, "event", ucv_string_new("exception"));
+	ucv_object_add(evo, "exception", plain);
 
-	if (json) {
-		debug_write_response(remote_debug_fd, "EVENT exception %s\n", json);
-		free(json);
-	}
+	debug_proto_write(remote_debug_fd, vm, "EVENT", evo);
+	ucv_put(evo);
 }
 
 /* Push an unsolicited signal notification to the connected debugger client.
  * Called from the SIGUSR1 signal handler when a debugger is already
- * attached, so this must stay async-signal-safe: no vsnprintf, no malloc,
- * just a raw write() of a fixed message. */
+ * attached, so this must stay async-signal-safe: no debug_proto_write() (it
+ * allocates), just a raw write() of a fixed, pre-formatted JSON message. */
 void
 debug_remote_notify_signal(int signum)
 {
-	static const char msg[] = "EVENT signal SIGUSR1 received (already attached, ignoring)\n";
+	static const char msg[] =
+		"EVENT {\"event\":\"signal\",\"signal\":\"SIGUSR1\","
+		"\"note\":\"already attached, ignoring\"}\n";
 
 	(void)signum;
 
@@ -346,13 +330,13 @@ debug_remote_notify_exit(uc_vm_t *vm, uc_vm_status_t status, int32_t exit_code,
                           uc_value_t *exception_obj)
 {
 	uc_value_t *evo;
-	char *json;
 
 	if (remote_debug_fd < 0)
 		return;
 
 	evo = ucv_object_new(vm);
 
+	ucv_object_add(evo, "event", ucv_string_new("exit"));
 	ucv_object_add(evo, "status", ucv_string_new(vm_status_name(status)));
 
 	if (status == STATUS_EXIT)
@@ -369,11 +353,6 @@ debug_remote_notify_exit(uc_vm_t *vm, uc_vm_status_t status, int32_t exit_code,
 		ucv_object_add(evo, "exception", plain);
 	}
 
-	json = ucv_to_jsonstring(vm, evo);
+	debug_proto_write(remote_debug_fd, vm, "EVENT", evo);
 	ucv_put(evo);
-
-	if (json) {
-		debug_write_response(remote_debug_fd, "EVENT exit %s\n", json);
-		free(json);
-	}
 }
