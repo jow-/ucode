@@ -24,6 +24,15 @@
 
 #define DEBUG_PROTO_READ_CHUNK 1024
 
+/* Append a NUL-terminated string; like printbuf_strappend() but for
+ * non-literal strings (printbuf_memappend_fast() compares its size
+ * argument against the buffer's int fields, hence the cast). */
+static void
+printbuf_strcat(uc_stringbuf_t *sb, const char *s)
+{
+	printbuf_memappend_fast(sb, s, (int)strlen(s));
+}
+
 void
 debug_proto_buf_init(debug_proto_buf_t *buf)
 {
@@ -50,14 +59,14 @@ debug_proto_write(int fd, uc_vm_t *vm, const char *verb, uc_value_t *payload)
 	ssize_t n;
 	char *json;
 
-	printbuf_memappend_fast(sb, verb, (int)strlen(verb));
+	printbuf_strcat(sb, verb);
 
 	if (payload) {
 		json = ucv_to_jsonstring(vm, payload);
 
 		if (json) {
 			printbuf_memappend_fast(sb, " ", 1);
-			printbuf_memappend_fast(sb, json, (int)strlen(json));
+			printbuf_strcat(sb, json);
 			free(json);
 		}
 	}

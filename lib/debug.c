@@ -89,6 +89,14 @@ extern bool debug_remote_has_active_connection(void);
 #include "ucode/compiler.h"
 #include "ucode/vm.h"
 
+/* Append a NUL-terminated string; like printbuf_strappend() but for
+ * non-literal strings (printbuf_memappend_fast() compares its size
+ * argument against the buffer's int fields, hence the cast). */
+static void
+printbuf_strcat(uc_stringbuf_t *sb, const char *s)
+{
+	printbuf_memappend_fast(sb, s, (int)strlen(s));
+}
 
 static char *memdump_signal = "USR2";
 static char *memdump_directory = "/tmp";
@@ -594,20 +602,6 @@ debug_handle_memdump(uc_vm_t *vm, size_t nargs)
 	return NULL;
 }
 
-#ifdef HAVE_ULOOP
-/* The uloop signal handling activation has been intentionally copied from
-   the uloop module here to ensure that uloop signal dispatching also works
-   when just loading the debug module without the uloop one. */
-static struct {
-	struct uloop_fd ufd;
-	uc_vm_t *vm;
-} signal_handle;
-
-static struct {
-	struct uloop_fd ufd;
-	uc_vm_t *vm;
-} break_handle;
-
 static bool debug_attach_mode = false;
 
 typedef enum {
@@ -623,6 +617,23 @@ typedef enum {
 	 * it's armed automatically for the lifetime of the debug session, not
 	 * by an explicit `break` command. */
 	BK_UNCAUGHT,
+	/* Dedicated system breakpoint for an async "pause now" request from an
+	 * already-attached client (SIGUSR1 while running - see
+	 * debug_break_signal_handler()) - the connected-client counterpart to
+	 * `-X`'s bare SIGUSR1 attach for a not-yet-attached one. Its struct is
+	 * pre-created (see install_debug_system_breakpoints()) and never
+	 * freed, specifically so the signal handler only ever has to write
+	 * already-allocated fields (dbk->bk.ip/cb) - genuinely
+	 * async-signal-safe, unlike get_breakpoint()'s malloc path. Between
+	 * requests dbk->bk.ip sits at debug_interrupt_disarmed_marker (a
+	 * dedicated inert sentinel, not NULL - a NULL ip is itself the
+	 * "fire on every single instruction" convention the generic
+	 * per-instruction breakpoint check in vm.c uses, the opposite of
+	 * idle); the handler arms it by pointing ip at NULL, and
+	 * bk_handle_interrupt() immediately disarms it again (back to the
+	 * inert marker) before entering the session, so it fires exactly
+	 * once per request instead of on every instruction from then on. */
+	BK_INTERRUPT,
 } debug_breakpoint_kind_t;
 
 typedef struct debug_breakpoint {
@@ -643,8 +654,27 @@ typedef struct debug_breakpoint {
 	bool deleted;
 } debug_breakpoint_t;
 
+/* Dedicated inert marker for BK_INTERRUPT - see its debug_breakpoint_kind_t
+ * comment above for why this can't just be NULL. Declared this early so
+ * debug_break_signal_handler() below can reference it. */
+static uint8_t debug_interrupt_disarmed_marker;
+
 static void bk_enter_session(uc_vm_t *vm, uc_breakpoint_t *bk);
 static uc_callframe_t *uc_debug_curr_frame(uc_vm_t *vm, size_t off);
+
+#ifdef HAVE_ULOOP
+/* The uloop signal handling activation has been intentionally copied from
+   the uloop module here to ensure that uloop signal dispatching also works
+   when just loading the debug module without the uloop one. */
+static struct {
+	struct uloop_fd ufd;
+	uc_vm_t *vm;
+} signal_handle;
+
+static struct {
+	struct uloop_fd ufd;
+	uc_vm_t *vm;
+} break_handle;
 
 static void
 uc_uloop_signal_cb(struct uloop_fd *ufd, unsigned int events)
@@ -713,10 +743,34 @@ static uc_vm_t *debug_break_vm = NULL;
 static void
 debug_break_signal_handler(int sig)
 {
-	/* A debugger is already attached - notify it instead of requesting
-	 * another break, since the VM is already halted or being controlled. */
+	/* A debugger is already attached - SIGUSR1 arriving here could be the
+	 * attached client's own Ctrl-C-while-running interrupt request (see
+	 * udbg.c), or an unrelated external sender; there's no way to tell
+	 * which, and this deliberately no longer distinguishes them (that
+	 * used to just forward an "already attached, ignoring" notification -
+	 * debug_remote_notify_signal(), removed - without actually pausing
+	 * anything): any SIGUSR1 while attached now arms a real break, the
+	 * same as it would for the not-yet-attached case just below, since
+	 * "someone sent SIGUSR1 to a debugged process" is a deliberate act
+	 * either way and "pause for inspection" is the reasonable universal
+	 * response to it. Arm BK_INTERRUPT so it fires on the very next
+	 * instruction (see its debug_breakpoint_kind_t comment) rather than
+	 * the VM API break used below for the not-yet-attached case: that one
+	 * unwinds the whole C call stack back to -X's own main loop (see
+	 * uc_vm_break_request()'s doc comment), which would tear down the
+	 * live session instead of pausing it. Only a direct field write - dbk
+	 * was pre-created specifically so this never has to call
+	 * get_breakpoint()'s malloc path from signal-handler context. */
 	if (debug_remote_has_active_connection()) {
-		debug_remote_notify_signal(sig);
+		for (size_t i = 0; i < debug_break_vm->breakpoints.count; i++) {
+			debug_breakpoint_t *dbk = (debug_breakpoint_t *)debug_break_vm->breakpoints.entries[i];
+
+			if (dbk && dbk->kind == BK_INTERRUPT) {
+				dbk->bk.ip = NULL;
+				break;
+			}
+		}
+
 		return;
 	}
 
@@ -2070,7 +2124,7 @@ printbuf_append_uv(uc_stringbuf_t *sb, uc_vm_t *vm, uc_value_t *val,
 		for (sb->bpos = pos; len > 0; len--)
 			sb->bpos += utf8_sequence_length(sb->buf + sb->bpos);
 
-		printbuf_memappend_fast(sb, end, strlen(end));
+		printbuf_strcat(sb, end);
 
 		return maxcols;
 	}
@@ -2095,7 +2149,7 @@ printbuf_append_funcname(uc_stringbuf_t *sb, uc_vm_t *vm, uc_value_t *val,
 			(void)k;
 
 			if (v == val) {
-				printbuf_memappend_fast(sb, rt->name, strlen(rt->name));
+				printbuf_strcat(sb, rt->name);
 				printbuf_strappend(sb, "#");
 				goto name;
 			}
@@ -2109,7 +2163,7 @@ printbuf_append_funcname(uc_stringbuf_t *sb, uc_vm_t *vm, uc_value_t *val,
 			(void)symname;
 
 			if (symval == val) {
-				printbuf_memappend_fast(sb, modname, strlen(modname));
+				printbuf_strcat(sb, modname);
 				printbuf_strappend(sb, ".");
 				goto name;
 			}
@@ -2121,7 +2175,7 @@ name:
 		uc_function_t *fn = ((uc_closure_t *)val)->function;
 
 		if (fn->name[0]) {
-			printbuf_memappend_fast(sb, fn->name, strlen(fn->name));
+			printbuf_strcat(sb, fn->name);
 			goto done;
 		}
 
@@ -2131,7 +2185,7 @@ name:
 		uc_cfunction_t *cf = (uc_cfunction_t *)val;
 
 		if (cf->name[0]) {
-			printbuf_memappend_fast(sb, cf->name, strlen(cf->name));
+			printbuf_strcat(sb, cf->name);
 			goto done;
 		}
 
@@ -2154,14 +2208,14 @@ name:
 
 		ucv_object_foreach(&obj->header, k, v) {
 			if (v == val) {
-				printbuf_memappend_fast(sb, k, strlen(k));
+				printbuf_strcat(sb, k);
 				printbuf_strappend(sb, ":");
 				break;
 			}
 		}
 	}
 
-	printbuf_memappend_fast(sb, placeholder, strlen(placeholder));
+	printbuf_strcat(sb, placeholder);
 
 done:
 	return printbuf_truncate(sb, off, maxcols, true);
@@ -2228,9 +2282,7 @@ printbuf_append_function(uc_stringbuf_t *sb, uc_vm_t *vm, uc_value_t *val,
 						printbuf_strappend(sb, "...");
 
 					if (argname) {
-						printbuf_memappend_fast(sb,
-							ucv_string_get(argname),
-							ucv_string_length(argname));
+						printbuf_strcat(sb, ucv_string_get(argname));
 
 						printbuf_strappend(sb, "=");
 						ucv_put(argname);
@@ -2282,8 +2334,7 @@ printbuf_append_srcpath(uc_stringbuf_t *sb, uc_source_t *source, size_t maxcols)
 	}
 	else {
 		sb->bpos = off;
-		printbuf_memappend_fast(sb,
-			source->filename, strlen(source->filename));
+		printbuf_strcat(sb, source->filename);
 	}
 
 	return printbuf_truncate(sb, off, maxcols, false);
@@ -2297,6 +2348,9 @@ bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk);
 
 static void
 bk_handle_uncaught(uc_vm_t *vm, uc_breakpoint_t *bk);
+
+static void
+bk_handle_interrupt(uc_vm_t *vm, uc_breakpoint_t *bk);
 
 static debug_breakpoint_t *
 get_breakpoint(uc_vm_t *vm, debug_breakpoint_kind_t kind)
@@ -2398,18 +2452,24 @@ delete_breakpoint(uc_vm_t *vm, debug_breakpoint_t *dbk, debug_breakpoint_t *curr
 }
 
 /* Arm the dedicated "break on uncaught exception" system breakpoint (see
- * UC_BREAKPOINT_UNCAUGHT_EXCEPTION in vm.c) for the lifetime of the debug
- * session. Idempotent - safe to call from every entry point that can start
- * a session (uc_debugger(), uc_debug_attach(), uc_debug_listen()), each of
- * which only runs its one-time setup once anyway, but this keeps that
- * invariant local rather than relying on the caller not to double-arm it. */
+ * UC_BREAKPOINT_UNCAUGHT_EXCEPTION in vm.c), and pre-create (inert - see
+ * BK_INTERRUPT's debug_breakpoint_kind_t comment) the async "pause now"
+ * one, for the lifetime of the debug session. Idempotent - safe to call
+ * from every entry point that can start a session (uc_debugger(),
+ * uc_debug_attach(), uc_debug_listen()), each of which only runs its
+ * one-time setup once anyway, but this keeps that invariant local rather
+ * than relying on the caller not to double-arm it. */
 static void
-install_uncaught_exception_breakpoint(uc_vm_t *vm)
+install_debug_system_breakpoints(uc_vm_t *vm)
 {
 	debug_breakpoint_t *dbk = get_breakpoint(vm, BK_UNCAUGHT);
 
 	dbk->bk.cb = bk_handle_uncaught;
 	dbk->bk.ip = UC_BREAKPOINT_UNCAUGHT_EXCEPTION;
+
+	dbk = get_breakpoint(vm, BK_INTERRUPT);
+	dbk->bk.cb = bk_handle_interrupt;
+	dbk->bk.ip = &debug_interrupt_disarmed_marker;
 }
 
 static size_t
@@ -2912,13 +2972,29 @@ bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk)
 }
 
 /* cb for the dedicated BK_UNCAUGHT system breakpoint (see
- * install_uncaught_exception_breakpoint() / UC_BREAKPOINT_UNCAUGHT_EXCEPTION
+ * install_debug_system_breakpoints() / UC_BREAKPOINT_UNCAUGHT_EXCEPTION
  * in vm.c). Invoked directly from vm.c's exception label, before any
  * unwinding happens, so vm->exception and the full callframe stack are
  * still exactly as they were at the point of the raise. */
 static void
 bk_handle_uncaught(uc_vm_t *vm, uc_breakpoint_t *bk)
 {
+	bk_enter_session(vm, bk);
+}
+
+/* cb for the dedicated BK_INTERRUPT system breakpoint (see its
+ * debug_breakpoint_kind_t comment and debug_break_signal_handler()).
+ * Disarms itself (back to the inert marker) *before* entering the
+ * session: it's invoked via the generic per-instruction ip==NULL "fire on
+ * every instruction" check in vm.c, so leaving it armed would make it
+ * fire again on the very next instruction once this session ends (e.g.
+ * from "continue"), forever, instead of just the one time the interrupt
+ * request asked for. */
+static void
+bk_handle_interrupt(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	bk->ip = &debug_interrupt_disarmed_marker;
+
 	bk_enter_session(vm, bk);
 }
 
@@ -3083,6 +3159,36 @@ build_variables_json(uc_vm_t *vm, uc_callframe_t *frame)
 		bool is_upval = slot >= (size_t)-1 / 2;
 		uc_value_t *item = ucv_object_new(vm);
 		uc_value_t *vval = NULL;
+		bool shadowed = false;
+
+		/* decls entries are recorded innermost-scope-first (a nested
+		 * block's own locals close, and get their debug range added, as
+		 * soon as *that* block ends - see uc_compiler_leave_scope() -
+		 * strictly before the enclosing scope's own locals do, whenever
+		 * that later happens to be) - so among entries whose range covers
+		 * `pos` (i.e. genuinely simultaneously in scope here, not just
+		 * same-named siblings in two different, mutually exclusive
+		 * branches), an earlier index is always the more-nested one: the
+		 * one real script code actually resolves this name to right now.
+		 * A same-named *later* entry is a shadowed outer declaration -
+		 * still shown (its stack slot is real and still holds a value),
+		 * just flagged so the listing doesn't look like a duplicate. */
+		if (vname) {
+			for (size_t j = 0; j < i; j++) {
+				if (decls->entries[j].from > pos || decls->entries[j].to < pos)
+					continue;
+
+				uc_value_t *other = load_constval(names, decls->entries[j].nameidx);
+				bool same = other && ucv_is_equal(vname, other);
+
+				ucv_put(other);
+
+				if (same) {
+					shadowed = true;
+					break;
+				}
+			}
+		}
 
 		if (vname) {
 			ucv_object_add(item, "name", ucv_get(vname));
@@ -3092,6 +3198,9 @@ build_variables_json(uc_vm_t *vm, uc_callframe_t *frame)
 			snprintf(buf, sizeof(buf), "$%zu", slot);
 			ucv_object_add(item, "name", ucv_string_new(buf));
 		}
+
+		if (shadowed)
+			ucv_object_add(item, "shadowed", ucv_boolean_new(true));
 
 		if (!is_upval) {
 			bool is_internal = (vname && *ucv_string_get(vname) == '(');
@@ -3264,6 +3373,109 @@ send_error(int fd, uc_vm_t *vm, const char *msg)
 	ucv_put(obj);
 }
 
+/* eval_expr() below runs the compiled expression through the exact same
+ * instruction dispatch loop as normal script code, with its callframes/
+ * stack swapped out for a fresh, empty set (see uc_vm_call() there) - so
+ * from the dispatch loop's point of view, an exception raised inside it
+ * looks exactly like *the whole program* running out of callframes to
+ * unwind to, which is precisely the condition the debugger's dedicated
+ * "pause on uncaught exception" system breakpoint (BK_UNCAUGHT, see
+ * install_debug_system_breakpoints()) exists to catch. Left armed,
+ * a throwing PRINT/EVAL expression would pause into a confusing nested
+ * debug session (with a fake "[eval expression]" frame) instead of just
+ * being reported back as part of that command's own reply, the way
+ * eval_expr()'s caller (and its own EXCEPTION_NONE check just below)
+ * already expects.
+ *
+ * eval_sandbox_enter()/_leave() bracket the call to temporarily disarm
+ * that breakpoint - and, defensively, BK_CATCH's currently-armed
+ * catchpoint too, even though it targets a real instruction address
+ * within the *original* paused frame's function and so could only ever
+ * spuriously match here by an astronomically unlikely pointer collision
+ * with the expression's own freshly compiled chunk - plus BK_INTERRUPT,
+ * which *can* legitimately be armed here: an async "pause now" request
+ * (see debug_break_signal_handler()) fires on the very next instruction
+ * dispatched, whichever that happens to be, so it's just as capable of
+ * firing mid-eval as BK_UNCAUGHT is. Restored (not consumed) on leave,
+ * so a request that arrived during eval still fires on the first real
+ * instruction afterwards instead of being silently dropped. Sandboxing
+ * this way
+ * only touches which breakpoints can fire; it does not change what the
+ * expression itself is allowed to do (see the PRINT/EVAL help text on
+ * that - this is not a security boundary, just about not derailing the
+ * command's own request/response shape).
+ *
+ * Disarming means pointing `bk.ip` at eval_sandbox_disabled_marker's
+ * address, *not* NULL: uc_vm_decode_insn()'s generic per-instruction
+ * breakpoint check (vm.c) treats a NULL ip as "fire on every single
+ * instruction" (that's how BK_STEP free-runs until it decides to stop),
+ * the opposite of disabled - so a real, otherwise-unused address is
+ * needed as the inert value instead, the same trick
+ * UC_BREAKPOINT_UNCAUGHT_EXCEPTION itself uses to guarantee it never
+ * collides with an actual bytecode address. */
+static uint8_t eval_sandbox_disabled_marker;
+
+typedef struct {
+	uint8_t *uncaught_ip;
+	uint8_t *catch_ip;
+	uint8_t *interrupt_ip;
+} eval_sandbox_t;
+
+static eval_sandbox_t
+eval_sandbox_enter(uc_vm_t *vm)
+{
+	eval_sandbox_t saved = { 0 };
+
+	for (size_t i = 0; i < vm->breakpoints.count; i++) {
+		debug_breakpoint_t *dbk = (debug_breakpoint_t *)vm->breakpoints.entries[i];
+
+		if (!dbk)
+			continue;
+
+		if (dbk->kind == BK_UNCAUGHT) {
+			saved.uncaught_ip = dbk->bk.ip;
+			dbk->bk.ip = &eval_sandbox_disabled_marker;
+		}
+		else if (dbk->kind == BK_CATCH) {
+			saved.catch_ip = dbk->bk.ip;
+			dbk->bk.ip = &eval_sandbox_disabled_marker;
+		}
+		else if (dbk->kind == BK_INTERRUPT) {
+			saved.interrupt_ip = dbk->bk.ip;
+			dbk->bk.ip = &eval_sandbox_disabled_marker;
+		}
+	}
+
+	return saved;
+}
+
+static void
+eval_sandbox_leave(uc_vm_t *vm, eval_sandbox_t saved)
+{
+	for (size_t i = 0; i < vm->breakpoints.count; i++) {
+		debug_breakpoint_t *dbk = (debug_breakpoint_t *)vm->breakpoints.entries[i];
+
+		if (!dbk)
+			continue;
+
+		if (dbk->kind == BK_UNCAUGHT)
+			dbk->bk.ip = saved.uncaught_ip;
+		else if (dbk->kind == BK_INTERRUPT) {
+			/* Unlike BK_UNCAUGHT/BK_CATCH, BK_INTERRUPT can legitimately
+			 * change *while* sandboxed: the async signal handler writes
+			 * NULL to it directly, with no notion of eval_expr() being
+			 * mid-call. Only restore the pre-sandbox value if nothing
+			 * did that - otherwise keep the freshly armed request so it
+			 * still fires on the first real instruction after this
+			 * returns, instead of eval_expr() silently discarding it. */
+			if (dbk->bk.ip == &eval_sandbox_disabled_marker)
+				dbk->bk.ip = saved.interrupt_ip;
+		}
+		else if (dbk->kind == BK_CATCH)
+			dbk->bk.ip = saved.catch_ip;
+	}
+}
+
 static bool
 eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
           char **errmsg)
@@ -3292,74 +3504,75 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 	}
 
 	uc_value_t *exprfn = ucv_closure_new(vm, uc_program_entry(prog), false);
-	uc_chunk_t *chunk = &((uc_closure_t *)exprfn)->function->chunk;
 
-	if (chunk->entries[0] != I_LVAR && chunk->entries[0] != I_LTHIS) {
-		*errmsg = xstrdup("Expecting expression");
-		uc_program_put(prog);
-		ucv_put(exprfn);
-		*res = NULL;
-
-		return false;
-	}
-
+	/* No restriction on the compiled shape here: raw_mode compiles `expr`
+	 * as an ordinary sequence of ucode statements, so a bare literal
+	 * ("1+2", "[1,2,3]", "\"hi\"") is just as valid as an identifier-rooted
+	 * one ("varname", "myobj.prop") - either way, calling the compiled
+	 * entry below always leaves *some* value on the stack to report back
+	 * (the closing statement's value, or null for a plain statement with
+	 * none). */
 	uc_value_t *scope = ucv_object_new(NULL);
 
-	/* determine referenced variables */
-	for (size_t i = 0; i < chunk->count; i += insn_length(&chunk->entries[i], prog)) {
-		if (chunk->entries[i] != I_LVAR)
+	/* Pre-populate `scope` with *every* local/upvalue declared in the
+	 * paused frame's current scope - not just ones this expression
+	 * happens to read - so a bare assignment like "x = 1" resolves
+	 * directly against `scope` too, not only a read like "x" or "x + 1".
+	 * The compiler emits a plain assignment as a bare I_SVAR with no
+	 * preceding I_LVAR at all (there's nothing to read first), and
+	 * I_SVAR's undeclared-variable fallback (uc_vm_insn_store_var() in
+	 * vm.c) only walks *past* `scope` onto the real enclosing scope chain
+	 * - in the worst case all the way to the real vm->globals, silently
+	 * creating an unwanted genuine global - when `scope` doesn't already
+	 * have the name as an *own* property; whether the expression read it
+	 * first is irrelevant to that check. Earlier (i.e. more specific, in
+	 * the case of shadowing) declarations win: stop at the first match
+	 * per name rather than letting a later, less-specific entry overwrite
+	 * it, matching normal scoping. */
+	for (size_t i = 0; i < decls->count; i++) {
+		if (decls->entries[i].from > pos || decls->entries[i].to < pos)
 			continue;
 
-		uc_value_t *varname = load_constval(
-			&prog->constants,
-			insn_u32(chunk->entries + i + 1));
+		uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
+		bool already;
 
-		if (!varname)
+		if (!vname)
 			continue;
 
+		ucv_object_get(scope, ucv_string_get(vname), &already);
+
+		if (already) {
+			ucv_put(vname);
+			continue;
+		}
+
+		size_t slot = decls->entries[i].slot;
 		uc_value_t *varval = NULL;
 
-		for (size_t j = 0; !varval && j < decls->count; j++) {
-			if (decls->entries[j].from > pos || decls->entries[j].to < pos)
-				continue;
+		/* is local var */
+		if (slot < (size_t)-1 / 2) {
+			slot += frame->stackframe;
 
-			uc_value_t *vname = load_constval(names, decls->entries[j].nameidx);
-			bool match = ucv_is_equal(varname, vname);
+			if (slot < vm->stack.count)
+				varval = ucv_get(vm->stack.entries[slot]);
+		}
 
-			ucv_put(vname);
+		/* is upvalue */
+		else {
+			slot -= ((size_t)-1 / 2);
 
-			if (!match)
-				continue;
+			if (slot < frame->closure->function->nupvals) {
+				uc_upvalref_t *ref = frame->closure->upvals[slot];
 
-			size_t slot = decls->entries[j].slot;
-
-			/* is local var */
-			if (slot < (size_t)-1 / 2) {
-				slot += frame->stackframe;
-
-				if (slot < vm->stack.count)
-					varval = ucv_get(vm->stack.entries[slot]);
-			}
-
-			/* is upvalue */
-			else {
-				slot -= ((size_t)-1 / 2);
-
-				if (slot < frame->closure->function->nupvals) {
-					uc_upvalref_t *ref = frame->closure->upvals[slot];
-
-					if (ref && ref->closed)
-						varval = ucv_get(ref->value);
-					else if (ref && ref->slot < vm->stack.count)
-						varval = ucv_get(vm->stack.entries[ref->slot]);
-				}
+				if (ref && ref->closed)
+					varval = ucv_get(ref->value);
+				else if (ref && ref->slot < vm->stack.count)
+					varval = ucv_get(vm->stack.entries[ref->slot]);
 			}
 		}
 
-		if (varval)
-			ucv_object_add(scope, ucv_string_get(varname), varval);
-
-		ucv_put(varname);
+		ucv_object_add(scope, ucv_string_get(vname), varval);
+		ucv_put(vname);
 	}
 
 	uc_value_t *prev_scope = ucv_get(uc_vm_scope_get(vm));
@@ -3385,8 +3598,12 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 	uc_vm_stack_push(vm, ucv_get(exprfn));
 
 	bool rv;
+	eval_sandbox_t sandbox = eval_sandbox_enter(vm);
+	uc_exception_type_t ex = uc_vm_call(vm, true, 0);
 
-	if (uc_vm_call(vm, true, 0) == EXCEPTION_NONE) {
+	eval_sandbox_leave(vm, sandbox);
+
+	if (ex == EXCEPTION_NONE) {
 		*res = uc_vm_stack_pop(vm);
 		rv = true;
 	}
@@ -3404,6 +3621,66 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 	vm->open_upvals = upvals;
 	vm->callframes = frames;
 	vm->stack = stack;
+
+	/* `scope` only ever held independent *copies* of the locals/upvalues
+	 * collected above (global references need no such handling: their
+	 * value already lives in prev_scope itself, scope's prototype, which
+	 * assignment inside the expression reaches directly) - so "x = 1" or
+	 * "x.y = 1" mutated the copy, not the paused frame's real stack slot/
+	 * upvalue, on its own. Write any of them back now that the real stack
+	 * is back in place, the same way I_SLOC/I_SUPV do (see
+	 * uc_vm_insn_store_local()/_store_upval() in vm.c). Unconditional,
+	 * regardless of `rv`: a later statement throwing doesn't undo an
+	 * earlier one's already-applied assignment in ordinary script
+	 * execution either, so eval shouldn't behave differently just because
+	 * it happens to run in a temporary scope. Must run before
+	 * uc_vm_scope_set() below, which drops the last reference to `scope`. */
+	for (size_t i = 0; i < decls->count; i++) {
+		if (decls->entries[i].from > pos || decls->entries[i].to < pos)
+			continue;
+
+		uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
+		bool exists = false;
+		uc_value_t *newval = vname
+			? ucv_object_get(scope, ucv_string_get(vname), &exists) : NULL;
+
+		ucv_put(vname);
+
+		if (!exists)
+			continue;
+
+		size_t slot = decls->entries[i].slot;
+
+		/* is local variable */
+		if (slot < (size_t)-1 / 2) {
+			slot += frame->stackframe;
+
+			if (slot < vm->stack.count) {
+				ucv_put(vm->stack.entries[slot]);
+				vm->stack.entries[slot] = ucv_get(newval);
+			}
+		}
+
+		/* is upvalue */
+		else {
+			slot -= ((size_t)-1 / 2);
+
+			if (slot < frame->closure->function->nupvals) {
+				uc_upvalref_t *ref = frame->closure->upvals[slot];
+
+				if (ref) {
+					if (ref->closed) {
+						ucv_put(ref->value);
+						ref->value = ucv_get(newval);
+					}
+					else if (ref->slot < vm->stack.count) {
+						ucv_put(vm->stack.entries[ref->slot]);
+						vm->stack.entries[ref->slot] = ucv_get(newval);
+					}
+				}
+			}
+		}
+	}
 
 	uc_vm_scope_set(vm, prev_scope);
 	uc_program_put(prog);
@@ -3452,12 +3729,13 @@ static const char *
 paused_reason_name(debug_breakpoint_kind_t kind)
 {
 	switch (kind) {
-	case BK_ONCE:     return "entry";
-	case BK_USER:     return "breakpoint";
-	case BK_STEP:     return "step";
-	case BK_CATCH:    return "exception";
-	case BK_UNCAUGHT: return "uncaught";
-	default:          return "unknown";
+	case BK_ONCE:      return "entry";
+	case BK_USER:      return "breakpoint";
+	case BK_STEP:      return "step";
+	case BK_CATCH:     return "exception";
+	case BK_UNCAUGHT:  return "uncaught";
+	case BK_INTERRUPT: return "interrupt";
+	default:           return "unknown";
 	}
 }
 
@@ -3602,7 +3880,13 @@ proto_cmd_help(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd
 		{ "SOURCES",
 			"List loaded source buffers." },
 		{ "PRINT",
-			"Evaluate an expression. Payload: {\"expr\":\"...\"}." },
+			"Evaluate an expression and report its result. Payload: "
+			"{\"expr\":\"...\"}. Response: VALUE {\"repr\"} or ERROR." },
+		{ "EVAL",
+			"Like PRINT, but discard the expression's result instead of "
+			"reporting it back - for expressions run for their side effect "
+			"(assignment, delete, ...). Payload: {\"expr\":\"...\"}. "
+			"Response: OK or ERROR." },
 		{ "LINES",
 			"Resolve a source range. Payload: {\"spec\",\"before\",\"after\"}." },
 		{ "THROW",
@@ -3875,6 +4159,13 @@ proto_cmd_backtrace(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, i
 			ucv_object_add(item, "insn", ucv_uint64_new(insn));
 			ucv_object_add(item, "function", ucv_string_new_length(fnbuf.buf, fnbuf.bpos));
 
+			/* number of call frames collapsed into this one by tail call
+			 * optimization (see uc_vm_frame_reinit() in vm.c) - the frames
+			 * of the intermediate tail calls are absent from the stack, so
+			 * report the count to let the client show the gap. */
+			if (frame->tco)
+				ucv_object_add(item, "tco", ucv_uint64_new(frame->tco));
+
 			free(pathbuf.buf);
 			free(fnbuf.buf);
 
@@ -4000,6 +4291,37 @@ proto_cmd_print(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int f
 		ucv_put(obj);
 		ucv_put(res);
 		free(vb.buf);
+	}
+	else {
+		send_error(fd, vm, errmsg ? errmsg : "Evaluation failed");
+	}
+
+	free(errmsg);
+}
+
+/* Like PRINT, but for an expression run for its side effect (assignment,
+ * delete, a mutating call, ...) rather than its value - mirrors the ucode
+ * CLI's -e/-p distinction (uc_compile()'s two entry points in main.c).
+ * "set x.y 1" is just "eval x.y = 1" - ordinary assignment syntax handles
+ * plain variables, property paths and array indices alike, so there is no
+ * separate name-resolution/slot-writing logic here at all, unlike an
+ * earlier, since-removed dedicated SET command had. */
+static void
+proto_cmd_eval(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_value_t *exprv = ucv_object_get(payload, "expr", NULL);
+	uc_value_t *res = NULL;
+	char *errmsg = NULL;
+
+	if (ucv_type(exprv) != UC_STRING) {
+		send_error(fd, vm, "Usage: EVAL {\"expr\":\"...\"}");
+		return;
+	}
+
+	if (eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg)) {
+		ucv_put(res);
+		debug_proto_write(fd, vm, "OK", NULL);
 	}
 	else {
 		send_error(fd, vm, errmsg ? errmsg : "Evaluation failed");
@@ -4437,6 +4759,18 @@ proto_cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int 
 					ucv_boolean_new((arg.u32 & 0x80000000) != 0));
 				ucv_object_add(item, "call_nargs",
 					ucv_uint64_new(arg.u32 & 0xffff));
+
+				/* a tail call is marked by the 0x00 byte the compiler emits
+				 * immediately after the I_RETURN that follows the call's
+				 * operand span - look the same two bytes ahead uc_vm_insn_call()
+				 * does to detect it (the marker is pure data, it is never
+				 * executed: the VM jumps to the callee at the call site, and
+				 * an unoptimized VM unwinds to the caller's chunk on the
+				 * I_RETURN before ever fetching it). */
+				if (i + n + 1 < target->chunk.count &&
+				    bytecode[i + n] == I_RETURN &&
+				    bytecode[i + n + 1] == 0x00)
+					ucv_object_add(item, "call_tail", ucv_boolean_new(true));
 			}
 
 			break;
@@ -4447,6 +4781,25 @@ proto_cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int 
 
 		if (operand)
 			ucv_object_add(item, "operand", operand);
+
+		/* the 0x00 tail call marker byte the compiler emits immediately after
+		 * the I_RETURN that terminates a tail call (see
+		 * uc_compiler_emit_tailcall_marker() in compiler.c): it is pure data
+		 * that no VM ever executes, but it still occupies one byte of the
+		 * chunk. Rather than disassemble it as a separate (confusing) NOOP
+		 * line, consume it here as part of the I_RETURN: flag the return as
+		 * the tail-call terminator and skip past the marker below. The
+		 * compiler only ever emits this marker immediately after such an
+		 * I_RETURN and never emits I_NOOP anywhere else, so the single-byte
+		 * look-ahead is a reliable test - no need to walk back across the
+		 * (variable-length) I_CALL. */
+		bool return_tailcall = false;
+
+		if (insn == I_RETURN && i + 1 < target->chunk.count &&
+		    bytecode[i + 1] == 0x00) {
+			return_tailcall = true;
+			ucv_object_add(item, "return_tailcall", ucv_boolean_new(true));
+		}
 
 		if (insn == I_CLFN || insn == I_ARFN) {
 			size_t id = 1, nupvals = 0;
@@ -4501,7 +4854,11 @@ proto_cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int 
 		}
 
 		ucv_array_push(insns, item);
-		i += n;
+
+		/* a tail-call-terminating I_RETURN has a 0x00 marker byte immediately
+		 * after it: consume it here (it is never executed) so it is not
+		 * disassembled as a separate NOOP line. */
+		i += n + (return_tailcall ? 1 : 0);
 	}
 
 	if (prog)
@@ -4545,7 +4902,7 @@ proto_cmd_source(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int 
 		fseeko(loc.source->fp, 0, SEEK_SET);
 
 		while ((n = fread(buf, 1, sizeof(buf), loc.source->fp)) > 0)
-			printbuf_memappend_fast((&text), buf, n);
+			printbuf_memappend_fast((&text), buf, (int)n);
 
 		ucv_object_add(obj, "text", ucv_string_new_length(text.buf, text.bpos));
 		free(text.buf);
@@ -4578,6 +4935,7 @@ static const struct {
 	{ "VARIABLES",         proto_cmd_variables },
 	{ "SOURCES",           proto_cmd_sources },
 	{ "PRINT",             proto_cmd_print },
+	{ "EVAL",              proto_cmd_eval },
 	{ "LINES",             proto_cmd_lines },
 	{ "THROW",             proto_cmd_throw },
 	{ "DISASSEMBLE",       proto_cmd_disasm },
@@ -4800,7 +5158,7 @@ uc_debug_attach(uc_vm_t *vm, size_t nargs)
 		 * bk_enter_session()), so there is no local tty state to set up
 		 * here at all. */
 
-		install_uncaught_exception_breakpoint(vm);
+		install_debug_system_breakpoints(vm);
 
 		debug_attach_initialized = true;
 	}
@@ -5034,7 +5392,7 @@ uc_debug_listen(uc_vm_t *vm, size_t nargs)
 		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(uc_vm_stack_pop(vm));
 
-		install_uncaught_exception_breakpoint(vm);
+		install_debug_system_breakpoints(vm);
 
 		debug_remote_listen_armed = true;
 	}
@@ -5182,7 +5540,7 @@ uc_debugger(uc_vm_t *vm, size_t nargs)
 		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(uc_vm_stack_pop(vm));
 
-		install_uncaught_exception_breakpoint(vm);
+		install_debug_system_breakpoints(vm);
 
 		debug_local_initialized = true;
 	}

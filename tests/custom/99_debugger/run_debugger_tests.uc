@@ -656,6 +656,127 @@ test();`,
 	);
 }
 
+function test_tail_call_optimization() {
+	printf("\n## Tail Call Optimization Tests\n\n");
+
+	// A tail-recursive function: the compiler emits `I_CALL ... I_RETURN 0x00`
+	// for the tail call, where the trailing 0x00 is a marker byte (never
+	// executed) that flags the call as a tail call. The disassembler must
+	// surface both the call and its terminating return as tail-call-related.
+	run_test("disasm_tail_call",
+		`function count(n) {
+	if (n === 0)
+		return "done";
+	return count(n - 1);
+}
+count(1);`,
+		['DISASSEMBLE {"spec":"count"}'],
+		{
+			no_crash: true,
+			check: (r) => {
+				for (let m in r.messages) {
+					if (m.verb != 'DISASSEMBLY') continue;
+					let has_call_tail = false, has_return_tail = false;
+
+					for (let ins in m.payload.instructions) {
+						if (ins.call_tail) has_call_tail = true;
+						if (ins.return_tailcall) has_return_tail = true;
+					}
+
+					if (has_call_tail && has_return_tail) return null;
+					return "expected call_tail and return_tailcall in disassembly " +
+					       `(got call_tail=${has_call_tail} return_tailcall=${has_return_tail})`;
+				}
+				return "no DISASSEMBLY received";
+			}
+		}
+	);
+
+	// The 0x00 marker byte is consumed as part of the I_RETURN that terminates
+	// the tail call, so it must NOT appear as a separate NOOP instruction in
+	// the disassembly. (The compiler never emits I_NOOP anywhere else, so any
+	// NOOP in this chunk would be a spurious marker that failed to consume.)
+	run_test("disasm_tail_call_marker_consumed",
+		`function count(n) {
+	if (n === 0)
+		return "done";
+	return count(n - 1);
+}
+count(1);`,
+		['DISASSEMBLE {"spec":"count"}'],
+		{
+			no_crash: true,
+			check: (r) => {
+				for (let m in r.messages) {
+					if (m.verb != 'DISASSEMBLY') continue;
+					for (let ins in m.payload.instructions)
+						if (ins.mnemonic == 'NOOP')
+							return "found a spurious NOOP (marker not consumed)";
+					return null;
+				}
+				return "no DISASSEMBLY received";
+			}
+		}
+	);
+
+	// A non-tail call (the result is used in a further expression) must NOT be
+	// flagged as a tail call: there is no 0x00 marker after its I_RETURN.
+	run_test("disasm_non_tail_call",
+		`function non_tail(n) {
+	if (n === 0)
+		return 0;
+	return non_tail(n - 1) + 1;
+}
+non_tail(1);`,
+		['DISASSEMBLE {"spec":"non_tail"}'],
+		{
+			no_crash: true,
+			check: (r) => {
+				for (let m in r.messages) {
+					if (m.verb != 'DISASSEMBLY') continue;
+					for (let ins in m.payload.instructions) {
+						if (ins.call_tail || ins.return_tailcall)
+							return "non-tail call was wrongly flagged as a tail call";
+					}
+					return null;
+				}
+				return "no DISASSEMBLY received";
+			}
+		}
+	);
+
+	// Stepping into a tail-recursive function reuses the current frame for each
+	// tail call, accumulating the count of collapsed frames in frame->tco. The
+	// backtrace must expose that count so the client can show how many frames
+	// were optimized away.
+	run_test("backtrace_tail_call_tco",
+		`function deep(n) {
+	if (n === 0)
+		return "bottom";
+	return deep(n - 1);
+}
+function outer() {
+	return deep(50);
+}
+print(outer(), "\n");`,
+		// Step into the recursion; each tail call reuses the frame and bumps tco.
+		['STEP', 'STEP', 'STEP', 'STEP', 'STEP', 'STEP', 'STEP',
+		 'BACKTRACE {}', 'CONTINUE'],
+		{
+			no_crash: true,
+			check: (r) => {
+				for (let m in r.messages) {
+					if (m.verb != 'BACKTRACE') continue;
+					for (let f in m.payload.frames) {
+						if (f.function == 'deep' && f.tco > 0) return null;
+					}
+				}
+				return "expected a backtrace frame with tco > 0";
+			}
+		}
+	);
+}
+
 function test_help_and_misc() {
 	printf("\n## Help and Miscellaneous Tests\n\n");
 
@@ -872,6 +993,7 @@ try {
 	test_stack_tracing();
 	test_source_view();
 	test_disassembly();
+	test_tail_call_optimization();
 	test_help_and_misc();
 	test_debug_api();
 	test_edge_cases();
