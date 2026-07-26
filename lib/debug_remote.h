@@ -15,10 +15,8 @@ int debug_remote_accept_on_path(const char *path);
 
 /* Push unsolicited notifications to a connected debugger client, if any, as
  * "EVENT {json}" protocol messages (see debug_proto.h) - the JSON payload
- * always carries a discriminating "event" field ("exception"/"exit"/
- * "signal"). */
+ * always carries a discriminating "event" field ("exception"/"exit"). */
 void debug_remote_notify_exception(uc_vm_t *vm, uc_exception_t *ex);
-void debug_remote_notify_signal(int signum);
 void debug_remote_notify_exit(uc_vm_t *vm, uc_vm_status_t status, int32_t exit_code,
                                uc_value_t *exception_obj);
 

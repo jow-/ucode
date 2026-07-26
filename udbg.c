@@ -1005,9 +1005,6 @@ render_event(struct json_object *p)
 				printf("*** program terminated (%s) ***", status);
 		}
 	}
-	else if (!strcmp(event, "signal")) {
-		printf("*** signal %s: %s ***", jstr(p, "signal", "?"), jstr(p, "note", ""));
-	}
 	else {
 		printf("*** event: %s %s ***", event,
 			json_object_to_json_string_ext(p, JSON_C_TO_STRING_SPACED));
@@ -1648,6 +1645,26 @@ wait_for_socket(const char *path, int timeout_sec)
 	return -1;
 }
 
+/* The debuggee's PID, for Ctrl-C-while-running (see maybe_send_interrupt()
+ * below) - resolved once right after connecting, however that happened
+ * (explicit <pid>, a socket path, or an inherited --fd), via SO_PEERCRED:
+ * works uniformly for all three, since all of them are - or, for --fd,
+ * were, at the moment the debuggee created it and only then forked - a
+ * connected AF_UNIX socket. -1 if this somehow couldn't be determined
+ * (Ctrl-C-while-running is then a no-op; everything else about the
+ * session is unaffected). */
+static pid_t debuggee_pid = -1;
+
+static void
+resolve_debuggee_pid(int fd)
+{
+	struct ucred cred;
+	socklen_t len = sizeof(cred);
+
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) == 0)
+		debuggee_pid = cred.pid;
+}
+
 static void
 print_usage(const char *prog)
 {
@@ -1786,6 +1803,8 @@ main(int argc, char **argv)
 		}
 	}
 
+	resolve_debuggee_pid(fd);
+
 	fprintf(stderr, "Connected to ucode debugger\n\n");
 
 	bool stdin_done = false;
@@ -1824,11 +1843,12 @@ main(int argc, char **argv)
 			json_object_put(payload);
 		}
 
-		/* Only accept (and select on) stdin while actually sitting at a
-		 * prompt: gating this on the exact same condition that shows the
-		 * prompt is what stops a command from racing ahead of - and
-		 * getting interleaved with - the connection's own initial PAUSED
-		 * message or a still-in-flight response to a previous command. */
+		/* Only accept (and select on) stdin for actual command input while
+		 * sitting at a prompt: gating this on the exact same condition
+		 * that shows the prompt is what stops a command from racing ahead
+		 * of - and getting interleaved with - the connection's own
+		 * initial PAUSED message or a still-in-flight response to a
+		 * previous command. */
 		bool accepting_input = paused && !stdin_done && !awaiting_response
 			&& !pending_source.active && !pending_backtrace.active;
 
@@ -1841,7 +1861,11 @@ main(int argc, char **argv)
 
 		FD_ZERO(&readfds);
 
-		if (accepting_input)
+		/* Outside of accepting_input, stdin is still watched (whenever
+		 * raw-mode editing is active, i.e. a real terminal - piped/
+		 * scripted input has no Ctrl-C to speak of) purely to catch
+		 * Ctrl-C-while-running: see the interrupt handling below. */
+		if (accepting_input || (lineedit_active() && !stdin_done))
 			FD_SET(STDIN_FILENO, &readfds);
 
 		FD_SET(fd, &readfds);
@@ -1864,7 +1888,25 @@ main(int argc, char **argv)
 			linebuf_append(&lb, buf, (size_t)n);
 		}
 
-		if (!stdin_done && FD_ISSET(STDIN_FILENO, &readfds)) {
+		if (!stdin_done && FD_ISSET(STDIN_FILENO, &readfds) && !accepting_input) {
+			/* Not sitting at a prompt (the debuggee is running) - stdin is
+			 * only being watched here for Ctrl-C, not full line editing;
+			 * anything else typed while running had no effect before this
+			 * feature existed either, so it's simply discarded rather
+			 * than queued up to confuse the next prompt. lineedit's raw
+			 * mode (a prerequisite for even reaching this branch, see the
+			 * FD_SET above) already made stdin non-blocking. */
+			char ibuf[64];
+			ssize_t n = read(STDIN_FILENO, ibuf, sizeof(ibuf));
+
+			for (ssize_t i = 0; i < n; i++) {
+				if (ibuf[i] == 3 /* Ctrl-C */ && debuggee_pid > 0) {
+					kill(debuggee_pid, SIGUSR1);
+					break;
+				}
+			}
+		}
+		else if (!stdin_done && FD_ISSET(STDIN_FILENO, &readfds)) {
 			bool eof = false;
 
 			if (lineedit_feed(buf, sizeof(buf), &eof)) {

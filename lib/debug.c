@@ -622,6 +622,23 @@ typedef enum {
 	 * it's armed automatically for the lifetime of the debug session, not
 	 * by an explicit `break` command. */
 	BK_UNCAUGHT,
+	/* Dedicated system breakpoint for an async "pause now" request from an
+	 * already-attached client (SIGUSR1 while running - see
+	 * debug_break_signal_handler()) - the connected-client counterpart to
+	 * `-X`'s bare SIGUSR1 attach for a not-yet-attached one. Its struct is
+	 * pre-created (see install_debug_system_breakpoints()) and never
+	 * freed, specifically so the signal handler only ever has to write
+	 * already-allocated fields (dbk->bk.ip/cb) - genuinely
+	 * async-signal-safe, unlike get_breakpoint()'s malloc path. Between
+	 * requests dbk->bk.ip sits at debug_interrupt_disarmed_marker (a
+	 * dedicated inert sentinel, not NULL - a NULL ip is itself the
+	 * "fire on every single instruction" convention the generic
+	 * per-instruction breakpoint check in vm.c uses, the opposite of
+	 * idle); the handler arms it by pointing ip at NULL, and
+	 * bk_handle_interrupt() immediately disarms it again (back to the
+	 * inert marker) before entering the session, so it fires exactly
+	 * once per request instead of on every instruction from then on. */
+	BK_INTERRUPT,
 } debug_breakpoint_kind_t;
 
 typedef struct debug_breakpoint {
@@ -641,6 +658,11 @@ typedef struct debug_breakpoint {
 	 * deferred until bk_enter_session() is done with it. */
 	bool deleted;
 } debug_breakpoint_t;
+
+/* Dedicated inert marker for BK_INTERRUPT - see its debug_breakpoint_kind_t
+ * comment above for why this can't just be NULL. Declared this early so
+ * debug_break_signal_handler() below can reference it. */
+static uint8_t debug_interrupt_disarmed_marker;
 
 static void bk_enter_session(uc_vm_t *vm, uc_breakpoint_t *bk);
 static uc_callframe_t *uc_debug_curr_frame(uc_vm_t *vm, size_t off);
@@ -712,10 +734,34 @@ static uc_vm_t *debug_break_vm = NULL;
 static void
 debug_break_signal_handler(int sig)
 {
-	/* A debugger is already attached - notify it instead of requesting
-	 * another break, since the VM is already halted or being controlled. */
+	/* A debugger is already attached - SIGUSR1 arriving here could be the
+	 * attached client's own Ctrl-C-while-running interrupt request (see
+	 * udbg.c), or an unrelated external sender; there's no way to tell
+	 * which, and this deliberately no longer distinguishes them (that
+	 * used to just forward an "already attached, ignoring" notification -
+	 * debug_remote_notify_signal(), removed - without actually pausing
+	 * anything): any SIGUSR1 while attached now arms a real break, the
+	 * same as it would for the not-yet-attached case just below, since
+	 * "someone sent SIGUSR1 to a debugged process" is a deliberate act
+	 * either way and "pause for inspection" is the reasonable universal
+	 * response to it. Arm BK_INTERRUPT so it fires on the very next
+	 * instruction (see its debug_breakpoint_kind_t comment) rather than
+	 * the VM API break used below for the not-yet-attached case: that one
+	 * unwinds the whole C call stack back to -X's own main loop (see
+	 * uc_vm_break_request()'s doc comment), which would tear down the
+	 * live session instead of pausing it. Only a direct field write - dbk
+	 * was pre-created specifically so this never has to call
+	 * get_breakpoint()'s malloc path from signal-handler context. */
 	if (debug_remote_has_active_connection()) {
-		debug_remote_notify_signal(sig);
+		for (size_t i = 0; i < debug_break_vm->breakpoints.count; i++) {
+			debug_breakpoint_t *dbk = (debug_breakpoint_t *)debug_break_vm->breakpoints.entries[i];
+
+			if (dbk && dbk->kind == BK_INTERRUPT) {
+				dbk->bk.ip = NULL;
+				break;
+			}
+		}
+
 		return;
 	}
 
@@ -2294,6 +2340,9 @@ bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk);
 static void
 bk_handle_uncaught(uc_vm_t *vm, uc_breakpoint_t *bk);
 
+static void
+bk_handle_interrupt(uc_vm_t *vm, uc_breakpoint_t *bk);
+
 static debug_breakpoint_t *
 get_breakpoint(uc_vm_t *vm, debug_breakpoint_kind_t kind)
 {
@@ -2387,18 +2436,24 @@ delete_breakpoint(uc_vm_t *vm, debug_breakpoint_t *dbk, debug_breakpoint_t *curr
 }
 
 /* Arm the dedicated "break on uncaught exception" system breakpoint (see
- * UC_BREAKPOINT_UNCAUGHT_EXCEPTION in vm.c) for the lifetime of the debug
- * session. Idempotent - safe to call from every entry point that can start
- * a session (uc_debugger(), uc_debug_attach(), uc_debug_listen()), each of
- * which only runs its one-time setup once anyway, but this keeps that
- * invariant local rather than relying on the caller not to double-arm it. */
+ * UC_BREAKPOINT_UNCAUGHT_EXCEPTION in vm.c), and pre-create (inert - see
+ * BK_INTERRUPT's debug_breakpoint_kind_t comment) the async "pause now"
+ * one, for the lifetime of the debug session. Idempotent - safe to call
+ * from every entry point that can start a session (uc_debugger(),
+ * uc_debug_attach(), uc_debug_listen()), each of which only runs its
+ * one-time setup once anyway, but this keeps that invariant local rather
+ * than relying on the caller not to double-arm it. */
 static void
-install_uncaught_exception_breakpoint(uc_vm_t *vm)
+install_debug_system_breakpoints(uc_vm_t *vm)
 {
 	debug_breakpoint_t *dbk = get_breakpoint(vm, BK_UNCAUGHT);
 
 	dbk->bk.cb = bk_handle_uncaught;
 	dbk->bk.ip = UC_BREAKPOINT_UNCAUGHT_EXCEPTION;
+
+	dbk = get_breakpoint(vm, BK_INTERRUPT);
+	dbk->bk.cb = bk_handle_interrupt;
+	dbk->bk.ip = &debug_interrupt_disarmed_marker;
 }
 
 static size_t
@@ -2901,13 +2956,29 @@ bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk)
 }
 
 /* cb for the dedicated BK_UNCAUGHT system breakpoint (see
- * install_uncaught_exception_breakpoint() / UC_BREAKPOINT_UNCAUGHT_EXCEPTION
+ * install_debug_system_breakpoints() / UC_BREAKPOINT_UNCAUGHT_EXCEPTION
  * in vm.c). Invoked directly from vm.c's exception label, before any
  * unwinding happens, so vm->exception and the full callframe stack are
  * still exactly as they were at the point of the raise. */
 static void
 bk_handle_uncaught(uc_vm_t *vm, uc_breakpoint_t *bk)
 {
+	bk_enter_session(vm, bk);
+}
+
+/* cb for the dedicated BK_INTERRUPT system breakpoint (see its
+ * debug_breakpoint_kind_t comment and debug_break_signal_handler()).
+ * Disarms itself (back to the inert marker) *before* entering the
+ * session: it's invoked via the generic per-instruction ip==NULL "fire on
+ * every instruction" check in vm.c, so leaving it armed would make it
+ * fire again on the very next instruction once this session ends (e.g.
+ * from "continue"), forever, instead of just the one time the interrupt
+ * request asked for. */
+static void
+bk_handle_interrupt(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	bk->ip = &debug_interrupt_disarmed_marker;
+
 	bk_enter_session(vm, bk);
 }
 
@@ -3293,7 +3364,7 @@ send_error(int fd, uc_vm_t *vm, const char *msg)
  * looks exactly like *the whole program* running out of callframes to
  * unwind to, which is precisely the condition the debugger's dedicated
  * "pause on uncaught exception" system breakpoint (BK_UNCAUGHT, see
- * install_uncaught_exception_breakpoint()) exists to catch. Left armed,
+ * install_debug_system_breakpoints()) exists to catch. Left armed,
  * a throwing PRINT/EVAL expression would pause into a confusing nested
  * debug session (with a fake "[eval expression]" frame) instead of just
  * being reported back as part of that command's own reply, the way
@@ -3305,7 +3376,14 @@ send_error(int fd, uc_vm_t *vm, const char *msg)
  * catchpoint too, even though it targets a real instruction address
  * within the *original* paused frame's function and so could only ever
  * spuriously match here by an astronomically unlikely pointer collision
- * with the expression's own freshly compiled chunk. Sandboxing this way
+ * with the expression's own freshly compiled chunk - plus BK_INTERRUPT,
+ * which *can* legitimately be armed here: an async "pause now" request
+ * (see debug_break_signal_handler()) fires on the very next instruction
+ * dispatched, whichever that happens to be, so it's just as capable of
+ * firing mid-eval as BK_UNCAUGHT is. Restored (not consumed) on leave,
+ * so a request that arrived during eval still fires on the first real
+ * instruction afterwards instead of being silently dropped. Sandboxing
+ * this way
  * only touches which breakpoints can fire; it does not change what the
  * expression itself is allowed to do (see the PRINT/EVAL help text on
  * that - this is not a security boundary, just about not derailing the
@@ -3324,6 +3402,7 @@ static uint8_t eval_sandbox_disabled_marker;
 typedef struct {
 	uint8_t *uncaught_ip;
 	uint8_t *catch_ip;
+	uint8_t *interrupt_ip;
 } eval_sandbox_t;
 
 static eval_sandbox_t
@@ -3345,6 +3424,10 @@ eval_sandbox_enter(uc_vm_t *vm)
 			saved.catch_ip = dbk->bk.ip;
 			dbk->bk.ip = &eval_sandbox_disabled_marker;
 		}
+		else if (dbk->kind == BK_INTERRUPT) {
+			saved.interrupt_ip = dbk->bk.ip;
+			dbk->bk.ip = &eval_sandbox_disabled_marker;
+		}
 	}
 
 	return saved;
@@ -3361,6 +3444,17 @@ eval_sandbox_leave(uc_vm_t *vm, eval_sandbox_t saved)
 
 		if (dbk->kind == BK_UNCAUGHT)
 			dbk->bk.ip = saved.uncaught_ip;
+		else if (dbk->kind == BK_INTERRUPT) {
+			/* Unlike BK_UNCAUGHT/BK_CATCH, BK_INTERRUPT can legitimately
+			 * change *while* sandboxed: the async signal handler writes
+			 * NULL to it directly, with no notion of eval_expr() being
+			 * mid-call. Only restore the pre-sandbox value if nothing
+			 * did that - otherwise keep the freshly armed request so it
+			 * still fires on the first real instruction after this
+			 * returns, instead of eval_expr() silently discarding it. */
+			if (dbk->bk.ip == &eval_sandbox_disabled_marker)
+				dbk->bk.ip = saved.interrupt_ip;
+		}
 		else if (dbk->kind == BK_CATCH)
 			dbk->bk.ip = saved.catch_ip;
 	}
@@ -3619,12 +3713,13 @@ static const char *
 paused_reason_name(debug_breakpoint_kind_t kind)
 {
 	switch (kind) {
-	case BK_ONCE:     return "entry";
-	case BK_USER:     return "breakpoint";
-	case BK_STEP:     return "step";
-	case BK_CATCH:    return "exception";
-	case BK_UNCAUGHT: return "uncaught";
-	default:          return "unknown";
+	case BK_ONCE:      return "entry";
+	case BK_USER:      return "breakpoint";
+	case BK_STEP:      return "step";
+	case BK_CATCH:     return "exception";
+	case BK_UNCAUGHT:  return "uncaught";
+	case BK_INTERRUPT: return "interrupt";
+	default:           return "unknown";
 	}
 }
 
@@ -5005,7 +5100,7 @@ uc_debug_attach(uc_vm_t *vm, size_t nargs)
 		 * bk_enter_session()), so there is no local tty state to set up
 		 * here at all. */
 
-		install_uncaught_exception_breakpoint(vm);
+		install_debug_system_breakpoints(vm);
 
 		debug_attach_initialized = true;
 	}
@@ -5239,7 +5334,7 @@ uc_debug_listen(uc_vm_t *vm, size_t nargs)
 		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(uc_vm_stack_pop(vm));
 
-		install_uncaught_exception_breakpoint(vm);
+		install_debug_system_breakpoints(vm);
 
 		debug_remote_listen_armed = true;
 	}
@@ -5387,7 +5482,7 @@ uc_debugger(uc_vm_t *vm, size_t nargs)
 		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(uc_vm_stack_pop(vm));
 
-		install_uncaught_exception_breakpoint(vm);
+		install_debug_system_breakpoints(vm);
 
 		debug_local_initialized = true;
 	}

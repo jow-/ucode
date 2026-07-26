@@ -276,24 +276,6 @@ debug_remote_notify_exception(uc_vm_t *vm, uc_exception_t *ex)
 	ucv_put(evo);
 }
 
-/* Push an unsolicited signal notification to the connected debugger client.
- * Called from the SIGUSR1 signal handler when a debugger is already
- * attached, so this must stay async-signal-safe: no debug_proto_write() (it
- * allocates), just a raw write() of a fixed, pre-formatted JSON message. */
-void
-debug_remote_notify_signal(int signum)
-{
-	static const char msg[] =
-		"EVENT {\"event\":\"signal\",\"signal\":\"SIGUSR1\","
-		"\"note\":\"already attached, ignoring\"}\n";
-
-	(void)signum;
-
-	if (remote_debug_fd >= 0) {
-		if (write(remote_debug_fd, msg, sizeof(msg) - 1) == -1) {}
-	}
-}
-
 static const char *
 vm_status_name(uc_vm_status_t status)
 {
