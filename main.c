@@ -203,9 +203,11 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, const compile_opts_t *o
 
 		/* -x: launch local debugger, breaking at `breakpoint` if given,
 		 * else at the first instruction.
-		 * -X: just enable break infrastructure; if `breakpoint` is given,
-		 * additionally arm attach mode and break at that location instead
-		 * of waiting for a plain SIGUSR1. */
+		 * -X: arm attach mode (wait for a remote debugger on the PID-derived
+		 * socket). With `breakpoint` given, break at that location; without
+		 * one, break at the first instruction of the entry function - the
+		 * remote mirror of `-x` with no argument. Either way this is the
+		 * remote equivalent of the local `-x` flow above. */
 		if (debug == DEBUG_MODE_LOCAL) {
 			uc_value_t *dbgfn = debug_lookup_fn(vm, "debugger");
 
@@ -221,7 +223,15 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, const compile_opts_t *o
 			if (uc_vm_call(vm, false, 1) == EXCEPTION_NONE)
 				ucv_put(uc_vm_stack_pop(vm));
 		}
-		else if (breakpoint) {
+		else {
+			/* -X: arm attach mode. Pass entryfn so that, when no explicit
+			 * `breakpoint` is given, debug.attach() installs its step
+			 * breakpoint at the entry function's first instruction (breaking
+			 * at the start of main, mirroring `-x` with no argument). When a
+			 * `breakpoint` is given, the explicit breakpoint below is what
+			 * pauses first; the entry step breakpoint is then simply
+			 * superseded. debug.attach() ignores a non-closure arg, so
+			 * passing NULL in that case is harmless. */
 			uc_value_t *attachfn = debug_lookup_fn(vm, "attach");
 
 			if (!attachfn) {
@@ -231,7 +241,7 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, const compile_opts_t *o
 			}
 
 			uc_vm_stack_push(vm, ucv_get(attachfn));
-			uc_vm_stack_push(vm, NULL);
+			uc_vm_stack_push(vm, breakpoint ? NULL : ucv_get(entryfn));
 
 			if (uc_vm_call(vm, false, 1) == EXCEPTION_NONE)
 				ucv_put(uc_vm_stack_pop(vm));

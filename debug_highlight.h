@@ -132,6 +132,14 @@ typedef struct {
 	bool have_call;
 	bool call_mcall;             /* method call: an implicit `this` arg follows */
 	uint32_t call_nargs;
+	bool call_tail;              /* tail call: I_RETURN + 0x00 marker follows the
+	                              * call's operand span, the VM reuses the current
+	                              * frame for the callee */
+
+	bool return_tailcall;       /* this I_RETURN terminates a tail call: the 0x00
+	                              * marker byte the compiler emits right after it is
+	                              * consumed as part of this instruction (pure data,
+	                              * never executed) */
 
 	struct {
 		int64_t slot;
@@ -161,11 +169,15 @@ void debug_highlight_print_disassembly(FILE *out, const char *function,
 /* One entry of a VARIABLES (or a BACKTRACE frame's inline "variables")
  * protocol response, for debug_highlight_print_variables() below. `kind`
  * is one of "this", "local", "internal" (a synthetic, parenthesized slot
- * name such as a `for`-loop's hidden iterator) or "upvalue". */
+ * name such as a `for`-loop's hidden iterator) or "upvalue". `shadowed`
+ * marks a same-named, less-nested declaration that a more-nested one
+ * currently hides - still a real, live slot, just not what plain script
+ * code resolves this name to right now. */
 typedef struct {
 	const char *name;
 	const char *kind;
 	const char *value_repr;
+	bool shadowed;
 } debug_variable_t;
 
 /* Print a "name : value" variable listing exactly as the pre-protocol
@@ -174,10 +186,13 @@ typedef struct {
  * bold cyan for an upvalue or faint white for "this"/an internal slot
  * (plain otherwise), a faint " : " separator, then the value - styled
  * bold red instead of truncated when it is the literal sentinel
- * "<out of range>". Every line is prefixed with `indent`. `columns` is
- * the terminal width the value is truncated to fit (pass 0 for "don't
- * know", which disables value truncation only - the name field is
- * always truncated to 16 regardless). */
+ * "<out of range>". A shadowed entry (see above - not part of the
+ * original pre-protocol listing, which never showed more than one
+ * variable per name to begin with) is rendered faint throughout with a
+ * trailing "(shadowed)" marker. Every line is prefixed with `indent`.
+ * `columns` is the terminal width the value is truncated to fit (pass 0
+ * for "don't know", which disables value truncation only - the name
+ * field is always truncated to 16 regardless). */
 void debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
                                       size_t nvars, const char *indent,
                                       size_t columns);

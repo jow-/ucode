@@ -45,6 +45,7 @@
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <sys/ioctl.h>
+#include <termios.h>
 #include <ctype.h>
 #include <inttypes.h>
 #include <stdbool.h>
@@ -52,6 +53,7 @@
 #include <json-c/json.h>
 
 #include "debug_highlight.h"
+#include "debug_lineedit.h"
 
 /* -- ANSI colors ----------------------------------------------------------- */
 
@@ -679,10 +681,12 @@ render_variables_array(struct json_object *items, const char *indent)
 
 	for (i = 0; i < n; i++) {
 		struct json_object *it = json_object_array_get_idx(items, i);
+		struct json_object *shadowed_j = json_object_object_get(it, "shadowed");
 
 		vars[i].name = jstr(it, "name", "?");
 		vars[i].kind = jstr(it, "kind", "");
 		vars[i].value_repr = jstr(it, "value_repr", "");
+		vars[i].shadowed = shadowed_j && json_object_get_boolean(shadowed_j);
 	}
 
 	debug_highlight_print_variables(stdout, vars, n, indent, term_columns());
@@ -760,6 +764,17 @@ render_backtrace_final(int fd, struct json_object *p)
 			};
 
 			render_source_lines(fd, file, line - 2, line + 2, &hl, 2);
+		}
+
+		/* tail call optimization reuses this frame for the callee, so the
+		 * intermediate frames of the tail calls are absent from the stack -
+		 * show the gap (see uc_vm_frame_reinit() in vm.c). */
+		{
+			struct json_object *tco_j = json_object_object_get(fr, "tco");
+
+			if (tco_j && json_object_get_int64(tco_j) > 0)
+				printf(C_DIM "  (%" PRId64 " tail call frames omitted)" C_RESET "\n",
+					json_object_get_int64(tco_j));
 		}
 
 		if (json_object_object_get_ex(fr, "variables", &vars))
@@ -926,11 +941,16 @@ render_disassembly(struct json_object *p)
 
 		if (json_object_object_get_ex(ins, "call_nargs", NULL)) {
 			struct json_object *mcall_j = json_object_object_get(ins, "call_mcall");
+			struct json_object *tail_j = json_object_object_get(ins, "call_tail");
 
 			d->have_call = true;
 			d->call_mcall = mcall_j && json_object_get_boolean(mcall_j);
 			d->call_nargs = (uint32_t)jint(ins, "call_nargs", 0);
+			d->call_tail = tail_j && json_object_get_boolean(tail_j);
 		}
+
+		if (json_object_object_get_ex(ins, "return_tailcall", NULL))
+			d->return_tailcall = true;
 
 		d->ncaptures = captures_j ? json_object_array_length(captures_j) : 0;
 		d->captures = calloc(d->ncaptures ? d->ncaptures : 1, sizeof(*d->captures));
@@ -1000,9 +1020,6 @@ render_event(struct json_object *p)
 			else
 				printf("*** program terminated (%s) ***", status);
 		}
-	}
-	else if (!strcmp(event, "signal")) {
-		printf("*** signal %s: %s ***", jstr(p, "signal", "?"), jstr(p, "note", ""));
 	}
 	else {
 		printf("*** event: %s %s ***", event,
@@ -1295,11 +1312,24 @@ static const struct {
 		"Print a list of loaded source buffers."
 	},
 	{ "print\0p\0",
-		"Evaluate an ucode expression and print the resulting value.\n\n"
+		"Evaluate an ucode expression and print the resulting value - like "
+		"the ucode CLI's `-p`.\n\n"
 		"Examples:\n"
 		"  print varname        # Print value of variable 'varname'\n"
 		"  print myobj.prop     # Print `prop` property of `myobj`\n"
 		"  print keys(myobj)    # Invoke a stdlib function"
+	},
+	{ "eval\0e\0",
+		"Evaluate an ucode expression, discarding its result instead of "
+		"printing it - like the ucode CLI's `-e`. The idiomatic way to "
+		"change a variable's value while paused: assignment is just "
+		"ordinary expression syntax, so a plain variable, a property path "
+		"or an array index all work the same way a script would write "
+		"them, without a separate dedicated command for it.\n\n"
+		"Examples:\n"
+		"  eval x = 5            # Assign the number 5 to variable 'x'\n"
+		"  eval x.y = 1          # Assign 1 to property 'y' of 'x'\n"
+		"  eval delete foo.bar   # Delete property 'bar' of 'foo'"
 	},
 	{ "lines\0ln\0",
 		"Print source code lines surrounding the given location specified "
@@ -1477,6 +1507,11 @@ send_command(int fd, char *line, bool *resuming, bool *sent)
 		json_object_object_add(payload, "expr", json_object_new_string(line));
 		proto_write(fd, "PRINT", payload);
 	}
+	else if (match_cmd("eval\0e\0", cmd)) {
+		payload = json_object_new_object();
+		json_object_object_add(payload, "expr", json_object_new_string(line));
+		proto_write(fd, "EVAL", payload);
+	}
 	else if (match_cmd("lines\0ln\0", cmd)) {
 		char *spec = shift_word(&line);
 		char *before = shift_word(&line);
@@ -1543,10 +1578,20 @@ send_command(int fd, char *line, bool *resuming, bool *sent)
 		if (!force && isatty(STDIN_FILENO)) {
 			char confirm[16];
 
+			/* This wants a plain, cooked-mode, blocking fgets() prompt of
+			 * its own - drop out of lineedit's raw/non-blocking mode for
+			 * it, then re-engage before returning. */
+			lineedit_suspend();
+
 			printf("Terminate program? (y/n) > ");
 			fflush(stdout);
 
-			if (!fgets(confirm, sizeof(confirm), stdin) || tolower((unsigned char)confirm[0]) != 'y') {
+			bool confirmed = fgets(confirm, sizeof(confirm), stdin) &&
+				tolower((unsigned char)confirm[0]) == 'y';
+
+			lineedit_resume();
+
+			if (!confirmed) {
 				*sent = false;
 				return true;
 			}
@@ -1616,6 +1661,34 @@ wait_for_socket(const char *path, int timeout_sec)
 	return -1;
 }
 
+/* The debuggee's PID, for Ctrl-C-while-running (see maybe_send_interrupt()
+ * below) - resolved once right after connecting, however that happened
+ * (explicit <pid>, a socket path, or an inherited --fd), via SO_PEERCRED:
+ * works uniformly for all three, since all of them are - or, for --fd,
+ * were, at the moment the debuggee created it and only then forked - a
+ * connected AF_UNIX socket. -1 if this somehow couldn't be determined
+ * (Ctrl-C-while-running is then a no-op; everything else about the
+ * session is unaffected). */
+static pid_t debuggee_pid = -1;
+
+static void
+resolve_debuggee_pid(int fd)
+{
+#if defined(__linux__)
+	struct ucred cred;
+	socklen_t len = sizeof(cred);
+
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) == 0)
+		debuggee_pid = cred.pid;
+#elif defined(__APPLE__)
+	pid_t pid;
+	socklen_t len = sizeof(pid);
+
+	if (getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &len) == 0)
+		debuggee_pid = pid;
+#endif
+}
+
 static void
 print_usage(const char *prog)
 {
@@ -1648,6 +1721,18 @@ main(int argc, char **argv)
 	signal(SIGPIPE, SIG_IGN);
 	setvbuf(stdout, NULL, _IOLBF, 0);
 	debug_highlight_init();
+
+	{
+		size_t n = sizeof(cli_help_table) / sizeof(cli_help_table[0]);
+		static lineedit_completion_t comps[sizeof(cli_help_table) / sizeof(cli_help_table[0])];
+
+		for (size_t i = 0; i < n; i++)
+			comps[i].names = cli_help_table[i].names;
+
+		lineedit_set_completions(comps, n);
+	}
+
+	lineedit_init();
 
 	/* Pull -s/--srcdir DIR out of argv wherever it appears, leaving the
 	 * rest of argument parsing below untouched. */
@@ -1742,6 +1827,8 @@ main(int argc, char **argv)
 		}
 	}
 
+	resolve_debuggee_pid(fd);
+
 	fprintf(stderr, "Connected to ucode debugger\n\n");
 
 	bool stdin_done = false;
@@ -1757,6 +1844,11 @@ main(int argc, char **argv)
 	 * reappearing (and racing ahead of) a response that just hasn't
 	 * arrived over the socket yet. */
 	bool awaiting_response = false;
+	/* Tracks whether lineedit_begin() has already been called for the
+	 * current accepting_input span, so the prompt (and a fresh, empty
+	 * edit line) is (re)started exactly once per command, not on every
+	 * select() wakeup while still mid-edit. */
+	bool prompt_shown = false;
 
 	for (;;) {
 		char *verb;
@@ -1775,22 +1867,29 @@ main(int argc, char **argv)
 			json_object_put(payload);
 		}
 
-		/* Only accept (and select on) stdin while actually sitting at a
-		 * prompt: gating this on the exact same condition that shows the
-		 * prompt is what stops a command from racing ahead of - and
-		 * getting interleaved with - the connection's own initial PAUSED
-		 * message or a still-in-flight response to a previous command. */
+		/* Only accept (and select on) stdin for actual command input while
+		 * sitting at a prompt: gating this on the exact same condition
+		 * that shows the prompt is what stops a command from racing ahead
+		 * of - and getting interleaved with - the connection's own
+		 * initial PAUSED message or a still-in-flight response to a
+		 * previous command. */
 		bool accepting_input = paused && !stdin_done && !awaiting_response
 			&& !pending_source.active && !pending_backtrace.active;
 
-		if (accepting_input) {
-			printf("dbg > ");
-			fflush(stdout);
+		if (!accepting_input)
+			prompt_shown = false;
+		else if (!prompt_shown) {
+			lineedit_begin("dbg > ");
+			prompt_shown = true;
 		}
 
 		FD_ZERO(&readfds);
 
-		if (accepting_input)
+		/* Outside of accepting_input, stdin is still watched (whenever
+		 * raw-mode editing is active, i.e. a real terminal - piped/
+		 * scripted input has no Ctrl-C to speak of) purely to catch
+		 * Ctrl-C-while-running: see the interrupt handling below. */
+		if (accepting_input || (lineedit_active() && !stdin_done))
 			FD_SET(STDIN_FILENO, &readfds);
 
 		FD_SET(fd, &readfds);
@@ -1813,34 +1912,58 @@ main(int argc, char **argv)
 			linebuf_append(&lb, buf, (size_t)n);
 		}
 
-		if (!stdin_done && FD_ISSET(STDIN_FILENO, &readfds)) {
-			if (!fgets(buf, sizeof(buf), stdin)) {
+		if (!stdin_done && FD_ISSET(STDIN_FILENO, &readfds) && !accepting_input) {
+			/* Not sitting at a prompt (the debuggee is running) - stdin is
+			 * only being watched here for Ctrl-C, not full line editing;
+			 * anything else typed while running had no effect before this
+			 * feature existed either, so it's simply discarded rather
+			 * than queued up to confuse the next prompt. lineedit's raw
+			 * mode (a prerequisite for even reaching this branch, see the
+			 * FD_SET above) already made stdin non-blocking. */
+			char ibuf[64];
+			ssize_t n = read(STDIN_FILENO, ibuf, sizeof(ibuf));
+
+			for (ssize_t i = 0; i < n; i++) {
+				if (ibuf[i] == 3 /* Ctrl-C */ && debuggee_pid > 0) {
+					kill(debuggee_pid, SIGUSR1);
+					break;
+				}
+			}
+		}
+		else if (!stdin_done && FD_ISSET(STDIN_FILENO, &readfds)) {
+			bool eof = false;
+
+			if (lineedit_feed(buf, sizeof(buf), &eof)) {
+				prompt_shown = false;
+
+				if (*trim(buf)) {
+					bool resuming, sent;
+					bool keep_going = send_command(fd, trim(buf), &resuming, &sent);
+
+					/* An unrecognized/empty command (or "quit" declined at its
+					 * confirmation prompt) never reaches the server, so there
+					 * is no response to wait for - re-show the prompt right
+					 * away instead of waiting forever for one that isn't
+					 * coming. */
+					awaiting_response = sent;
+
+					if (resuming)
+						paused = false;
+
+					if (!keep_going) {
+						/* QUIT was sent - keep looping (without reading
+						 * further stdin) to drain and render any trailing
+						 * responses (e.g. a final EVENT exit) until the
+						 * server closes the connection, instead of exiting
+						 * immediately and losing output that was already in
+						 * flight. */
+						stdin_done = true;
+					}
+				}
+			}
+			else if (eof) {
 				proto_write(fd, "QUIT", NULL);
 				stdin_done = true;
-			}
-			else if (*trim(buf)) {
-				bool resuming, sent;
-				bool keep_going = send_command(fd, trim(buf), &resuming, &sent);
-
-				/* An unrecognized/empty command (or "quit" declined at its
-				 * confirmation prompt) never reaches the server, so there
-				 * is no response to wait for - re-show the prompt right
-				 * away instead of waiting forever for one that isn't
-				 * coming. */
-				awaiting_response = sent;
-
-				if (resuming)
-					paused = false;
-
-				if (!keep_going) {
-					/* QUIT was sent - keep looping (without reading
-					 * further stdin) to drain and render any trailing
-					 * responses (e.g. a final EVENT exit) until the
-					 * server closes the connection, instead of exiting
-					 * immediately and losing output that was already in
-					 * flight. */
-					stdin_done = true;
-				}
 			}
 		}
 	}

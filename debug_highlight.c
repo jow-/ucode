@@ -644,7 +644,7 @@ dbuf_style(dbuf_t *b, const style_t *style)
 	b->len += n;
 }
 
-static void
+__attribute__((format(printf, 2, 3))) static void
 dbuf_printf(dbuf_t *b, const char *fmt, ...)
 {
 	va_list ap, ap2;
@@ -833,6 +833,12 @@ debug_highlight_print_disassembly(FILE *out, const char *function,
 				dbuf_printf(&line, "%" PRIu32, ins->call_nargs);
 				dbuf_style(&line, NULL);
 				dbuf_printf(&line, " arg%s", (ins->call_nargs == 1) ? "" : "s");
+
+				if (ins->call_tail) {
+					dbuf_style(&line, &st_yellow);
+					dbuf_printf(&line, " (tail call)");
+					dbuf_style(&line, NULL);
+				}
 			}
 
 			dbuf_printf(&line, "}");
@@ -843,6 +849,17 @@ debug_highlight_print_disassembly(FILE *out, const char *function,
 			dbuf_printf(&line, " (unknown operand format: %d)", fmt);
 			dbuf_style(&line, NULL);
 			break;
+		}
+
+		/* this I_RETURN terminates a tail call: the 0x00 marker byte the
+		 * compiler emits right after it was consumed as part of this
+		 * instruction (it is pure data, never executed), so annotate the
+		 * return rather than showing a separate NOOP line. */
+		if (ins->return_tailcall) {
+			dbuf_printf(&line, " ; ");
+			dbuf_style(&line, &st_yellow);
+			dbuf_printf(&line, "tail call (marker consumed)");
+			dbuf_style(&line, NULL);
 		}
 
 		dbuf_flush(&line, out, columns);
@@ -933,6 +950,7 @@ debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
 	static const style_t st_upval = { FG_CYAN, 0, BOLD };
 	static const style_t st_faint = { FG_BWHITE, 0, FAINT };
 	static const style_t st_err   = { FG_RED, 0, BOLD };
+	static const char shadowed_suffix[] = "  (shadowed)";
 	size_t indent_len = indent ? strlen(indent) : 0;
 	size_t value_cols = 0;
 	dbuf_t namebuf = { 0 }, valuebuf = { 0 };
@@ -946,7 +964,7 @@ debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
 		const char *name = v->name ? v->name : "?";
 		const char *repr = v->value_repr ? v->value_repr : "";
 		bool upval = !strcmp(kind, "upvalue");
-		bool faint = !strcmp(kind, "this") || !strcmp(kind, "internal");
+		bool faint = v->shadowed || !strcmp(kind, "this") || !strcmp(kind, "internal");
 		bool err = !strcmp(repr, "<out of range>");
 		size_t namelen;
 
@@ -960,14 +978,19 @@ debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
 		if (indent)
 			fputs(indent, out);
 
-		if (upval)
+		/* A shadowed entry is rendered faint throughout, taking priority
+		 * over its own kind's usual color (still cyan/upvalue matters
+		 * far less than "this isn't what the name resolves to anymore"). */
+		if (v->shadowed)
+			cs(out, &st_faint);
+		else if (upval)
 			cs(out, &st_upval);
 		else if (faint)
 			cs(out, &st_faint);
 
 		fwrite(namebuf.buf, 1, namebuf.len, out);
 
-		if (upval || faint)
+		if (v->shadowed || upval || faint)
 			cs(out, NULL);
 
 		for (; namelen < 16; namelen++)
@@ -983,6 +1006,17 @@ debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
 			cs(out, NULL);
 		}
 		else {
+			size_t this_value_cols = value_cols;
+
+			/* Reserve room for the trailing "(shadowed)" marker printed
+			 * below, or it doesn't count against the line's width budget
+			 * and can push the whole line past `columns`, wrapping. */
+			if (v->shadowed && this_value_cols > sizeof(shadowed_suffix) - 1)
+				this_value_cols -= sizeof(shadowed_suffix) - 1;
+
+			if (v->shadowed)
+				cs(out, &st_faint);
+
 			dbuf_printf(&valuebuf, "%s", repr);
 
 			/* value_repr is always the compact, single-line repr (see
@@ -990,9 +1024,18 @@ debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
 			 * literal embedded newline anyway, since byte-counting
 			 * truncation across one would garble rather than shorten it. */
 			if (columns > 0 && !strchr(repr, '\n'))
-				dbuf_truncate_value(&valuebuf, value_cols);
+				dbuf_truncate_value(&valuebuf, this_value_cols);
 
 			fwrite(valuebuf.buf, 1, valuebuf.len, out);
+
+			if (v->shadowed)
+				cs(out, NULL);
+		}
+
+		if (v->shadowed) {
+			cs(out, &st_faint);
+			fputs(shadowed_suffix, out);
+			cs(out, NULL);
 		}
 
 		fputc('\n', out);
