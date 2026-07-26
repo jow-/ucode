@@ -39,10 +39,15 @@
 
 /* A statement span to shade, in 1-based line numbers and 0-based byte
  * columns within those lines (matching the debug protocol's "col" fields).
- * Set from_line to 0 for "no highlight". */
+ * Set from_line to 0 for "no highlight". `have_ip` additionally underlines
+ * the single character at {ip_line, ip_col} - the exact current
+ * instruction position, as opposed to {from,to} which mark the enclosing
+ * statement's extent. */
 typedef struct {
 	size_t from_line, from_col;
 	size_t to_line, to_col;
+	bool have_ip;
+	size_t ip_line, ip_col;
 } debug_highlight_span_t;
 
 /* Compile the highlight regexes once; safe to call repeatedly. Returns
@@ -63,5 +68,19 @@ void debug_highlight_print_source(FILE *out, char **lines, size_t nlines,
                                    size_t from, size_t to,
                                    const debug_highlight_span_t *hl,
                                    size_t left_pad, size_t columns);
+
+/* Print a full-width "[bracket] rest " status bar to `out` on a solid
+ * background, ported from the original format_context_header_backtrace()/
+ * format_context_header_callframe() (the bar shown above a paused
+ * location's or a backtrace frame's source snippet) - `bracket` is the
+ * source file (or "C" for a native frame), `rest` the call breadcrumb or
+ * frame signature. Long `rest` values are elided from the front (ellipsis
+ * first, keeping the tail - the original's choice, since the innermost/
+ * current part of a chain matters more than the outermost when both don't
+ * fit) if `columns` is nonzero; pass 0 to disable width awareness (no
+ * truncation, no trailing padding). */
+void debug_highlight_print_header_bar(FILE *out, const char *bracket,
+                                       const char *rest,
+                                       size_t left_pad, size_t columns);
 
 #endif

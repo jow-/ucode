@@ -3460,6 +3460,32 @@ build_paused_payload(uc_vm_t *vm, debug_breakpoint_t *dbk)
 
 	ucv_object_add(obj, "reason", ucv_string_new(paused_reason_name(dbk->kind)));
 
+	/* Full call chain, outermost first, for the client's header bar (see
+	 * the original format_context_breadcrumb() this replaces) - skips the
+	 * SIGINT handler's own native frame, which would otherwise show up as
+	 * a spurious innermost entry whenever paused via Ctrl-C. */
+	{
+		uc_value_t *breadcrumb = ucv_array_new(vm);
+
+		for (size_t i = 0; i < vm->callframes.count; i++) {
+			uc_callframe_t *frame = &vm->callframes.entries[i];
+			uc_stringbuf_t namebuf = { 0 };
+
+			if (frame->cfunction != NULL &&
+			    frame->cfunction->cfn == uc_debug_sigint_handler)
+				continue;
+
+			printbuf_append_funcname(&namebuf, vm,
+				frame->closure ? &frame->closure->header : &frame->cfunction->header,
+				SIZE_MAX);
+
+			ucv_array_push(breadcrumb, ucv_string_new_length(namebuf.buf, namebuf.bpos));
+			free(namebuf.buf);
+		}
+
+		ucv_object_add(obj, "breadcrumb", breadcrumb);
+	}
+
 	if (funframe) {
 		uc_function_t *function = funframe->closure->function;
 		uc_source_t *source = uc_program_function_source(function);

@@ -66,6 +66,7 @@
 #define C_BLUE    "\033[34m"
 #define C_MAGENTA "\033[35m"
 #define C_CYAN    "\033[36m"
+#define C_EVENT   "\033[2;3m" /* faint + italic, for async server events */
 
 #define MAX_LINE 65536
 #define DEFAULT_SOCKET_DIR "/tmp"
@@ -319,13 +320,14 @@ typedef struct {
 	int64_t from, to;
 	debug_highlight_span_t hl;
 	bool have_hl;
+	size_t left_pad;
 } pending_source_t;
 
 static pending_source_t pending_source = { 0 };
 
 static void
 request_source(int fd, const char *file, int64_t from, int64_t to,
-                const debug_highlight_span_t *hl)
+                const debug_highlight_span_t *hl, size_t left_pad)
 {
 	struct json_object *payload;
 
@@ -340,6 +342,7 @@ request_source(int fd, const char *file, int64_t from, int64_t to,
 		pending_source.from = from;
 		pending_source.to = to;
 		pending_source.have_hl = (hl != NULL);
+		pending_source.left_pad = left_pad;
 
 		if (hl)
 			pending_source.hl = *hl;
@@ -358,6 +361,7 @@ request_source(int fd, const char *file, int64_t from, int64_t to,
 	pending_source.from = from;
 	pending_source.to = to;
 	pending_source.have_hl = (hl != NULL);
+	pending_source.left_pad = left_pad;
 
 	if (hl)
 		pending_source.hl = *hl;
@@ -384,13 +388,13 @@ term_columns(void)
  * re-invokes this once the text has actually arrived. */
 static void
 render_source_lines(int fd, const char *file, int64_t from, int64_t to,
-                     const debug_highlight_span_t *hl)
+                     const debug_highlight_span_t *hl, size_t left_pad)
 {
 	size_t nlines;
 	char **lines = find_cached_source(file, &nlines);
 
 	if (!lines) {
-		request_source(fd, file, from, to, hl);
+		request_source(fd, file, from, to, hl, left_pad);
 		return;
 	}
 
@@ -398,10 +402,47 @@ render_source_lines(int fd, const char *file, int64_t from, int64_t to,
 		from = 1;
 
 	debug_highlight_print_source(stdout, lines, nlines,
-		(size_t)from, (size_t)to, hl, 0, term_columns());
+		(size_t)from, (size_t)to, hl, left_pad, term_columns());
 }
 
 /* -- response rendering ------------------------------------------------- */
+
+/* Join a JSON array of strings with " \xc2\xbb " (U+00BB, " » "), matching
+ * format_context_breadcrumb()'s separator. Caller frees the result. */
+static char *
+join_breadcrumb(struct json_object *arr)
+{
+	static const char sep[] = " \xc2\xbb "; /* U+00BB RIGHT-POINTING GUILLEMET */
+	size_t n = arr ? json_object_array_length(arr) : 0;
+	size_t len = 0, i;
+	char *out, *p;
+
+	if (n == 0)
+		return strdup("");
+
+	for (i = 0; i < n; i++)
+		len += strlen(json_object_get_string(json_object_array_get_idx(arr, i)));
+
+	len += (n - 1) * (sizeof(sep) - 1);
+	out = p = malloc(len + 1);
+
+	for (i = 0; i < n; i++) {
+		const char *s = json_object_get_string(json_object_array_get_idx(arr, i));
+		size_t l = strlen(s);
+
+		if (i > 0) {
+			memcpy(p, sep, sizeof(sep) - 1);
+			p += sizeof(sep) - 1;
+		}
+
+		memcpy(p, s, l);
+		p += l;
+	}
+
+	*p = '\0';
+
+	return out;
+}
 
 static void
 render_paused(int fd, struct json_object *p)
@@ -423,12 +464,19 @@ render_paused(int fd, struct json_object *p)
 		printf("  " C_RED "exception: %s" C_RESET "\n", jstr(p, "exception_message", ""));
 
 	if (file && line > 0) {
+		struct json_object *breadcrumb_arr = json_object_object_get(p, "breadcrumb");
+		char *breadcrumb = join_breadcrumb(breadcrumb_arr);
+		int64_t col = jint(p, "col", 0);
 		debug_highlight_span_t hl = {
 			.from_line = (size_t)line, .from_col = 0,
-			.to_line = (size_t)line, .to_col = SIZE_MAX
+			.to_line = (size_t)line, .to_col = SIZE_MAX,
+			.have_ip = true, .ip_line = (size_t)line, .ip_col = (size_t)col
 		};
 
-		render_source_lines(fd, file, line - 2, line + 2, &hl);
+		debug_highlight_print_header_bar(stdout, file, breadcrumb, 0, term_columns());
+		free(breadcrumb);
+
+		render_source_lines(fd, file, line - 2, line + 2, &hl, 0);
 	}
 }
 
@@ -492,8 +540,32 @@ render_variables_array(struct json_object *items, const char *indent)
 	}
 }
 
+/* Async multi-file fetch for render_backtrace(): a backtrace can span
+ * several source files at once (unlike PAUSED/LINES, which only ever need
+ * one), so a single pending_source-style slot isn't enough - this instead
+ * queues every file the frames need that isn't cached yet, fetches them
+ * one at a time, and only actually prints once all of them have arrived. */
+typedef struct {
+	bool active;
+	struct json_object *payload;
+	char **files;
+	size_t nfiles, next;
+} pending_backtrace_t;
+
+static pending_backtrace_t pending_backtrace = { 0 };
+
 static void
-render_backtrace(struct json_object *p)
+request_backtrace_file(int fd, const char *file)
+{
+	struct json_object *payload = json_object_new_object();
+
+	json_object_object_add(payload, "file", json_object_new_string(file));
+	proto_write(fd, "SOURCE", payload);
+	json_object_put(payload);
+}
+
+static void
+render_backtrace_final(int fd, struct json_object *p)
 {
 	struct json_object *frames = NULL;
 	size_t i, n;
@@ -504,22 +576,88 @@ render_backtrace(struct json_object *p)
 	for (i = 0; i < n; i++) {
 		struct json_object *fr = json_object_array_get_idx(frames, i);
 		struct json_object *vars = NULL;
+		const char *file = jstr(fr, "file", NULL);
+		int64_t line = jint(fr, "line", 0);
+		int64_t col = jint(fr, "col", 0);
+		bool native = !strcmp(jstr(fr, "kind", ""), "native");
+		char signature[256];
 
-		if (!strcmp(jstr(fr, "kind", ""), "native")) {
-			printf(C_BOLD "#%-2" PRId64 C_RESET " in %s, function " C_BOLD "%s()" C_RESET "\n",
-				jint(fr, "index", 0), jstr(fr, "module", "?"),
-				jstr(fr, "function", "?"));
-		}
-		else {
-			printf(C_BOLD "#%-2" PRId64 C_RESET " in %s:%" PRId64 ":%" PRId64 " " C_BOLD "%s()" C_RESET "\n",
-				jint(fr, "index", 0), jstr(fr, "file", "?"),
-				jint(fr, "line", 0), jint(fr, "col", 0),
-				jstr(fr, "function", "?"));
+		snprintf(signature, sizeof(signature), "%s()", jstr(fr, "function", "?"));
+
+		printf(C_BOLD "#%-2" PRId64 C_RESET " ", jint(fr, "index", 0));
+
+		debug_highlight_print_header_bar(stdout,
+			native ? "C" : (file ? file : "?"), signature, 0, term_columns());
+
+		if (!native && file && line > 0) {
+			debug_highlight_span_t hl = {
+				.from_line = (size_t)line, .from_col = 0,
+				.to_line = (size_t)line, .to_col = SIZE_MAX,
+				.have_ip = true, .ip_line = (size_t)line, .ip_col = (size_t)col
+			};
+
+			render_source_lines(fd, file, line - 2, line + 2, &hl, 2);
 		}
 
 		if (json_object_object_get_ex(fr, "variables", &vars))
 			render_variables_array(vars, "     - ");
+
+		printf("\n");
 	}
+}
+
+static void
+render_backtrace(int fd, struct json_object *p)
+{
+	struct json_object *frames = NULL;
+	size_t i, n;
+	char **missing = NULL;
+	size_t n_missing = 0, cap = 0;
+
+	json_object_object_get_ex(p, "frames", &frames);
+	n = frames ? json_object_array_length(frames) : 0;
+
+	for (i = 0; i < n; i++) {
+		struct json_object *fr = json_object_array_get_idx(frames, i);
+		const char *file = jstr(fr, "file", NULL);
+		size_t dummy;
+		size_t j;
+		bool already = false;
+
+		if (!file || strcmp(jstr(fr, "kind", ""), "script"))
+			continue;
+
+		if (find_cached_source(file, &dummy))
+			continue;
+
+		for (j = 0; j < n_missing; j++)
+			if (!strcmp(missing[j], file))
+				already = true;
+
+		if (already)
+			continue;
+
+		if (n_missing >= cap) {
+			cap = cap ? cap * 2 : 4;
+			missing = realloc(missing, cap * sizeof(*missing));
+		}
+
+		missing[n_missing++] = strdup(file);
+	}
+
+	if (n_missing == 0) {
+		free(missing);
+		render_backtrace_final(fd, p);
+		return;
+	}
+
+	pending_backtrace.active = true;
+	pending_backtrace.payload = json_object_get(p);
+	pending_backtrace.files = missing;
+	pending_backtrace.nfiles = n_missing;
+	pending_backtrace.next = 0;
+
+	request_backtrace_file(fd, missing[0]);
 }
 
 static void
@@ -542,10 +680,18 @@ render_source_range(int fd, struct json_object *p)
 		hl.to_line = (size_t)jint(cursor, "to_line", 0);
 		hl.to_col = (size_t)jint(cursor, "to_col", 0);
 
-		render_source_lines(fd, file, from, to, &hl);
+		/* The protocol only gives us the statement's *span*, not the
+		 * exact current instruction position within it (which can differ
+		 * for multi-part expressions) - approximate with the span start,
+		 * which is exact for the common case of a simple statement. */
+		hl.have_ip = true;
+		hl.ip_line = hl.from_line;
+		hl.ip_col = hl.from_col;
+
+		render_source_lines(fd, file, from, to, &hl, 0);
 	}
 	else {
-		render_source_lines(fd, file, from, to, NULL);
+		render_source_lines(fd, file, from, to, NULL, 0);
 	}
 }
 
@@ -576,6 +722,52 @@ render_disassembly(struct json_object *p)
 	}
 }
 
+/* Async server events (see EVENT in lib/debug_proto.h) can land at any
+ * time, unprompted by anything the user typed - set in a faint italic
+ * style to visually set them apart from direct command responses. */
+static void
+render_event(struct json_object *p)
+{
+	const char *event = jstr(p, "event", "?");
+
+	printf(C_EVENT);
+
+	if (!strcmp(event, "exception")) {
+		struct json_object *exc = json_object_object_get(p, "exception");
+
+		printf("*** exception: %s: %s ***", jstr(exc, "type", "Error"),
+			jstr(exc, "message", "?"));
+	}
+	else if (!strcmp(event, "exit")) {
+		const char *status = jstr(p, "status", "?");
+
+		if (!strcmp(status, "OK")) {
+			printf("*** program finished ***");
+		}
+		else if (!strcmp(status, "EXIT")) {
+			printf("*** program exited (code %" PRId64 ") ***", jint(p, "code", 0));
+		}
+		else {
+			struct json_object *exc = json_object_object_get(p, "exception");
+
+			if (exc)
+				printf("*** program terminated: %s: %s ***",
+					jstr(exc, "type", "Error"), jstr(exc, "message", "?"));
+			else
+				printf("*** program terminated (%s) ***", status);
+		}
+	}
+	else if (!strcmp(event, "signal")) {
+		printf("*** signal %s: %s ***", jstr(p, "signal", "?"), jstr(p, "note", ""));
+	}
+	else {
+		printf("*** event: %s %s ***", event,
+			json_object_to_json_string_ext(p, JSON_C_TO_STRING_SPACED));
+	}
+
+	printf(C_RESET "\n");
+}
+
 static void
 render_response(int fd, const char *verb, struct json_object *payload)
 {
@@ -586,7 +778,7 @@ render_response(int fd, const char *verb, struct json_object *payload)
 	else if (!strcmp(verb, "VARIABLES"))
 		render_variables_array(json_object_object_get(payload, "vars"), "");
 	else if (!strcmp(verb, "BACKTRACE"))
-		render_backtrace(payload);
+		render_backtrace(fd, payload);
 	else if (!strcmp(verb, "SOURCE_RANGE"))
 		render_source_range(fd, payload);
 	else if (!strcmp(verb, "DISASSEMBLY"))
@@ -598,8 +790,7 @@ render_response(int fd, const char *verb, struct json_object *payload)
 	else if (!strcmp(verb, "BREAKPOINT_ADDED"))
 		printf(C_GREEN "Breakpoint #%" PRId64 " added" C_RESET "\n", jint(payload, "id", 0));
 	else if (!strcmp(verb, "EVENT"))
-		printf("[event: %s] %s\n", jstr(payload, "event", "?"),
-			json_object_to_json_string_ext(payload, JSON_C_TO_STRING_SPACED));
+		render_event(payload);
 	else if (!strcmp(verb, "SOURCE")) {
 		const char *text = jstr(payload, "text", NULL);
 		const char *file = jstr(payload, "file", "?");
@@ -609,28 +800,68 @@ render_response(int fd, const char *verb, struct json_object *payload)
 
 			cache_source_text(file, text, &nlines);
 
+			/* A render_backtrace() multi-file fetch takes priority: advance
+			 * its queue and either request the next missing file or, once
+			 * every frame's file is cached, finally print the whole thing. */
+			if (pending_backtrace.active && pending_backtrace.next < pending_backtrace.nfiles &&
+			    !strcmp(pending_backtrace.files[pending_backtrace.next], file)) {
+				pending_backtrace.next++;
+
+				if (pending_backtrace.next < pending_backtrace.nfiles) {
+					request_backtrace_file(fd, pending_backtrace.files[pending_backtrace.next]);
+				}
+				else {
+					size_t i;
+
+					render_backtrace_final(fd, pending_backtrace.payload);
+					json_object_put(pending_backtrace.payload);
+
+					for (i = 0; i < pending_backtrace.nfiles; i++)
+						free(pending_backtrace.files[i]);
+
+					free(pending_backtrace.files);
+					pending_backtrace = (pending_backtrace_t){ 0 };
+				}
+			}
 			/* Finishing an auto-fetch triggered by render_paused()/
 			 * render_source_range() (see pending_source) is distinct from
 			 * a direct response to a user-typed "source <file>" command:
 			 * the former re-renders exactly the range that was originally
 			 * requested, the latter shows the whole file. */
-			if (pending_source.active && !strcmp(pending_source.file, file)) {
+			else if (pending_source.active && !strcmp(pending_source.file, file)) {
 				int64_t from = pending_source.from;
 				int64_t to = pending_source.to;
 				bool have_hl = pending_source.have_hl;
 				debug_highlight_span_t hl = pending_source.hl;
+				size_t left_pad = pending_source.left_pad;
 
 				pending_source.active = false;
-				render_source_lines(fd, file, from, to, have_hl ? &hl : NULL);
+				render_source_lines(fd, file, from, to, have_hl ? &hl : NULL, left_pad);
 			}
 			else {
 				printf("--- %s ---\n", file);
-				render_source_lines(fd, file, 1, (int64_t)nlines, NULL);
+				render_source_lines(fd, file, 1, (int64_t)nlines, NULL, 0);
 			}
 		}
 		else {
 			printf("(source unavailable: %s)\n", jstr(payload, "error", "?"));
 			pending_source.active = false;
+
+			if (pending_backtrace.active) {
+				size_t i;
+
+				/* Missing source for one frame shouldn't block showing the
+				 * rest - just print what we have (unavailable files will
+				 * fall back to "no snippet" for that frame). */
+				render_backtrace_final(fd, pending_backtrace.payload);
+				json_object_put(pending_backtrace.payload);
+
+				for (i = 0; i < pending_backtrace.nfiles; i++)
+					free(pending_backtrace.files[i]);
+
+				free(pending_backtrace.files);
+				pending_backtrace = (pending_backtrace_t){ 0 };
+			}
 		}
 	}
 	else if (!strcmp(verb, "HELP")) {
@@ -1052,7 +1283,7 @@ main(int argc, char **argv)
 		 * getting interleaved with - the connection's own initial PAUSED
 		 * message or a still-in-flight response to a previous command. */
 		bool accepting_input = paused && !stdin_done && !awaiting_response
-			&& !pending_source.active;
+			&& !pending_source.active && !pending_backtrace.active;
 
 		if (accepting_input) {
 			printf("dbg > ");

@@ -393,7 +393,8 @@ debug_highlight_print_source(FILE *out, char **lines, size_t nlines,
 				.fg = FG_BWHITE,
 				.bg = ((size_t)i >= line_hl_from && (size_t)i < line_hl_to)
 					? BG_GRAY : BG_BLACK,
-				.styles = 0
+				.styles = (hl && hl->have_ip && linenum == hl->ip_line &&
+				           (size_t)i == hl->ip_col) ? ULINE : 0
 			};
 			size_t j;
 
@@ -455,4 +456,70 @@ debug_highlight_print_source(FILE *out, char **lines, size_t nlines,
 	}
 
 	free(colors);
+}
+
+/* -- header bar, ported from format_context_header_backtrace()/
+ * format_context_header_callframe() -------------------------------------- */
+
+/* Elide the front of `s` (in place) down to at most `maxcols` bytes,
+ * prefixing a horizontal-ellipsis marker, so the *tail* stays visible -
+ * matches the original's choice for both filenames (basename matters more
+ * than the leading directories) and call breadcrumbs (the innermost/
+ * current frame matters more than the outermost). Byte-based rather than
+ * the original's UTF-8/ANSI-escape-aware column counting - a reasonable
+ * simplification for what is normally short, plain ASCII text (paths,
+ * identifiers). */
+static char *
+truncate_head(const char *s, size_t maxcols)
+{
+	static const char ellipsis[] = "\xe2\x80\xa6"; /* U+2026, 1 column, 3 bytes */
+	size_t len = strlen(s);
+	char *out;
+
+	if (maxcols == 0 || len <= maxcols)
+		return strdup(s);
+
+	if (maxcols <= 1)
+		return strdup(ellipsis);
+
+	out = malloc(sizeof(ellipsis) - 1 + (maxcols - 1) + 1);
+	memcpy(out, ellipsis, sizeof(ellipsis) - 1);
+	memcpy(out + sizeof(ellipsis) - 1, s + (len - (maxcols - 1)), maxcols - 1);
+	out[sizeof(ellipsis) - 1 + (maxcols - 1)] = '\0';
+
+	return out;
+}
+
+void
+debug_highlight_print_header_bar(FILE *out, const char *bracket, const char *rest,
+                                  size_t left_pad, size_t columns)
+{
+	size_t columns_avail = (columns > left_pad) ? columns - left_pad : 0;
+	size_t bracket_width = (columns_avail >= 42) ? (columns_avail - 2) / 4 : columns_avail;
+	char *bracket_trunc = columns_avail ? truncate_head(bracket, bracket_width) : strdup(bracket);
+	size_t printed = 2 + strlen(bracket_trunc);
+	size_t i;
+
+	for (i = 0; i < left_pad; i++)
+		fputc(' ', out);
+
+	cs(out, &((style_t){ FG_BWHITE, BG_GRAY, 0 }));
+	fprintf(out, "[%s]", bracket_trunc);
+	free(bracket_trunc);
+
+	if (rest && *rest && (!columns_avail || columns_avail > printed + 2 + 10)) {
+		size_t rest_width = columns_avail ? columns_avail - printed - 2 : 0;
+		char *rest_trunc = columns_avail ? truncate_head(rest, rest_width) : strdup(rest);
+
+		fprintf(out, " %s ", rest_trunc);
+		printed += 2 + strlen(rest_trunc);
+		free(rest_trunc);
+	}
+
+	if (columns_avail > printed)
+		for (i = 0; i < columns_avail - printed; i++)
+			fputc(' ', out);
+
+	cs(out, NULL);
+	fputc('\n', out);
 }
