@@ -241,20 +241,42 @@ debug_highlight_print_source(FILE *out, char **lines, size_t nlines,
                               const debug_highlight_span_t *hl,
                               size_t left_pad, size_t columns)
 {
+	debug_highlight_range_t range = { from, to };
+
+	debug_highlight_print_source_ranges(out, lines, nlines, 1, &range, hl, left_pad, columns);
+}
+
+void
+debug_highlight_print_source_ranges(FILE *out, char **lines, size_t nlines,
+                                     size_t nranges,
+                                     const debug_highlight_range_t *ranges,
+                                     const debug_highlight_span_t *hl,
+                                     size_t left_pad, size_t columns)
+{
 	color_span_t *colors = NULL;
 	size_t colors_count = 0, colors_cap = 0;
 	regex_t *ml_rule_re_end = NULL;
 	fg_color_t ml_rule_color = FG_NONE;
 	style_t style = { FG_BWHITE, BG_BLACK, 0 };
-	size_t linenum;
+	size_t linenum, start_line = SIZE_MAX, end_line = 0;
+	ssize_t last_indent = -1;
+	size_t r;
 
-	if (from < 1)
-		from = 1;
+	for (r = 0; r < nranges; r++) {
+		if (ranges[r].from == 0 || ranges[r].to == 0)
+			continue;
 
-	if (to > nlines)
-		to = nlines;
+		if (ranges[r].from < start_line)
+			start_line = ranges[r].from;
 
-	for (linenum = 1; linenum <= to; linenum++) {
+		if (ranges[r].to > end_line)
+			end_line = ranges[r].to;
+	}
+
+	if (end_line > nlines)
+		end_line = nlines;
+
+	for (linenum = 1; linenum <= end_line; linenum++) {
 		const char *linestr = lines[linenum - 1];
 		ssize_t linelen = (ssize_t)strlen(linestr);
 		size_t ml_rule_from = 0;
@@ -349,8 +371,44 @@ debug_highlight_print_source(FILE *out, char **lines, size_t nlines,
 			}
 		}
 
-		if (linenum < from)
-			continue;
+		{
+			bool print_line = false, more_lines = false;
+
+			for (r = 0; r < nranges; r++) {
+				if (ranges[r].from == 0 || ranges[r].to == 0)
+					continue;
+
+				print_line |= (linenum >= ranges[r].from && linenum <= ranges[r].to);
+				more_lines |= (ranges[r].from > start_line && ranges[r].from == linenum + 1);
+			}
+
+			if (!print_line) {
+				if (more_lines) {
+					size_t pad = (size_t)(last_indent < 0 ? 0 : last_indent);
+					size_t i;
+
+					for (i = 0; i < left_pad; i++)
+						fputc(' ', out);
+
+					cs(out, &((style_t){ FG_GRAY, BG_BLACK, FAINT }));
+					fputs("   \xe2\x80\xa6 " /* "   … " */, out);
+
+					for (i = 0; i < pad; i++)
+						fputc(' ', out);
+
+					fputs("\xe2\x80\xa6", out);
+
+					if (columns > 6 + pad)
+						for (i = 0; i < columns - 6 - pad; i++)
+							fputc(' ', out);
+
+					cs(out, NULL);
+					fputc('\n', out);
+				}
+
+				continue;
+			}
+		}
 
 		/* per-line highlight bounds, translated from the {line,col}
 		 * range (see comment above) */
@@ -378,7 +436,6 @@ debug_highlight_print_source(FILE *out, char **lines, size_t nlines,
 		}
 
 		size_t linecols = 0;
-		ssize_t last_indent = -1;
 		ssize_t i;
 
 		for (i = 0; i < (ssize_t)left_pad; i++)

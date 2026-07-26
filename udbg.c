@@ -217,6 +217,17 @@ jint(struct json_object *obj, const char *key, int64_t dflt)
 	return dflt;
 }
 
+/* Every "col"/"from_col"/"to_col" field the protocol sends is 1-based (see
+ * uc_source_get_line() in source.c), meant for human-readable "line:col"
+ * display - debug_highlight's span/ip columns are 0-based byte indices
+ * into the line string, so any such field needs this before being used as
+ * one. */
+static size_t
+col0(int64_t col)
+{
+	return (col > 0) ? (size_t)(col - 1) : 0;
+}
+
 /* -- source cache & syntax highlighting ----------------------------------- */
 
 typedef struct source_cache_entry {
@@ -465,6 +476,65 @@ term_columns(void)
  * asynchronously requests it (see `pending_source` above) and returns
  * without printing anything - the main loop's SOURCE response handler
  * re-invokes this once the text has actually arrived. */
+
+/* Mirrors format_context_statement()'s range-splitting for a statement/
+ * function too long to show in full: a window of context around `from`,
+ * a gap, and a window around the current instruction and/or `to` - using
+ * the same 2-line-before/2-line-after context radius render_paused()/
+ * render_backtrace_final() already use. Returns the number of ranges
+ * written to `ranges` (1 if the span is short enough to just show whole,
+ * up to 3 otherwise). Falls back to a single [from, to] range verbatim if
+ * there's no known "current line" to anchor the split around. */
+static size_t
+compute_context_ranges(int64_t from, int64_t to, const debug_highlight_span_t *hl,
+                        debug_highlight_range_t ranges[3])
+{
+	const int64_t ctx = 2;
+	int64_t ip;
+	debug_highlight_range_t r[3] = { { 0, 0 }, { 0, 0 }, { 0, 0 } };
+	size_t n = 0, i;
+
+	if (from < 1)
+		from = 1;
+
+	if (!hl || !hl->have_ip || to - from <= 4) {
+		ranges[0] = (debug_highlight_range_t){ (size_t)from, (size_t)to };
+		return 1;
+	}
+
+	ip = (int64_t)hl->ip_line;
+
+	if (ip < from)
+		ip = from;
+
+	if (ip > to)
+		ip = to;
+
+	if (ip - from <= (ctx + ctx + 2)) {
+		r[1].from = (size_t)from;
+	}
+	else {
+		r[0].from = (size_t)from;
+		r[0].to = (size_t)(from + ctx);
+		r[1].from = (size_t)(ip - ctx);
+	}
+
+	if (to - ip <= (ctx + ctx + 2)) {
+		r[1].to = (size_t)to;
+	}
+	else {
+		r[1].to = (size_t)(ip + ctx);
+		r[2].from = (size_t)(to - ctx);
+		r[2].to = (size_t)to;
+	}
+
+	for (i = 0; i < 3; i++)
+		if (r[i].from && r[i].to)
+			ranges[n++] = r[i];
+
+	return n;
+}
+
 static void
 render_source_lines(int fd, const char *file, int64_t from, int64_t to,
                      const debug_highlight_span_t *hl, size_t left_pad)
@@ -483,8 +553,17 @@ render_source_lines(int fd, const char *file, int64_t from, int64_t to,
 	if (from < 1)
 		from = 1;
 
-	debug_highlight_print_source(stdout, lines, nlines,
-		(size_t)from, (size_t)to, hl, left_pad, term_columns());
+	{
+		size_t columns = term_columns();
+		debug_highlight_range_t ranges[3];
+		size_t nranges;
+
+		columns = (columns > left_pad) ? columns - left_pad : 0;
+		nranges = compute_context_ranges(from, to, hl, ranges);
+
+		debug_highlight_print_source_ranges(stdout, lines, nlines,
+			nranges, ranges, hl, left_pad, columns);
+	}
 }
 
 /* -- response rendering ------------------------------------------------- */
@@ -552,7 +631,7 @@ render_paused(int fd, struct json_object *p)
 		debug_highlight_span_t hl = {
 			.from_line = (size_t)line, .from_col = 0,
 			.to_line = (size_t)line, .to_col = SIZE_MAX,
-			.have_ip = true, .ip_line = (size_t)line, .ip_col = (size_t)col
+			.have_ip = true, .ip_line = (size_t)line, .ip_col = col0(col)
 		};
 
 		debug_highlight_print_header_bar(stdout, file, breadcrumb, 0, term_columns());
@@ -675,7 +754,7 @@ render_backtrace_final(int fd, struct json_object *p)
 			debug_highlight_span_t hl = {
 				.from_line = (size_t)line, .from_col = 0,
 				.to_line = (size_t)line, .to_col = SIZE_MAX,
-				.have_ip = true, .ip_line = (size_t)line, .ip_col = (size_t)col
+				.have_ip = true, .ip_line = (size_t)line, .ip_col = col0(col)
 			};
 
 			render_source_lines(fd, file, line - 2, line + 2, &hl, 2);
@@ -761,9 +840,9 @@ render_source_range(int fd, struct json_object *p)
 
 	if (cursor) {
 		hl.from_line = (size_t)jint(cursor, "from_line", 0);
-		hl.from_col = (size_t)jint(cursor, "from_col", 0);
+		hl.from_col = col0(jint(cursor, "from_col", 0));
 		hl.to_line = (size_t)jint(cursor, "to_line", 0);
-		hl.to_col = (size_t)jint(cursor, "to_col", 0);
+		hl.to_col = col0(jint(cursor, "to_col", 0));
 
 		/* The protocol only gives us the statement's *span*, not the
 		 * exact current instruction position within it (which can differ
@@ -1030,18 +1109,48 @@ shift_word(char **rest)
 	return word;
 }
 
+/* True if `typed` is a non-empty prefix of any of the NUL-separated names
+ * in `names` (e.g. "list\0ls\0") - shortest-unique-prefix command matching,
+ * same as the original interactive CLI's `commands[]` dispatch. Ambiguous
+ * prefixes (matching more than one command) resolve to whichever command
+ * is checked first below, in the same fixed order the original table
+ * declared them in. */
 static bool
-send_command(int fd, char *line, bool *resuming)
+match_cmd(const char *names, const char *typed)
+{
+	size_t typed_len = strlen(typed);
+	const char *p = names;
+
+	if (typed_len == 0)
+		return false;
+
+	while (*p) {
+		size_t len = strlen(p);
+
+		if (len >= typed_len && !strncmp(p, typed, typed_len))
+			return true;
+
+		p += len + 1;
+	}
+
+	return false;
+}
+
+static bool
+send_command(int fd, char *line, bool *resuming, bool *sent)
 {
 	char *cmd = shift_word(&line);
 	struct json_object *payload = NULL;
 
 	*resuming = false;
+	*sent = true;
 
-	if (!*cmd)
+	if (!*cmd) {
+		*sent = false;
 		return true;
+	}
 
-	if (!strcmp(cmd, "help") || !strcmp(cmd, "h") || !strcmp(cmd, "?")) {
+	if (match_cmd("help\0h\0?\0", cmd)) {
 		if (*line) {
 			payload = json_object_new_object();
 			json_object_object_add(payload, "command", json_object_new_string(line));
@@ -1049,12 +1158,12 @@ send_command(int fd, char *line, bool *resuming)
 
 		proto_write(fd, "HELP", payload);
 	}
-	else if (!strcmp(cmd, "break") || !strcmp(cmd, "b")) {
+	else if (match_cmd("break\0b\0", cmd)) {
 		payload = json_object_new_object();
 		json_object_object_add(payload, "spec", json_object_new_string(line));
 		proto_write(fd, "BREAK", payload);
 	}
-	else if (!strcmp(cmd, "delete") || !strcmp(cmd, "d")) {
+	else if (match_cmd("delete\0d\0", cmd)) {
 		if (*line) {
 			payload = json_object_new_object();
 			json_object_object_add(payload, "id", json_object_new_int64(strtoll(line, NULL, 10)));
@@ -1062,43 +1171,43 @@ send_command(int fd, char *line, bool *resuming)
 
 		proto_write(fd, "DELETE", payload);
 	}
-	else if (!strcmp(cmd, "list") || !strcmp(cmd, "ls")) {
+	else if (match_cmd("list\0ls\0", cmd)) {
 		proto_write(fd, "LIST_BREAKPOINTS", NULL);
 	}
-	else if (!strcmp(cmd, "next") || !strcmp(cmd, "n")) {
+	else if (match_cmd("next\0n\0", cmd)) {
 		proto_write(fd, "NEXT", NULL);
 		*resuming = true;
 	}
-	else if (!strcmp(cmd, "step") || !strcmp(cmd, "s")) {
+	else if (match_cmd("step\0s\0", cmd)) {
 		proto_write(fd, "STEP", NULL);
 		*resuming = true;
 	}
-	else if (!strcmp(cmd, "continue") || !strcmp(cmd, "c")) {
+	else if (match_cmd("continue\0c\0", cmd)) {
 		proto_write(fd, "CONTINUE", NULL);
 		*resuming = true;
 	}
-	else if (!strcmp(cmd, "return")) {
+	else if (match_cmd("return\0", cmd)) {
 		proto_write(fd, "RETURN", NULL);
 		*resuming = true;
 	}
-	else if (!strcmp(cmd, "backtrace") || !strcmp(cmd, "bt")) {
+	else if (match_cmd("backtrace\0bt\0", cmd)) {
 		payload = json_object_new_object();
 		json_object_object_add(payload, "full",
 			json_object_new_boolean(!strcmp(trim(line), "full")));
 		proto_write(fd, "BACKTRACE", payload);
 	}
-	else if (!strcmp(cmd, "variables") || !strcmp(cmd, "vars")) {
+	else if (match_cmd("variables\0vars\0", cmd)) {
 		proto_write(fd, "VARIABLES", NULL);
 	}
-	else if (!strcmp(cmd, "sources") || !strcmp(cmd, "src")) {
+	else if (match_cmd("sources\0src\0", cmd)) {
 		proto_write(fd, "SOURCES", NULL);
 	}
-	else if (!strcmp(cmd, "print") || !strcmp(cmd, "p")) {
+	else if (match_cmd("print\0p\0", cmd)) {
 		payload = json_object_new_object();
 		json_object_object_add(payload, "expr", json_object_new_string(line));
 		proto_write(fd, "PRINT", payload);
 	}
-	else if (!strcmp(cmd, "lines") || !strcmp(cmd, "ln")) {
+	else if (match_cmd("lines\0ln\0", cmd)) {
 		char *spec = shift_word(&line);
 		char *before = shift_word(&line);
 		char *after = shift_word(&line);
@@ -1116,7 +1225,7 @@ send_command(int fd, char *line, bool *resuming)
 
 		proto_write(fd, "LINES", payload);
 	}
-	else if (!strcmp(cmd, "throw")) {
+	else if (match_cmd("throw\0", cmd)) {
 		char *first = shift_word(&line);
 		static const char *types[] = {
 			"syntax", "runtime", "type", "reference", "user", "exit"
@@ -1145,7 +1254,7 @@ send_command(int fd, char *line, bool *resuming)
 
 		proto_write(fd, "THROW", payload);
 	}
-	else if (!strcmp(cmd, "disassemble") || !strcmp(cmd, "disasm")) {
+	else if (match_cmd("disassemble\0disasm\0", cmd)) {
 		if (*line) {
 			payload = json_object_new_object();
 			json_object_object_add(payload, "spec", json_object_new_string(line));
@@ -1153,12 +1262,12 @@ send_command(int fd, char *line, bool *resuming)
 
 		proto_write(fd, "DISASSEMBLE", payload);
 	}
-	else if (!strcmp(cmd, "source")) {
+	else if (match_cmd("source\0", cmd)) {
 		payload = json_object_new_object();
 		json_object_object_add(payload, "file", json_object_new_string(line));
 		proto_write(fd, "SOURCE", payload);
 	}
-	else if (!strcmp(cmd, "quit") || !strcmp(cmd, "q")) {
+	else if (match_cmd("quit\0q\0", cmd)) {
 		bool force = !strcmp(trim(line), "-f");
 
 		if (!force && isatty(STDIN_FILENO)) {
@@ -1167,8 +1276,10 @@ send_command(int fd, char *line, bool *resuming)
 			printf("Terminate program? (y/n) > ");
 			fflush(stdout);
 
-			if (!fgets(confirm, sizeof(confirm), stdin) || tolower((unsigned char)confirm[0]) != 'y')
+			if (!fgets(confirm, sizeof(confirm), stdin) || tolower((unsigned char)confirm[0]) != 'y') {
+				*sent = false;
 				return true;
+			}
 		}
 
 		proto_write(fd, "QUIT", NULL);
@@ -1176,6 +1287,7 @@ send_command(int fd, char *line, bool *resuming)
 	}
 	else {
 		printf("Unrecognized command '%s' (try 'help')\n", cmd);
+		*sent = false;
 	}
 
 	return true;
@@ -1437,10 +1549,15 @@ main(int argc, char **argv)
 				stdin_done = true;
 			}
 			else if (*trim(buf)) {
-				bool resuming;
-				bool keep_going = send_command(fd, trim(buf), &resuming);
+				bool resuming, sent;
+				bool keep_going = send_command(fd, trim(buf), &resuming, &sent);
 
-				awaiting_response = true;
+				/* An unrecognized/empty command (or "quit" declined at its
+				 * confirmation prompt) never reaches the server, so there
+				 * is no response to wait for - re-show the prompt right
+				 * away instead of waiting forever for one that isn't
+				 * coming. */
+				awaiting_response = sent;
 
 				if (resuming)
 					paused = false;

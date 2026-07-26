@@ -69,6 +69,26 @@ void debug_highlight_print_source(FILE *out, char **lines, size_t nlines,
                                    const debug_highlight_span_t *hl,
                                    size_t left_pad, size_t columns);
 
+/* A single [from, to] (1-based, inclusive) line range, for the multi-range
+ * form below. */
+typedef struct {
+	size_t from, to;
+} debug_highlight_range_t;
+
+/* Like debug_highlight_print_source(), but for up to `nranges` disjoint
+ * ranges at once - lines that fall in a gap between two ranges are skipped
+ * with a single "   … " ellipsis marker rather than printed, matching the
+ * original format_context_statement()'s handling of a statement too long
+ * to show in full: a window of context at its start, a gap, and a window
+ * around the current instruction/its end. Ranges need not be sorted; a
+ * {0, 0} entry is ignored (so callers can pass a fixed-size array without
+ * always filling every slot). */
+void debug_highlight_print_source_ranges(FILE *out, char **lines, size_t nlines,
+                                          size_t nranges,
+                                          const debug_highlight_range_t *ranges,
+                                          const debug_highlight_span_t *hl,
+                                          size_t left_pad, size_t columns);
+
 /* Print a full-width "[bracket] rest " status bar to `out` on a solid
  * background, ported from the original format_context_header_backtrace()/
  * format_context_header_callframe() (the bar shown above a paused
