@@ -933,6 +933,7 @@ debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
 	static const style_t st_upval = { FG_CYAN, 0, BOLD };
 	static const style_t st_faint = { FG_BWHITE, 0, FAINT };
 	static const style_t st_err   = { FG_RED, 0, BOLD };
+	static const char shadowed_suffix[] = "  (shadowed)";
 	size_t indent_len = indent ? strlen(indent) : 0;
 	size_t value_cols = 0;
 	dbuf_t namebuf = { 0 }, valuebuf = { 0 };
@@ -946,7 +947,7 @@ debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
 		const char *name = v->name ? v->name : "?";
 		const char *repr = v->value_repr ? v->value_repr : "";
 		bool upval = !strcmp(kind, "upvalue");
-		bool faint = !strcmp(kind, "this") || !strcmp(kind, "internal");
+		bool faint = v->shadowed || !strcmp(kind, "this") || !strcmp(kind, "internal");
 		bool err = !strcmp(repr, "<out of range>");
 		size_t namelen;
 
@@ -960,14 +961,19 @@ debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
 		if (indent)
 			fputs(indent, out);
 
-		if (upval)
+		/* A shadowed entry is rendered faint throughout, taking priority
+		 * over its own kind's usual color (still cyan/upvalue matters
+		 * far less than "this isn't what the name resolves to anymore"). */
+		if (v->shadowed)
+			cs(out, &st_faint);
+		else if (upval)
 			cs(out, &st_upval);
 		else if (faint)
 			cs(out, &st_faint);
 
 		fwrite(namebuf.buf, 1, namebuf.len, out);
 
-		if (upval || faint)
+		if (v->shadowed || upval || faint)
 			cs(out, NULL);
 
 		for (; namelen < 16; namelen++)
@@ -983,6 +989,17 @@ debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
 			cs(out, NULL);
 		}
 		else {
+			size_t this_value_cols = value_cols;
+
+			/* Reserve room for the trailing "(shadowed)" marker printed
+			 * below, or it doesn't count against the line's width budget
+			 * and can push the whole line past `columns`, wrapping. */
+			if (v->shadowed && this_value_cols > sizeof(shadowed_suffix) - 1)
+				this_value_cols -= sizeof(shadowed_suffix) - 1;
+
+			if (v->shadowed)
+				cs(out, &st_faint);
+
 			dbuf_printf(&valuebuf, "%s", repr);
 
 			/* value_repr is always the compact, single-line repr (see
@@ -990,9 +1007,18 @@ debug_highlight_print_variables(FILE *out, const debug_variable_t *vars,
 			 * literal embedded newline anyway, since byte-counting
 			 * truncation across one would garble rather than shorten it. */
 			if (columns > 0 && !strchr(repr, '\n'))
-				dbuf_truncate_value(&valuebuf, value_cols);
+				dbuf_truncate_value(&valuebuf, this_value_cols);
 
 			fwrite(valuebuf.buf, 1, valuebuf.len, out);
+
+			if (v->shadowed)
+				cs(out, NULL);
+		}
+
+		if (v->shadowed) {
+			cs(out, &st_faint);
+			fputs(shadowed_suffix, out);
+			cs(out, NULL);
 		}
 
 		fputc('\n', out);

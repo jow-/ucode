@@ -3072,6 +3072,36 @@ build_variables_json(uc_vm_t *vm, uc_callframe_t *frame)
 		bool is_upval = slot >= (size_t)-1 / 2;
 		uc_value_t *item = ucv_object_new(vm);
 		uc_value_t *vval = NULL;
+		bool shadowed = false;
+
+		/* decls entries are recorded innermost-scope-first (a nested
+		 * block's own locals close, and get their debug range added, as
+		 * soon as *that* block ends - see uc_compiler_leave_scope() -
+		 * strictly before the enclosing scope's own locals do, whenever
+		 * that later happens to be) - so among entries whose range covers
+		 * `pos` (i.e. genuinely simultaneously in scope here, not just
+		 * same-named siblings in two different, mutually exclusive
+		 * branches), an earlier index is always the more-nested one: the
+		 * one real script code actually resolves this name to right now.
+		 * A same-named *later* entry is a shadowed outer declaration -
+		 * still shown (its stack slot is real and still holds a value),
+		 * just flagged so the listing doesn't look like a duplicate. */
+		if (vname) {
+			for (size_t j = 0; j < i; j++) {
+				if (decls->entries[j].from > pos || decls->entries[j].to < pos)
+					continue;
+
+				uc_value_t *other = load_constval(names, decls->entries[j].nameidx);
+				bool same = other && ucv_is_equal(vname, other);
+
+				ucv_put(other);
+
+				if (same) {
+					shadowed = true;
+					break;
+				}
+			}
+		}
 
 		if (vname) {
 			ucv_object_add(item, "name", ucv_get(vname));
@@ -3081,6 +3111,9 @@ build_variables_json(uc_vm_t *vm, uc_callframe_t *frame)
 			snprintf(buf, sizeof(buf), "$%zu", slot);
 			ucv_object_add(item, "name", ucv_string_new(buf));
 		}
+
+		if (shadowed)
+			ucv_object_add(item, "shadowed", ucv_boolean_new(true));
 
 		if (!is_upval) {
 			bool is_internal = (vname && *ucv_string_get(vname) == '(');
@@ -3261,7 +3294,7 @@ send_error(int fd, uc_vm_t *vm, const char *msg)
  * unwind to, which is precisely the condition the debugger's dedicated
  * "pause on uncaught exception" system breakpoint (BK_UNCAUGHT, see
  * install_uncaught_exception_breakpoint()) exists to catch. Left armed,
- * a throwing PRINT/SET expression would pause into a confusing nested
+ * a throwing PRINT/EVAL expression would pause into a confusing nested
  * debug session (with a fake "[eval expression]" frame) instead of just
  * being reported back as part of that command's own reply, the way
  * eval_expr()'s caller (and its own EXCEPTION_NONE check just below)
@@ -3274,7 +3307,7 @@ send_error(int fd, uc_vm_t *vm, const char *msg)
  * spuriously match here by an astronomically unlikely pointer collision
  * with the expression's own freshly compiled chunk. Sandboxing this way
  * only touches which breakpoints can fire; it does not change what the
- * expression itself is allowed to do (see the PRINT/SET help text on
+ * expression itself is allowed to do (see the PRINT/EVAL help text on
  * that - this is not a security boundary, just about not derailing the
  * command's own request/response shape).
  *
@@ -3361,7 +3394,6 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 	}
 
 	uc_value_t *exprfn = ucv_closure_new(vm, uc_program_entry(prog), false);
-	uc_chunk_t *chunk = &((uc_closure_t *)exprfn)->function->chunk;
 
 	/* No restriction on the compiled shape here: raw_mode compiles `expr`
 	 * as an ordinary sequence of ucode statements, so a bare literal
@@ -3369,66 +3401,68 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 	 * one ("varname", "myobj.prop") - either way, calling the compiled
 	 * entry below always leaves *some* value on the stack to report back
 	 * (the closing statement's value, or null for a plain statement with
-	 * none), and the "referenced variables" scan just below only cares
-	 * about I_LVAR occurring *anywhere* in the chunk, not about what its
-	 * first instruction happens to be. */
+	 * none). */
 	uc_value_t *scope = ucv_object_new(NULL);
 
-	/* determine referenced variables */
-	for (size_t i = 0; i < chunk->count; i += insn_length(&chunk->entries[i], prog)) {
-		if (chunk->entries[i] != I_LVAR)
+	/* Pre-populate `scope` with *every* local/upvalue declared in the
+	 * paused frame's current scope - not just ones this expression
+	 * happens to read - so a bare assignment like "x = 1" resolves
+	 * directly against `scope` too, not only a read like "x" or "x + 1".
+	 * The compiler emits a plain assignment as a bare I_SVAR with no
+	 * preceding I_LVAR at all (there's nothing to read first), and
+	 * I_SVAR's undeclared-variable fallback (uc_vm_insn_store_var() in
+	 * vm.c) only walks *past* `scope` onto the real enclosing scope chain
+	 * - in the worst case all the way to the real vm->globals, silently
+	 * creating an unwanted genuine global - when `scope` doesn't already
+	 * have the name as an *own* property; whether the expression read it
+	 * first is irrelevant to that check. Earlier (i.e. more specific, in
+	 * the case of shadowing) declarations win: stop at the first match
+	 * per name rather than letting a later, less-specific entry overwrite
+	 * it, matching normal scoping. */
+	for (size_t i = 0; i < decls->count; i++) {
+		if (decls->entries[i].from > pos || decls->entries[i].to < pos)
 			continue;
 
-		uc_value_t *varname = load_constval(
-			&prog->constants,
-			insn_u32(chunk->entries + i + 1));
+		uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
+		bool already;
 
-		if (!varname)
+		if (!vname)
 			continue;
 
+		ucv_object_get(scope, ucv_string_get(vname), &already);
+
+		if (already) {
+			ucv_put(vname);
+			continue;
+		}
+
+		size_t slot = decls->entries[i].slot;
 		uc_value_t *varval = NULL;
 
-		for (size_t j = 0; !varval && j < decls->count; j++) {
-			if (decls->entries[j].from > pos || decls->entries[j].to < pos)
-				continue;
+		/* is local var */
+		if (slot < (size_t)-1 / 2) {
+			slot += frame->stackframe;
 
-			uc_value_t *vname = load_constval(names, decls->entries[j].nameidx);
-			bool match = ucv_is_equal(varname, vname);
+			if (slot < vm->stack.count)
+				varval = ucv_get(vm->stack.entries[slot]);
+		}
 
-			ucv_put(vname);
+		/* is upvalue */
+		else {
+			slot -= ((size_t)-1 / 2);
 
-			if (!match)
-				continue;
+			if (slot < frame->closure->function->nupvals) {
+				uc_upvalref_t *ref = frame->closure->upvals[slot];
 
-			size_t slot = decls->entries[j].slot;
-
-			/* is local var */
-			if (slot < (size_t)-1 / 2) {
-				slot += frame->stackframe;
-
-				if (slot < vm->stack.count)
-					varval = ucv_get(vm->stack.entries[slot]);
-			}
-
-			/* is upvalue */
-			else {
-				slot -= ((size_t)-1 / 2);
-
-				if (slot < frame->closure->function->nupvals) {
-					uc_upvalref_t *ref = frame->closure->upvals[slot];
-
-					if (ref && ref->closed)
-						varval = ucv_get(ref->value);
-					else if (ref && ref->slot < vm->stack.count)
-						varval = ucv_get(vm->stack.entries[ref->slot]);
-				}
+				if (ref && ref->closed)
+					varval = ucv_get(ref->value);
+				else if (ref && ref->slot < vm->stack.count)
+					varval = ucv_get(vm->stack.entries[ref->slot]);
 			}
 		}
 
-		if (varval)
-			ucv_object_add(scope, ucv_string_get(varname), varval);
-
-		ucv_put(varname);
+		ucv_object_add(scope, ucv_string_get(vname), varval);
+		ucv_put(vname);
 	}
 
 	uc_value_t *prev_scope = ucv_get(uc_vm_scope_get(vm));
@@ -3477,6 +3511,66 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 	vm->open_upvals = upvals;
 	vm->callframes = frames;
 	vm->stack = stack;
+
+	/* `scope` only ever held independent *copies* of the locals/upvalues
+	 * collected above (global references need no such handling: their
+	 * value already lives in prev_scope itself, scope's prototype, which
+	 * assignment inside the expression reaches directly) - so "x = 1" or
+	 * "x.y = 1" mutated the copy, not the paused frame's real stack slot/
+	 * upvalue, on its own. Write any of them back now that the real stack
+	 * is back in place, the same way I_SLOC/I_SUPV do (see
+	 * uc_vm_insn_store_local()/_store_upval() in vm.c). Unconditional,
+	 * regardless of `rv`: a later statement throwing doesn't undo an
+	 * earlier one's already-applied assignment in ordinary script
+	 * execution either, so eval shouldn't behave differently just because
+	 * it happens to run in a temporary scope. Must run before
+	 * uc_vm_scope_set() below, which drops the last reference to `scope`. */
+	for (size_t i = 0; i < decls->count; i++) {
+		if (decls->entries[i].from > pos || decls->entries[i].to < pos)
+			continue;
+
+		uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
+		bool exists = false;
+		uc_value_t *newval = vname
+			? ucv_object_get(scope, ucv_string_get(vname), &exists) : NULL;
+
+		ucv_put(vname);
+
+		if (!exists)
+			continue;
+
+		size_t slot = decls->entries[i].slot;
+
+		/* is local variable */
+		if (slot < (size_t)-1 / 2) {
+			slot += frame->stackframe;
+
+			if (slot < vm->stack.count) {
+				ucv_put(vm->stack.entries[slot]);
+				vm->stack.entries[slot] = ucv_get(newval);
+			}
+		}
+
+		/* is upvalue */
+		else {
+			slot -= ((size_t)-1 / 2);
+
+			if (slot < frame->closure->function->nupvals) {
+				uc_upvalref_t *ref = frame->closure->upvals[slot];
+
+				if (ref) {
+					if (ref->closed) {
+						ucv_put(ref->value);
+						ref->value = ucv_get(newval);
+					}
+					else if (ref->slot < vm->stack.count) {
+						ucv_put(vm->stack.entries[ref->slot]);
+						vm->stack.entries[ref->slot] = ucv_get(newval);
+					}
+				}
+			}
+		}
+	}
 
 	uc_vm_scope_set(vm, prev_scope);
 	uc_program_put(prog);
@@ -3675,11 +3769,13 @@ proto_cmd_help(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd
 		{ "SOURCES",
 			"List loaded source buffers." },
 		{ "PRINT",
-			"Evaluate an expression. Payload: {\"expr\":\"...\"}." },
-		{ "SET",
-			"Assign an expression's value to a variable. Payload: "
-			"{\"name\":\"...\",\"expr\":\"...\"}. Response: VALUE {\"name\",\"repr\"} "
-			"or ERROR." },
+			"Evaluate an expression and report its result. Payload: "
+			"{\"expr\":\"...\"}. Response: VALUE {\"repr\"} or ERROR." },
+		{ "EVAL",
+			"Like PRINT, but discard the expression's result instead of "
+			"reporting it back - for expressions run for their side effect "
+			"(assignment, delete, ...). Payload: {\"expr\":\"...\"}. "
+			"Response: OK or ERROR." },
 		{ "LINES",
 			"Resolve a source range. Payload: {\"spec\",\"before\",\"after\"}." },
 		{ "THROW",
@@ -4085,140 +4181,35 @@ proto_cmd_print(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int f
 	free(errmsg);
 }
 
+/* Like PRINT, but for an expression run for its side effect (assignment,
+ * delete, a mutating call, ...) rather than its value - mirrors the ucode
+ * CLI's -e/-p distinction (uc_compile()'s two entry points in main.c).
+ * "set x.y 1" is just "eval x.y = 1" - ordinary assignment syntax handles
+ * plain variables, property paths and array indices alike, so there is no
+ * separate name-resolution/slot-writing logic here at all, unlike an
+ * earlier, since-removed dedicated SET command had. */
 static void
-proto_cmd_set(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+proto_cmd_eval(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
 {
 	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
-	uc_value_t *namev = ucv_object_get(payload, "name", NULL);
 	uc_value_t *exprv = ucv_object_get(payload, "expr", NULL);
 	uc_value_t *res = NULL;
 	char *errmsg = NULL;
-	const char *name;
 
-	if (!frame) {
-		send_error(fd, vm, "No active call frame");
+	if (ucv_type(exprv) != UC_STRING) {
+		send_error(fd, vm, "Usage: EVAL {\"expr\":\"...\"}");
 		return;
 	}
 
-	if (ucv_type(namev) != UC_STRING || ucv_type(exprv) != UC_STRING) {
-		send_error(fd, vm, "Usage: SET {\"name\":\"...\",\"expr\":\"...\"}");
-		return;
+	if (eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg)) {
+		ucv_put(res);
+		debug_proto_write(fd, vm, "OK", NULL);
 	}
-
-	name = ucv_string_get(namev);
-
-	if (!eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg)) {
+	else {
 		send_error(fd, vm, errmsg ? errmsg : "Evaluation failed");
-		free(errmsg);
-		return;
 	}
 
-	/* Find `name` among the current frame's in-scope local/upvalue slots -
-	 * same declaration scan build_variables_json() uses - and, if found,
-	 * write straight into that stack slot/upvalue ref the same way
-	 * I_SLOC/I_SUPV do (see uc_vm_insn_store_local()/_store_upval() in
-	 * vm.c); otherwise fall back to the same undeclared-variable handling
-	 * I_SVAR uses (uc_vm_insn_store_var()) - walk the assigning scope's
-	 * prototype chain for an existing binding, or create one on
-	 * vm->globals in non-strict mode. */
-	uc_chunk_t *chunk = &frame->closure->function->chunk;
-	uc_variables_t *decls = &chunk->debuginfo.variables;
-	uc_value_list_t *names = &chunk->debuginfo.varnames;
-	size_t pos = frame->ip - chunk->entries;
-	bool found = false;
-
-	for (size_t i = 0; !found && i < decls->count; i++) {
-		if (decls->entries[i].from > pos || decls->entries[i].to < pos)
-			continue;
-
-		uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
-
-		if (!vname || strcmp(ucv_string_get(vname), name)) {
-			ucv_put(vname);
-			continue;
-		}
-
-		ucv_put(vname);
-		found = true;
-
-		size_t slot = decls->entries[i].slot;
-
-		/* is local variable */
-		if (slot < (size_t)-1 / 2) {
-			slot += frame->stackframe;
-
-			if (slot < vm->stack.count) {
-				ucv_put(vm->stack.entries[slot]);
-				vm->stack.entries[slot] = ucv_get(res);
-			}
-		}
-
-		/* is upvalue */
-		else {
-			slot -= ((size_t)-1 / 2);
-
-			if (slot < frame->closure->function->nupvals) {
-				uc_upvalref_t *ref = frame->closure->upvals[slot];
-
-				if (ref) {
-					if (ref->closed) {
-						ucv_put(ref->value);
-						ref->value = ucv_get(res);
-					}
-					else if (ref->slot < vm->stack.count) {
-						ucv_put(vm->stack.entries[ref->slot]);
-						vm->stack.entries[ref->slot] = ucv_get(res);
-					}
-				}
-			}
-		}
-	}
-
-	if (!found) {
-		uc_value_t *scope = vm->globals, *next;
-		bool exists;
-
-		while (true) {
-			ucv_object_get(scope, name, &exists);
-
-			if (exists)
-				break;
-
-			next = ucv_prototype_get(scope);
-
-			if (!next) {
-				if (frame->strict) {
-					char msg[128];
-
-					snprintf(msg, sizeof(msg),
-						"Reference error: access to undeclared variable %s", name);
-					send_error(fd, vm, msg);
-					ucv_put(res);
-
-					return;
-				}
-
-				break;
-			}
-
-			scope = next;
-		}
-
-		ucv_object_add(scope, name, ucv_get(res));
-	}
-
-	uc_stringbuf_t vb = { 0 };
-	uc_value_t *obj = ucv_object_new(vm);
-
-	ucv_to_stringbuf_formatted(vm, &vb, res, 0, ' ', 2);
-
-	ucv_object_add(obj, "name", ucv_string_new(name));
-	ucv_object_add(obj, "repr", ucv_string_new_length(vb.buf, vb.bpos));
-	debug_proto_write(fd, vm, "VALUE", obj);
-
-	ucv_put(obj);
-	ucv_put(res);
-	free(vb.buf);
+	free(errmsg);
 }
 
 static void
@@ -4791,7 +4782,7 @@ static const struct {
 	{ "VARIABLES",         proto_cmd_variables },
 	{ "SOURCES",           proto_cmd_sources },
 	{ "PRINT",             proto_cmd_print },
-	{ "SET",               proto_cmd_set },
+	{ "EVAL",              proto_cmd_eval },
 	{ "LINES",             proto_cmd_lines },
 	{ "THROW",             proto_cmd_throw },
 	{ "DISASSEMBLE",       proto_cmd_disasm },

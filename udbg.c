@@ -681,10 +681,12 @@ render_variables_array(struct json_object *items, const char *indent)
 
 	for (i = 0; i < n; i++) {
 		struct json_object *it = json_object_array_get_idx(items, i);
+		struct json_object *shadowed_j = json_object_object_get(it, "shadowed");
 
 		vars[i].name = jstr(it, "name", "?");
 		vars[i].kind = jstr(it, "kind", "");
 		vars[i].value_repr = jstr(it, "value_repr", "");
+		vars[i].shadowed = shadowed_j && json_object_get_boolean(shadowed_j);
 	}
 
 	debug_highlight_print_variables(stdout, vars, n, indent, term_columns());
@@ -1297,23 +1299,24 @@ static const struct {
 		"Print a list of loaded source buffers."
 	},
 	{ "print\0p\0",
-		"Evaluate an ucode expression and print the resulting value.\n\n"
+		"Evaluate an ucode expression and print the resulting value - like "
+		"the ucode CLI's `-p`.\n\n"
 		"Examples:\n"
 		"  print varname        # Print value of variable 'varname'\n"
 		"  print myobj.prop     # Print `prop` property of `myobj`\n"
 		"  print keys(myobj)    # Invoke a stdlib function"
 	},
-	{ "set\0",
-		"Assign the value of an ucode expression to a variable - the "
-		"idiomatic way to change a variable's value while paused, instead "
-		"of misusing 'print' with an assignment expression. `name` may be "
-		"any local, upvalue or global variable visible at the current "
-		"location; if it isn't declared anywhere in scope, a new global "
-		"variable is created (or, in strict mode, this is an error) - the "
-		"same rule plain assignment in script code follows.\n\n"
+	{ "eval\0e\0",
+		"Evaluate an ucode expression, discarding its result instead of "
+		"printing it - like the ucode CLI's `-e`. The idiomatic way to "
+		"change a variable's value while paused: assignment is just "
+		"ordinary expression syntax, so a plain variable, a property path "
+		"or an array index all work the same way a script would write "
+		"them, without a separate dedicated command for it.\n\n"
 		"Examples:\n"
-		"  set x 5               # Assign the number 5 to variable 'x'\n"
-		"  set x y + 1           # Assign the value of 'y + 1' to 'x'"
+		"  eval x = 5            # Assign the number 5 to variable 'x'\n"
+		"  eval x.y = 1          # Assign 1 to property 'y' of 'x'\n"
+		"  eval delete foo.bar   # Delete property 'bar' of 'foo'"
 	},
 	{ "lines\0ln\0",
 		"Print source code lines surrounding the given location specified "
@@ -1491,19 +1494,10 @@ send_command(int fd, char *line, bool *resuming, bool *sent)
 		json_object_object_add(payload, "expr", json_object_new_string(line));
 		proto_write(fd, "PRINT", payload);
 	}
-	else if (match_cmd("set\0", cmd)) {
-		char *name = shift_word(&line);
-
-		if (!*name || !*line) {
-			printf("Usage: set <name> <expr>\n");
-			*sent = false;
-			return true;
-		}
-
+	else if (match_cmd("eval\0e\0", cmd)) {
 		payload = json_object_new_object();
-		json_object_object_add(payload, "name", json_object_new_string(name));
 		json_object_object_add(payload, "expr", json_object_new_string(line));
-		proto_write(fd, "SET", payload);
+		proto_write(fd, "EVAL", payload);
 	}
 	else if (match_cmd("lines\0ln\0", cmd)) {
 		char *spec = shift_word(&line);
