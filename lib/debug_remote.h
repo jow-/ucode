@@ -13,16 +13,20 @@ void debug_remote_cleanup_attach_socket(void);
  * on error. Used by debug.listen(path) for the explicit-path case. */
 int debug_remote_accept_on_path(const char *path);
 
-/* Push unsolicited notifications to a connected debugger client, if any. */
+/* Push unsolicited notifications to a connected debugger client, if any, as
+ * "EVENT {json}" protocol messages (see debug_proto.h) - the JSON payload
+ * always carries a discriminating "event" field ("exception"/"exit"/
+ * "signal"). */
 void debug_remote_notify_exception(uc_vm_t *vm, uc_exception_t *ex);
 void debug_remote_notify_signal(int signum);
 void debug_remote_notify_exit(uc_vm_t *vm, uc_vm_status_t status, int32_t exit_code,
                                uc_value_t *exception_obj);
 
-/* Mark the given fd as the currently attached remote debugger connection
+/* Mark the given fd as the currently attached debugger session connection
  * (or -1 for none), used by debug_remote_has_active_connection() and the
- * notify helpers above. Owned by whoever is currently driving the session
- * (debug_cli_run_remote_session()). */
+ * notify helpers above - shared by both the remote and local (-x) cases,
+ * since both ultimately just hand a connected fd to bk_enter_session().
+ * Owned by whoever is currently driving the session (debug_run_session()). */
 void debug_remote_set_active_fd(int fd);
 bool debug_remote_has_active_connection(void);
 int debug_remote_get_active_fd(void);
@@ -33,10 +37,10 @@ int debug_remote_get_active_fd(void);
  * socket error (caller should give up). */
 int debug_remote_handle_break(uc_vm_t *vm);
 
-/* Provided by debug.c: run a full interactive debugger CLI session over an
- * already-connected client socket, reusing the local terminal debugger's
- * command set and readline-style editing. Takes ownership of client_fd
- * (closes it) and resumes script execution before returning. */
-void debug_cli_run_remote_session(uc_vm_t *vm, int client_fd);
+/* Provided by debug.c: run a full interactive debugger session over an
+ * already-connected client socket, speaking the line-based debug protocol
+ * (see debug_proto.h). Takes ownership of client_fd (closes it) and resumes
+ * script execution before returning. */
+void debug_run_session(uc_vm_t *vm, int client_fd);
 
 #endif
