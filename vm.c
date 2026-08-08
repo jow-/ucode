@@ -80,7 +80,7 @@ static const int8_t insn_operand_bytes[__I_MAX] = {
 	[I_DYNLOAD] = 4
 };
 
-static const char *exception_type_strings[] = {
+const char *exception_type_strings[] = {
 	[EXCEPTION_SYNTAX] = "Syntax error",
 	[EXCEPTION_RUNTIME] = "Runtime error",
 	[EXCEPTION_TYPE] = "Type error",

@@ -305,8 +305,11 @@ typedef enum {
 	EXCEPTION_TYPE,
 	EXCEPTION_REFERENCE,
 	EXCEPTION_USER,
-	EXCEPTION_EXIT
+	EXCEPTION_EXIT,
+	EXCEPTION_MAX
 } uc_exception_type_t;
+
+extern const char *exception_type_strings[];
 
 typedef struct {
 	uc_exception_type_t type;

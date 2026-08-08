@@ -75,11 +75,11 @@ Passing an uncompilable regexp throws an exception.
 -- End --
 
 -- Expect stderr --
-Compile error
-In line 10, byte 8:
+Syntax error: Compile error
+In line 4, byte 16:
 
- `        die(e);`
-  Near here ---^
+ `        regexp("foo(");`
+  Near here -----------^
 
 
 -- End --
