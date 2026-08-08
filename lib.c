@@ -738,30 +738,103 @@ uc_chr(uc_vm_t *vm, size_t nargs)
 	return rv;
 }
 
+static uc_exception_type_t
+check_exception_object(uc_value_t *obj)
+{
+	uc_value_t *trace, *entry, *type;
+	uc_exception_type_t i;
+	const char *typestr;
+	size_t len;
+
+	if (ucv_type(obj) != UC_OBJECT)
+		return EXCEPTION_NONE;
+
+	trace = ucv_object_get(obj, "stacktrace", NULL);
+
+	if (ucv_type(trace) != UC_ARRAY)
+		return EXCEPTION_NONE;
+
+	len = ucv_array_length(trace);
+
+	if (len == 0)
+		return EXCEPTION_NONE;
+
+	entry = ucv_array_get(trace, 0);
+
+	if (ucv_type(entry) != UC_OBJECT || ucv_object_get(entry, "line", NULL) == NULL)
+		return EXCEPTION_NONE;
+
+	type = ucv_object_get(obj, "type", NULL);
+
+	if (ucv_type(type) != UC_STRING)
+		return EXCEPTION_USER;
+
+	typestr = ucv_string_get(type);
+
+	for (i = EXCEPTION_SYNTAX; i < EXCEPTION_MAX; i++)
+		if (exception_type_strings[i] && strcmp(typestr, exception_type_strings[i]) == 0)
+			return i;
+
+	return EXCEPTION_USER;
+}
+
 /**
  * Raise an exception with the given message and abort execution.
  *
+ * When passed an exception object (an object with `message` and/or
+ * `stacktrace` properties matching the shape of a caught exception),
+ * `die()` preserves the original message and stacktrace instead of
+ * creating new ones — enabling clean re-throw semantics.
+ *
  * @function module:core#die
  *
- * @param {string} msg
- * The error message.
+ * @param {string|Object} msg
+ * The error message, or an exception-like object with `message` and
+ * `stacktrace` properties.
  *
  * @throws {Error}
  * The error with the given message.
  *
  * @example
  * die(msg);
+ *
+ * @example
+ * try {
+ *     inner();
+ * } catch (e) {
+ *     die(e);  // re-throw preserving original message and stacktrace
+ * }
  */
 static uc_value_t *
 uc_die(uc_vm_t *vm, size_t nargs)
 {
-	uc_value_t *msg = uc_fn_arg(0);
+	uc_value_t *arg = uc_fn_arg(0);
+	uc_exception_type_t etype;
 	bool freeable = false;
 	char *s;
 
-	s = msg ? uc_cast_string(vm, &msg, &freeable) : "Died";
+	/* If arg is an exception object with a valid stacktrace, use it
+	 * directly to avoid the cost of capturing a new one. */
+	etype = check_exception_object(arg);
 
-	uc_vm_raise_exception(vm, EXCEPTION_USER, "%s", s);
+	if (etype != EXCEPTION_NONE)
+	{
+		uc_value_t *msg = ucv_object_get(arg, "message", NULL);
+
+		s = msg ? uc_cast_string(vm, &msg, &freeable) : "Died";
+
+		vm->exception.type = etype;
+		free(vm->exception.message);
+		vm->exception.message = strdup(s);
+
+		ucv_put(vm->exception.stacktrace);
+		vm->exception.stacktrace = ucv_get(ucv_object_get(arg, "stacktrace", NULL));
+	}
+	else
+	{
+		s = arg ? uc_cast_string(vm, &arg, &freeable) : "Died";
+		uc_vm_raise_exception(vm, EXCEPTION_USER, "%s", s);
+	}
 
 	if (freeable)
 		free(s);
