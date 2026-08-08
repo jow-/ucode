@@ -338,7 +338,7 @@ struct uc_vm {
 	uc_parse_config_t *config;
 	uc_value_t *globals;
 	uc_value_t *registry;
-	uc_source_t *sources;
+	struct lh_table *sources;
 	uc_weakref_t values;
 	uc_resource_types_t restypes;
 	char _reserved[sizeof(uc_modexports_t)];
