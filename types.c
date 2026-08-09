@@ -375,7 +375,7 @@ ucv_free(uc_value_t *uv, bool retain)
 		break;
 	}
 
-	if (!ref || !retain) {
+	if (!ref || !retain || !ref->prev || !ref->next) {
 		if (ref && ref->prev && ref->next)
 			ucv_unref(ref);
 

@@ -1770,7 +1770,7 @@ uc_uloop_task(uc_vm_t *vm, size_t nargs)
 	cbs = ucv_array_new(NULL);
 	ucv_array_set(cbs, 0, ucv_get(output_cb));
 	ucv_array_set(cbs, 1, ucv_get(input_cb));
-	ucv_resource_value_set(task->cb.obj, 1, ucv_get(cbs));
+	ucv_resource_value_set(task->cb.obj, 1, cbs);
 
 	ok_return(task->cb.obj);
 }

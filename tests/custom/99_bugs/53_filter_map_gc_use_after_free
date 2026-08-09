@@ -1,0 +1,56 @@
+Test that `filter()`, `map()`, and `call()` survive a `gc("collect")`
+triggered from inside the user callback. The builtins hold their working
+values in C locals while user code runs; under the bug, a GC sweep frees
+them and the builtins return corrupted or dangling data.
+
+-- Testcase --
+{%
+	let input = [];
+	for (let i = 0; i < 10; i++)
+		push(input, i);
+
+	function clobber() {
+		gc("collect");
+
+		let trash = [];
+		for (let i = 0; i < 256; i++)
+			push(trash, sprintf("clobber_%04d", i));
+	}
+
+	let f = filter(input, function(x) { clobber(); return true; });
+	printf("filter: type=%s len=%d match=%s\n",
+		type(f), length(f), (f == null) ? "n/a" : (`${f}` == `${input}` ? "yes" : "no"));
+
+	let m = map(input, function(x) { clobber(); return x; });
+	printf("map: type=%s len=%d match=%s\n",
+		type(m), length(m), (m == null) ? "n/a" : (`${m}` == `${input}` ? "yes" : "no"));
+
+	// uc_callfunc prev_scope UAF: a scope with its own prototype takes the
+	// branch where fn_scope = ucv_get(scope), with no prototype linkage to
+	// the prior globals. The prior globals (`prev_scope`) is then held only
+	// in a C local while user code runs.
+	global.tag = "original";
+
+	// capture builtins as closures so the user code can run them after
+	// vm->globals has been swapped to the prototype-only sandbox scope
+	let mygc = gc, mypush = push, mysprintf = sprintf;
+
+	call(function() {
+		mygc("collect");
+		let trash = [];
+		for (let i = 0; i < 256; i++)
+			mypush(trash, mysprintf("clobber_%04d", i));
+	}, null, proto({}, {}));
+
+	// after call() returns, globals must have been restored to a live
+	// object. accessing global.tag goes through vm->globals; if it is
+	// dangling the lookup fails or returns garbage.
+	printf("call: globals.tag=%s\n", global.tag);
+%}
+-- End --
+
+-- Expect stdout --
+filter: type=array len=10 match=yes
+map: type=array len=10 match=yes
+call: globals.tag=original
+-- End --

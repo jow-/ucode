@@ -94,7 +94,7 @@ def_chunks(zstrm_t * const zstrm)
 
 	/* run deflate() on input until output buffer not full */
 	do {
-		printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
+		printbuf_memset(zstrm->outbuf, -1, 0, CHUNK);
 		zstrm->outbuf->bpos -= CHUNK;
 
 		zstrm->strm.avail_out = CHUNK;
@@ -114,15 +114,15 @@ static bool
 uc_zlib_def_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zstrm)
 {
 	int ret;
-	bool eof = false;
-	uc_value_t *rfn, *rbuf;
+	bool eof = false, rv = false;
+	uc_value_t *rfn, *rbuf = NULL;
 
-	rfn = ucv_property_get(obj, "read");
+	rfn = ucv_get(ucv_property_get(obj, "read"));
 
 	if (!ucv_is_callable(rfn)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				      "Input object does not implement read() method");
-		return false;
+		goto out;
 	}
 
 	do {
@@ -132,7 +132,7 @@ uc_zlib_def_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zs
 		uc_vm_stack_push(vm, ucv_int64_new(CHUNK));
 
 		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE)
-			goto fail;
+			goto out;
 
 		rbuf = uc_vm_stack_pop(vm);	// read output chunk
 
@@ -140,7 +140,7 @@ uc_zlib_def_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zs
 		if (rbuf != NULL && ucv_type(rbuf) != UC_STRING) {
 			uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 					      "Input object read() method returned non-string value");
-			goto fail;
+			goto out;
 		}
 
 		/* check EOF */
@@ -154,14 +154,16 @@ uc_zlib_def_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zs
 		(void)ret;	// XXX make annoying compiler that ignores assert() happy
 
 		ucv_put(rbuf);	// release rbuf
+		rbuf = NULL;
 	} while (!eof);	// finish compression if all of source has been read in
 	assert(ret == Z_STREAM_END);	// stream will be complete
 
-	return true;
+	rv = true;
 
-fail:
+out:
 	ucv_put(rbuf);
-	return false;
+	ucv_put(rfn);
+	return rv;
 }
 
 static bool
@@ -297,7 +299,7 @@ inf_chunks(zstrm_t * const zstrm)
 
 	/* run inflate() on input until output buffer not full */
 	do {
-		printbuf_memset(zstrm->outbuf, printbuf_length(zstrm->outbuf) + CHUNK - 1, 0, 1);
+		printbuf_memset(zstrm->outbuf, -1, 0, CHUNK);
 		zstrm->outbuf->bpos -= CHUNK;
 
 		zstrm->strm.avail_out = CHUNK;
@@ -322,15 +324,15 @@ static bool
 uc_zlib_inf_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zstrm)
 {
 	int ret = Z_STREAM_ERROR;	// error out if EOF on first loop
-	bool eof = false;
-	uc_value_t *rfn, *rbuf;
+	bool eof = false, rv = false;
+	uc_value_t *rfn, *rbuf = NULL;
 
-	rfn = ucv_property_get(obj, "read");
+	rfn = ucv_get(ucv_property_get(obj, "read"));
 
 	if (!ucv_is_callable(rfn)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				      "Input object does not implement read() method");
-		return false;
+		goto out;
 	}
 
 	do {
@@ -340,7 +342,7 @@ uc_zlib_inf_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zs
 		uc_vm_stack_push(vm, ucv_int64_new(CHUNK));
 
 		if (uc_vm_call(vm, true, 1) != EXCEPTION_NONE)
-			goto fail;
+			goto out;
 
 		rbuf = uc_vm_stack_pop(vm);	// read output chunk
 
@@ -348,7 +350,7 @@ uc_zlib_inf_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zs
 		if (rbuf != NULL && ucv_type(rbuf) != UC_STRING) {
 			uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 					      "Input object read() method returned non-string value");
-			goto fail;
+			goto out;
 		}
 
 		/* check EOF */
@@ -364,20 +366,19 @@ uc_zlib_inf_object(uc_vm_t *const vm, uc_value_t * const obj, zstrm_t * const zs
 		case Z_NEED_DICT:
 		case Z_DATA_ERROR:
 		case Z_MEM_ERROR:
-			goto fail;
+			goto out;
 		}
 
 		ucv_put(rbuf);	// release rbuf
+		rbuf = NULL;
 	} while (ret != Z_STREAM_END);	// done when inflate() says it's done
 
-	if (ret != Z_STREAM_END)	// data error
-		return false;
+	rv = (ret == Z_STREAM_END);	// data error otherwise
 
-	return true;
-
-fail:
+out:
 	ucv_put(rbuf);
-	return false;
+	ucv_put(rfn);
+	return rv;
 }
 
 static bool

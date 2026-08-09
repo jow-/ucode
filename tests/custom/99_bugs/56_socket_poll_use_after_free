@@ -1,0 +1,31 @@
+Test that `socket.poll()` survives a `gc("collect")` triggered from the
+user's `fileno()` method. The result array is held in a C local while 
+user code runs to resolve each polled handle's fd, and a GC sweep frees
+it mid-loop.
+
+-- Testcase --
+{%
+	import * as socket from 'socket';
+
+	let s = socket.create(socket.AF_INET, socket.SOCK_STREAM, 0);
+	let real_fd = s.fileno();
+
+	let obj = {};
+	obj.fileno = function() {
+		gc("collect");
+		let trash = [];
+		for (let i = 0; i < 256; i++)
+			push(trash, sprintf("clobber_%04d", i));
+		return real_fd;
+	};
+
+	let r = socket.poll(0, [obj, socket.POLLIN]);
+
+	printf("type=%s len=%d first_is_obj=%s\n",
+		type(r), length(r), (length(r) > 0 && r[0][0] === obj) ? "yes" : "no");
+%}
+-- End --
+
+-- Expect stdout --
+type=array len=1 first_is_obj=yes
+-- End --

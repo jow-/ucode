@@ -2701,11 +2701,14 @@ uc_socket_poll(uc_vm_t *vm, size_t nargs)
 	if (errno != 0 || timeout < (int64_t)INT_MIN || timeout > (int64_t)INT_MAX)
 		err_return(ERANGE, "Invalid timeout value");
 
+	size_t argoff = vm->stack.count - nargs;
+
 	rv = ucv_array_new(vm);
+	uc_vm_stack_push(vm, ucv_get(rv));
 
 	for (size_t i = 1; i < nargs; i++) {
 		uc_vector_grow(&pfds);
-		item = uv_to_pollfd(vm, uc_fn_arg(i), &pfds.entries[pfds.count]);
+		item = uv_to_pollfd(vm, vm->stack.entries[argoff + i], &pfds.entries[pfds.count]);
 
 		if (item)
 			ucv_array_set(rv, pfds.count++, item);
@@ -2714,6 +2717,7 @@ uc_socket_poll(uc_vm_t *vm, size_t nargs)
 	ret = poll(pfds.entries, pfds.count, timeout);
 
 	if (ret == -1) {
+		ucv_put(uc_vm_stack_pop(vm));
 		ucv_put(rv);
 		uc_vector_clear(&pfds);
 		err_return(errno, "poll()");
@@ -2723,6 +2727,7 @@ uc_socket_poll(uc_vm_t *vm, size_t nargs)
 		ucv_array_set(ucv_array_get(rv, i), 1,
 			ucv_int64_new(pfds.entries[i].revents));
 
+	ucv_put(uc_vm_stack_pop(vm));
 	uc_vector_clear(&pfds);
 	ok_return(rv);
 }

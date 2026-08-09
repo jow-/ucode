@@ -1,0 +1,31 @@
+Test that `json()` survives the user's `read()` callback reassigning
+`obj.read` between calls. `uc_json_from_object()` caches the read method
+as a borrowed pointer for the parse loop; under the bug, reassignment
+drops the original closure's last owning reference and the next
+iteration dereferences freed memory.
+
+-- Testcase --
+{%
+	let chunks = [ '{"hello": ', '"world"}' ];
+	let idx = 0;
+
+	let obj = {};
+	obj.read = function(n) {
+		// state-machine pattern: first call swaps in the "real" reader
+		if (idx == 0) {
+			obj.read = function(n) {
+				return idx < length(chunks) ? chunks[idx++] : "";
+			};
+		}
+		return idx < length(chunks) ? chunks[idx++] : "";
+	};
+
+	printf("%.J\n", json(obj));
+%}
+-- End --
+
+-- Expect stdout --
+{
+	"hello": "world"
+}
+-- End --
