@@ -419,7 +419,7 @@ print_memdump(uc_vm_t *vm, FILE *out)
 					print_function_srcpos(ctx.out, frame->closure);
 				else
 					fprintf(ctx.out, " @ [C function \"%s\"]",
-						frame->cfunction->name);
+						uvc_cfunction_get_name( frame->cfunction ) );
 			}
 			else if (i == frame->stackframe) {
 				fprintf(ctx.out, " (callee)");
@@ -428,7 +428,7 @@ print_memdump(uc_vm_t *vm, FILE *out)
 					print_function_srcpos(ctx.out, frame->closure);
 				else
 					fprintf(ctx.out, " @ [C function \"%s\"]",
-						frame->cfunction->name);
+						uvc_cfunction_get_name( frame->cfunction ) );
 			}
 			else if (i > frame->stackframe) {
 				fprintf(ctx.out, " (argument #%zu)",
@@ -438,7 +438,7 @@ print_memdump(uc_vm_t *vm, FILE *out)
 					print_function_srcpos(ctx.out, frame->closure);
 				else
 					fprintf(ctx.out, " @ [C function \"%s\"]",
-						frame->cfunction->name);
+						uvc_cfunction_get_name( frame->cfunction ) );
 			}
 		}
 
