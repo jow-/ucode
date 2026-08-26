@@ -89,6 +89,8 @@ limitations under the License.
 #include <linux/if_bridge.h>
 #include <linux/netconf.h>
 #include <linux/ipv6.h>
+#include <linux/can/netlink.h>
+#include <linux/can/vxcan.h>
 
 #include <libubox/uloop.h>
 
@@ -932,6 +934,76 @@ static const uc_nl_attr_spec_t link_bridge_slave_attrs[] = {
 	{ IFLA_BRPORT_VLAN_TUNNEL, "vlan_tunnel", DT_U8, 0, NULL },
 };
 
+static const uc_nl_nested_spec_t link_can_bittiming_rta = {
+	.headsize = NLA_ALIGN(sizeof(struct can_bittiming)),
+	.nattrs = 8,
+	.attrs = {
+		{ RTA_UNSPEC, "bitrate", DT_U32, 0, MEMBER(can_bittiming, bitrate) },
+		{ RTA_UNSPEC, "sample_point", DT_U32, 0, MEMBER(can_bittiming, sample_point) },
+		{ RTA_UNSPEC, "tq", DT_U32, 0, MEMBER(can_bittiming, tq) },
+		{ RTA_UNSPEC, "prop_seg", DT_U32, 0, MEMBER(can_bittiming, prop_seg) },
+		{ RTA_UNSPEC, "phase_seg1", DT_U32, 0, MEMBER(can_bittiming, phase_seg1) },
+		{ RTA_UNSPEC, "phase_seg2", DT_U32, 0, MEMBER(can_bittiming, phase_seg2) },
+		{ RTA_UNSPEC, "sjw", DT_U32, 0, MEMBER(can_bittiming, sjw) },
+		{ RTA_UNSPEC, "brp", DT_U32, 0, MEMBER(can_bittiming, brp) },
+	}
+};
+
+static const uc_nl_nested_spec_t link_can_bittiming_const_rta = {
+	.headsize = NLA_ALIGN(sizeof(struct can_bittiming_const)),
+	.nattrs = 8,
+	.attrs = {
+		{ RTA_UNSPEC, "tseg1_min", DT_U32, 0, MEMBER(can_bittiming_const, tseg1_min) },
+		{ RTA_UNSPEC, "tseg1_max", DT_U32, 0, MEMBER(can_bittiming_const, tseg1_max) },
+		{ RTA_UNSPEC, "tseg2_min", DT_U32, 0, MEMBER(can_bittiming_const, tseg2_min) },
+		{ RTA_UNSPEC, "tseg2_max", DT_U32, 0, MEMBER(can_bittiming_const, tseg2_max) },
+		{ RTA_UNSPEC, "sjw_max", DT_U32, 0, MEMBER(can_bittiming_const, sjw_max) },
+		{ RTA_UNSPEC, "brp_min", DT_U32, 0, MEMBER(can_bittiming_const, brp_min) },
+		{ RTA_UNSPEC, "brp_max", DT_U32, 0, MEMBER(can_bittiming_const, brp_max) },
+		{ RTA_UNSPEC, "brp_inc", DT_U32, 0, MEMBER(can_bittiming_const, brp_inc) },
+	}
+};
+
+static const uc_nl_nested_spec_t link_can_clock_rta = {
+	.headsize = NLA_ALIGN(sizeof(struct can_clock)),
+	.nattrs = 1,
+	.attrs = {
+		{ RTA_UNSPEC, "freq", DT_U32, 0, MEMBER(can_clock, freq) },
+	}
+};
+
+static const uc_nl_nested_spec_t link_can_ctrlmode_rta = {
+	.headsize = NLA_ALIGN(sizeof(struct can_ctrlmode)),
+	.nattrs = 2,
+	.attrs = {
+		{ RTA_UNSPEC, "mask", DT_U32, 0, MEMBER(can_ctrlmode, mask) },
+		{ RTA_UNSPEC, "flags", DT_U32, 0, MEMBER(can_ctrlmode, flags) },
+	}
+};
+
+static const uc_nl_nested_spec_t link_can_berr_counter_rta = {
+	.headsize = NLA_ALIGN(sizeof(struct can_berr_counter)),
+	.nattrs = 2,
+	.attrs = {
+		{ RTA_UNSPEC, "txerr", DT_U16, 0, MEMBER(can_berr_counter, txerr) },
+		{ RTA_UNSPEC, "rxerr", DT_U16, 0, MEMBER(can_berr_counter, rxerr) },
+	}
+};
+
+static const uc_nl_attr_spec_t link_can_attrs[] = {
+	{ IFLA_CAN_BERR_COUNTER, "berr_counter", DT_NESTED, DF_NO_SET, &link_can_berr_counter_rta },
+	{ IFLA_CAN_BITTIMING, "bittiming", DT_NESTED, 0, &link_can_bittiming_rta },
+	{ IFLA_CAN_BITTIMING_CONST, "bittiming_const", DT_NESTED, DF_NO_SET, &link_can_bittiming_const_rta },
+	{ IFLA_CAN_CLOCK, "clock", DT_NESTED, DF_NO_SET, &link_can_clock_rta },
+	{ IFLA_CAN_CTRLMODE, "ctrlmode", DT_NESTED, 0, &link_can_ctrlmode_rta },
+	{ IFLA_CAN_DATA_BITTIMING, "data_bittiming", DT_NESTED, 0, &link_can_bittiming_rta },
+	{ IFLA_CAN_DATA_BITTIMING_CONST, "data_bittiming_const", DT_NESTED, DF_NO_SET, &link_can_bittiming_const_rta },
+	{ IFLA_CAN_RESTART, "restart", DT_U32, DF_NO_GET, NULL },
+	{ IFLA_CAN_RESTART_MS, "restart_ms", DT_U32, 0, NULL },
+	{ IFLA_CAN_STATE, "state", DT_U32, DF_NO_SET, NULL },
+	{ IFLA_CAN_TERMINATION, "termination", DT_U16, 0, NULL },
+};
+
 static const uc_nl_attr_spec_t link_geneve_attrs[] = {
 	{ IFLA_GENEVE_COLLECT_METADATA, "collect_metadata", DT_FLAG, DF_NO_GET, NULL },
 	{ IFLA_GENEVE_ID, "id", DT_U32, 0, NULL },
@@ -992,6 +1064,10 @@ static const uc_nl_attr_spec_t link_vlan_attrs[] = {
 static const uc_nl_attr_spec_t link_vrf_attrs[] = {
 	{ IFLA_VRF_PORT_TABLE, "port_table", DT_U32, DF_NO_SET, NULL },
 	{ IFLA_VRF_TABLE, "table", DT_U32, 0, NULL },
+};
+
+static const uc_nl_attr_spec_t link_vxcan_attrs[] = {
+	{ VXCAN_INFO_PEER, "info_peer", DT_NESTED, 0, &link_msg },
 };
 
 static const uc_nl_attr_spec_t link_vxlan_attrs[] = {
@@ -1884,6 +1960,7 @@ static const struct {
 	LINK_TYPE(bond_slave),
 	LINK_TYPE(bridge),
 	LINK_TYPE(bridge_slave),
+	LINK_TYPE(can),
 	LINK_TYPE(geneve),
 	LINK_TYPE(hsr),
 	LINK_TYPE(ipoib),
@@ -1892,7 +1969,7 @@ static const struct {
 	LINK_TYPE(rmnet),
 	LINK_TYPE(vlan),
 	LINK_TYPE(vrf),
-	//LINK_TYPE(vxcan),
+	LINK_TYPE(vxcan),
 	LINK_TYPE(vxlan),
 	//LINK_TYPE(xdp),
 	//LINK_TYPE(xstats),
@@ -2669,6 +2746,14 @@ uc_nl_parse_rta_nested(const uc_nl_attr_spec_t *spec, struct nl_msg *msg, char *
 	struct nlattr *nested_nla;
 
 	nested_nla = nla_reserve(msg, spec->attr, nest->headsize);
+
+	if (!nested_nla)
+		return false;
+
+	/* nla_reserve() only zeroes the padding, not the payload, so struct
+	 * headers would otherwise carry heap garbage into the kernel */
+	if (nest->headsize)
+		memset(nla_data(nested_nla), 0, nest->headsize);
 
 	if (!uc_nl_parse_attrs(msg, nla_data(nested_nla), nest->attrs, nest->nattrs, vm, val))
 		return false;
@@ -4163,6 +4248,57 @@ register_constants(uc_vm_t *vm, uc_value_t *scope)
 	 */
 	ADD_CONST(HSR_PROTOCOL_HSR);
 	ADD_CONST(HSR_PROTOCOL_PRP);
+
+	/**
+	 * @typedef
+	 * @name CAN controller modes
+	 * @description
+	 * Flag bits used in the `mask` and `flags` members of the `ctrlmode`
+	 * attribute of `can` type links.
+	 * @property {number} CAN_CTRLMODE_LOOPBACK - Loopback mode
+	 * @property {number} CAN_CTRLMODE_LISTENONLY - Listen-only mode
+	 * @property {number} CAN_CTRLMODE_3_SAMPLES - Triple sampling mode
+	 * @property {number} CAN_CTRLMODE_ONE_SHOT - One-shot mode
+	 * @property {number} CAN_CTRLMODE_BERR_REPORTING - Bus error reporting
+	 * @property {number} CAN_CTRLMODE_FD - CAN FD mode
+	 * @property {number} CAN_CTRLMODE_PRESUME_ACK - Ignore missing CAN ACKs
+	 * @property {number} CAN_CTRLMODE_FD_NON_ISO - CAN FD in non-ISO mode
+	 * @property {number} CAN_CTRLMODE_CC_LEN8_DLC - Classic CAN DLC option
+	 */
+	ADD_CONST(CAN_CTRLMODE_LOOPBACK);
+	ADD_CONST(CAN_CTRLMODE_LISTENONLY);
+	ADD_CONST(CAN_CTRLMODE_3_SAMPLES);
+	ADD_CONST(CAN_CTRLMODE_ONE_SHOT);
+	ADD_CONST(CAN_CTRLMODE_BERR_REPORTING);
+	ADD_CONST(CAN_CTRLMODE_FD);
+	ADD_CONST(CAN_CTRLMODE_PRESUME_ACK);
+	ADD_CONST(CAN_CTRLMODE_FD_NON_ISO);
+#ifdef CAN_CTRLMODE_CC_LEN8_DLC
+	ADD_CONST(CAN_CTRLMODE_CC_LEN8_DLC);
+#endif
+#ifdef CAN_CTRLMODE_TDC_AUTO
+	ADD_CONST(CAN_CTRLMODE_TDC_AUTO);
+	ADD_CONST(CAN_CTRLMODE_TDC_MANUAL);
+#endif
+
+	/**
+	 * @typedef
+	 * @name CAN operational states
+	 * @description
+	 * Values of the `state` attribute of `can` type links.
+	 * @property {number} CAN_STATE_ERROR_ACTIVE - RX/TX error count < 96
+	 * @property {number} CAN_STATE_ERROR_WARNING - RX/TX error count < 128
+	 * @property {number} CAN_STATE_ERROR_PASSIVE - RX/TX error count < 256
+	 * @property {number} CAN_STATE_BUS_OFF - RX/TX error count >= 256
+	 * @property {number} CAN_STATE_STOPPED - Device is stopped
+	 * @property {number} CAN_STATE_SLEEPING - Device is sleeping
+	 */
+	ADD_CONST(CAN_STATE_ERROR_ACTIVE);
+	ADD_CONST(CAN_STATE_ERROR_WARNING);
+	ADD_CONST(CAN_STATE_ERROR_PASSIVE);
+	ADD_CONST(CAN_STATE_BUS_OFF);
+	ADD_CONST(CAN_STATE_STOPPED);
+	ADD_CONST(CAN_STATE_SLEEPING);
 
 	/**
 	 * @typedef

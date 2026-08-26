@@ -80,6 +80,8 @@
 # include <linux/in6.h>
 # include <linux/if_packet.h>
 # include <linux/filter.h>
+# include <linux/can.h>
+# include <linux/can/raw.h>
 
 # ifndef SO_TIMESTAMP_OLD
 #  define SO_TIMESTAMP_OLD SO_TIMESTAMP
@@ -367,6 +369,7 @@ sockaddr_to_uv(struct sockaddr_storage *ss, uc_value_t *addrobj)
 	struct sockaddr_un *su;
 #if defined(__linux__)
 	struct sockaddr_ll *sl;
+	struct sockaddr_can *sc;
 #endif
 
 	ucv_object_add(addrobj, "family", ucv_uint64_new(ss->ss_family));
@@ -443,6 +446,21 @@ sockaddr_to_uv(struct sockaddr_storage *ss, uc_value_t *addrobj)
 
 		ucv_object_add(addrobj, "address",
 			hwaddr_to_uv(sl->sll_addr, sl->sll_halen));
+
+		return true;
+
+	case AF_CAN:
+		sc = (struct sockaddr_can *)ss;
+
+		ifname = (sc->can_ifindex > 0)
+			? if_indextoname(sc->can_ifindex, addrstr) : NULL;
+
+		if (ifname)
+			ucv_object_add(addrobj, "interface",
+				ucv_string_new(ifname));
+		else if (sc->can_ifindex != 0)
+			ucv_object_add(addrobj, "interface",
+				ucv_int64_new(sc->can_ifindex));
 
 		return true;
 #endif
@@ -535,6 +553,7 @@ uv_to_sockaddr(uc_value_t *addr, struct sockaddr_storage *ss, socklen_t *slen)
 	struct sockaddr_un *su = (struct sockaddr_un *)ss;
 #if defined(__linux__)
 	struct sockaddr_ll *sl = (struct sockaddr_ll *)ss;
+	struct sockaddr_can *sc = (struct sockaddr_can *)ss;
 #endif
 	uc_value_t *item;
 	unsigned long n;
@@ -807,6 +826,28 @@ uv_to_sockaddr(uc_value_t *addr, struct sockaddr_storage *ss, socklen_t *slen)
 
 			sl->sll_family = AF_PACKET;
 			*slen = sizeof(*sl);
+
+			ok_return(true);
+
+		case AF_CAN:
+			item = ucv_object_get(addr, "interface", NULL);
+
+			if (ucv_type(item) == UC_STRING) {
+				sc->can_ifindex = if_nametoindex(ucv_string_get(item));
+
+				if (sc->can_ifindex == 0)
+					err_return(errno, "Unable to resolve interface %s",
+						ucv_string_get(item));
+			}
+			else if (item != NULL) {
+				sc->can_ifindex = ucv_to_integer(item);
+
+				if (errno)
+					err_return(errno, "Unable to convert interface to integer");
+			}
+
+			sc->can_family = AF_CAN;
+			*slen = sizeof(*sc);
 
 			ok_return(true);
 #endif
@@ -1739,6 +1780,18 @@ static sockopt_t sockopts[] = {
 	{ SOL_PACKET, PACKET_VERSION, SV_INT },
 	{ SOL_PACKET, PACKET_QDISC_BYPASS, SV_BOOL },
 #endif
+
+#if defined(__linux__)
+	{ SOL_CAN_RAW, CAN_RAW_FILTER, SV_STRING },
+	{ SOL_CAN_RAW, CAN_RAW_ERR_FILTER, SV_INT },
+	{ SOL_CAN_RAW, CAN_RAW_LOOPBACK, SV_BOOL },
+	{ SOL_CAN_RAW, CAN_RAW_RECV_OWN_MSGS, SV_BOOL },
+	{ SOL_CAN_RAW, CAN_RAW_FD_FRAMES, SV_BOOL },
+	{ SOL_CAN_RAW, CAN_RAW_JOIN_FILTERS, SV_BOOL },
+# ifdef CAN_RAW_XL_FRAMES
+	{ SOL_CAN_RAW, CAN_RAW_XL_FRAMES, SV_BOOL },
+# endif
+#endif
 };
 
 static cmsgtype_t cmsgtypes[] = {
@@ -2362,7 +2415,7 @@ uc_socket_strerror(uc_vm_t *vm, size_t nargs)
 /**
  * @typedef {Object} module:socket.socket.SocketAddress
  * @property {number} family
- * Address family, one of AF_INET, AF_INET6, AF_UNIX or AF_PACKET.
+ * Address family, one of AF_INET, AF_INET6, AF_UNIX, AF_PACKET or AF_CAN.
  *
  * @property {string} address
  * IPv4/IPv6 address string (AF_INET or AF_INET6 only) or hardware address in
@@ -2376,9 +2429,9 @@ uc_socket_strerror(uc_vm_t *vm, size_t nargs)
  *
  * @property {string|number} [interface]
  * Link local address scope (for IPv6 sockets) or bound network interface
- * (for packet sockets), either a network device name string or a nonzero
- * positive integer representing a network interface index (AF_INET6 and
- * AF_PACKET only).
+ * (for packet and CAN sockets), either a network device name string or a
+ * nonzero positive integer representing a network interface index (AF_INET6,
+ * AF_PACKET and AF_CAN only).
  *
  * @property {string} path
  * Domain socket filesystem path (AF_UNIX only).
@@ -4948,6 +5001,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	 * @property {number} AF_INET - IPv4 Internet protocols.
 	 * @property {number} AF_INET6 - IPv6 Internet protocols.
 	 * @property {number} AF_PACKET - Low-level packet interface.
+	 * @property {number} AF_CAN - Controller Area Network sockets.
 	 */
 	ADD_CONST(AF_UNSPEC);
 	ADD_CONST(AF_UNIX);
@@ -4955,6 +5009,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(AF_INET6);
 #if defined(__linux__)
 	ADD_CONST(AF_PACKET);
+	ADD_CONST(AF_CAN);
 #endif
 
 	/**
@@ -5429,6 +5484,76 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 	ADD_CONST(PACKET_MULTICAST);
 	ADD_CONST(PACKET_OTHERHOST);
 	ADD_CONST(PACKET_OUTGOING);
+#endif
+
+	/**
+	 * @typedef
+	 * @name CAN Protocol Constants
+	 * @description
+	 * The `CAN_RAW` and `CAN_BCM` constants specify SocketCAN protocol numbers
+	 * and may be passed as third argument to
+	 * {@link module:socket#create|create()} for `AF_CAN` sockets.
+	 *
+	 * The `SOL_CAN_RAW` constant specifies the raw CAN socket level and the
+	 * `CAN_RAW_*` constants are option names recognized by
+	 * {@link module:socket.socket#getopt|getopt()} and
+	 * {@link module:socket.socket#setopt|setopt()}, in conjunction with the
+	 * `SOL_CAN_RAW` socket level.
+	 *
+	 * The remaining constants describe the layout of the fixed size CAN frames
+	 * exchanged over raw CAN sockets: bit flags within the 32 bit CAN ID, ID
+	 * masks, frame sizes and payload limits as well as the flag bits used by
+	 * CAN FD frames.
+	 * @property {number} CAN_RAW - Raw CAN protocol.
+	 * @property {number} CAN_BCM - Broadcast manager CAN protocol.
+	 * @property {number} SOL_CAN_RAW - Raw CAN socket option level.
+	 * @property {number} CAN_RAW_FILTER - Set receive filter list, a packed array of 32 bit id/mask pairs.
+	 * @property {number} CAN_RAW_ERR_FILTER - Set error frame filter mask.
+	 * @property {number} CAN_RAW_LOOPBACK - Control local loopback of sent frames.
+	 * @property {number} CAN_RAW_RECV_OWN_MSGS - Control reception of own sent frames.
+	 * @property {number} CAN_RAW_FD_FRAMES - Enable CAN FD frame support.
+	 * @property {number} CAN_RAW_JOIN_FILTERS - All filters must match instead of any.
+	 * @property {number} CAN_RAW_XL_FRAMES - Enable CAN XL frame support.
+	 * @property {number} CAN_EFF_FLAG - Extended (29 bit) frame format flag within the CAN ID.
+	 * @property {number} CAN_RTR_FLAG - Remote transmission request flag within the CAN ID.
+	 * @property {number} CAN_ERR_FLAG - Error message frame flag within the CAN ID.
+	 * @property {number} CAN_SFF_MASK - Standard (11 bit) frame format ID mask.
+	 * @property {number} CAN_EFF_MASK - Extended (29 bit) frame format ID mask.
+	 * @property {number} CAN_ERR_MASK - Error frame class mask.
+	 * @property {number} CAN_MTU - Size of a classic CAN frame.
+	 * @property {number} CANFD_MTU - Size of a CAN FD frame.
+	 * @property {number} CANFD_BRS - CAN FD bit rate switch flag.
+	 * @property {number} CANFD_ESI - CAN FD error state indicator flag.
+	 * @property {number} CAN_MAX_DLEN - Maximum classic CAN payload length.
+	 * @property {number} CANFD_MAX_DLEN - Maximum CAN FD payload length.
+	 */
+#if defined(__linux__)
+	ADD_CONST(CAN_RAW);
+	ADD_CONST(CAN_BCM);
+	ADD_CONST(SOL_CAN_RAW);
+	ADD_CONST(CAN_RAW_FILTER);
+	ADD_CONST(CAN_RAW_ERR_FILTER);
+	ADD_CONST(CAN_RAW_LOOPBACK);
+	ADD_CONST(CAN_RAW_RECV_OWN_MSGS);
+	ADD_CONST(CAN_RAW_FD_FRAMES);
+	ADD_CONST(CAN_RAW_JOIN_FILTERS);
+# ifdef CAN_RAW_XL_FRAMES
+	ADD_CONST(CAN_RAW_XL_FRAMES);
+# endif
+
+	ADD_CONST(CAN_EFF_FLAG);
+	ADD_CONST(CAN_RTR_FLAG);
+	ADD_CONST(CAN_ERR_FLAG);
+	ADD_CONST(CAN_SFF_MASK);
+	ADD_CONST(CAN_EFF_MASK);
+	ADD_CONST(CAN_ERR_MASK);
+
+	ADD_CONST(CAN_MTU);
+	ADD_CONST(CANFD_MTU);
+	ADD_CONST(CANFD_BRS);
+	ADD_CONST(CANFD_ESI);
+	ADD_CONST(CAN_MAX_DLEN);
+	ADD_CONST(CANFD_MAX_DLEN);
 #endif
 
 	/**
