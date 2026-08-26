@@ -276,6 +276,12 @@ void uc_vm_free(uc_vm_t *vm)
 		vm->open_upvals = ref;
 	}
 
+	/* Resource type prototypes are part of the VM value pool, so release the
+	 * restype refs before the final GC; any references still held by
+	 * GC-managed values are dropped by ucv_freeall() itself. */
+	for (i = 0; i < vm->restypes.count; i++)
+		ucv_put(vm->restypes.entries[i]->proto);
+
 	uc_vm_reset_callframes(vm);
 	uc_vm_reset_stack(vm);
 	uc_vector_clear(&vm->stack);
@@ -302,14 +308,8 @@ void uc_vm_free(uc_vm_t *vm)
 		lh_table_free(vm->sources);
 	}
 
-	/* Type prototypes are not on the GC value list, so a ucv_put() during
-	 * ucv_freeall()'s retain phase would only mark them UC_NULL and leak
-	 * them. Release them here, after the final GC, so the last reference a
-	 * GC value may hold (e.g. via proto()) is already gone. */
-	for (i = 0; i < vm->restypes.count; i++) {
-		ucv_put(vm->restypes.entries[i]->proto);
+	for (i = 0; i < vm->restypes.count; i++)
 		free(vm->restypes.entries[i]);
-	}
 
 	uc_vector_clear(&vm->restypes);
 
