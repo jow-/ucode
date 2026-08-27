@@ -1,0 +1,55 @@
+Test ctype instance methods: .cast(), .copy(), .string()
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// Test .cast() method
+let x = ffi.ctype('int', 42);
+let px = x.ptr();
+let pv = px.cast('void *');
+print(pv != null ? 'cast_ptr_ok\n' : 'cast_ptr_fail\n');
+
+let str = ffi.string("hello");
+let addr = str.ptr().cast('uintptr_t');
+print(addr.get() > 0 ? 'cast_uintptr_ok\n' : 'cast_uintptr_fail\n');
+
+// Test .copy() method
+let buf = ffi.ctype('char[10]');
+buf.copy("hello");
+let result = ffi.string(buf);
+print(result == "hello" ? 'copy_str_ok\n' : 'copy_str_fail\n');
+
+let src = ffi.ctype('char[5]', [1, 2, 3, 4, 5]);
+let dst = ffi.ctype('char[5]');
+dst.copy(src, 5);
+print(dst.get(0) == 1 && dst.get(4) == 5 ? 'copy_arr_ok\n' : 'copy_arr_fail\n');
+
+// Test .string() method
+let buf2 = ffi.ctype('char[10]', "hello");
+let s1 = buf2.string();
+print(s1 == "hello" ? 'string_arr_ok\n' : 'string_arr_fail\n');
+
+ffi.cdef('char *strdup(const char *); void free(void *);');
+let strdup = ffi.C.wrap('char *strdup(const char *)');
+let free = ffi.C.wrap('void free(void *)');
+let ptr = strdup("world");
+let s2 = ptr.string();
+print(s2 == "world" ? 'string_ptr_ok\n' : 'string_ptr_fail\n');
+
+let s3 = ptr.string(3);
+print(s3 == "wor" ? 'string_len_ok\n' : 'string_len_fail\n');
+
+free(ptr);
+%}
+-- End --
+
+-- Expect stdout --
+cast_ptr_ok
+cast_uintptr_ok
+copy_str_ok
+copy_arr_ok
+string_arr_ok
+string_ptr_ok
+string_len_ok
+-- End --

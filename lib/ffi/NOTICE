@@ -1,0 +1,73 @@
+NOTICE - Third Party Attribution
+
+This module contains code derived from LuaJIT.
+
+================================================================================
+
+LuaJIT FFI Implementation
+--------------------------
+
+Copyright (C) 2005-2025 Mike Pall
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+
+Files Derived from LuaJIT
+-------------------------
+
+The following files contain derived work from LuaJIT's FFI implementation:
+
+- uc_cparse.c    - C declaration parser (adapted from LuaJIT's lj_cparse.c)
+- uc_ctype.c     - Type system management (adapted from LuaJIT's lj_ctype.c)
+- uc_cconv.c     - Value conversion machinery (adapted from LuaJIT's lj_cconv.c)
+- uc_cdata.c     - C data object handling (adapted from LuaJIT's lj_cdata.c)
+- include/uc_cparse.h  - C parser header
+- include/uc_ctype.h   - Type system header
+- include/uc_cconv.h   - Conversion header
+- include/uc_cdata.h   - C data header
+- include/uc_def.h     - Common definitions (adapted from LuaJIT's lj_def.h)
+
+================================================================================
+
+Modifications
+-------------
+
+The LuaJIT FFI code has been adapted for use with the ucode virtual machine.
+Key modifications include:
+
+- LuaJIT's own call infrastructure has been replaced with libffi exclusively
+- Adapted VM interactions to use ucode's API (uc_vm_t, uc_value_t, etc.)
+- Removed JIT-specific code and dependencies
+- Consolidated library loading logic
+
+================================================================================
+
+Additional Notices
+------------------
+
+This module also depends on:
+
+- ucode (https://github.com/jow-/ucode)
+  Copyright (C) 2020-2026 ucode contributors
+  Licensed under the ISC License
+
+- libffi (https://github.com/libffi/libffi)
+  Copyright (C) 1996-2024 Free Software Foundation, Inc.
+  Licensed under the MIT License

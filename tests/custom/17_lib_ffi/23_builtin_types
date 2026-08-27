@@ -1,0 +1,268 @@
+Preloaded types and variables are available without explicit cdef() declarations.
+
+Predeclared errno variable.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+	// Resolve cached errno
+	let e = ffi.C.dlsym('errno');
+	// e is accessible (value may vary)
+	print("errno type: ", replace(e?.tostring(), / @ .+/, ''), "\n");
+-- End --
+
+-- Expect stdout --
+errno type: int **
+-- End --
+
+
+Predeclared environ variable.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// Resolve cached environ
+let env = ffi.C.dlsym('environ');
+print("environ type: ", replace(env?.tostring(), / @ .+/, ''), "\n");
+
+// Access first few environment variables
+let count = 0;
+for (let i = 0; i < 5; i++) {
+    let var = env.deref("char **").get(i);
+    if (!var) break;
+    count++;
+}
+print("found ", count ? "some" : "no", " vars\n");
+-- End --
+
+-- Expect stdout --
+environ type: char ***
+found some vars
+-- End --
+
+
+Builtin size_t type.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// size_t is predeclared - no cdef needed
+let sz = ffi.sizeof('size_t');
+print("size_t size: ", sz, "\n");
+
+let st = ffi.ctype('size_t', 12345);
+print("size_t value: ", st.get(), "\n");
+-- End --
+
+-- Expect stdout --
+size_t size: 8
+size_t value: 12345
+-- End --
+
+
+Builtin ssize_t type.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// ssize_t is predeclared - no cdef needed
+let sz = ffi.sizeof('ssize_t');
+print("ssize_t size: ", sz, "\n");
+
+let sst = ffi.ctype('ssize_t', -42);
+print("ssize_t value: ", sst.get(), "\n");
+-- End --
+
+-- Expect stdout --
+ssize_t size: 8
+ssize_t value: -42
+-- End --
+
+
+Builtin intptr_t and uintptr_t types.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// intptr_t/uintptr_t are predeclared
+let ip = ffi.sizeof('intptr_t');
+let up = ffi.sizeof('uintptr_t');
+print("intptr_t size: ", ip, " uintptr_t size: ", up, "\n");
+
+let ptr = ffi.ctype('uintptr_t', 0xDEADBEEF);
+print("uintptr_t value: ", ptr.get(), "\n");
+-- End --
+
+-- Expect stdout --
+intptr_t size: 8 uintptr_t size: 8
+uintptr_t value: 3735928559
+-- End --
+
+
+Builtin ptrdiff_t type.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// ptrdiff_t is predeclared
+let pd = ffi.sizeof('ptrdiff_t');
+print("ptrdiff_t size: ", pd, "\n");
+
+let ptd = ffi.ctype('ptrdiff_t', -100);
+print("ptrdiff_t value: ", ptd.get(), "\n");
+-- End --
+
+-- Expect stdout --
+ptrdiff_t size: 8
+ptrdiff_t value: -100
+-- End --
+
+
+Builtin wchar_t type.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// wchar_t is predeclared
+let wc = ffi.sizeof('wchar_t');
+print("wchar_t size: ", wc, "\n");
+-- End --
+
+-- Expect stdout --
+wchar_t size: 4
+-- End --
+
+
+Fixed-width int8_t and uint8_t types.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// int8_t/uint8_t are predeclared
+let i8 = ffi.sizeof('int8_t');
+let u8 = ffi.sizeof('uint8_t');
+print("int8_t size: ", i8, " uint8_t size: ", u8, "\n");
+
+let si8 = ffi.ctype('int8_t', -128);
+let ui8 = ffi.ctype('uint8_t', 255);
+print("int8_t: ", si8.get(), " uint8_t: ", ui8.get(), "\n");
+-- End --
+
+-- Expect stdout --
+int8_t size: 1 uint8_t size: 1
+int8_t: -128 uint8_t: 255
+-- End --
+
+
+Fixed-width int16_t and uint16_t types.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// int16_t/uint16_t are predeclared
+let i16 = ffi.sizeof('int16_t');
+let u16 = ffi.sizeof('uint16_t');
+print("int16_t size: ", i16, " uint16_t size: ", u16, "\n");
+
+let si16 = ffi.ctype('int16_t', -32768);
+let ui16 = ffi.ctype('uint16_t', 65535);
+print("int16_t: ", si16.get(), " uint16_t: ", ui16.get(), "\n");
+-- End --
+
+-- Expect stdout --
+int16_t size: 2 uint16_t size: 2
+int16_t: -32768 uint16_t: 65535
+-- End --
+
+
+Fixed-width int32_t and uint32_t types.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// int32_t/uint32_t are predeclared
+let i32 = ffi.sizeof('int32_t');
+let u32 = ffi.sizeof('uint32_t');
+print("int32_t size: ", i32, " uint32_t size: ", u32, "\n");
+
+let si32 = ffi.ctype('int32_t', -2147483648);
+let ui32 = ffi.ctype('uint32_t', 4294967295);
+print("int32_t: ", si32.get(), " uint32_t: ", ui32.get(), "\n");
+-- End --
+
+-- Expect stdout --
+int32_t size: 4 uint32_t size: 4
+int32_t: -2147483648 uint32_t: 4294967295
+-- End --
+
+
+Fixed-width int64_t and uint64_t types.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// int64_t/uint64_t are predeclared
+let i64 = ffi.sizeof('int64_t');
+let u64 = ffi.sizeof('uint64_t');
+print("int64_t size: ", i64, " uint64_t size: ", u64, "\n");
+
+let si64 = ffi.ctype('int64_t', -9223372036854775808);
+let ui64 = ffi.ctype('uint64_t', 18446744073709551615);
+print("int64_t: ", si64.get(), " uint64_t: ", ui64.get(), "\n");
+-- End --
+
+-- Expect stdout --
+int64_t size: 8 uint64_t size: 8
+int64_t: -9223372036854775808 uint64_t: 18446744073709551615
+-- End --
+
+
+Using builtin types in function declarations.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// Use builtin types in cdef
+ffi.cdef('size_t strlen(const char *);');
+let strlen = ffi.C.wrap('strlen');
+
+let len = strlen("hello");
+print("strlen result: ", len, "\n");
+-- End --
+
+-- Expect stdout --
+strlen result: 5
+-- End --
+
+
+Using builtin types in arrays.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+// Create arrays of builtin types
+let buf = ffi.ctype('uint8_t[4]', [1, 2, 3, 4]);
+let idx = ffi.ctype('size_t[3]', [10, 20, 30]);
+
+print("buf[0]: ", buf.get(0), " buf[3]: ", buf.get(3), "\n");
+print("idx[1]: ", idx.get(1), "\n");
+-- End --
+
+-- Expect stdout --
+buf[0]: 1 buf[3]: 4
+idx[1]: 20
+-- End --
+

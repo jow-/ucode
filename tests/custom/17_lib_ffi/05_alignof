@@ -1,0 +1,22 @@
+The `ffi.alignof()` function queries the alignment requirement of types
+in bytes. Struct alignment is determined by its most strictly aligned member.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('struct aligned { char c; int i; double d; };');
+
+print("char: ", ffi.alignof('char'), "\n");
+print("int: ", ffi.alignof('int'), "\n");
+print("double: ", ffi.alignof('double'), "\n");
+print("struct aligned: ", ffi.alignof('struct aligned'), "\n");
+-- End --
+
+-- Expect stdout --
+char: 1
+int: 4
+double: 8
+struct aligned: 4
+-- End --
+

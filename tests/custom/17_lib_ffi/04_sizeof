@@ -1,0 +1,24 @@
+The `ffi.sizeof()` function queries the size of types or cdata instances
+in bytes.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('struct point { int x; int y; };');
+
+print("int: ", ffi.sizeof('int'), "\n");
+print("double: ", ffi.sizeof('double'), "\n");
+print("point: ", ffi.sizeof('struct point'), "\n");
+
+let arr = ffi.ctype('int[10]');
+print("int[10]: ", ffi.sizeof(arr), "\n");
+-- End --
+
+-- Expect stdout --
+int: 4
+double: 8
+point: 8
+int[10]: 40
+-- End --
+

@@ -1,0 +1,18 @@
+The `ffi.typeof()` function returns the CTypeID of a cdata value.
+
+Get type ID from cdata.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let i = ffi.ctype('int', 42);
+let tid = ffi.typeof(i);
+
+print("type of int cdata: ", tid.get(), "\n");
+-- End --
+
+-- Expect stdout --
+type of int cdata: 9
+-- End --
+

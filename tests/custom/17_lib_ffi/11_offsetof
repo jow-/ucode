@@ -1,0 +1,21 @@
+The `ffi.offsetof()` function returns the byte offset of a struct field.
+
+Field offsets in a struct with padding.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef struct { char a; int b; short c; } st;');
+
+print("offsetof(a): ", ffi.offsetof('st', 'a'), "\n");
+print("offsetof(b): ", ffi.offsetof('st', 'b'), "\n");
+print("offsetof(c): ", ffi.offsetof('st', 'c'), "\n");
+-- End --
+
+-- Expect stdout --
+offsetof(a): 0
+offsetof(b): 4
+offsetof(c): 8
+-- End --
+
