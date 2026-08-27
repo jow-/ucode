@@ -1,0 +1,45 @@
+The serial module configures tty/serial devices through file handles
+created by the fs module. Termios line settings, the VMIN/VTIME read
+controls and raw mode operate on a pseudo terminal here, while the modem
+control ioctls report an error on a non terminal device.
+
+-- Testcase --
+import * as serial from 'serial';
+import { open } from 'fs';
+
+let f = open('/dev/ptmx', 'r+');
+print(serial.isatty(f), "\n");
+
+let a = serial.attr(f);
+print(type(a.cflag) == 'int', "\n");
+print(length(a.cc) > 0, "\n");
+
+serial.setblocking(f, 5, 0);
+print(serial.attr(f).cc[serial.VMIN], "\n");
+
+serial.setraw(f);
+print((serial.attr(f).lflag & serial.ICANON) == 0, "\n");
+
+print((serial.CS8 & serial.CSIZE) == serial.CS8, "\n");
+print(serial.B9600 > 0, "\n");
+
+let g = open('/dev/null', 'r');
+print(serial.mget(g) == null, "\n");
+print(serial.error() != null, "\n");
+-- End --
+
+-- Args --
+-R
+-- End --
+
+-- Expect stdout --
+true
+true
+true
+5
+true
+true
+true
+true
+true
+-- End --
