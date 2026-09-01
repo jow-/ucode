@@ -102,7 +102,7 @@ if(libubox)
   set(DEFAULT_ULOOP_SUPPORT ON)
 endif()
 
-if(wslay AND wslay_include)
+if(wslay AND wslay_include AND libubox)
   set(DEFAULT_WEBSOCKET_SUPPORT ON)
 endif()
 
@@ -434,7 +434,7 @@ if(WEBSOCKET_SUPPORT)
   set_target_properties(websocket_lib PROPERTIES OUTPUT_NAME websocket PREFIX "")
   target_include_directories(websocket_lib PRIVATE ${wslay_include})
   target_link_options(websocket_lib PRIVATE ${UCODE_MODULE_LINK_OPTIONS})
-  target_link_libraries(websocket_lib ${wslay})
+  target_link_libraries(websocket_lib ${wslay} ${libubox})
 endif()
 
 if(SERIAL_SUPPORT)
