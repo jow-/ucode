@@ -1477,6 +1477,62 @@ uc_ws_fileno(uc_vm_t *vm, size_t nargs)
 /* connect()                                                              */
 /* ---------------------------------------------------------------------- */
 
+/**
+ * Initiate a WebSocket connection to the given URL.
+ *
+ * The URL must use the `ws://` scheme (`wss://` requires TLS support which
+ * is not implemented yet). IPv6 literals may be given in bracket notation,
+ * e.g. `ws://[::1]:8080/path`. Userinfo components are rejected.
+ *
+ * Name resolution is performed synchronously; the TCP connection, the
+ * protocol handshake and the subsequent data exchange are fully
+ * asynchronous and driven by the uloop event loop, so `uloop.run()` must
+ * be invoked for the connection to progress.
+ *
+ * Runtime failures (refused connections, handshake errors, timeouts,
+ * abrupt resets) are reported through the `error` event, invalid
+ * arguments raise type exceptions.
+ *
+ * @function module:websocket#connect
+ *
+ * @param {string} url
+ * The WebSocket URL to connect to, e.g. `ws://host:port/path`.
+ *
+ * @param {Object} [options]
+ * Additional connection options:
+ *
+ *   - `timeout` (number): connect and handshake timeout in milliseconds,
+ *     `0` disables the timeout. Default: `15000`.
+ *   - `max_frame_size` (number): maximum accepted message size in bytes;
+ *     larger messages cause a close handshake with status code 1009.
+ *     Clamped to the range 1024 to 16777216. Default: `262144`.
+ *   - `headers` (Object): additional HTTP headers to include in the
+ *     handshake request. Values containing line breaks are rejected.
+ *
+ * @returns {?websocket.connection}
+ * Returns the connection resource or `null` on error, e.g. when name
+ * resolution fails. Consult `error()` for the cause in that case.
+ *
+ * @example
+ * ```javascript
+ * import { connect } from 'websocket';
+ * import * as uloop from 'uloop';
+ *
+ * uloop.init();
+ *
+ * let ws = connect('ws://10.0.0.1:8080/telemetry', {
+ *     headers: { Authorization: 'Bearer secret' },
+ *     max_frame_size: 65536
+ * });
+ *
+ * ws.on('open',    (ws) => ws.send('hello'));
+ * ws.on('message', (ws, data, is_text) => print(data));
+ * ws.on('close',   (ws, code, reason) => print(`closed ${code}\n`));
+ * ws.on('error',   (ws, error) => print(`error: ${error}\n`));
+ *
+ * uloop.run();
+ * ```
+ */
 static uc_value_t *
 uc_ws_connect(uc_vm_t *vm, size_t nargs)
 {
