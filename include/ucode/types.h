@@ -91,9 +91,14 @@ typedef struct {
 	size_t from, to, slot, nameidx;
 } uc_varrange_t;
 
+typedef struct {
+	uint8_t bytes;
+	uint8_t insns;
+} uc_offset_t;
+
 uc_declare_vector(uc_ehranges_t, uc_ehrange_t);
 uc_declare_vector(uc_variables_t, uc_varrange_t);
-uc_declare_vector(uc_offsetinfo_t, uint8_t);
+uc_declare_vector(uc_offsetinfo_t, uc_offset_t);
 
 typedef struct {
 	size_t count;
@@ -327,8 +332,14 @@ typedef struct {
 	bool mcall, strict;
 } uc_callframe_t;
 
+typedef struct uc_breakpoint {
+	uint8_t *ip;
+	void (*cb)(uc_vm_t *, struct uc_breakpoint *);
+} uc_breakpoint_t;
+
 uc_declare_vector(uc_callframes_t, uc_callframe_t);
 uc_declare_vector(uc_stack_t, uc_value_t *);
+uc_declare_vector(uc_breakpoints_t, uc_breakpoint_t *);
 
 typedef struct printbuf uc_stringbuf_t;
 
@@ -345,7 +356,7 @@ struct uc_vm {
 	struct lh_table *sources;
 	uc_weakref_t values;
 	uc_resource_types_t restypes;
-	char _reserved[sizeof(uc_modexports_t)];
+	uc_breakpoints_t breakpoints;
 	union {
 		uint32_t u32;
 		int32_t s32;
@@ -367,6 +378,8 @@ struct uc_vm {
 		struct sigaction sa;
 		int sigpipe[2];
 	} signal;
+	bool break_requested;
+	int break_notifyfd[2];
 };
 
 
@@ -443,6 +456,40 @@ size_t ucv_object_length(uc_value_t *);
 	                    entry_next##key = entry##key->next, entry##key)							\
 	                 : 0);																		\
 	     entry##key = entry_next##key)
+
+/* dict (value-key object) detection via hash table equal_fn sentinel */
+extern int uc_dict_equal(const void *k1, const void *k2);
+
+static inline bool
+ucv_is_dict(uc_value_t *uv)
+{
+	uc_object_t *obj;
+
+	if (((uintptr_t)uv & 3) != 0 || uv == NULL || uv->type != UC_OBJECT)
+		return false;
+
+	obj = (uc_object_t *)uv;
+
+	return (obj->table->equal_fn == uc_dict_equal);
+}
+
+#define ucv_dict_foreach(dict, key, val)                                                       \
+	uc_value_t *key = NULL;                                                                      \
+	uc_value_t *val = NULL;                                                                      \
+	struct lh_entry *entry##key;                                                                 \
+	struct lh_entry *entry_next##key = NULL;                                                     \
+	for (entry##key = (ucv_type(dict) == UC_OBJECT) ? ((uc_object_t *)dict)->table->head : NULL; \
+	     (entry##key ? (key = (uc_value_t *)lh_entry_k(entry##key),                              \
+	                 val = (uc_value_t *)lh_entry_v(entry##key),                                 \
+	                 entry_next##key = entry##key->next, entry##key)                             \
+	              : 0);                                                                          \
+	     entry##key = entry_next##key)
+
+uc_value_t *ucv_dict_new(uc_vm_t *, uc_value_t *src);
+uc_value_t *ucv_dict_get(uc_vm_t *, uc_value_t *, uc_value_t *);
+uc_value_t *ucv_dict_set(uc_vm_t *, uc_value_t *, uc_value_t *, uc_value_t *);
+bool ucv_dict_delete(uc_vm_t *, uc_value_t *, uc_value_t *);
+size_t ucv_dict_length(uc_value_t *);
 
 uc_value_t *ucv_cfunction_new(const char *, uc_cfn_ptr_t);
 

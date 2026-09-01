@@ -20,14 +20,11 @@
 #include "ucode/types.h"
 #include "ucode/util.h"
 
-#define OFFSETINFO_BITS (sizeof(((uc_offsetinfo_t *)NULL)->entries[0]) * 8)
-#define OFFSETINFO_BYTE_BITS 3
-#define OFFSETINFO_INSN_BITS (OFFSETINFO_BITS - OFFSETINFO_BYTE_BITS)
-#define OFFSETINFO_MAX_BYTES ((1 << OFFSETINFO_BYTE_BITS) - 1)
-#define OFFSETINFO_MAX_INSNS ((1 << OFFSETINFO_INSN_BITS) - 1)
-#define OFFSETINFO_NUM_BYTES(n) ((n) & OFFSETINFO_MAX_BYTES)
-#define OFFSETINFO_NUM_INSNS(n) ((n) >> OFFSETINFO_BYTE_BITS)
-#define OFFSETINFO_ENCODE(line, insns) ((line & OFFSETINFO_MAX_BYTES) | (((insns) << OFFSETINFO_BYTE_BITS) & ~OFFSETINFO_MAX_BYTES))
+#define OFFSETINFO_MAX_BYTES 127
+#define OFFSETINFO_MAX_INSNS 127
+#define OFFSETINFO_NUM_BYTES(o) ((o)->bytes & OFFSETINFO_MAX_BYTES)
+#define OFFSETINFO_NUM_INSNS(o) ((o)->insns & OFFSETINFO_MAX_INSNS)
+#define OFFSETINFO_IS_END(o) ((o)->insns & 0x80)
 
 
 void
@@ -69,38 +66,39 @@ uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t offset)
 
 	uc_vector_push(chunk, byte);
 
-	/* offset info is encoded in bytes, for each byte, the first three bits
-	 * specify the number of source text bytes to advance since the last entry
-	 * and the remaining five bits specify the amount of instructions belonging
-	 * to any given source text offset */
+	/* Offset info is encoded in byte pairs, the first byte specifies the number
+	 * of source text bytes to advance since the last entry and the second byte
+	 * specifies the amount of instructions belonging to the source text offset.
+	 * Byte and instruction count values are limited to 7 bits (0x00..0x7f),
+	 * the most significant bit in each byte is reserved as flag value; if the
+	 * bit is set in the first byte, it signals the begin of a logical statement
+	 * while a set bit in the second byte denotes the end of the statement. */
 	if (offset > 0 || offsets->count == 0) {
-		/* if this offset is farther than seven (2 ** 3 - 1) bytes apart from
+		/* If this offset is farther than 127 (2 ** 7 - 1) bytes apart from
 		 * the last one, we need to emit intermediate "jump" bytes with zero
 		 * instructions each */
 		for (i = offset; i > OFFSETINFO_MAX_BYTES; i -= OFFSETINFO_MAX_BYTES) {
-			/* advance by 7 bytes */
-			uc_vector_push(offsets, OFFSETINFO_ENCODE(OFFSETINFO_MAX_BYTES, 0));
+			/* advance by 127 bytes */
+			uc_vector_push(offsets, { OFFSETINFO_MAX_BYTES, 0 });
 		}
 
 		/* advance by `i` bytes, count one instruction */
-		uc_vector_push(offsets, OFFSETINFO_ENCODE(i, 1));
+		uc_vector_push(offsets, { i, 1 });
 	}
 
 	/* update instruction count at current offset entry */
 	else {
-		/* since we encode the per-offset instruction count in five bits, we
-		 * can only count up to 31 instructions. If we exceed that limit,
-		 * emit another offset entry with the initial three bits set to zero */
-		if (OFFSETINFO_NUM_INSNS(offsets->entries[offsets->count - 1]) >= OFFSETINFO_MAX_INSNS) {
+		uc_offset_t *o = uc_vector_last(offsets);
+
+		/* since we encode the per-offset instruction count in seven bits, we
+		 * can only count up to 127 instructions. If we exceed that limit,
+		 * emit another offset entry with the byte offset set to zero */
+		if (OFFSETINFO_NUM_INSNS(o) >= OFFSETINFO_MAX_INSNS) {
 			/* advance by 0 bytes, count one instruction */
-			uc_vector_push(offsets, OFFSETINFO_ENCODE(0, 1));
+			uc_vector_push(offsets, { 0, 1 });
 		}
 		else {
-			uint8_t *prev = uc_vector_last(offsets);
-
-			*prev = OFFSETINFO_ENCODE(
-				OFFSETINFO_NUM_BYTES(*prev),
-				OFFSETINFO_NUM_INSNS(*prev) + 1);
+			o->insns++;
 		}
 	}
 
@@ -108,24 +106,56 @@ uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t offset)
 }
 
 void
-uc_chunk_pop(uc_chunk_t *chunk)
+uc_chunk_stmt_start(uc_chunk_t *chunk, size_t offset)
 {
 	uc_offsetinfo_t *offsets = &chunk->debuginfo.offsets;
-	int n_insns;
+	size_t i;
 
+	for (i = offset; i > OFFSETINFO_MAX_BYTES; i -= OFFSETINFO_MAX_BYTES) {
+		/* advance by 127 bytes */
+		uc_vector_push(offsets, { OFFSETINFO_MAX_BYTES, 0 });
+	}
+
+	/* advance by `i` bytes, set start of statement flag */
+	uc_vector_push(offsets, { i | 0x80, 0 });
+}
+
+void
+uc_chunk_stmt_end(uc_chunk_t *chunk, size_t offset)
+{
+	uc_offsetinfo_t *offsets = &chunk->debuginfo.offsets;
+	uc_offset_t *o = offsets->count ? uc_vector_last(offsets) : NULL;
+	size_t i;
+
+	for (i = offset; i > OFFSETINFO_MAX_BYTES; i -= OFFSETINFO_MAX_BYTES) {
+		/* advance by 127 bytes */
+		uc_vector_push(offsets, { OFFSETINFO_MAX_BYTES, 0 });
+	}
+
+	if (i > 0 || o == NULL || OFFSETINFO_IS_END(o)) {
+		/* advance by `i` bytes, set start of statement flag */
+		uc_vector_push(offsets, { i, 0x80 });
+	}
+	else {
+		/* set end flag on last offset entry */
+		o->insns |= 0x80;
+	}
+}
+
+void
+uc_chunk_pop(uc_chunk_t *chunk)
+{
 	assert(chunk->count > 0);
 
 	chunk->count--;
 
-	n_insns = OFFSETINFO_NUM_INSNS(offsets->entries[offsets->count - 1]);
+	for (size_t i = chunk->debuginfo.offsets.count; i > 0; i--) {
+		uc_offset_t *o = &chunk->debuginfo.offsets.entries[i - 1];
 
-	if (n_insns > 0) {
-		uint8_t *prev = uc_vector_last(offsets);
-
-		*prev = OFFSETINFO_ENCODE(OFFSETINFO_NUM_BYTES(*prev), n_insns - 1);
-	}
-	else {
-		offsets->count--;
+		if (o->insns & 127) {
+			o->insns = ((o->insns & 127) - 1) | (o->insns & 128);
+			break;
+		}
 	}
 }
 
@@ -133,17 +163,17 @@ size_t
 uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t off)
 {
 	uc_offsetinfo_t *offsets = &chunk->debuginfo.offsets;
-	size_t i, inum = 0, lnum = 0;
+	size_t i, inum = 0, bnum = 0;
 
 	if (!offsets->count)
 		return 0;
 
 	for (i = 0; i < offsets->count && inum < off; i++) {
-		lnum += OFFSETINFO_NUM_BYTES(offsets->entries[i]);
-		inum += OFFSETINFO_NUM_INSNS(offsets->entries[i]);
+		bnum += OFFSETINFO_NUM_BYTES(&offsets->entries[i]);
+		inum += OFFSETINFO_NUM_INSNS(&offsets->entries[i]);
 	}
 
-	return lnum;
+	return bnum;
 }
 
 void

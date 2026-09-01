@@ -112,6 +112,7 @@ typedef enum {
 typedef enum {
 	STATUS_OK,
 	STATUS_EXIT,
+	STATUS_BREAK,
 	ERROR_COMPILE,
 	ERROR_RUNTIME
 } uc_vm_status_t;
@@ -122,7 +123,7 @@ typedef enum {
 
 #define GC_DEFAULT_INTERVAL 1000
 
-extern uint32_t insns[__I_MAX];
+extern const int8_t uc_vm_insn_format[__I_MAX];
 
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config);
 void uc_vm_free(uc_vm_t *vm);
@@ -160,5 +161,35 @@ uc_value_t *uc_vm_invoke(uc_vm_t *vm, const char *fname, size_t nargs, ...);
 uc_exception_type_t uc_vm_signal_dispatch(uc_vm_t *vm);
 void uc_vm_signal_raise(uc_vm_t *vm, int signo);
 int uc_vm_signal_notifyfd(uc_vm_t *vm);
+
+/* Lazily wire up the self-pipe/handler array needed for the signal()
+ * builtin to work, independent of whether the embedding host opted into
+ * this via uc_parse_config_t.setup_signal_handlers. Without this, a VM
+ * initialized with that flag left unset (e.g. uc_vm_init(vm, NULL)) would
+ * silently install a NULL/SIG_DFL signal disposition the first time
+ * script code calls signal() with a callable handler - terminating the
+ * process on the next occurrence of that signal instead of invoking the
+ * handler. Call this before relying on signal() from C code that doesn't
+ * control how the VM was initialized (see lib/debug.c). Safe to call more
+ * than once. */
+void uc_vm_signal_handlers_ensure(uc_vm_t *vm);
+
+bool uc_vm_break_requested(uc_vm_t *vm);
+void uc_vm_break_request(uc_vm_t *vm);
+int uc_vm_break_notifyfd(uc_vm_t *vm);
+void uc_vm_break_init(uc_vm_t *vm);
+void uc_vm_break_cleanup(uc_vm_t *vm);
+
+uc_vm_status_t uc_vm_resume(uc_vm_t *vm);
+
+int8_t uc_vm_insn_to_argtype(uc_vm_insn_t insn);
+
+/* Well-known sentinel `uc_breakpoint_t.ip` value identifying the dedicated
+ * "break on uncaught exception" system breakpoint. Not a real bytecode
+ * address - install a breakpoint with this as its `ip` (and any `cb`) to
+ * have it invoked, with callframes fully intact, right before an exception
+ * that nothing would catch starts unwinding the stack. See the comment on
+ * uc_vm_exception_would_be_caught() in vm.c for the exact semantics. */
+extern uint8_t *const UC_BREAKPOINT_UNCAUGHT_EXCEPTION;
 
 #endif /* UCODE_VM_H */

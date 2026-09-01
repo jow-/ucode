@@ -113,15 +113,61 @@ print_usage(const char *app)
 
 	"-s\n"
 	"  Omit (strip) debug information when compiling files.\n"
-	"  Only meaningful in conjunction with `-c`.\n\n",
+	"  Only meaningful in conjunction with `-c`.\n\n"
+
+	"-x[expr]\n"
+	"  Start program in interactive debugger. If given, stop at the location\n"
+	"  described by `expr` (a function name, `path:line[:offset]`, or a ucode\n"
+	"  expression evaluating to a function - the same grammar the `break`\n"
+	"  debugger CLI command accepts) instead of the first instruction.\n\n"
+	"-X[expr]\n"
+	"  Enable debugger infrastructure (SIGUSR1 break, uloop) without\n"
+	"  launching the interactive debugger automatically. If given, `expr` is\n"
+	"  resolved the same way as for `-x` and a breakpoint is installed at\n"
+	"  that location; once hit, execution pauses and waits for a remote\n"
+	"  debugger to attach, the same way the SIGUSR1 break does.\n\n",
 		app);
 }
 
+static bool
+parse_library_load(char *opt, uc_vm_t *vm);
+
+static uc_value_t *
+debug_lookup_fn(uc_vm_t *vm, const char *name)
+{
+	uc_value_t *dbgmod = ucv_object_get(uc_vm_scope_get(vm), "debug", NULL);
+	uc_value_t *fn = ucv_object_get(dbgmod, name, NULL);
+
+	if (ucv_type(fn) != UC_CFUNCTION) {
+		fprintf(stderr, "Unable to locate debug.%s() function\n", name);
+
+		return NULL;
+	}
+
+	return fn;
+}
+
+typedef enum {
+	DEBUG_MODE_NONE,   /* neither -x nor -X given */
+	DEBUG_MODE_LOCAL,  /* -x: launch local interactive debugger */
+	DEBUG_MODE_REMOTE, /* -X: enable break infrastructure for a remote debugger */
+} debug_mode_t;
+
+typedef struct {
+	bool strip;
+	char *interpreter;
+	bool autoprint;
+	debug_mode_t debug;
+	char *breakpoint;
+} compile_opts_t;
 
 static int
-compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *interp, bool print_result)
+compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, const compile_opts_t *opts)
 {
 	uc_value_t *res = NULL;
+	bool strip = opts->strip, autoprint = opts->autoprint;
+	debug_mode_t debug = opts->debug;
+	char *interp = opts->interpreter, *breakpoint = opts->breakpoint;
 	uc_program_t *program;
 	int rc = 0;
 	char *err;
@@ -147,11 +193,94 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *inter
 	if (vm->gc_interval)
 		uc_vm_gc_start(vm, vm->gc_interval);
 
-	rc = uc_vm_execute(vm, program, &res);
+	if (debug != DEBUG_MODE_NONE) {
+		uc_value_t *entryfn;
+
+		if (!parse_library_load("debug", vm)) {
+			fprintf(stderr, "Unable to load debug module\n");
+			rc = -2;
+			goto out;
+		}
+
+		entryfn = ucv_closure_new(vm, uc_program_entry(program), false);
+
+		/* -x: launch local debugger, breaking at `breakpoint` if given,
+		 * else at the first instruction.
+		 * -X: just enable break infrastructure; if `breakpoint` is given,
+		 * additionally arm attach mode and break at that location instead
+		 * of waiting for a plain SIGUSR1. */
+		if (debug == DEBUG_MODE_LOCAL) {
+			uc_value_t *dbgfn = debug_lookup_fn(vm, "debugger");
+
+			if (!dbgfn) {
+				ucv_put(entryfn);
+				rc = -2;
+				goto out;
+			}
+
+			uc_vm_stack_push(vm, ucv_get(dbgfn));
+			uc_vm_stack_push(vm, breakpoint ? NULL : ucv_get(entryfn));
+
+			if (uc_vm_call(vm, false, 1) == EXCEPTION_NONE)
+				ucv_put(uc_vm_stack_pop(vm));
+		}
+		else if (breakpoint) {
+			uc_value_t *attachfn = debug_lookup_fn(vm, "attach");
+
+			if (!attachfn) {
+				ucv_put(entryfn);
+				rc = -2;
+				goto out;
+			}
+
+			uc_vm_stack_push(vm, ucv_get(attachfn));
+			uc_vm_stack_push(vm, NULL);
+
+			if (uc_vm_call(vm, false, 1) == EXCEPTION_NONE)
+				ucv_put(uc_vm_stack_pop(vm));
+		}
+
+		if (breakpoint) {
+			uc_value_t *bkfn = debug_lookup_fn(vm, "breakpoint");
+			uc_value_t *id;
+
+			if (!bkfn) {
+				ucv_put(entryfn);
+				rc = -2;
+				goto out;
+			}
+
+			uc_vm_stack_push(vm, ucv_get(bkfn));
+			uc_vm_stack_push(vm, ucv_string_new(breakpoint));
+			uc_vm_stack_push(vm, ucv_get(entryfn));
+
+			if (uc_vm_call(vm, false, 2) == EXCEPTION_NONE) {
+				id = uc_vm_stack_pop(vm);
+
+				if (!ucv_is_truish(id)) {
+					fprintf(stderr,
+						"Unable to resolve breakpoint location '%s'\n",
+						breakpoint);
+					ucv_put(id);
+					ucv_put(entryfn);
+					rc = -2;
+					goto out;
+				}
+
+				ucv_put(id);
+			}
+		}
+
+		ucv_put(entryfn);
+	}
+
+	uc_vm_status_t status = uc_vm_execute(vm, program, &res);
+
+	rc = status;
 
 	switch (rc) {
 	case STATUS_OK:
-		if (print_result) {
+		if (autoprint) {
 			if (ucv_type(res) == UC_STRING) {
 				fwrite(ucv_string_get(res), ucv_string_length(res), 1, stdout);
 			}
@@ -171,6 +300,14 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *inter
 		rc = (int)ucv_int64_get(res);
 		break;
 
+	case STATUS_BREAK:
+		/* Break requested - in remote debug mode, continue running */
+		if (debug == DEBUG_MODE_REMOTE)
+			rc = 0;
+		else
+			rc = -2;
+		break;
+
 	case ERROR_COMPILE:
 		rc = -1;
 		break;
@@ -178,6 +315,48 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, bool strip, char *inter
 	case ERROR_RUNTIME:
 		rc = -2;
 		break;
+	}
+
+	/* Let an attached remote debugger client know the target is going away
+	 * and why, instead of it only finding out once the connection drops.
+	 * Pass the raw VM status rather than the CLI's own exit-code
+	 * translation above (which flattens both error kinds to the same -2
+	 * and loses the actual exception), plus the exit code / a full
+	 * exception object (same {type, message, stacktrace} shape script
+	 * code sees via try/catch) it corresponds to.
+	 *
+	 * These have to be snapshotted into locals *before* the uc_vm_call()
+	 * below, not read from vm->exception/vm->arg by the callee once
+	 * inside it: uc_vm_call() unconditionally calls
+	 * uc_vm_clear_exception() as its very first action (a normal safety
+	 * reset for ordinary calls, which also frees vm->exception.message/
+	 * ->stacktrace), which would wipe vm->exception out from under us
+	 * before debug.notifyExit() ever got to look at it.
+	 *
+	 * vm->output (stdout) is fully block-buffered once it's a socket
+	 * rather than a tty, while the notification itself goes out via a raw
+	 * write() - flush first, or the event can overtake not-yet-flushed
+	 * script output that was already written earlier. */
+	if (debug != DEBUG_MODE_NONE) {
+		uc_value_t *notifyfn = debug_lookup_fn(vm, "notifyExit");
+		int32_t exit_code = vm->arg.s32;
+		uc_value_t *exception_obj = (status == ERROR_COMPILE || status == ERROR_RUNTIME)
+			? uc_vm_exception_object(vm) : NULL;
+
+		fflush(vm->output);
+
+		if (notifyfn) {
+			uc_vm_stack_push(vm, ucv_get(notifyfn));
+			uc_vm_stack_push(vm, ucv_int64_new(status));
+			uc_vm_stack_push(vm, ucv_int64_new(exit_code));
+			uc_vm_stack_push(vm, exception_obj);
+
+			if (uc_vm_call(vm, false, 3) == EXCEPTION_NONE)
+				ucv_put(uc_vm_stack_pop(vm));
+		}
+		else {
+			ucv_put(exception_obj);
+		}
 	}
 
 out:
@@ -513,8 +692,10 @@ appname(const char *argv0)
 int
 main(int argc, char **argv)
 {
-	const char *optspec = POSIXLY_CORRECT_FLAG "he:p:tg:ST::RD:F:U:l:L:c::o:s";
+	const char *optspec = POSIXLY_CORRECT_FLAG "he:p:tg:ST::RD:F:U:l:L:c::o:sx::X::";
 	bool strip = false, print_result = false;
+	debug_mode_t debug = DEBUG_MODE_NONE;
+	char *breakpoint = NULL;
 	char *interp = "/usr/bin/env ucode";
 	uc_source_t *source = NULL;
 	FILE *precompile = NULL;
@@ -654,6 +835,16 @@ main(int argc, char **argv)
 		case 'o':
 			outfile = optarg;
 			break;
+
+		case 'x':
+			debug = DEBUG_MODE_LOCAL;
+			breakpoint = optarg;
+			break;
+
+		case 'X':
+			debug = DEBUG_MODE_REMOTE;
+			breakpoint = optarg;
+			break;
 		}
 	}
 
@@ -703,7 +894,13 @@ main(int argc, char **argv)
 
 	ucv_put(o);
 
-	rv = compile(&vm, source, precompile, strip, interp, print_result);
+	rv = compile(&vm, source, precompile, &((compile_opts_t){
+		.strip = strip,
+		.interpreter = interp,
+		.autoprint = print_result,
+		.debug = debug,
+		.breakpoint = breakpoint,
+	}));
 
 out:
 	uc_search_path_free(&config.module_search_path);

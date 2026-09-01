@@ -80,6 +80,15 @@ check that ucode provides exepected help:
     Omit (strip) debug information when compiling files.
     Only meaningful in conjunction with `-c`.
   
+  -x
+    Start program in interactive debugger.
+  
+  -X
+    Enable debugger infrastructure (SIGUSR1 break, uloop) without
+    launching the interactive debugger automatically.
+  
+
+
 
 check that ucode prints greetings:
 

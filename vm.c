@@ -37,7 +37,7 @@ static const char *insn_names[__I_MAX] = {
 	__insns
 };
 
-static const int8_t insn_operand_bytes[__I_MAX] = {
+const int8_t uc_vm_insn_format[__I_MAX] = {
 	[I_LOAD] = 4,
 	[I_LOAD8] = 1,
 	[I_LOAD16] = 2,
@@ -99,13 +99,13 @@ uc_vm_insn_to_name(uc_vm_insn_t insn)
 	return insn_names[insn];
 }
 
-static int8_t
+int8_t
 uc_vm_insn_to_argtype(uc_vm_insn_t insn)
 {
 	if (insn < 0 || insn >= __I_MAX)
 		return 0;
 
-	return insn_operand_bytes[insn];
+	return uc_vm_insn_format[insn];
 }
 
 static void
@@ -171,20 +171,14 @@ uc_vm_signal_handler(int sig)
 	uc_vm_signal_raise(vm, sig);
 }
 
-static void
-uc_vm_signal_handlers_setup(uc_vm_t *vm)
+/* Actually wire up the self-pipe/handler array/sigaction template needed
+ * for ucode-level signal() callbacks to work, independent of whether the
+ * embedding host opted into this via config->setup_signal_handlers. Safe
+ * to call more than once (a no-op once already set up for this thread). */
+void
+uc_vm_signal_handlers_ensure(uc_vm_t *vm)
 {
-	uc_thread_context_t *tctx;
-
-	memset(&vm->signal, 0, sizeof(vm->signal));
-
-	vm->signal.sigpipe[0] = -1;
-	vm->signal.sigpipe[1] = -1;
-
-	if (!vm->config->setup_signal_handlers)
-		return;
-
-	tctx = uc_thread_context_get();
+	uc_thread_context_t *tctx = uc_thread_context_get();
 
 	if (tctx->signal_handler_vm)
 		return;
@@ -199,6 +193,20 @@ uc_vm_signal_handlers_setup(uc_vm_t *vm)
 	sigemptyset(&vm->signal.sa.sa_mask);
 
 	tctx->signal_handler_vm = vm;
+}
+
+static void
+uc_vm_signal_handlers_setup(uc_vm_t *vm)
+{
+	memset(&vm->signal, 0, sizeof(vm->signal));
+
+	vm->signal.sigpipe[0] = -1;
+	vm->signal.sigpipe[1] = -1;
+
+	if (!vm->config->setup_signal_handlers)
+		return;
+
+	uc_vm_signal_handlers_ensure(vm);
 }
 
 static void
@@ -225,7 +233,27 @@ uc_vm_signal_handlers_reset(uc_vm_t *vm)
 		vm->signal.sigpipe[i] = -1;
 	}
 
-	tctx->signal_handler_vm = NULL;
+		tctx->signal_handler_vm = NULL;
+}
+
+void uc_vm_break_init(uc_vm_t *vm)
+{
+	vm->break_requested = false;
+	vm->break_notifyfd[0] = -1;
+	vm->break_notifyfd[1] = -1;
+
+	if (pipe2(vm->break_notifyfd, O_CLOEXEC | O_NONBLOCK) == 0) {
+		/* pipe created successfully */
+	}
+}
+
+void uc_vm_break_cleanup(uc_vm_t *vm)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(vm->break_notifyfd); i++) {
+		if (vm->break_notifyfd[i] > STDERR_FILENO)
+			close(vm->break_notifyfd[i]);
+		vm->break_notifyfd[i] = -1;
+	}
 }
 
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
@@ -256,6 +284,8 @@ void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config)
 
 	uc_vm_signal_handlers_setup(vm);
 
+	uc_vm_break_init(vm);
+
 	uc_thread_context_get()->refcount++;
 }
 
@@ -266,6 +296,8 @@ void uc_vm_free(uc_vm_t *vm)
 	size_t i;
 
 	uc_vm_signal_handlers_reset(vm);
+
+	uc_vm_break_cleanup(vm);
 
 	ucv_put(vm->exception.stacktrace);
 	free(vm->exception.message);
@@ -312,6 +344,11 @@ void uc_vm_free(uc_vm_t *vm)
 		free(vm->restypes.entries[i]);
 
 	uc_vector_clear(&vm->restypes);
+
+	for (i = 0; i < vm->breakpoints.count; i++)
+		free(vm->breakpoints.entries[i]);
+
+	uc_vector_clear(&vm->breakpoints);
 
 	ctx = uc_thread_context_get();
 
@@ -368,6 +405,13 @@ uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 #endif
 
 	assert(frame->ip < end);
+
+	for (size_t i = 0; i < vm->breakpoints.count; i++) {
+		uc_breakpoint_t *bk = vm->breakpoints.entries[i];
+
+		if (bk != NULL && (bk->ip == NULL || bk->ip == frame->ip))
+			bk->cb(vm, bk);
+	}
 
 	insn = frame->ip[0];
 	frame->ip++;
@@ -916,6 +960,49 @@ uc_vm_clear_exception(uc_vm_t *vm)
 	vm->exception.message = NULL;
 }
 
+/* Well-known sentinel `uc_breakpoint_t.ip` value identifying the dedicated
+ * "break on uncaught exception" system breakpoint (see debug.c's BK_UNCAUGHT).
+ * It deliberately isn't a real bytecode address, so the ordinary
+ * ip-matching breakpoint dispatch in uc_vm_decode_insn() - which walks
+ * vm->breakpoints on every single instruction - never fires it by
+ * accident; it is only ever invoked explicitly, from the exception label in
+ * uc_vm_execute_chunk() below, at the one moment it actually applies. */
+static uint8_t uc_breakpoint_uncaught_exception_storage;
+uint8_t *const UC_BREAKPOINT_UNCAUGHT_EXCEPTION =
+	&uc_breakpoint_uncaught_exception_storage;
+
+/* Non-destructively predict whether uc_vm_handle_exception()'s real unwind
+ * loop (below) would find a handler for the currently raised exception
+ * anywhere between the current callframe and `caller` (the frame depth this
+ * uc_vm_execute_chunk() invocation was entered at - the same boundary its
+ * own unwind loop stops at). Mirrors that loop's exact stopping conditions
+ * (a native callframe, or reaching `caller`) but only inspects state; nops
+ * of the stack/exception state, jumping ip. Used to decide whether to break
+ * into the debugger *before* unwinding starts, while the original throwing
+ * frame - locals, exact position - is still fully intact, since once
+ * uc_vm_handle_exception() starts really popping frames that's gone. */
+static bool
+uc_vm_exception_would_be_caught(uc_vm_t *vm, size_t caller)
+{
+	for (size_t i = vm->callframes.count; i > caller; i--) {
+		uc_callframe_t *frame = &vm->callframes.entries[i - 1];
+
+		if (!frame->closure)
+			return false;
+
+		uc_chunk_t *chunk = &frame->closure->function->chunk;
+		size_t pos = frame->ip - chunk->entries;
+
+		for (size_t j = 0; j < chunk->ehranges.count; j++) {
+			if (pos >= chunk->ehranges.entries[j].from &&
+			    pos < chunk->ehranges.entries[j].to)
+				return true;
+		}
+	}
+
+	return false;
+}
+
 static bool
 uc_vm_handle_exception(uc_vm_t *vm)
 {
@@ -1238,7 +1325,9 @@ uc_vm_insn_load_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_RESOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
-		uc_vm_stack_push(vm, ucv_key_get(vm, v, k));
+		uc_vm_stack_push(vm, ucv_is_dict(v)
+			? ucv_dict_get(vm, v, k)
+			: ucv_key_get(vm, v, k));
 		break;
 
 	default:
@@ -1263,7 +1352,9 @@ uc_vm_insn_peek_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_RESOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
-		uc_vm_stack_push(vm, ucv_key_get(vm, v, k));
+		uc_vm_stack_push(vm, ucv_is_dict(v)
+			? ucv_dict_get(vm, v, k)
+			: ucv_key_get(vm, v, k));
 		break;
 
 	default:
@@ -1459,7 +1550,9 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_OBJECT:
 	case UC_ARRAY:
 		if (assert_mutable_value(vm, o)) {
-			uc_value_t *rv = ucv_key_set(vm, o, k, v);
+			uc_value_t *rv = ucv_is_dict(o)
+			    ? ucv_dict_set(vm, o, k, v)
+			    : ucv_key_set(vm, o, k, v);
 
 			/* on success rv is a reference to the stored value that gets
 			 * pushed onto the stack; clear v so the cleanup below does not
@@ -1942,9 +2035,13 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 		if (assert_mutable_value(vm, v)) {
 			uc_value_t *nv, *rv;
 
-			val = ucv_key_get(vm, v, k);
+			val = ucv_is_dict(v)
+			    ? ucv_dict_get(vm, v, k)
+			    : ucv_key_get(vm, v, k);
 			nv = uc_vm_value_arith(vm, vm->arg.u8, val, inc);
-			rv = ucv_key_set(vm, v, k, nv);
+			rv = ucv_is_dict(v)
+			    ? ucv_dict_set(vm, v, k, nv)
+			    : ucv_key_set(vm, v, k, nv);
 
 			/* on success rv is a reference to the stored value that gets
 			 * pushed onto the stack; on failure nv was not stored, so
@@ -2077,10 +2174,17 @@ uc_vm_insn_sobj(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *obj = uc_vm_stack_peek(vm, vm->arg.u32);
 	size_t idx;
 
-	for (idx = 0; idx < vm->arg.u32; idx += 2)
-		ucv_key_set(vm, obj,
-			uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1),
-			uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2));
+	if (ucv_is_dict(obj)) {
+		for (idx = 0; idx < vm->arg.u32; idx += 2)
+			ucv_dict_set(vm, obj,
+				uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1),
+				uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2));
+	} else {
+		for (idx = 0; idx < vm->arg.u32; idx += 2)
+			ucv_key_set(vm, obj,
+				uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1),
+				uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2));
+	}
 
 	for (idx = 0; idx < vm->arg.u32; idx++)
 		ucv_put(uc_vm_stack_pop(vm));
@@ -2091,23 +2195,51 @@ uc_vm_insn_mobj(uc_vm_t *vm, uc_vm_insn_t insn)
 {
 	uc_value_t *src = uc_vm_stack_pop(vm);
 	uc_value_t *dst = uc_vm_stack_peek(vm, 0);
+	bool dst_is_dict = ucv_is_dict(dst);
 	size_t i;
 	char *s;
 
 	switch (ucv_type(src)) {
 	case UC_OBJECT:
-		; /* a label can only be part of a statement and a declaration is not a statement */
-		ucv_object_foreach(src, k, v)
-			ucv_object_add(dst, k, ucv_get(v));
+		if (ucv_is_dict(src)) {
+			/* spread dict into object or dict */
+			ucv_dict_foreach(src, k, v) {
+				if (dst_is_dict) {
+					ucv_dict_set(vm, dst, k, ucv_get(v));
+				} else {
+					/* convert value key to string for regular object */
+					s = ucv_to_string(vm, k);
+					ucv_object_add(dst, s ? s : "", ucv_get(v));
+					free(s);
+				}
+			}
+		} else if (dst_is_dict) {
+			/* spread regular object into dict — keys become string values */
+			ucv_object_foreach(src, k, v) {
+				uc_value_t *key = ucv_string_new(k);
+
+				ucv_dict_set(vm, dst, key, ucv_get(v));
+			}
+		} else {
+			/* spread regular object into regular object */
+			ucv_object_foreach(src, k, v)
+				ucv_object_add(dst, k, ucv_get(v));
+		}
 
 		ucv_put(src);
 		break;
 
 	case UC_ARRAY:
 		for (i = 0; i < ucv_array_length(src); i++) {
-			xasprintf(&s, "%zu", i);
-			ucv_object_add(dst, s, ucv_get(ucv_array_get(src, i)));
-			free(s);
+			if (dst_is_dict) {
+				uc_value_t *key = ucv_int64_new((int64_t)i);
+
+				ucv_dict_set(vm, dst, key, ucv_get(ucv_array_get(src, i)));
+			} else {
+				xasprintf(&s, "%zu", i);
+				ucv_object_add(dst, s, ucv_get(ucv_array_get(src, i)));
+				free(s);
+			}
 		}
 
 		ucv_put(src);
@@ -2413,6 +2545,7 @@ uc_vm_object_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
 	uc_resource_t *res = (uc_resource_t *)k;
 	uc_object_t *obj = (uc_object_t *)v;
 	uc_object_iterator_t *iter;
+	bool is_dict;
 
 	if (!res) {
 		/* object is empty */
@@ -2448,7 +2581,12 @@ uc_vm_object_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
 		return false;
 	}
 
-	uc_vm_stack_push(vm, ucv_string_new(iter->u.pos->k));
+	is_dict = (iter->table->equal_fn == uc_dict_equal);
+
+	if (is_dict)
+		uc_vm_stack_push(vm, ucv_get((uc_value_t *)iter->u.pos->k));
+	else
+		uc_vm_stack_push(vm, ucv_string_new((char *)iter->u.pos->k));
 
 	if (insn == I_NEXTKV)
 		uc_vm_stack_push(vm, ucv_get((uc_value_t *)iter->u.pos->v));
@@ -2597,7 +2735,9 @@ uc_vm_insn_delete(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
 		if (assert_mutable_value(vm, v)) {
-			rv = ucv_key_delete(vm, v, k);
+			rv = ucv_is_dict(v)
+				? ucv_dict_delete(vm, v, k)
+				: ucv_key_delete(vm, v, k);
 			uc_vm_stack_push(vm, ucv_boolean_new(rv));
 		}
 
@@ -2851,7 +2991,12 @@ uc_vm_signal_dispatch(uc_vm_t *vm)
 	size_t i, j;
 	int sig, rv;
 
-	if (!vm->config->setup_signal_handlers)
+	/* Check whether the signal self-pipe was actually set up, rather than
+	 * re-checking config->setup_signal_handlers directly: the pipe may
+	 * have been lazily initialized on demand via
+	 * uc_vm_signal_handlers_ensure() after the fact (see lib/debug.c),
+	 * independent of what the original config requested. */
+	if (vm->signal.sigpipe[0] < 0)
 		return EXCEPTION_NONE;
 
 	for (i = 0; i < ARRAY_SIZE(vm->signal.raised); i++) {
@@ -2887,6 +3032,17 @@ uc_vm_signal_dispatch(uc_vm_t *vm)
 	}
 
 	return EXCEPTION_NONE;
+}
+
+static uc_vm_status_t
+uc_vm_exception_type_to_status(uc_vm_t *vm)
+{
+	switch (vm->exception.type) {
+	case EXCEPTION_NONE:   return STATUS_OK;
+	case EXCEPTION_EXIT:   return STATUS_EXIT;
+	case EXCEPTION_SYNTAX: return ERROR_COMPILE;
+	default:               return ERROR_RUNTIME;
+	}
 }
 
 static uc_vm_status_t
@@ -3101,6 +3257,12 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 
 		case I_CALL:
 			uc_vm_insn_call(vm, insn);
+
+			if (vm->callframes.count == 0)
+				return uc_vm_exception_type_to_status(vm);
+
+			frame = uc_vm_current_frame(vm);
+			chunk = frame->closure ? uc_vm_frame_chunk(frame) : NULL;
 			break;
 
 		case I_RETURN:
@@ -3147,6 +3309,33 @@ exception:
 				return STATUS_EXIT;
 			}
 
+			/* If a debugger has armed the dedicated "break on uncaught
+			 * exception" system breakpoint and nothing between here and
+			 * this invocation's original call depth would actually handle
+			 * this exception, give it a chance to inspect the fully intact
+			 * stack *before* uc_vm_handle_exception()'s loop below starts
+			 * popping frames - once that happens, the original throwing
+			 * frame's locals and exact position are gone for good. */
+			if (!uc_vm_exception_would_be_caught(vm, caller)) {
+				for (size_t i = 0; i < vm->breakpoints.count; i++) {
+					uc_breakpoint_t *bk = vm->breakpoints.entries[i];
+
+					if (bk != NULL && bk->ip == UC_BREAKPOINT_UNCAUGHT_EXCEPTION) {
+						bk->cb(vm, bk);
+
+						/* "quit" was issued from within the breakpoint's
+						 * CLI session */
+						if (vm->exception.type == EXCEPTION_EXIT) {
+							uc_vm_reset_callframes(vm);
+
+							return STATUS_EXIT;
+						}
+
+						break;
+					}
+				}
+			}
+
 			/* walk up callframes until something handles the exception or the original caller is reached */
 			while (!uc_vm_handle_exception(vm)) {
 				/* no further callframe, report unhandled exception and terminate */
@@ -3169,6 +3358,12 @@ exception:
 		/* run handler for signal(s) delivered during previous instruction */
 		if (uc_vm_signal_dispatch(vm) != EXCEPTION_NONE)
 			goto exception;
+
+		/* check for break request */
+		if (vm->break_requested) {
+			vm->break_requested = false;
+			return STATUS_BREAK;
+		}
 	}
 
 	return STATUS_OK;
@@ -3221,6 +3416,13 @@ uc_vm_execute(uc_vm_t *vm, uc_program_t *program, uc_value_t **retval)
 	case STATUS_EXIT:
 		if (retval)
 			*retval = ucv_int64_new(vm->arg.s32);
+
+		break;
+
+	case STATUS_BREAK:
+		/* Break requested - exit gracefully without error */
+		if (retval)
+			*retval = NULL;
 
 		break;
 
@@ -3403,4 +3605,48 @@ int
 uc_vm_signal_notifyfd(uc_vm_t *vm)
 {
 	return vm->signal.sigpipe[0];
+}
+
+bool
+uc_vm_break_requested(uc_vm_t *vm)
+{
+	return vm->break_requested;
+}
+
+void
+uc_vm_break_request(uc_vm_t *vm)
+{
+	vm->break_requested = true;
+
+	if (vm->break_notifyfd[1] >= 0) {
+		char c = 'B';
+		if (write(vm->break_notifyfd[1], &c, 1) == -1) {}
+	}
+}
+
+int
+uc_vm_break_notifyfd(uc_vm_t *vm)
+{
+	return vm->break_notifyfd[0];
+}
+
+uc_vm_status_t
+uc_vm_resume(uc_vm_t *vm)
+{
+	uc_vm_status_t status = uc_vm_execute_chunk(vm);
+
+	switch (status) {
+	case STATUS_OK:
+	case STATUS_EXIT:
+	case STATUS_BREAK:
+		break;
+
+	default:
+		if (vm->exhandler)
+			vm->exhandler(vm, &vm->exception);
+
+		break;
+	}
+
+	return status;
 }

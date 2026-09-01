@@ -1,0 +1,600 @@
+The `dict()` function creates a dictionary with arbitrary ucode value keys,
+instead of being limited to string keys as regular objects are.
+
+Key uniqueness follows `uc_uniq()` semantics:
+- Scalars (null, bool, int, double, string) are compared by value
+- Non-scalars (arrays, objects, etc.) are compared by pointer equality
+- NaN doubles are treated as equal
+
+1. Create an empty dictionary.
+
+-- Testcase --
+{%
+	let d = dict();
+	printf("%.J\n", [ type(d), length(d) ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"object",
+	0
+]
+-- End --
+
+
+2. Create dictionary from an object (string keys become string value keys).
+
+-- Testcase --
+{%
+	let d = dict({ "a": 1, "b": 2 });
+	printf("%.J\n", [ length(d), d["a"], d["b"] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	2,
+	1,
+	2
+]
+-- End --
+
+
+3. Create dictionary from an array (numeric indices become integer keys).
+
+-- Testcase --
+{%
+	let d = dict([ 10, 20, 30 ]);
+	printf("%.J\n", [ length(d), d[0], d[1], d[2] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	3,
+	10,
+	20,
+	30
+]
+-- End --
+
+
+4. Create dictionary from another dict.
+
+-- Testcase --
+{%
+	let d1 = dict();
+	d1[42] = "answer";
+	d1[true] = "yes";
+	let d2 = dict(d1);
+	printf("%.J\n", [ length(d2), d2[42], d2[true] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	2,
+	"answer",
+	"yes"
+]
+-- End --
+
+
+5. Dict with various scalar key types (bool, int, float, null, string).
+
+-- Testcase --
+{%
+	let d = dict();
+	d[true] = "yes";
+	d[false] = "no";
+	d[42] = "answer";
+	d[-1] = "neg";
+	d[0] = "zero";
+	d[3.14] = "pi";
+	d[null] = "nil";
+	d["foo"] = "bar";
+
+	printf("%.J\n", [
+		length(d),
+		d[true], d[false],
+		d[42], d[-1], d[0],
+		d[3.14],
+		d[null],
+		d["foo"]
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	8,
+	"yes",
+	"no",
+	"answer",
+	"neg",
+	"zero",
+	"pi",
+	"nil",
+	"bar"
+]
+-- End --
+
+
+6. NaN keys are treated as equal (single NaN slot).
+
+-- Testcase --
+{%
+	let d = dict();
+	let n1 = json("NaN");
+	let n2 = json("NaN");
+	d[n1] = "first";
+	d[n2] = "second";
+	printf("%.J\n", [ length(d), d[n1], d[n2] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	1,
+	"second",
+	"second"
+]
+-- End --
+
+
+7. Array keys use pointer equality (different array instances = different keys).
+
+-- Testcase --
+{%
+	let d = dict();
+	let a1 = [ 1, 2, 3 ];
+	let a2 = [ 1, 2, 3 ];
+	d[a1] = "first";
+	d[a2] = "second";
+	printf("%.J\n", [ length(d), d[a1], d[a2] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	2,
+	"first",
+	"second"
+]
+-- End --
+
+
+8. Array keys use pointer equality (same reference = same key).
+
+-- Testcase --
+{%
+	let d = dict();
+	let a = [ 1, 2, 3 ];
+	d[a] = "first";
+	d[a] = "second";
+	printf("%.J\n", [ length(d), d[a] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	1,
+	"second"
+]
+-- End --
+
+
+9. Object keys use pointer equality.
+
+-- Testcase --
+{%
+	let d = dict();
+	let o1 = { x: 1 };
+	let o2 = { x: 1 };
+	d[o1] = "first";
+	d[o2] = "second";
+	printf("%.J\n", [ length(d), d[o1], d[o2] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	2,
+	"first",
+	"second"
+]
+-- End --
+
+
+10. Update existing key preserves key count.
+
+-- Testcase --
+{%
+	let d = dict();
+	d[1] = "a";
+	d[2] = "b";
+	d[3] = "c";
+	d[2] = "updated";
+	printf("%.J\n", [ length(d), d[2] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	3,
+	"updated"
+]
+-- End --
+
+
+11. Delete key from dict.
+
+-- Testcase --
+{%
+	let d = dict();
+	d["a"] = 1;
+	d["b"] = 2;
+	d["c"] = 3;
+	delete d["b"];
+	printf("%.J\n", [ length(d), d["a"], d["b"], d["c"] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	2,
+	1,
+	null,
+	3
+]
+-- End --
+
+
+12. keys() on dict returns actual value keys.
+
+-- Testcase --
+{%
+	let d = dict();
+	d[42] = "x";
+	d[true] = "y";
+	d["foo"] = "z";
+	let k = keys(d);
+	printf("%.J\n", [ length(k), type(k[0]), type(k[1]), type(k[2]) ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	3,
+	"int",
+	"bool",
+	"string"
+]
+-- End --
+
+
+13. values() on dict.
+
+-- Testcase --
+{%
+	let d = dict();
+	d[1] = "a";
+	d[2] = "b";
+	d[3] = "c";
+	printf("%.J\n", values(d));
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"a",
+	"b",
+	"c"
+]
+-- End --
+
+
+14. exists() on dict with value keys.
+
+-- Testcase --
+{%
+	let d = dict();
+	d[42] = "answer";
+	d["foo"] = "bar";
+	d[true] = "yes";
+	printf("%.J\n", [
+		exists(d, 42),
+		exists(d, "foo"),
+		exists(d, true),
+		exists(d, "missing")
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	true,
+	true,
+	true,
+	false
+]
+-- End --
+
+
+15. length() on dict.
+
+-- Testcase --
+{%
+	let d = dict();
+	print(length(d), "\n");
+	d[1] = "a";
+	print(length(d), "\n");
+	d[2] = "b";
+	d[3] = "c";
+	print(length(d), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+0
+1
+3
+-- End --
+
+
+16. Spread dict into object (value keys converted to strings).
+
+-- Testcase --
+{%
+	let d = dict();
+	d[true] = "yes";
+	d[42] = "answer";
+	d["foo"] = "bar";
+	let o = { prefix: 1, ...d, suffix: 2 };
+	printf("%.J\n", [
+		o["true"], o["42"], o["foo"],
+		o["prefix"], o["suffix"]
+	]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"yes",
+	"answer",
+	"bar",
+	1,
+	2
+]
+-- End --
+
+
+17. Spread object into dict (string keys preserved as string values).
+
+-- Testcase --
+{%
+	let o = { a: 1, b: 2, c: 3 };
+	let d = dict(o);
+	printf("%.J\n", [ length(d), d["a"], d["b"], d["c"] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	3,
+	1,
+	2,
+	3
+]
+-- End --
+
+
+18. Spread dict into dict.
+
+-- Testcase --
+{%
+	let d1 = dict();
+	d1[99] = "ninety-nine";
+	d1[true] = "yes";
+	let d2 = dict(d1);
+	d2[100] = "hundred";
+	printf("%.J\n", [ length(d2), d2[99], d2[true], d2[100] ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	3,
+	"ninety-nine",
+	"yes",
+	"hundred"
+]
+-- End --
+
+
+19. for...in iteration yields value keys.
+
+-- Testcase --
+{%
+	let d = dict();
+	d["a"] = 1;
+	d["b"] = 2;
+	d["c"] = 3;
+	let collected = [];
+
+	for (let k in d)
+		push(collected, k);
+
+	printf("%.J\n", collected);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"a",
+	"b",
+	"c"
+]
+-- End --
+
+
+20. for...in iteration with non-string keys.
+
+-- Testcase --
+{%
+	let d = dict();
+	d[10] = "x";
+	d[20] = "y";
+	let sum = 0;
+
+	for (let k in d)
+		sum += k;
+
+	print(sum, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+30
+-- End --
+
+
+21. Dict with prototype chain (regular object proto).
+
+-- Testcase --
+{%
+	let d = dict();
+	let p = { shared: "value" };
+	proto(d, p);
+	print(d.shared, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+value
+-- End --
+
+
+22. Dict with dict prototype.
+
+-- Testcase --
+{%
+	let pd = dict();
+	pd[true] = "from-prototype";
+	pd[42] = "answer";
+	let d = dict();
+	proto(d, pd);
+	printf("%.J\n", [ d[true], d[42], length(d) ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	"from-prototype",
+	"answer",
+	0
+]
+-- End --
+
+
+23. Dict value increment and decrement.
+
+-- Testcase --
+{%
+	let d = dict();
+	d["n"] = 10;
+	d["n"]++;
+	d["n"] += 5;
+	d["n"]--;
+	d["n"] -= 3;
+	print(d["n"], "\n");
+%}
+-- End --
+
+-- Expect stdout --
+12
+-- End --
+
+
+24. Dict GC stress test (no leaks with many dicts and keys).
+
+-- Testcase --
+{%
+	for (let i = 0; i < 1000; i++) {
+		let d = dict();
+		for (let j = 0; j < 50; j++) {
+			d[j] = j * 2;
+			d["k" + j] = "str-" + j;
+			d[true] = "bool";
+		}
+	}
+
+	gc();
+	print("ok\n");
+%}
+-- End --
+
+-- Expect stdout --
+ok
+-- End --
+
+
+25. Dict JSON serialization (value keys converted to JSON strings).
+
+-- Testcase --
+{%
+	let d = dict();
+	d[true] = "yes";
+	d[42] = "answer";
+	d["foo"] = "bar";
+	d[null] = "nil";
+	printf("%.J\n", d);
+%}
+-- End --
+
+-- Expect stdout --
+{
+	"true": "yes",
+	"42": "answer",
+	"foo": "bar",
+	"null": "nil"
+}
+-- End --
+
+
+26. Dict plain stringification (computed property expressions).
+
+-- Testcase --
+{%
+	let d = dict();
+	d[true] = "yes";
+	d[42] = "answer";
+	d["foo"] = "bar";
+	print(d, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+{ [true]: "yes", [42]: "answer", ["foo"]: "bar" }
+-- End --
+
+
+27. Dict with complex keys serializes correctly.
+
+-- Testcase --
+{%
+	let d = dict();
+	let a = [ 1, 2 ];
+	d[a] = "array-key";
+	d[3.14] = "pi";
+	printf("%.J\n", d);
+%}
+-- End --
+
+-- Expect stdout --
+{
+	"[ 1, 2 ]": "array-key",
+	"3.14": "pi"
+}
+-- End --

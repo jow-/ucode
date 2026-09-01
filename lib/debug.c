@@ -60,7 +60,21 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <unistd.h>
+#include <signal.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <errno.h>
+#include <limits.h>
+#include <dlfcn.h>
+#include <fnmatch.h>
+#include <regex.h>
+#include <termios.h>
+
+#include "debug_remote.h"
+#include "debug_proto.h"
+
+/* Forward declarations from debug_remote.c */
+extern bool debug_remote_has_active_connection(void);
 
 #ifdef HAVE_ULOOP
 #include <libubox/uloop.h>
@@ -71,6 +85,8 @@
 
 #include "ucode/module.h"
 #include "ucode/platform.h"
+#include "ucode/compiler.h"
+#include "ucode/vm.h"
 
 
 static char *memdump_signal = "USR2";
@@ -586,6 +602,71 @@ static struct {
 	uc_vm_t *vm;
 } signal_handle;
 
+static struct {
+	struct uloop_fd ufd;
+	uc_vm_t *vm;
+} break_handle;
+
+static bool debug_attach_mode = false;
+
+typedef enum {
+	BK_ONCE,
+	BK_USER,
+	BK_STEP,
+	BK_CATCH,
+	/* Dedicated system breakpoint firing once per raise, right before an
+	 * exception that nothing would catch starts unwinding the stack - see
+	 * UC_BREAKPOINT_UNCAUGHT_EXCEPTION in vm.c. Unlike BK_STEP/BK_CATCH it
+	 * isn't tied to a concrete instruction address (dbk->bk.ip is instead
+	 * the UC_BREAKPOINT_UNCAUGHT_EXCEPTION sentinel), and unlike BK_USER
+	 * it's armed automatically for the lifetime of the debug session, not
+	 * by an explicit `break` command. */
+	BK_UNCAUGHT,
+	/* Dedicated system breakpoint for an async "pause now" request from an
+	 * already-attached client (SIGUSR1 while running - see
+	 * debug_break_signal_handler()) - the connected-client counterpart to
+	 * `-X`'s bare SIGUSR1 attach for a not-yet-attached one. Its struct is
+	 * pre-created (see install_debug_system_breakpoints()) and never
+	 * freed, specifically so the signal handler only ever has to write
+	 * already-allocated fields (dbk->bk.ip/cb) - genuinely
+	 * async-signal-safe, unlike get_breakpoint()'s malloc path. Between
+	 * requests dbk->bk.ip sits at debug_interrupt_disarmed_marker (a
+	 * dedicated inert sentinel, not NULL - a NULL ip is itself the
+	 * "fire on every single instruction" convention the generic
+	 * per-instruction breakpoint check in vm.c uses, the opposite of
+	 * idle); the handler arms it by pointing ip at NULL, and
+	 * bk_handle_interrupt() immediately disarms it again (back to the
+	 * inert marker) before entering the session, so it fires exactly
+	 * once per request instead of on every instruction from then on. */
+	BK_INTERRUPT,
+} debug_breakpoint_kind_t;
+
+typedef struct debug_breakpoint {
+	uc_breakpoint_t bk;
+	uc_function_t *fn;
+	size_t depth;
+	debug_breakpoint_kind_t kind;
+	/* Set instead of actually freeing the struct when "delete" removes the
+	 * breakpoint bk_enter_session() is *currently* handling: that C stack frame
+	 * still holds this pointer and keeps handling further commands (and,
+	 * for "next"/"step", keeps reading ->depth) for the rest of the CLI
+	 * session, so freeing it there and then would be a use-after-free the
+	 * moment the next command runs, and a double free once bk_enter_session()'s
+	 * own end-of-session cleanup runs free_breakpoint() on it again. The
+	 * breakpoint is unlinked from vm->breakpoints immediately either way
+	 * (so it can't fire again); only the free() of the struct itself is
+	 * deferred until bk_enter_session() is done with it. */
+	bool deleted;
+} debug_breakpoint_t;
+
+/* Dedicated inert marker for BK_INTERRUPT - see its debug_breakpoint_kind_t
+ * comment above for why this can't just be NULL. Declared this early so
+ * debug_break_signal_handler() below can reference it. */
+static uint8_t debug_interrupt_disarmed_marker;
+
+static void bk_enter_session(uc_vm_t *vm, uc_breakpoint_t *bk);
+static uc_callframe_t *uc_debug_curr_frame(uc_vm_t *vm, size_t off);
+
 static void
 uc_uloop_signal_cb(struct uloop_fd *ufd, unsigned int events)
 {
@@ -594,27 +675,124 @@ uc_uloop_signal_cb(struct uloop_fd *ufd, unsigned int events)
 }
 
 static void
+uc_uloop_break_cb(struct uloop_fd *ufd, unsigned int events)
+{
+	char c;
+	while (read(break_handle.ufd.fd, &c, 1) > 0) {
+		/* break requested */
+	}
+
+	/* In attach mode, launch the debugger CLI immediately */
+	if (debug_attach_mode) {
+		uc_vm_t *vm = break_handle.vm;
+		uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+
+		if (frame) {
+			debug_breakpoint_t dbk = {
+				.bk = { .ip = frame->ip },
+				.fn = frame->closure->function,
+				.kind = BK_USER
+			};
+
+			bk_enter_session(vm, &dbk.bk);
+		}
+	}
+}
+
+static void
 debug_setup_uloop(uc_vm_t *vm)
 {
 	int signal_fd = uc_vm_signal_notifyfd(vm);
+	int break_fd = uc_vm_break_notifyfd(vm);
 
-	if (signal_fd != -1 && uloop_init() == 0) {
+	if (uloop_init() < 0)
+		return;
+
+	if (signal_fd != -1) {
 		signal_handle.vm = vm;
 		signal_handle.ufd.cb = uc_uloop_signal_cb;
 		signal_handle.ufd.fd = signal_fd;
 
 		uloop_fd_add(&signal_handle.ufd, ULOOP_READ);
 	}
+
+	if (break_fd != -1) {
+		break_handle.vm = vm;
+		break_handle.ufd.cb = uc_uloop_break_cb;
+		break_handle.ufd.fd = break_fd;
+
+		uloop_fd_add(&break_handle.ufd, ULOOP_READ);
+	}
 }
 #else
 static void debug_setup_uloop(uc_vm_t *vm) {}
 #endif
+
+/* Global vm pointer for SIGUSR1 handler */
+static uc_vm_t *debug_break_vm = NULL;
+
+static void
+debug_break_signal_handler(int sig)
+{
+	/* A debugger is already attached - SIGUSR1 arriving here could be the
+	 * attached client's own Ctrl-C-while-running interrupt request (see
+	 * udbg.c), or an unrelated external sender; there's no way to tell
+	 * which, and this deliberately no longer distinguishes them (that
+	 * used to just forward an "already attached, ignoring" notification -
+	 * debug_remote_notify_signal(), removed - without actually pausing
+	 * anything): any SIGUSR1 while attached now arms a real break, the
+	 * same as it would for the not-yet-attached case just below, since
+	 * "someone sent SIGUSR1 to a debugged process" is a deliberate act
+	 * either way and "pause for inspection" is the reasonable universal
+	 * response to it. Arm BK_INTERRUPT so it fires on the very next
+	 * instruction (see its debug_breakpoint_kind_t comment) rather than
+	 * the VM API break used below for the not-yet-attached case: that one
+	 * unwinds the whole C call stack back to -X's own main loop (see
+	 * uc_vm_break_request()'s doc comment), which would tear down the
+	 * live session instead of pausing it. Only a direct field write - dbk
+	 * was pre-created specifically so this never has to call
+	 * get_breakpoint()'s malloc path from signal-handler context. */
+	if (debug_remote_has_active_connection()) {
+		for (size_t i = 0; i < debug_break_vm->breakpoints.count; i++) {
+			debug_breakpoint_t *dbk = (debug_breakpoint_t *)debug_break_vm->breakpoints.entries[i];
+
+			if (dbk && dbk->kind == BK_INTERRUPT) {
+				dbk->bk.ip = NULL;
+				break;
+			}
+		}
+
+		return;
+	}
+
+	/* Signal handler - request break via VM API
+	 * The actual break will be processed by uloop or the VM */
+	if (debug_break_vm)
+		uc_vm_break_request(debug_break_vm);
+}
+
+static void
+debug_setup_break_signal(uc_vm_t *vm)
+{
+	struct sigaction sa = { 0 };
+
+	debug_break_vm = vm;
+
+	sa.sa_handler = debug_break_signal_handler;
+	sa.sa_flags = SA_RESTART;
+	sigemptyset(&sa.sa_mask);
+
+	/* Only install if not already handled by debug module */
+	if (sigaction(SIGUSR1, &sa, NULL) != 0)
+		fprintf(stderr, "SIGUSR1 handler installation failed: %s\n", strerror(errno));
+}
 
 static void
 debug_setup_memdump(uc_vm_t *vm)
 {
 	uc_cfn_ptr_t ucsignal = uc_stdlib_function("signal");
 	uc_value_t *memdump = ucv_cfunction_new("memdump", debug_handle_memdump);
+	uc_value_t *handler;
 	char *ev;
 
 	ev = getenv("UCODE_DEBUG_MEMDUMP_PATH");
@@ -628,11 +806,35 @@ debug_setup_memdump(uc_vm_t *vm)
 	uc_vm_stack_push(vm, ucv_string_new(memdump_signal));
 	uc_vm_stack_push(vm, memdump);
 
-	if (ucsignal(vm, 2) != memdump)
+	handler = ucsignal(vm, 2);
+
+	if (handler != memdump)
 		fprintf(stderr, "Unable to install debug signal handler\n");
 
 	ucv_put(uc_vm_stack_pop(vm));
 	ucv_put(uc_vm_stack_pop(vm));
+	ucv_put(handler);
+}
+
+static uc_exception_handler_t *debug_prev_exhandler = NULL;
+
+static void
+debug_exception_notify_handler(uc_vm_t *vm, uc_exception_t *ex)
+{
+	/* Forward uncaught exceptions to an attached remote debugger client,
+	 * in addition to whatever the previously installed handler does
+	 * (normally printing to stderr). No-op when nobody is attached.
+	 * vm->output (stdout) is fully block-buffered once it's a socket
+	 * rather than a tty, while the notification itself goes out via a raw
+	 * write() - flush first, or the event can overtake not-yet-flushed
+	 * script output the target already produced earlier. */
+	if (debug_remote_has_active_connection()) {
+		fflush(vm->output);
+		debug_remote_notify_exception(vm, ex);
+	}
+
+	if (debug_prev_exhandler)
+		debug_prev_exhandler(vm, ex);
 }
 
 static void
@@ -640,10 +842,26 @@ debug_setup(uc_vm_t *vm)
 {
 	char *ev;
 
+	/* Make sure the ucode-level signal() builtin actually works,
+	 * regardless of whether the embedding host opted into
+	 * uc_parse_config_t.setup_signal_handlers - debug_setup_memdump()
+	 * below and debug.attach()/debug.listen()/debug.debugger() all rely
+	 * on it, and a host that simply calls uc_vm_init(vm, NULL) (uwsd,
+	 * uhttpd) gets that flag unset by default. Without this, installing
+	 * one of those handlers would silently end up with a NULL/SIG_DFL
+	 * disposition, terminating the process on the next occurrence of the
+	 * signal instead of invoking the handler. */
+	uc_vm_signal_handlers_ensure(vm);
+
 	ev = getenv("UCODE_DEBUG_MEMDUMP_ENABLED");
 
 	if (!ev || !strcmp(ev, "1") || !strcmp(ev, "yes") || !strcmp(ev, "true"))
 		debug_setup_memdump(vm);
+
+	debug_setup_break_signal(vm);
+
+	debug_prev_exhandler = uc_vm_exception_handler_get(vm);
+	uc_vm_exception_handler_set(vm, debug_exception_notify_handler);
 }
 
 
@@ -1652,6 +1870,3645 @@ uc_setupval(uc_vm_t *vm, size_t nargs)
 }
 
 
+/* ========================================================================== */
+/* Interactive debugger implementation follows                                */
+/* ========================================================================== */
+
+typedef struct {
+	size_t nesting;
+	size_t off_start, off_end;
+	size_t pos_start, pos_end, pos_ip;
+	uint8_t *ip_start, *ip_end;
+} insn_span_t;
+
+typedef struct {
+	const char *path;
+	size_t line;
+	size_t column;
+	size_t offset;
+	uc_program_t *program;
+	uc_source_t *source;
+	uc_function_t *function;
+} location_t;
+
+#define uc_vector_add(vec, ...) ({ \
+	uc_vector_push((vec), ((typeof((vec)->entries[0]))__VA_ARGS__)); \
+	uc_vector_last(vec); \
+})
+
+static uc_callframe_t *
+uc_debug_curr_frame(uc_vm_t *vm, size_t off)
+{
+	if (off > vm->callframes.count)
+		return NULL;
+
+	for (size_t i = vm->callframes.count - off; i > 0; i--)
+		if (vm->callframes.entries[i-1].closure)
+			return &vm->callframes.entries[i-1];
+
+	return NULL;
+}
+
+/* -- convert file path to module name -------------------------------------- */
+static char *
+filename_to_modulename(uc_vm_t *vm, const char *filename)
+{
+	char *module_path = realpath(filename, NULL);
+	char *rv = NULL;
+
+	if (!module_path)
+		module_path = (char *)filename;
+
+	size_t len_module_path = strlen(module_path);
+
+	uc_value_t *search =
+		ucv_object_get(uc_vm_scope_get(vm), "REQUIRE_SEARCH_PATH", NULL);
+
+	for (size_t i = 0; rv == NULL && i < ucv_array_length(search); i++) {
+		uc_value_t *p = ucv_array_get(search, i);
+
+		if (ucv_type(p) != UC_STRING)
+			continue;
+
+		char *search_spec = xstrdup(ucv_string_get(p));
+		char *search_ext = strchr(search_spec, '*');
+
+		if (!search_ext) {
+			free(search_spec);
+			continue;
+		}
+
+		*search_ext++ = 0;
+
+		char *search_path = realpath(search_spec, NULL);
+
+		if (!search_path) {
+			free(search_spec);
+			continue;
+		}
+
+		size_t len_search_path = strlen(search_path);
+		size_t len_search_ext = strlen(search_ext);
+
+		if (!strncmp(module_path, search_path, len_search_path) &&
+		    module_path[len_search_path] == '/' &&
+		    len_module_path > len_search_ext &&
+		    !strcmp(module_path + len_module_path - len_search_ext, search_ext))
+		{
+			xasprintf(&rv, "%.*s",
+				(int)(len_module_path - (len_search_path + 1 + len_search_ext)),
+				module_path + len_search_path + 1);
+
+			for (char *p = rv; *p; p++)
+				if (*p == '/')
+					*p = '.';
+		}
+
+		free(search_spec);
+		free(search_path);
+	}
+
+	free(module_path);
+
+	return rv;
+}
+
+/* -- helper routines to deal with print buffers ---------------------------- */
+static size_t
+utf8_sequence_length(const char *s)
+{
+	const uint8_t *c = (const uint8_t *)s;
+
+	if ((c[0] & 0xe0) == 0xc0 &&
+	    (c[1] & 0xc0) == 0x80)
+		return 2;
+
+	if ((c[0] & 0xf0) == 0xe0 &&
+	    (c[1] & 0xc0) == 0x80 &&
+	    (c[2] & 0xc0) == 0x80)
+		return 3;
+
+	if ((c[0] & 0xf8) == 0xf0 &&
+	    (c[1] & 0xc0) == 0x80 &&
+	    (c[2] & 0xc0) == 0x80 &&
+	    (c[3] & 0xc0) == 0x80)
+		return 4;
+
+	return (*c != 0);
+}
+
+static size_t
+esc_sequence_length(const char *s)
+{
+	if (s[0] == '\033' && s[1] == '[') {
+		size_t i = 2;
+
+		while (s[i] != '\0' && s[i] != 'm')
+			i++;
+
+		return i + (s[i] == 'm');
+	}
+
+	return 0;
+}
+
+static size_t
+strwidth(const char *s)
+{
+	size_t len = 0;
+
+	while (*s) {
+		s += esc_sequence_length(s);
+
+		size_t n = utf8_sequence_length(s);
+
+		if (n) {
+			s += n;
+			len++;
+		}
+	}
+
+	return len;
+}
+
+static bool
+str_startswith(const char *s, const char *substr)
+{
+	if (substr == NULL)
+		return true;
+
+	return strncmp(s, substr, strlen(substr)) == 0;
+}
+
+static size_t
+printbuf_truncate(uc_stringbuf_t *sb, size_t off, size_t maxcols, bool tail)
+{
+	if (maxcols == 0) {
+		sb->bpos = off;
+		sb->buf[off] = 0;
+
+		return 0;
+	}
+
+	size_t len = strwidth(sb->buf + off);
+	char *s = sb->buf + off;
+
+	if (tail == false && len > maxcols) {
+		for (size_t i = 0; i < len - maxcols + 1; i++) {
+			s += esc_sequence_length(s);
+			s += utf8_sequence_length(s);
+		}
+
+		size_t keeplen = (sb->buf + sb->bpos) - s;
+		size_t trunclen = s - (sb->buf + off);
+		size_t elliplen = sizeof("…") - 1;
+
+		/* Reserve enough additional space for ellipsis mb sequence. */
+		if (trunclen < elliplen)
+			printbuf_memset(sb, -1, ' ', elliplen - trunclen);
+
+		memmove(sb->buf + off + elliplen, s, keeplen);
+		memcpy(sb->buf + off, "…", elliplen);
+
+		sb->bpos += elliplen;
+		sb->bpos -= trunclen;
+		sb->buf[sb->bpos] = 0;
+
+		return maxcols;
+	}
+
+	if (tail == true && len > maxcols) {
+		for (size_t i = 0; i < maxcols - 1; i++) {
+			s += esc_sequence_length(s);
+			s += utf8_sequence_length(s);
+		}
+
+		sb->bpos = s - sb->buf;
+		printbuf_strappend(sb, "…");
+
+		return maxcols;
+	}
+
+	return len;
+}
+
+static size_t
+printbuf_append_uv(uc_stringbuf_t *sb, uc_vm_t *vm, uc_value_t *val,
+                   size_t maxcols)
+{
+	int pos = sb->bpos;
+	const char *end;
+	size_t len;
+
+	ucv_to_stringbuf(vm, sb, val, false);
+
+	len = strwidth(sb->buf + pos);
+
+	if (len > maxcols) {
+		switch (sb->buf[pos]) {
+		case '{': len = maxcols - 3; end = "… }"; break;
+		case '[': len = maxcols - 3; end = "… ]"; break;
+		case '"': len = maxcols - 2; end = "…\""; break;
+		default:  len = maxcols - 1; end = "…";   break;
+		}
+
+		for (sb->bpos = pos; len > 0; len--)
+			sb->bpos += utf8_sequence_length(sb->buf + sb->bpos);
+
+		printbuf_memappend_fast(sb, end, strlen(end));
+
+		return maxcols;
+	}
+
+	return len;
+}
+
+static size_t
+printbuf_append_funcname(uc_stringbuf_t *sb, uc_vm_t *vm, uc_value_t *val,
+                         size_t maxcols)
+{
+	char *placeholder = NULL;
+	int off = sb->bpos;
+
+	for (size_t i = 0; i < vm->restypes.count; i++) {
+		uc_resource_type_t *rt = vm->restypes.entries[i];
+
+		ucv_object_foreach(rt->proto, k, v) {
+			(void)k;
+
+			if (v == val) {
+				printbuf_memappend_fast(sb, rt->name, strlen(rt->name));
+				printbuf_strappend(sb, "#");
+				goto name;
+			}
+		}
+	}
+
+	uc_value_t *modtable = ucv_object_get(uc_vm_scope_get(vm), "modules", NULL);
+
+	ucv_object_foreach(modtable, modname, modscope) {
+		ucv_object_foreach(modscope, symname, symval) {
+			(void)symname;
+
+			if (symval == val) {
+				printbuf_memappend_fast(sb, modname, strlen(modname));
+				printbuf_strappend(sb, ".");
+				goto name;
+			}
+		}
+	}
+
+name:
+	if (ucv_type(val) == UC_CLOSURE) {
+		uc_function_t *fn = ((uc_closure_t *)val)->function;
+
+		if (fn->name[0]) {
+			printbuf_memappend_fast(sb, fn->name, strlen(fn->name));
+			goto done;
+		}
+
+		placeholder = fn->arrow ? "λ" : "𝑓";
+	}
+	else if (ucv_type(val) == UC_CFUNCTION) {
+		uc_cfunction_t *cf = (uc_cfunction_t *)val;
+
+		if (cf->name[0]) {
+			printbuf_memappend_fast(sb, cf->name, strlen(cf->name));
+			goto done;
+		}
+
+		placeholder = "𝑓";
+	}
+	else {
+		return 0;
+	}
+
+	/* no prefix and no name yet, try to name by containing property name */
+	for (uc_weakref_t *ref = vm->values.next;
+		ref != &vm->values && sb->bpos == off;
+		ref = ref->next)
+	{
+		uc_object_t *obj =
+			(uc_object_t *)((char *)ref - offsetof(uc_object_t, ref));
+
+		if (obj->header.type != UC_OBJECT)
+			continue;
+
+		ucv_object_foreach(&obj->header, k, v) {
+			if (v == val) {
+				printbuf_memappend_fast(sb, k, strlen(k));
+				printbuf_strappend(sb, ":");
+				break;
+			}
+		}
+	}
+
+	printbuf_memappend_fast(sb, placeholder, strlen(placeholder));
+
+done:
+	return printbuf_truncate(sb, off, maxcols, true);
+}
+
+static size_t
+printbuf_append_function(uc_stringbuf_t *sb, uc_vm_t *vm, uc_value_t *val,
+                         uc_callframe_t *frame, size_t maxcols)
+{
+	uc_type_t t = ucv_type(val);
+	int off = sb->bpos;
+
+	if (t == UC_CFUNCTION) {
+		printbuf_append_funcname(sb, vm, val, SIZE_MAX);
+		printbuf_strappend(sb, "(");
+
+		if (frame) {
+			size_t prev_frame = vm->stack.count;
+
+			for (size_t i = vm->callframes.count; i > 0; i--) {
+				if (&vm->callframes.entries[i - 1] == frame)
+					break;
+
+				prev_frame = vm->callframes.entries[i - 1].stackframe;
+			}
+
+			for (size_t j = 1; j < prev_frame - frame->stackframe; j++) {
+				if (j > 1)
+					printbuf_strappend(sb, ", ");
+
+				uc_value_t *argval =
+					(frame->stackframe + j < vm->stack.count)
+						? vm->stack.entries[frame->stackframe + j]
+						: NULL;
+
+				printbuf_append_uv(sb, vm, argval, 32);
+			}
+		}
+
+		printbuf_strappend(sb, ")");
+	}
+	else if (t == UC_CLOSURE) {
+		uc_closure_t *cl = (uc_closure_t *)val;
+		uc_source_t *source = uc_program_function_source(cl->function);
+
+		if (cl->function->module) {
+			char *s = filename_to_modulename(vm, source->filename);
+			sprintbuf(sb, "module(%s)", s ? s : "");
+			free(s);
+		}
+		else {
+			printbuf_append_funcname(sb, vm, val, SIZE_MAX);
+			printbuf_strappend(sb, "(");
+
+			if (frame) {
+				for (size_t i = 0; i < cl->function->nargs; i++) {
+					uc_value_t *argname = uc_chunk_debug_get_variable(
+						&cl->function->chunk, i, i + 1, false);
+
+					if (i > 0)
+						printbuf_strappend(sb, ", ");
+
+					if (i + 1 == cl->function->nargs && cl->function->vararg)
+						printbuf_strappend(sb, "...");
+
+					if (argname) {
+						printbuf_memappend_fast(sb,
+							ucv_string_get(argname),
+							ucv_string_length(argname));
+
+						printbuf_strappend(sb, "=");
+						ucv_put(argname);
+					}
+					else {
+						sprintbuf(sb, "$%zu=", i + 1);
+					}
+
+					uc_value_t *argval =
+						(frame->stackframe + i + 1 < vm->stack.count)
+							? vm->stack.entries[frame->stackframe + i + 1]
+							: NULL;
+
+					printbuf_append_uv(sb, vm, argval, 32);
+				}
+			}
+
+			printbuf_strappend(sb, ")");
+		}
+	}
+
+	return printbuf_truncate(sb, off, maxcols, true);
+}
+
+static size_t
+printbuf_append_srcpath(uc_stringbuf_t *sb, uc_source_t *source, size_t maxcols)
+{
+	int off = sb->bpos;
+
+	printbuf_memset(sb, off + PATH_MAX, 0, 1);
+
+	if (realpath(source->filename, sb->buf + off)) {
+		size_t pathlen = strlen(sb->buf + off);
+		char cwd[PATH_MAX];
+
+		if (getcwd(cwd, sizeof(cwd))) {
+			size_t cwdlen = strlen(cwd);
+
+			if (strncmp(sb->buf + off, cwd, cwdlen) == 0 &&
+			    sb->buf[off + cwdlen] == '/')
+			{
+				pathlen -= cwdlen + 1;
+				memmove(sb->buf + off, sb->buf + off + cwdlen + 1, pathlen);
+			}
+		}
+
+		sb->bpos = off + pathlen;
+		sb->buf[sb->bpos] = 0;
+	}
+	else {
+		sb->bpos = off;
+		printbuf_memappend_fast(sb,
+			source->filename, strlen(source->filename));
+	}
+
+	return printbuf_truncate(sb, off, maxcols, false);
+}
+
+static void
+bk_enter_session(uc_vm_t *vm, uc_breakpoint_t *bk);
+
+static void
+bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk);
+
+static void
+bk_handle_uncaught(uc_vm_t *vm, uc_breakpoint_t *bk);
+
+static void
+bk_handle_interrupt(uc_vm_t *vm, uc_breakpoint_t *bk);
+
+static debug_breakpoint_t *
+get_breakpoint(uc_vm_t *vm, debug_breakpoint_kind_t kind)
+{
+	debug_breakpoint_t *dbk;
+
+	for (size_t i = 0; i < vm->breakpoints.count; i++) {
+		dbk = (debug_breakpoint_t *)vm->breakpoints.entries[i];
+
+		if (dbk != NULL && dbk->kind == kind)
+			return dbk;
+	}
+
+	dbk = xalloc(sizeof(*dbk));
+	dbk->kind = kind;
+	uc_vector_push(&vm->breakpoints, &dbk->bk);
+
+	return dbk;
+}
+
+static void
+update_breakpoint(uc_vm_t *vm, debug_breakpoint_kind_t kind,
+                  void (*cb)(uc_vm_t *, uc_breakpoint_t *), uint8_t *ip,
+                  uc_function_t *fn, size_t depth)
+{
+	debug_breakpoint_t *dbk = get_breakpoint(vm, kind);
+
+	dbk->bk.cb = cb;
+	dbk->depth = depth;
+	dbk->fn = fn;
+
+	/* If the target instruction is the same then invoke handler directly */
+	if (dbk->bk.ip == ip)
+		dbk->bk.cb(vm, &dbk->bk);
+	else
+		dbk->bk.ip = ip;
+}
+
+/* Remove a breakpoint from vm->breakpoints so it can no longer fire, without
+ * freeing its backing memory - see the `deleted` field comment above for why
+ * these two steps sometimes need to happen at different times. */
+static bool
+unlink_breakpoint(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	uc_breakpoints_t *bks = &vm->breakpoints;
+	bool found = false;
+
+	/* Blank out breakpoint slot */
+	for (size_t i = bks->count; i > 0; i--) {
+		if (bks->entries[i - 1] == bk) {
+			bks->entries[i - 1] = NULL;
+			found = true;
+			break;
+		}
+	}
+
+	/* Cleanup empty tail of the breakpoint vector */
+	while (bks->count > 0 && bks->entries[bks->count - 1] == NULL)
+		bks->count--;
+
+	return found;
+}
+
+static bool
+free_breakpoint(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	bool found = unlink_breakpoint(vm, bk);
+
+	free(bk);
+
+	return found;
+}
+
+/* Delete a breakpoint via the "delete" CLI command. `dbk` is the one to
+ * remove; `current` is the breakpoint bk_enter_session() is presently handling
+ * (its `dbk` parameter), still alive on that C stack frame and still going
+ * to be dereferenced by further commands in this same session (and, for
+ * BK_STEP, possibly by bk_enter_session()'s own end-of-session cleanup). If
+ * they're the same object, only unlink it now and mark it `deleted` so
+ * bk_enter_session() frees it once it's actually done with it; otherwise it's
+ * safe to free it outright. */
+static void
+delete_breakpoint(uc_vm_t *vm, debug_breakpoint_t *dbk, debug_breakpoint_t *current)
+{
+	if (dbk == current) {
+		unlink_breakpoint(vm, &dbk->bk);
+		dbk->deleted = true;
+	}
+	else {
+		free_breakpoint(vm, &dbk->bk);
+	}
+}
+
+/* Arm the dedicated "break on uncaught exception" system breakpoint (see
+ * UC_BREAKPOINT_UNCAUGHT_EXCEPTION in vm.c), and pre-create (inert - see
+ * BK_INTERRUPT's debug_breakpoint_kind_t comment) the async "pause now"
+ * one, for the lifetime of the debug session. Idempotent - safe to call
+ * from every entry point that can start a session (uc_debugger(),
+ * uc_debug_attach(), uc_debug_listen()), each of which only runs its
+ * one-time setup once anyway, but this keeps that invariant local rather
+ * than relying on the caller not to double-arm it. */
+static void
+install_debug_system_breakpoints(uc_vm_t *vm)
+{
+	debug_breakpoint_t *dbk = get_breakpoint(vm, BK_UNCAUGHT);
+
+	dbk->bk.cb = bk_handle_uncaught;
+	dbk->bk.ip = UC_BREAKPOINT_UNCAUGHT_EXCEPTION;
+
+	dbk = get_breakpoint(vm, BK_INTERRUPT);
+	dbk->bk.cb = bk_handle_interrupt;
+	dbk->bk.ip = &debug_interrupt_disarmed_marker;
+}
+
+static size_t
+patch_breakpoint(uc_vm_t *vm, uc_function_t *fn, size_t insnoff,
+                 debug_breakpoint_kind_t kind, size_t depth)
+{
+	debug_breakpoint_t *dbk = xalloc(sizeof(debug_breakpoint_t));
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_breakpoints_t *bks = &vm->breakpoints;
+
+	dbk->bk.ip = fn ? &fn->chunk.entries[insnoff] : NULL;
+	dbk->bk.cb = bk_enter_session;
+	dbk->fn = fn;
+	dbk->kind = kind;
+	dbk->depth = depth;
+
+	/* When the user breakpoint to be installed is at the same instruction
+	   offset as the current VM instruction pointer then ensure to append it
+	   to the breakpoint stack, otherwise reclaim free entry. */
+	if (frame == NULL || frame->ip != dbk->bk.ip) {
+		for (size_t i = 0; i < bks->count; i++) {
+			if (bks->entries[i] == NULL) {
+				bks->entries[i] = &dbk->bk;
+
+				return i + 1;
+			}
+		}
+	}
+
+	uc_vector_push(bks, &dbk->bk);
+
+	return bks->count;
+}
+
+static bool
+filename_matches_pattern(const char *filename, const char *pattern)
+{
+	if (strchr(pattern, '/') || strchr(pattern, '*'))
+		return (fnmatch(filename, pattern, 0) == 0);
+
+	const char *basename = strrchr(filename, '/');
+
+	if (basename)
+		return (strcmp(basename + 1, pattern) == 0);
+
+	return (strcmp(filename, pattern) == 0);
+}
+
+static bool
+lookup_source(uc_vm_t *vm, location_t *loc)
+{
+	uc_stringbuf_t pattern = { 0 }, filename = { 0 };
+	uc_weakref_t *ref;
+	uc_closure_t *uc;
+
+	if (loc->program != NULL && loc->source != NULL)
+		return true;
+
+	if (loc->path == NULL)
+		return false;
+
+	printbuf_append_srcpath(&pattern,
+		&((uc_source_t){ .filename = (char *)loc->path }), SIZE_MAX);
+
+	/* iterate all existing closures to find programs */
+	for (ref = vm->values.next; ref != &vm->values; ref = ref->next) {
+		uc = (uc_closure_t *)((uintptr_t)ref - offsetof(uc_closure_t, ref));
+
+		if (uc->header.type != UC_CLOSURE)
+			continue;
+
+		if (!uc->function || !uc->function->program)
+			continue;
+
+		uc_program_t *program = uc->function->program;
+
+		/* iterate all program sources looking for a patchname match */
+		for (size_t i = 0; i < program->sources.count; i++) {
+			uc_source_t *source = program->sources.entries[i];
+
+			printbuf_append_srcpath(&filename, source, SIZE_MAX);
+
+			if (filename_matches_pattern(filename.buf, pattern.buf)) {
+				size_t col = (loc->column > 0) ? loc->column - 1 : 0;
+				size_t rem = (loc->line > 0) ? loc->line - 1 : 0;
+				uc_lineinfo_t *lines = &source->lineinfo;
+
+				/* iterate line lengths looking for exact offset */
+				for (size_t j = 0, llen = 0, off = 0; j < lines->count; j++) {
+					size_t bytes = lines->entries[j] & 0x7f;
+
+					if (rem == 0 && col >= llen && col <= llen + bytes) {
+						loc->program = program;
+						loc->source = source;
+						loc->offset = off + llen + col;
+
+						free(filename.buf);
+						free(pattern.buf);
+
+						return true;
+					}
+
+					llen += bytes;
+
+					if (j > 0 && lines->entries[j] & 0x80) {
+						off += llen + 1;
+						llen = 0;
+						rem--;
+					}
+				}
+			}
+
+			printbuf_reset(&filename);
+		}
+	}
+
+	free(filename.buf);
+	free(pattern.buf);
+
+	return false;
+}
+
+static bool
+lookup_offset(uc_vm_t *vm, location_t *loc)
+{
+	if (!lookup_source(vm, loc))
+		return false;
+
+	size_t column = (loc->column > 0) ? loc->column - 1 : 0;
+	size_t remaining = (loc->line > 0) ? loc->line - 1 : 0;
+	uc_lineinfo_t *lines = &loc->source->lineinfo;
+
+	/* iterate line lengths looking for exact offset */
+	for (size_t j = 0, linelen = 0, offset = 0; j < lines->count; j++) {
+		size_t bytes = lines->entries[j] & 0x7f;
+
+		if (remaining == 0 && column >= linelen && column <= linelen + bytes) {
+			loc->offset = offset + linelen + column;
+
+			return true;
+		}
+
+		linelen += bytes;
+
+		if (j > 0 && lines->entries[j] & 0x80) {
+			offset += linelen + 1;
+			linelen = 0;
+			remaining--;
+		}
+	}
+
+	return false;
+}
+
+static bool
+lookup_function(uc_vm_t *vm, location_t *loc)
+{
+	if (loc->function != NULL)
+		return true;
+
+	if (!lookup_offset(vm, loc))
+		return false;
+
+	uc_program_function_foreach(loc->program, fn) {
+		if (uc_program_function_source(fn) != loc->source)
+			continue;
+
+		size_t beg = uc_program_function_srcpos(fn, 0);
+		size_t end = uc_program_function_srcpos(fn, SIZE_MAX);
+
+		if (beg <= loc->offset && end >= loc->offset) {
+			loc->function = fn;
+
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool
+lookup_stmt_boundary(uc_vm_t *vm, location_t *loc, insn_span_t *sp)
+{
+	if (!lookup_function(vm, loc))
+		return false;
+
+	struct { insn_span_t *entries; size_t count; } sp_stack = { 0 };
+	uc_chunk_t *chunk = &loc->function->chunk;
+	uc_offsetinfo_t *offsets = &chunk->debuginfo.offsets;
+	size_t bytes = loc->function->srcpos;
+	insn_span_t *s = NULL;
+
+	for (size_t i = 0, insns = 0; i < offsets->count; i++) {
+		uc_offset_t *o = &offsets->entries[i];
+
+		if (o->bytes & 0x80) {
+			size_t nesting = sp_stack.count + 1;
+
+			s = uc_vector_add(&sp_stack, {
+				.nesting   = nesting,
+				.off_start = i,
+				.pos_start = bytes,
+				.pos_ip    = bytes,
+				.ip_start  = chunk->entries + insns
+			});
+		}
+
+		bytes += o->bytes & 0x7f;
+		insns += o->insns & 0x7f;
+
+		if (insns > chunk->count)
+			goto not_found; /* out of range / invalid offset coding */
+
+		if (o->insns & 0x80) {
+			if (sp_stack.count == 0)
+				goto not_found; /* invalid offset coding */
+
+			s->off_end = i;
+			s->pos_end = bytes;
+			s->ip_end  = chunk->entries + insns;
+
+			if (s->pos_start <= loc->offset && s->pos_end >= loc->offset)
+				goto found;
+
+			s = --sp_stack.count ? uc_vector_last(&sp_stack) : NULL;
+		}
+
+		if (bytes > loc->offset && s == NULL)
+			goto not_found; /* past searched offset w/o matching range start */
+	}
+
+not_found:
+	memset(sp, 0, sizeof(*sp));
+	uc_vector_clear(&sp_stack);
+
+	return false;
+
+found:
+	*sp = *uc_vector_last(&sp_stack);
+	uc_vector_clear(&sp_stack);
+
+	return true;
+}
+
+static size_t
+add_breakpoint(uc_vm_t *vm, const char *path, size_t line, size_t byte,
+               debug_breakpoint_kind_t kind)
+{
+	location_t loc = { .path = path, .line = line, .column = byte };
+	insn_span_t stmt;
+
+	if (!lookup_stmt_boundary(vm, &loc, &stmt))
+		return 0;
+
+	return patch_breakpoint(vm, loc.function,
+		stmt.ip_start - loc.function->chunk.entries, kind, stmt.nesting);
+}
+
+static uint8_t *
+next_parent(uc_vm_t *vm, uc_function_t **fnp)
+{
+	for (size_t i = vm->callframes.count - 1; i > 0; i--) {
+		uc_callframe_t *pframe = &vm->callframes.entries[i - 1];
+
+		if (!pframe->closure)
+			continue;
+
+		*fnp = pframe->closure->function;
+
+		return pframe->ip;
+	}
+
+	return NULL;
+}
+
+static bool
+find_statement_boundaries(uc_function_t *fn, uint8_t *ip, size_t depth, insn_span_t *sp)
+{
+	struct { insn_span_t *entries; size_t count; } sp_stack = { 0 };
+	uc_offsetinfo_t *offsets = &fn->chunk.debuginfo.offsets;
+	size_t off = ip - fn->chunk.entries;
+	size_t i = 0, bytes = 0, insns = 0;
+	insn_span_t *s = NULL;
+
+	for (i = 0; i < offsets->count; i++) {
+		uc_offset_t *o = &offsets->entries[i];
+
+		bytes += o->bytes & 0x7f;
+
+		if (o->bytes & 0x80) {
+			size_t nesting = sp_stack.count + 1;
+
+			s = uc_vector_add(&sp_stack, {
+				.nesting   = nesting,
+				.off_start = i,
+				.pos_start = fn->srcpos + bytes,
+				.pos_ip    = fn->srcpos + bytes,
+				.ip_start  = &fn->chunk.entries[insns]
+			});
+		}
+
+		if (insns <= off && insns + (o->insns & 0x7f) > off && s != NULL)
+			s->pos_ip = fn->srcpos + bytes;
+
+		insns += o->insns & 0x7f;
+
+		if (insns > fn->chunk.count)
+			goto not_found; /* out of range / invalid offset codiing */
+
+		if (o->insns & 0x80) {
+			if (sp_stack.count == 0)
+				goto not_found; /* invalid offset coding */
+
+			if (depth == 0 || sp_stack.count == depth) {
+				s->off_end = i;
+				s->pos_end = fn->srcpos + bytes;
+				s->ip_end = &fn->chunk.entries[insns];
+
+				if (s->ip_start <= ip && s->ip_end > ip)
+					goto found;
+			}
+
+			s = --sp_stack.count ? uc_vector_last(&sp_stack) : NULL;
+		}
+
+		if (insns > off && s == NULL)
+			goto not_found; /* past searched offset w/o matching range start */
+	}
+
+not_found:
+	memset(sp, 0, sizeof(*sp));
+	uc_vector_clear(&sp_stack);
+
+	return false;
+
+found:
+	*sp = *uc_vector_last(&sp_stack);
+	uc_vector_clear(&sp_stack);
+
+	return true;
+}
+
+
+static uc_value_t *
+uc_debug_sigint_handler(uc_vm_t *vm, size_t nargs);
+
+
+// FIXME: read beyond end of array
+static int32_t
+insn_s32(uint8_t *ip)
+{
+	return (
+		ip[0] * 0x1000000UL +
+		ip[1] * 0x10000UL +
+		ip[2] * 0x100UL +
+		ip[3]
+	) - 0x7fffffff;
+}
+
+static uint32_t
+insn_u32(uint8_t *ip)
+{
+	return (
+		ip[0] * 0x1000000UL +
+		ip[1] * 0x10000UL +
+		ip[2] * 0x100UL +
+		ip[3]
+	);
+}
+
+static uint32_t
+insn_u16(uint8_t *ip)
+{
+	return (
+		ip[0] * 0x100UL +
+		ip[1]
+	);
+}
+
+static size_t
+insn_length(uint8_t *ip, uc_program_t *prog)
+{
+	if (*ip == I_CALL)
+		return 5 + ((insn_u32(ip + 1) >> 16) & 0x7fff) * 2;
+
+	if (*ip == I_CLFN || *ip == I_ARFN) {
+		uint32_t u32 = insn_u32(ip + 1);
+		size_t i = 1;
+		uc_program_function_foreach(prog, fn)
+			if (i++ == u32)
+				return 5 + fn->nupvals * 4;
+	}
+
+	return 1 + abs(uc_vm_insn_format[*ip]);
+}
+
+static void
+bk_enter_function(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	debug_breakpoint_t *dbk = (debug_breakpoint_t *)bk;
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uint8_t *ip = frame->ip;
+	uint32_t argspec = 0;
+	bool enter = false;
+
+	assert(dbk->kind == BK_STEP);
+
+	if (*ip == I_CALL) {
+		argspec = insn_u32(ip + 1);
+
+		size_t nargs = argspec & 0xffff;
+
+		if (nargs + 1 < vm->stack.count) {
+			uc_value_t *fno = vm->stack.entries[vm->stack.count - nargs - 1];
+
+			if (ucv_type(fno) == UC_CLOSURE) {
+				uc_function_t *fn = ((uc_closure_t *)fno)->function;
+
+				dbk->bk.cb = bk_enter_session;
+				dbk->bk.ip = fn->chunk.entries;
+				dbk->depth = 1;
+				dbk->fn = fn;
+				enter = true;
+			}
+		}
+	}
+
+	if (!enter) {
+		dbk->bk.cb = bk_enter_session;
+		dbk->bk.ip = NULL;
+		dbk->depth = 0;
+		dbk->fn = NULL;
+	}
+}
+
+static void
+bk_leave_function(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	debug_breakpoint_t *dbk = (debug_breakpoint_t *)bk;
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 1);
+
+	assert(dbk->kind == BK_STEP);
+
+	if (!frame)
+		return;
+
+	dbk->bk.cb = bk_enter_session;
+	dbk->bk.ip = frame->ip;
+	dbk->depth = 0;
+	dbk->fn = frame->closure->function;
+}
+
+static void
+bk_follow_jump(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	debug_breakpoint_t *dbk = (debug_breakpoint_t *)bk;
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_program_t *prog = frame->closure->function->program;
+	uc_chunk_t *chunk = &frame->closure->function->chunk;
+	size_t off = frame->ip - chunk->entries;
+	uint8_t *ip = frame->ip;
+
+	assert(dbk->kind == BK_STEP);
+
+	/* skip conditional jmpz if conditition is true */
+	if (*ip == I_JMPZ && ucv_is_truish(uc_vm_stack_peek(vm, 0))) {
+		off += insn_length(ip, prog);
+	}
+
+	/* otherwise follow jump */
+	else {
+		int32_t addr = insn_s32(ip + 1);
+
+		if ((addr < 0 && (size_t)-addr > off) ||
+		    (addr >= 0 && (size_t)addr >= chunk->count))
+		{
+			off += insn_length(ip, prog);
+		}
+		else {
+			off += addr;
+		}
+	}
+
+	/* if the next offset is a jump instruction as well, then don't install
+	   interactive breakpoint but re-invoke this breakpoint handler */
+	if (chunk->entries[off] == I_JMP || chunk->entries[off] == I_JMPZ)
+		dbk->bk.cb = bk_follow_jump;
+	else
+		dbk->bk.cb = bk_enter_session;
+
+	dbk->bk.ip = chunk->entries + off;
+	dbk->depth = 0;
+	dbk->fn = frame->closure->function;
+}
+
+static void
+bk_handle_catch(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	bk_enter_session(vm, bk);
+}
+
+/* cb for the dedicated BK_UNCAUGHT system breakpoint (see
+ * install_debug_system_breakpoints() / UC_BREAKPOINT_UNCAUGHT_EXCEPTION
+ * in vm.c). Invoked directly from vm.c's exception label, before any
+ * unwinding happens, so vm->exception and the full callframe stack are
+ * still exactly as they were at the point of the raise. */
+static void
+bk_handle_uncaught(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	bk_enter_session(vm, bk);
+}
+
+/* cb for the dedicated BK_INTERRUPT system breakpoint (see its
+ * debug_breakpoint_kind_t comment and debug_break_signal_handler()).
+ * Disarms itself (back to the inert marker) *before* entering the
+ * session: it's invoked via the generic per-instruction ip==NULL "fire on
+ * every instruction" check in vm.c, so leaving it armed would make it
+ * fire again on the very next instruction once this session ends (e.g.
+ * from "continue"), forever, instead of just the one time the interrupt
+ * request asked for. */
+static void
+bk_handle_interrupt(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	bk->ip = &debug_interrupt_disarmed_marker;
+
+	bk_enter_session(vm, bk);
+}
+
+/* Sentinel returned by next_step() to mean "stay paused right where we
+ * are" - distinct from a real instruction address and from NULL (which
+ * means "no next instruction, resume unattended"). Used for the case where
+ * a single-step would return from the outermost callframe: there is no
+ * parent frame left for bk_leave_function() to arm a breakpoint in and no
+ * further instruction will ever be decoded once RETURN executes (the
+ * program terminates), so silently resuming would blow past the debugger
+ * entirely instead of stopping. See cmd_step_common().
+ *
+ * Reuses the vm pointer itself as the sentinel value rather than a
+ * dedicated static byte: vm is already available at both the producing and
+ * consuming end, points at an object entirely disjoint from any bytecode
+ * ip, and needs no allocation to obtain (unlike e.g. the address of the
+ * BK_STEP breakpoint struct, which would force get_breakpoint() to
+ * lazily xalloc() it just to manufacture a comparison value). */
+#define STEP_STAY_PAUSED(vm) ((uint8_t *)(vm))
+
+static uint8_t *
+next_step(uc_vm_t *vm, uc_function_t **fnp, uint8_t *ip, bool single, size_t *depthp)
+{
+	insn_span_t stmt, next;
+
+	if (find_statement_boundaries(*fnp, ip, 0, &stmt)) {
+		uc_program_t *prog = (*fnp)->program;
+
+		for (uint8_t *p = ip; p < stmt.ip_end; p += insn_length(p, prog)) {
+			switch (*p) {
+			case I_CALL:
+				if (single) {
+					update_breakpoint(vm, BK_STEP, bk_enter_function, p, *fnp, 0);
+
+					return NULL;
+				}
+
+				break;
+
+			case I_RETURN:
+				if (single) {
+					if (!uc_debug_curr_frame(vm, 1))
+						return STEP_STAY_PAUSED(vm);
+
+					update_breakpoint(vm, BK_STEP, bk_leave_function, p, *fnp, 0);
+
+					return NULL;
+				}
+
+				break;
+
+			case I_JMP:
+			case I_JMPZ:
+				update_breakpoint(vm, BK_STEP, bk_follow_jump, p, *fnp, 0);
+
+				return NULL;
+			}
+		}
+
+		while (find_statement_boundaries(*fnp, stmt.ip_end, 0, &next)) {
+			/* if next statement fully contains our statement, continue */
+			if (next.ip_start <= stmt.ip_start && next.ip_end >= stmt.ip_end) {
+				fprintf(stderr, "Redo %zu..%zu -> %zu..%zu\n",
+					stmt.pos_start, stmt.pos_end, next.pos_start, next.pos_end);
+				stmt = next;
+				continue;
+			}
+
+			*depthp = next.nesting;
+
+			return next.ip_start;
+		}
+	}
+
+	*depthp = 0;
+
+	return next_parent(vm, fnp);
+}
+
+static uc_value_t *
+load_constval(uc_value_list_t *vallist, size_t cidx)
+{
+	uc_value_type_t t = (cidx < vallist->isize)
+		? (vallist->index[cidx] & 7) : TAG_INVAL;
+
+	if (t == TAG_STR) {
+		char buf[sizeof(vallist->index[0])] = { 0 };
+		size_t len = (vallist->index[cidx] >> 3) & 31;
+
+		for (size_t j = 1; j <= len; j++)
+			buf[j-1] = (vallist->index[cidx] >> (j << 3));
+
+		return ucv_string_new_length(buf, len);
+	}
+	else if (t == TAG_LSTR) {
+		size_t off = (vallist->index[cidx] >> 3);
+
+		if (off + sizeof(uint32_t) <= vallist->dsize) {
+			char *p = vallist->data + off;
+			size_t len = be32toh(*(uint32_t *)p);
+
+			if (off + sizeof(uint32_t) + len <= vallist->dsize)
+				return ucv_string_new_length(p + sizeof(uint32_t), len);
+		}
+	}
+	else if (t == TAG_DBL) {
+		size_t off = (vallist->index[cidx] >> 3);
+
+		if (off + sizeof(double) <= vallist->dsize)
+			return ucv_double_new(uc_double_unpack(vallist->data + off, false));
+	}
+	else if (t == TAG_NUM) {
+		return ucv_uint64_new(vallist->index[cidx] >> 3);
+	}
+	else if (t == TAG_LNUM) {
+		size_t off = (vallist->index[cidx] >> 3);
+
+		if (off + sizeof(uint64_t) <= vallist->dsize)
+			return ucv_uint64_new(be64toh(*(uint64_t *)(vallist->data + off)));
+	}
+
+	return NULL;
+}
+
+/* Data-only extraction of local variables/upvalues for the current frame,
+ * for the VARIABLES protocol response and BACKTRACE's optional per-frame
+ * variable dump - the client owns all rendering (column widths, colors,
+ * truncation), so this only ever emits raw name/kind/value_repr data. */
+static uc_value_t *
+build_variables_json(uc_vm_t *vm, uc_callframe_t *frame)
+{
+	uc_chunk_t *chunk = &frame->closure->function->chunk;
+	uc_variables_t *decls = &chunk->debuginfo.variables;
+	uc_value_list_t *names = &chunk->debuginfo.varnames;
+	size_t pos = frame->ip - chunk->entries;
+	uc_value_t *arr = ucv_array_new(vm);
+
+	if (frame->ctx) {
+		uc_value_t *item = ucv_object_new(vm);
+		uc_stringbuf_t vb = { 0 };
+
+		/* Compact, single-line repr, matching the pre-protocol variables
+		 * listing's default (non-"full") mode - the client truncates long
+		 * aggregate values rather than ever wrapping them onto several
+		 * lines, so pretty-printing here would defeat that. */
+		ucv_to_stringbuf(vm, &vb, frame->ctx, false);
+
+		ucv_object_add(item, "name", ucv_string_new("this"));
+		ucv_object_add(item, "kind", ucv_string_new("this"));
+		ucv_object_add(item, "value_repr", ucv_string_new_length(vb.buf, vb.bpos));
+
+		free(vb.buf);
+		ucv_array_push(arr, item);
+	}
+
+	for (size_t i = 0; i < decls->count; i++) {
+		if (decls->entries[i].from > pos || decls->entries[i].to < pos)
+			continue;
+
+		uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
+		size_t slot = decls->entries[i].slot;
+		bool is_upval = slot >= (size_t)-1 / 2;
+		uc_value_t *item = ucv_object_new(vm);
+		uc_value_t *vval = NULL;
+		bool shadowed = false;
+
+		/* decls entries are recorded innermost-scope-first (a nested
+		 * block's own locals close, and get their debug range added, as
+		 * soon as *that* block ends - see uc_compiler_leave_scope() -
+		 * strictly before the enclosing scope's own locals do, whenever
+		 * that later happens to be) - so among entries whose range covers
+		 * `pos` (i.e. genuinely simultaneously in scope here, not just
+		 * same-named siblings in two different, mutually exclusive
+		 * branches), an earlier index is always the more-nested one: the
+		 * one real script code actually resolves this name to right now.
+		 * A same-named *later* entry is a shadowed outer declaration -
+		 * still shown (its stack slot is real and still holds a value),
+		 * just flagged so the listing doesn't look like a duplicate. */
+		if (vname) {
+			for (size_t j = 0; j < i; j++) {
+				if (decls->entries[j].from > pos || decls->entries[j].to < pos)
+					continue;
+
+				uc_value_t *other = load_constval(names, decls->entries[j].nameidx);
+				bool same = other && ucv_is_equal(vname, other);
+
+				ucv_put(other);
+
+				if (same) {
+					shadowed = true;
+					break;
+				}
+			}
+		}
+
+		if (vname) {
+			ucv_object_add(item, "name", ucv_get(vname));
+		}
+		else {
+			char buf[32];
+			snprintf(buf, sizeof(buf), "$%zu", slot);
+			ucv_object_add(item, "name", ucv_string_new(buf));
+		}
+
+		if (shadowed)
+			ucv_object_add(item, "shadowed", ucv_boolean_new(true));
+
+		if (!is_upval) {
+			bool is_internal = (vname && *ucv_string_get(vname) == '(');
+
+			ucv_object_add(item, "kind", ucv_string_new(is_internal ? "internal" : "local"));
+
+			if (frame->stackframe + slot < vm->stack.count)
+				vval = vm->stack.entries[frame->stackframe + slot];
+		}
+		else {
+			size_t upslot = slot - ((size_t)-1 / 2);
+
+			ucv_object_add(item, "kind", ucv_string_new("upvalue"));
+
+			if (upslot < frame->closure->function->nupvals) {
+				uc_upvalref_t *ref = frame->closure->upvals[upslot];
+
+				if (ref) {
+					if (ref->closed)
+						vval = ref->value;
+					else if (ref->slot < vm->stack.count)
+						vval = vm->stack.entries[ref->slot];
+				}
+			}
+		}
+
+		if (vval) {
+			uc_stringbuf_t vb = { 0 };
+
+			ucv_to_stringbuf(vm, &vb, vval, false);
+			ucv_object_add(item, "value_repr", ucv_string_new_length(vb.buf, vb.bpos));
+			free(vb.buf);
+		}
+		else {
+			ucv_object_add(item, "value_repr", ucv_string_new("<out of range>"));
+		}
+
+		ucv_put(vname);
+		ucv_array_push(arr, item);
+	}
+
+	return arr;
+}
+
+/* Resolve a breakpoint location specification of the form
+ * "path[:line[:offset]]", a bare function name, or a ucode expression that
+ * evaluates to a function, and install a breakpoint of the given kind.
+ *
+ * `frame` may be NULL when there is no active script call frame yet, e.g.
+ * when installing a breakpoint before the program has started running (the
+ * `-x <expr>`/`-X <expr>` command line options) - in that case, `program`
+ * must be given explicitly to resolve bare function names against; a `:line`
+ * spec cannot default its path from a current file and arbitrary expressions
+ * cannot be evaluated, so both are reported as unsupported instead.
+ *
+ * Returns the installed breakpoint id, or 0 on failure. On failure, `*errmsg`
+ * is set to a newly allocated diagnostic string the caller must free(), or to
+ * NULL if the caller should fall back to a generic message. */
+static bool eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr,
+                      uc_value_t **res, char **errmsg);
+
+static size_t
+resolve_breakpoint(uc_vm_t *vm, uc_callframe_t *frame, uc_program_t *program,
+                   char *spec, debug_breakpoint_kind_t kind, char **errmsg)
+{
+	size_t id = 0;
+
+	*errmsg = NULL;
+
+	if (spec == NULL || *spec == '\0') {
+		xasprintf(errmsg, "Usage: path[:line[:offset]] | expr");
+
+		return 0;
+	}
+
+	/* path spec */
+	if ((strchr(spec, '/') || strchr(spec, ':') ||
+	     (*spec >= '0' && *spec <= '9')) && *spec != '(') {
+
+		char *path, *line, *byte;
+
+		if (*spec == ':' || (*spec >= '0' && *spec <= '9')) {
+			if (frame == NULL) {
+				xasprintf(errmsg,
+					"No active source file to default path from");
+
+				return 0;
+			}
+
+			path = uc_program_function_source(frame->closure->function)->filename;
+			line = strtok(spec, ": \t");
+			byte = strtok(NULL, ": \t");
+		}
+		else {
+			path = strtok(spec, ": \t");
+			line = strtok(NULL, ": \t");
+			byte = strtok(NULL, ": \t");
+		}
+
+		if (!path && !line && !byte) {
+			xasprintf(errmsg, "Usage: path[:line[:offset]]");
+
+			return 0;
+		}
+
+		id = add_breakpoint(vm, path,
+			line ? strtoul(line, NULL, 10) : 0,
+			byte ? strtoul(byte, NULL, 10) : 0,
+			kind);
+	}
+
+	/* expression spec or function name */
+	else {
+		uc_program_t *prog = frame ? frame->closure->function->program : program;
+		uc_value_t *val = NULL;
+
+		/* Before evaluating as code, try looking up function name directly. */
+		if (prog != NULL) {
+			uc_program_function_foreach(prog, fn) {
+				if (!strcmp(fn->name, spec)) {
+					id = patch_breakpoint(vm, fn, 0, kind, 1);
+					break;
+				}
+			}
+		}
+
+		if (id == 0 && frame != NULL) {
+			char *errmsg2 = NULL;
+
+			if (eval_expr(vm, frame, spec, &val, &errmsg2)) {
+				if (ucv_type(val) == UC_CLOSURE) {
+					id = patch_breakpoint(vm,
+						((uc_closure_t *)val)->function, 0, kind, 1);
+				}
+				else {
+					char *s = ucv_to_string(vm, val);
+					int len = strlen(s);
+
+					xasprintf(errmsg, "Value `%s` (%.*s%s) is not a function",
+						spec,
+						len > 32 ? 31 : len,
+						s,
+						len > 32 ? "…" : "");
+
+					free(s);
+				}
+
+				ucv_put(val);
+			}
+
+			free(errmsg2);
+		}
+		else if (id == 0 && frame == NULL) {
+			xasprintf(errmsg,
+				"No function named `%s` found "
+				"(expressions require an active frame)", spec);
+		}
+	}
+
+	return id;
+}
+
+static void
+send_error(int fd, uc_vm_t *vm, const char *msg)
+{
+	uc_value_t *obj = ucv_object_new(vm);
+
+	ucv_object_add(obj, "message", ucv_string_new(msg));
+	debug_proto_write(fd, vm, "ERROR", obj);
+	ucv_put(obj);
+}
+
+/* eval_expr() below runs the compiled expression through the exact same
+ * instruction dispatch loop as normal script code, with its callframes/
+ * stack swapped out for a fresh, empty set (see uc_vm_call() there) - so
+ * from the dispatch loop's point of view, an exception raised inside it
+ * looks exactly like *the whole program* running out of callframes to
+ * unwind to, which is precisely the condition the debugger's dedicated
+ * "pause on uncaught exception" system breakpoint (BK_UNCAUGHT, see
+ * install_debug_system_breakpoints()) exists to catch. Left armed,
+ * a throwing PRINT/EVAL expression would pause into a confusing nested
+ * debug session (with a fake "[eval expression]" frame) instead of just
+ * being reported back as part of that command's own reply, the way
+ * eval_expr()'s caller (and its own EXCEPTION_NONE check just below)
+ * already expects.
+ *
+ * eval_sandbox_enter()/_leave() bracket the call to temporarily disarm
+ * that breakpoint - and, defensively, BK_CATCH's currently-armed
+ * catchpoint too, even though it targets a real instruction address
+ * within the *original* paused frame's function and so could only ever
+ * spuriously match here by an astronomically unlikely pointer collision
+ * with the expression's own freshly compiled chunk - plus BK_INTERRUPT,
+ * which *can* legitimately be armed here: an async "pause now" request
+ * (see debug_break_signal_handler()) fires on the very next instruction
+ * dispatched, whichever that happens to be, so it's just as capable of
+ * firing mid-eval as BK_UNCAUGHT is. Restored (not consumed) on leave,
+ * so a request that arrived during eval still fires on the first real
+ * instruction afterwards instead of being silently dropped. Sandboxing
+ * this way
+ * only touches which breakpoints can fire; it does not change what the
+ * expression itself is allowed to do (see the PRINT/EVAL help text on
+ * that - this is not a security boundary, just about not derailing the
+ * command's own request/response shape).
+ *
+ * Disarming means pointing `bk.ip` at eval_sandbox_disabled_marker's
+ * address, *not* NULL: uc_vm_decode_insn()'s generic per-instruction
+ * breakpoint check (vm.c) treats a NULL ip as "fire on every single
+ * instruction" (that's how BK_STEP free-runs until it decides to stop),
+ * the opposite of disabled - so a real, otherwise-unused address is
+ * needed as the inert value instead, the same trick
+ * UC_BREAKPOINT_UNCAUGHT_EXCEPTION itself uses to guarantee it never
+ * collides with an actual bytecode address. */
+static uint8_t eval_sandbox_disabled_marker;
+
+typedef struct {
+	uint8_t *uncaught_ip;
+	uint8_t *catch_ip;
+	uint8_t *interrupt_ip;
+} eval_sandbox_t;
+
+static eval_sandbox_t
+eval_sandbox_enter(uc_vm_t *vm)
+{
+	eval_sandbox_t saved = { 0 };
+
+	for (size_t i = 0; i < vm->breakpoints.count; i++) {
+		debug_breakpoint_t *dbk = (debug_breakpoint_t *)vm->breakpoints.entries[i];
+
+		if (!dbk)
+			continue;
+
+		if (dbk->kind == BK_UNCAUGHT) {
+			saved.uncaught_ip = dbk->bk.ip;
+			dbk->bk.ip = &eval_sandbox_disabled_marker;
+		}
+		else if (dbk->kind == BK_CATCH) {
+			saved.catch_ip = dbk->bk.ip;
+			dbk->bk.ip = &eval_sandbox_disabled_marker;
+		}
+		else if (dbk->kind == BK_INTERRUPT) {
+			saved.interrupt_ip = dbk->bk.ip;
+			dbk->bk.ip = &eval_sandbox_disabled_marker;
+		}
+	}
+
+	return saved;
+}
+
+static void
+eval_sandbox_leave(uc_vm_t *vm, eval_sandbox_t saved)
+{
+	for (size_t i = 0; i < vm->breakpoints.count; i++) {
+		debug_breakpoint_t *dbk = (debug_breakpoint_t *)vm->breakpoints.entries[i];
+
+		if (!dbk)
+			continue;
+
+		if (dbk->kind == BK_UNCAUGHT)
+			dbk->bk.ip = saved.uncaught_ip;
+		else if (dbk->kind == BK_INTERRUPT) {
+			/* Unlike BK_UNCAUGHT/BK_CATCH, BK_INTERRUPT can legitimately
+			 * change *while* sandboxed: the async signal handler writes
+			 * NULL to it directly, with no notion of eval_expr() being
+			 * mid-call. Only restore the pre-sandbox value if nothing
+			 * did that - otherwise keep the freshly armed request so it
+			 * still fires on the first real instruction after this
+			 * returns, instead of eval_expr() silently discarding it. */
+			if (dbk->bk.ip == &eval_sandbox_disabled_marker)
+				dbk->bk.ip = saved.interrupt_ip;
+		}
+		else if (dbk->kind == BK_CATCH)
+			dbk->bk.ip = saved.catch_ip;
+	}
+}
+
+static bool
+eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
+          char **errmsg)
+{
+	uc_chunk_t *caller_chunk = &frame->closure->function->chunk;
+	uc_variables_t *decls = &caller_chunk->debuginfo.variables;
+	uc_value_list_t *names = &caller_chunk->debuginfo.varnames;
+	size_t pos = frame->ip - caller_chunk->entries;
+
+	*errmsg = NULL;
+
+	uc_source_t *source =
+		uc_source_new_buffer("[eval expression]", xstrdup(expr), strlen(expr));
+
+	uc_parse_config_t conf = { .raw_mode = true };
+	char *err = NULL;
+	uc_program_t *prog = uc_compile(&conf, source, &err);
+
+	uc_source_put(source);
+
+	if (!prog) {
+		*errmsg = err;
+		*res = NULL;
+
+		return false;
+	}
+
+	uc_value_t *exprfn = ucv_closure_new(vm, uc_program_entry(prog), false);
+
+	/* No restriction on the compiled shape here: raw_mode compiles `expr`
+	 * as an ordinary sequence of ucode statements, so a bare literal
+	 * ("1+2", "[1,2,3]", "\"hi\"") is just as valid as an identifier-rooted
+	 * one ("varname", "myobj.prop") - either way, calling the compiled
+	 * entry below always leaves *some* value on the stack to report back
+	 * (the closing statement's value, or null for a plain statement with
+	 * none). */
+	uc_value_t *scope = ucv_object_new(NULL);
+
+	/* Pre-populate `scope` with *every* local/upvalue declared in the
+	 * paused frame's current scope - not just ones this expression
+	 * happens to read - so a bare assignment like "x = 1" resolves
+	 * directly against `scope` too, not only a read like "x" or "x + 1".
+	 * The compiler emits a plain assignment as a bare I_SVAR with no
+	 * preceding I_LVAR at all (there's nothing to read first), and
+	 * I_SVAR's undeclared-variable fallback (uc_vm_insn_store_var() in
+	 * vm.c) only walks *past* `scope` onto the real enclosing scope chain
+	 * - in the worst case all the way to the real vm->globals, silently
+	 * creating an unwanted genuine global - when `scope` doesn't already
+	 * have the name as an *own* property; whether the expression read it
+	 * first is irrelevant to that check. Earlier (i.e. more specific, in
+	 * the case of shadowing) declarations win: stop at the first match
+	 * per name rather than letting a later, less-specific entry overwrite
+	 * it, matching normal scoping. */
+	for (size_t i = 0; i < decls->count; i++) {
+		if (decls->entries[i].from > pos || decls->entries[i].to < pos)
+			continue;
+
+		uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
+		bool already;
+
+		if (!vname)
+			continue;
+
+		ucv_object_get(scope, ucv_string_get(vname), &already);
+
+		if (already) {
+			ucv_put(vname);
+			continue;
+		}
+
+		size_t slot = decls->entries[i].slot;
+		uc_value_t *varval = NULL;
+
+		/* is local var */
+		if (slot < (size_t)-1 / 2) {
+			slot += frame->stackframe;
+
+			if (slot < vm->stack.count)
+				varval = ucv_get(vm->stack.entries[slot]);
+		}
+
+		/* is upvalue */
+		else {
+			slot -= ((size_t)-1 / 2);
+
+			if (slot < frame->closure->function->nupvals) {
+				uc_upvalref_t *ref = frame->closure->upvals[slot];
+
+				if (ref && ref->closed)
+					varval = ucv_get(ref->value);
+				else if (ref && ref->slot < vm->stack.count)
+					varval = ucv_get(vm->stack.entries[ref->slot]);
+			}
+		}
+
+		ucv_object_add(scope, ucv_string_get(vname), varval);
+		ucv_put(vname);
+	}
+
+	uc_value_t *prev_scope = ucv_get(uc_vm_scope_get(vm));
+
+	ucv_prototype_set(scope, ucv_get(prev_scope));
+
+	uc_vm_scope_set(vm, scope);
+
+	/* Save VM callframes and stack */
+	uc_upvalref_t *upvals = vm->open_upvals;
+	uc_callframes_t frames = vm->callframes;
+	uc_stack_t stack = vm->stack;
+
+	vm->open_upvals = NULL;
+
+	vm->callframes.count = 0;
+	vm->callframes.entries = NULL;
+
+	vm->stack.count = 0;
+	vm->stack.entries = NULL;
+
+	uc_vm_stack_push(vm, ucv_get(frame->ctx));
+	uc_vm_stack_push(vm, ucv_get(exprfn));
+
+	bool rv;
+	eval_sandbox_t sandbox = eval_sandbox_enter(vm);
+	uc_exception_type_t ex = uc_vm_call(vm, true, 0);
+
+	eval_sandbox_leave(vm, sandbox);
+
+	if (ex == EXCEPTION_NONE) {
+		*res = uc_vm_stack_pop(vm);
+		rv = true;
+	}
+	else {
+		xasprintf(errmsg, "Exception: %s", vm->exception.message);
+		vm->exception.type = EXCEPTION_NONE;
+		*res = NULL;
+		rv = false;
+	}
+
+	uc_vector_clear(&vm->callframes);
+	uc_vector_clear(&vm->stack);
+
+	/* Restore VM callframes and stack */
+	vm->open_upvals = upvals;
+	vm->callframes = frames;
+	vm->stack = stack;
+
+	/* `scope` only ever held independent *copies* of the locals/upvalues
+	 * collected above (global references need no such handling: their
+	 * value already lives in prev_scope itself, scope's prototype, which
+	 * assignment inside the expression reaches directly) - so "x = 1" or
+	 * "x.y = 1" mutated the copy, not the paused frame's real stack slot/
+	 * upvalue, on its own. Write any of them back now that the real stack
+	 * is back in place, the same way I_SLOC/I_SUPV do (see
+	 * uc_vm_insn_store_local()/_store_upval() in vm.c). Unconditional,
+	 * regardless of `rv`: a later statement throwing doesn't undo an
+	 * earlier one's already-applied assignment in ordinary script
+	 * execution either, so eval shouldn't behave differently just because
+	 * it happens to run in a temporary scope. Must run before
+	 * uc_vm_scope_set() below, which drops the last reference to `scope`. */
+	for (size_t i = 0; i < decls->count; i++) {
+		if (decls->entries[i].from > pos || decls->entries[i].to < pos)
+			continue;
+
+		uc_value_t *vname = load_constval(names, decls->entries[i].nameidx);
+		bool exists = false;
+		uc_value_t *newval = vname
+			? ucv_object_get(scope, ucv_string_get(vname), &exists) : NULL;
+
+		ucv_put(vname);
+
+		if (!exists)
+			continue;
+
+		size_t slot = decls->entries[i].slot;
+
+		/* is local variable */
+		if (slot < (size_t)-1 / 2) {
+			slot += frame->stackframe;
+
+			if (slot < vm->stack.count) {
+				ucv_put(vm->stack.entries[slot]);
+				vm->stack.entries[slot] = ucv_get(newval);
+			}
+		}
+
+		/* is upvalue */
+		else {
+			slot -= ((size_t)-1 / 2);
+
+			if (slot < frame->closure->function->nupvals) {
+				uc_upvalref_t *ref = frame->closure->upvals[slot];
+
+				if (ref) {
+					if (ref->closed) {
+						ucv_put(ref->value);
+						ref->value = ucv_get(newval);
+					}
+					else if (ref->slot < vm->stack.count) {
+						ucv_put(vm->stack.entries[ref->slot]);
+						vm->stack.entries[ref->slot] = ucv_get(newval);
+					}
+				}
+			}
+		}
+	}
+
+	uc_vm_scope_set(vm, prev_scope);
+	uc_program_put(prog);
+	ucv_put(exprfn);
+
+	return rv;
+}
+
+/* Arm/refresh the BK_CATCH breakpoint for the innermost exception handler
+ * range (if any) covering `ip` within `fn`, so a subsequent exception raised
+ * there is intercepted by bk_handle_catch() before normal unwinding. */
+static void
+update_catchpoint(uc_vm_t *vm, uc_function_t *fn, uint8_t *ip)
+{
+	uc_ehranges_t *eh = &fn->chunk.ehranges;
+	size_t off = ip - fn->chunk.entries;
+
+	for (size_t i = 0; i < eh->count; i++) {
+		if (off >= eh->entries[i].from && off < eh->entries[i].to) {
+			debug_breakpoint_t *dbk = get_breakpoint(vm, BK_CATCH);
+
+			/* Just (re)arm the real bytecode breakpoint so the VM's own
+			 * dispatch loop fires it when execution actually reaches the
+			 * catch handler - never invoke the handler synchronously from
+			 * here via update_breakpoint()'s "already armed to this ip ->
+			 * fire now" shortcut. This runs on every pause, and the target
+			 * is often unchanged across pauses (e.g. a whole function body
+			 * wrapped in one try/catch), so that shortcut would otherwise
+			 * trigger bk_handle_catch() -> bk_enter_session() recursively
+			 * without the VM ever advancing, overflowing the stack. */
+			dbk->bk.cb = bk_handle_catch;
+			dbk->bk.ip = fn->chunk.entries + eh->entries[i].target;
+			dbk->fn = fn;
+			dbk->depth = 0;
+
+			break;
+		}
+	}
+}
+
+/* Build the PAUSED event payload: resolve the current source location (and,
+ * as a side effect, finish arming the breakpoint's fn/ip and the exception
+ * catchpoint - see the original print_location() this replaces), then emit
+ * {reason, file, line, col, function, breakpoint_id} with no rendering. */
+static const char *
+paused_reason_name(debug_breakpoint_kind_t kind)
+{
+	switch (kind) {
+	case BK_ONCE:      return "entry";
+	case BK_USER:      return "breakpoint";
+	case BK_STEP:      return "step";
+	case BK_CATCH:     return "exception";
+	case BK_UNCAUGHT:  return "uncaught";
+	case BK_INTERRUPT: return "interrupt";
+	default:           return "unknown";
+	}
+}
+
+static uc_value_t *
+build_paused_payload(uc_vm_t *vm, debug_breakpoint_t *dbk)
+{
+	uc_callframe_t *topframe = NULL, *funframe = NULL;
+	size_t depth = dbk->depth;
+	uc_value_t *obj = ucv_object_new(vm);
+
+	for (size_t i = vm->callframes.count; i > 0; i--) {
+		if (!topframe || (topframe->cfunction &&
+		                  topframe->cfunction->cfn == uc_debug_sigint_handler))
+			topframe = &vm->callframes.entries[i - 1];
+
+		if (vm->callframes.entries[i - 1].closure) {
+			funframe = &vm->callframes.entries[i - 1];
+
+			if (dbk->fn == NULL && dbk->kind != BK_UNCAUGHT) {
+				dbk->fn = funframe->closure->function;
+				dbk->bk.ip = funframe->ip;
+			}
+
+			update_catchpoint(vm, funframe->closure->function, funframe->ip);
+			break;
+		}
+	}
+
+	ucv_object_add(obj, "reason", ucv_string_new(paused_reason_name(dbk->kind)));
+
+	/* Full call chain, outermost first, for the client's header bar (see
+	 * the original format_context_breadcrumb() this replaces) - skips the
+	 * SIGINT handler's own native frame, which would otherwise show up as
+	 * a spurious innermost entry whenever paused via Ctrl-C. */
+	{
+		uc_value_t *breadcrumb = ucv_array_new(vm);
+
+		for (size_t i = 0; i < vm->callframes.count; i++) {
+			uc_callframe_t *frame = &vm->callframes.entries[i];
+			uc_stringbuf_t namebuf = { 0 };
+
+			if (frame->cfunction != NULL &&
+			    frame->cfunction->cfn == uc_debug_sigint_handler)
+				continue;
+
+			printbuf_append_funcname(&namebuf, vm,
+				frame->closure ? &frame->closure->header : &frame->cfunction->header,
+				SIZE_MAX);
+
+			ucv_array_push(breadcrumb, ucv_string_new_length(namebuf.buf, namebuf.bpos));
+			free(namebuf.buf);
+		}
+
+		ucv_object_add(obj, "breadcrumb", breadcrumb);
+	}
+
+	if (funframe) {
+		uc_function_t *function = funframe->closure->function;
+		uc_source_t *source = uc_program_function_source(function);
+		insn_span_t stmt;
+
+		if (find_statement_boundaries(function, funframe->ip, depth, &stmt)) {
+			uc_stringbuf_t pathbuf = { 0 };
+			size_t byte = stmt.pos_start;
+			size_t line = uc_source_get_line(source, &byte);
+
+			printbuf_append_srcpath(&pathbuf, source, SIZE_MAX);
+
+			ucv_object_add(obj, "file", ucv_string_new_length(pathbuf.buf, pathbuf.bpos));
+			ucv_object_add(obj, "line", ucv_uint64_new(line));
+			ucv_object_add(obj, "col", ucv_uint64_new(byte));
+
+			free(pathbuf.buf);
+		}
+
+		uc_stringbuf_t fnbuf = { 0 };
+		printbuf_append_funcname(&fnbuf, vm, &funframe->closure->header, SIZE_MAX);
+		ucv_object_add(obj, "function", ucv_string_new_length(fnbuf.buf, fnbuf.bpos));
+		free(fnbuf.buf);
+	}
+	else if (topframe && topframe->cfunction) {
+		ucv_object_add(obj, "function", ucv_string_new(
+			topframe->cfunction->name[0]
+				? topframe->cfunction->name : "[native function]"));
+	}
+
+	if ((dbk->kind == BK_CATCH || dbk->kind == BK_UNCAUGHT) &&
+	    vm->exception.type != EXCEPTION_NONE) {
+		ucv_object_add(obj, "exception_type",
+			ucv_uint64_new(vm->exception.type));
+		ucv_object_add(obj, "exception_message",
+			ucv_string_new(vm->exception.message));
+	}
+
+	if (dbk->kind == BK_USER) {
+		size_t n = 0;
+
+		for (size_t i = 0; i < vm->breakpoints.count; i++) {
+			debug_breakpoint_t *p = (debug_breakpoint_t *)vm->breakpoints.entries[i];
+
+			if (p == NULL || p->kind != BK_USER)
+				continue;
+
+			n++;
+
+			if (p == dbk) {
+				ucv_object_add(obj, "breakpoint_id", ucv_uint64_new(n));
+				break;
+			}
+		}
+	}
+
+	return obj;
+}
+
+static void
+proto_cmd_help(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	static const struct {
+		const char *verb;
+		const char *help;
+	} help_table[] = {
+		{ "BREAK",
+			"Set a breakpoint. Payload: {\"spec\":\"path[:line[:offset]]\"|\"expr\"}. "
+			"Response: BREAKPOINT_ADDED {\"id\"} or ERROR." },
+		{ "DELETE",
+			"Delete a breakpoint. Payload: {\"id\":N} or omitted for the current one." },
+		{ "LIST_BREAKPOINTS",
+			"List all currently set breakpoints. Response: BREAKPOINTS {\"items\"}." },
+		{ "NEXT",
+			"Execute the next statement and stop again." },
+		{ "STEP",
+			"Execute the next statement, stepping into calls." },
+		{ "CONTINUE",
+			"Continue execution until the next breakpoint or end of program." },
+		{ "RETURN",
+			"Run until the current function returns." },
+		{ "BACKTRACE",
+			"Print a trace of the current callstack. Payload: {\"full\":bool}." },
+		{ "VARIABLES",
+			"List local variables for the current context." },
+		{ "SOURCES",
+			"List loaded source buffers." },
+		{ "PRINT",
+			"Evaluate an expression and report its result. Payload: "
+			"{\"expr\":\"...\"}. Response: VALUE {\"repr\"} or ERROR." },
+		{ "EVAL",
+			"Like PRINT, but discard the expression's result instead of "
+			"reporting it back - for expressions run for their side effect "
+			"(assignment, delete, ...). Payload: {\"expr\":\"...\"}. "
+			"Response: OK or ERROR." },
+		{ "LINES",
+			"Resolve a source range. Payload: {\"spec\",\"before\",\"after\"}." },
+		{ "THROW",
+			"Raise an exception. Payload: {\"type\",\"message\"}." },
+		{ "DISASSEMBLE",
+			"Disassemble a function or statement. Payload: {\"spec\"}." },
+		{ "SOURCE",
+			"Fetch raw source text for a file. Payload: {\"file\"}." },
+		{ "QUIT",
+			"Terminate the debugged program." },
+	};
+
+	uc_value_t *cmdv = ucv_object_get(payload, "command", NULL);
+	const char *filter = (ucv_type(cmdv) == UC_STRING) ? ucv_string_get(cmdv) : NULL;
+	uc_value_t *items = ucv_array_new(vm);
+
+	for (size_t i = 0; i < ARRAY_SIZE(help_table); i++) {
+		if (filter && !str_startswith(help_table[i].verb, filter))
+			continue;
+
+		uc_value_t *item = ucv_object_new(vm);
+
+		ucv_object_add(item, "verb", ucv_string_new(help_table[i].verb));
+		ucv_object_add(item, "help", ucv_string_new(help_table[i].help));
+		ucv_array_push(items, item);
+	}
+
+	uc_value_t *obj = ucv_object_new(vm);
+	ucv_object_add(obj, "commands", items);
+	debug_proto_write(fd, vm, "HELP", obj);
+	ucv_put(obj);
+}
+
+static void
+proto_cmd_break(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_value_t *specv = ucv_object_get(payload, "spec", NULL);
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	char *errmsg = NULL;
+	char *spec;
+	size_t id;
+
+	if (ucv_type(specv) != UC_STRING) {
+		send_error(fd, vm, "Usage: BREAK {\"spec\":\"path[:line[:offset]]\"|\"expr\"}");
+		return;
+	}
+
+	spec = xstrdup(ucv_string_get(specv));
+
+	id = resolve_breakpoint(vm, frame,
+		frame ? frame->closure->function->program : NULL,
+		spec, BK_USER, &errmsg);
+
+	free(spec);
+
+	if (id) {
+		uc_value_t *obj = ucv_object_new(vm);
+
+		ucv_object_add(obj, "id", ucv_uint64_new(id));
+		debug_proto_write(fd, vm, "BREAKPOINT_ADDED", obj);
+		ucv_put(obj);
+	}
+	else {
+		send_error(fd, vm, errmsg ? errmsg : "Unable to resolve source location");
+	}
+
+	free(errmsg);
+}
+
+static void
+proto_cmd_delete(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_breakpoints_t *bks = &vm->breakpoints;
+	uc_value_t *idv = ucv_object_get(payload, "id", NULL);
+
+	if (idv) {
+		size_t want, n = 0;
+
+		if (ucv_type(idv) != UC_INTEGER && ucv_type(idv) != UC_DOUBLE) {
+			send_error(fd, vm, "Usage: DELETE {\"id\":N}");
+			return;
+		}
+
+		want = (size_t)ucv_int64_get(idv);
+
+		for (size_t i = 0; i < bks->count; i++) {
+			debug_breakpoint_t *target = (debug_breakpoint_t *)bks->entries[i];
+
+			if (target == NULL || target->kind != BK_USER)
+				continue;
+
+			if (++n == want) {
+				delete_breakpoint(vm, target, dbk);
+				debug_proto_write(fd, vm, "OK", NULL);
+				return;
+			}
+		}
+
+		char msg[64];
+		snprintf(msg, sizeof(msg), "No breakpoint #%zu set", want);
+		send_error(fd, vm, msg);
+	}
+	else if (dbk->kind == BK_USER) {
+		delete_breakpoint(vm, dbk, dbk);
+		debug_proto_write(fd, vm, "OK", NULL);
+	}
+	else {
+		send_error(fd, vm, "Automatic breakpoint cannot be deleted");
+	}
+}
+
+static void
+proto_cmd_list(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_breakpoints_t *bks = &vm->breakpoints;
+	uc_value_t *items = ucv_array_new(vm);
+	size_t n = 0;
+
+	const char *kinds[] = {
+		[BK_ONCE] = "once",
+		[BK_USER] = "user",
+		[BK_STEP] = "step",
+		[BK_CATCH] = "catch",
+		[BK_UNCAUGHT] = "uncaught",
+	};
+
+	for (size_t i = 0; i < ARRAY_SIZE(kinds); i++) {
+		for (size_t j = 0; j < bks->count; j++) {
+			debug_breakpoint_t *p = (debug_breakpoint_t *)bks->entries[j];
+
+			if (p == NULL || p->kind != i)
+				continue;
+
+			uc_value_t *item = ucv_object_new(vm);
+
+			ucv_object_add(item, "kind", ucv_string_new(kinds[p->kind]));
+
+			if (p->kind == BK_USER)
+				ucv_object_add(item, "id", ucv_uint64_new(++n));
+
+			if (p->fn) {
+				uc_source_t *source = uc_program_function_source(p->fn);
+				size_t byte = uc_program_function_srcpos(p->fn,
+					p->bk.ip - p->fn->chunk.entries);
+				size_t line = uc_source_get_line(source, &byte);
+				uc_stringbuf_t pathbuf = { 0 }, fnbuf = { 0 };
+				uc_closure_t cl = {
+					.header = { .type = UC_CLOSURE },
+					.function = p->fn
+				};
+
+				printbuf_append_srcpath(&pathbuf, source, SIZE_MAX);
+				printbuf_append_function(&fnbuf, vm, &cl.header, NULL, SIZE_MAX);
+
+				ucv_object_add(item, "file", ucv_string_new_length(pathbuf.buf, pathbuf.bpos));
+				ucv_object_add(item, "line", ucv_uint64_new(line));
+				ucv_object_add(item, "col", ucv_uint64_new(byte > 1 ? byte : 1));
+				ucv_object_add(item, "function", ucv_string_new_length(fnbuf.buf, fnbuf.bpos));
+
+				free(pathbuf.buf);
+				free(fnbuf.buf);
+			}
+
+			ucv_array_push(items, item);
+		}
+	}
+
+	uc_value_t *obj = ucv_object_new(vm);
+	ucv_object_add(obj, "items", items);
+	debug_proto_write(fd, vm, "BREAKPOINTS", obj);
+	ucv_put(obj);
+}
+
+static void
+cmd_step_common(uc_vm_t *vm, debug_breakpoint_t *dbk, bool single, int fd, bool *proceed)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_function_t *fn;
+	size_t depth;
+	uint8_t *nextinsn;
+
+	if (!frame) {
+		*proceed = false;
+		return;
+	}
+
+	fn = frame->closure->function;
+	depth = dbk->depth;
+	nextinsn = next_step(vm, &fn, frame->ip, single, &depth);
+
+	/* Returning from the outermost frame - nothing further to step to and
+	 * the program is about to terminate. Stay paused instead of resuming
+	 * unattended (see STEP_STAY_PAUSED comment). */
+	if (nextinsn == STEP_STAY_PAUSED(vm)) {
+		send_error(fd, vm, "No next instruction - program will terminate on 'continue'");
+		*proceed = true;
+		return;
+	}
+
+	/* no next instruction, run until completion */
+	if (!nextinsn) {
+		*proceed = false;
+		return;
+	}
+
+	update_breakpoint(vm, BK_STEP, bk_enter_session, nextinsn, fn, depth);
+
+	*proceed = false;
+}
+
+static void
+proto_cmd_next(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	cmd_step_common(vm, dbk, false, fd, proceed);
+}
+
+static void
+proto_cmd_step(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	cmd_step_common(vm, dbk, true, fd, proceed);
+}
+
+static void
+proto_cmd_continue(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	*proceed = false;
+}
+
+static void
+proto_cmd_return(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 1);
+
+	if (frame) {
+		update_breakpoint(vm, BK_STEP, bk_enter_session, frame->ip,
+			frame->closure->function, 0); /* XXX: fixup depth? */
+	}
+
+	*proceed = false;
+}
+
+static void
+proto_cmd_backtrace(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	bool verbose = ucv_is_truish(ucv_object_get(payload, "full", NULL));
+	uc_value_t *frames = ucv_array_new(vm);
+
+	for (size_t i = vm->callframes.count; i > 0; i--) {
+		uc_callframe_t *frame = &vm->callframes.entries[i - 1];
+		uc_value_t *item;
+
+		if (frame->closure) {
+			uc_function_t *function = frame->closure->function;
+			uc_source_t *source = uc_program_function_source(function);
+			size_t insn = frame->ip - function->chunk.entries;
+			size_t byte = insn;
+			size_t line = insnoff_to_srcpos(function, &byte);
+			uc_stringbuf_t pathbuf = { 0 }, fnbuf = { 0 };
+
+			item = ucv_object_new(vm);
+
+			printbuf_append_srcpath(&pathbuf, source, SIZE_MAX);
+			printbuf_append_funcname(&fnbuf, vm, &frame->closure->header, SIZE_MAX);
+
+			ucv_object_add(item, "kind", ucv_string_new("script"));
+			ucv_object_add(item, "index", ucv_uint64_new(i));
+			ucv_object_add(item, "file", ucv_string_new_length(pathbuf.buf, pathbuf.bpos));
+			ucv_object_add(item, "line", ucv_uint64_new(line));
+			ucv_object_add(item, "col", ucv_uint64_new(byte));
+			ucv_object_add(item, "insn", ucv_uint64_new(insn));
+			ucv_object_add(item, "function", ucv_string_new_length(fnbuf.buf, fnbuf.bpos));
+
+			free(pathbuf.buf);
+			free(fnbuf.buf);
+
+			if (verbose)
+				ucv_object_add(item, "variables", build_variables_json(vm, frame));
+		}
+		else if (frame->cfunction) {
+			uc_cfunction_t *cfn = frame->cfunction;
+			uc_stringbuf_t fnbuf = { 0 };
+			Dl_info dli;
+
+			item = ucv_object_new(vm);
+
+			printbuf_append_funcname(&fnbuf, vm, &cfn->header, SIZE_MAX);
+
+			ucv_object_add(item, "kind", ucv_string_new("native"));
+			ucv_object_add(item, "index", ucv_uint64_new(i));
+
+			if (dladdr(cfn->cfn, &dli) != 0 && dli.dli_fname != NULL)
+				ucv_object_add(item, "module", ucv_string_new(dli.dli_fname));
+
+			ucv_object_add(item, "function", ucv_string_new_length(fnbuf.buf, fnbuf.bpos));
+
+			free(fnbuf.buf);
+		}
+		else {
+			continue;
+		}
+
+		ucv_array_push(frames, item);
+	}
+
+	uc_value_t *obj = ucv_object_new(vm);
+	ucv_object_add(obj, "frames", frames);
+	debug_proto_write(fd, vm, "BACKTRACE", obj);
+	ucv_put(obj);
+}
+
+static void
+proto_cmd_variables(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_value_t *obj;
+
+	if (!frame) {
+		send_error(fd, vm, "No local variables in current context");
+		return;
+	}
+
+	obj = ucv_object_new(vm);
+	ucv_object_add(obj, "vars", build_variables_json(vm, frame));
+	debug_proto_write(fd, vm, "VARIABLES", obj);
+	ucv_put(obj);
+}
+
+static void
+proto_cmd_sources(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	struct lh_table *sources = lh_kptr_table_new(16, NULL);
+	uc_value_t *items = ucv_array_new(vm);
+	struct lh_entry *e;
+	uc_weakref_t *ref;
+	size_t i = 0;
+
+	for (ref = vm->values.next; ref != &vm->values; ref = ref->next) {
+		uc_closure_t *uc =
+			(uc_closure_t *)((uintptr_t)ref - offsetof(uc_closure_t, ref));
+
+		if (uc->header.type != UC_CLOSURE)
+			continue;
+
+		if (!uc->function || !uc->function->program)
+			continue;
+
+		for (size_t j = 0; j < uc->function->program->sources.count; j++) {
+			uc_source_t *source = uc->function->program->sources.entries[j];
+			unsigned long hash = lh_get_hash(sources, source);
+
+			if (!lh_table_lookup_entry_w_hash(sources, source, hash))
+				lh_table_insert_w_hash(sources, source, NULL, hash, 0);
+		}
+	}
+
+	lh_foreach(sources, e) {
+		uc_source_t *source = lh_entry_k(e);
+		uc_value_t *item = ucv_object_new(vm);
+
+		ucv_object_add(item, "index", ucv_uint64_new(i++));
+		ucv_object_add(item, "file", ucv_string_new(source->filename));
+		ucv_array_push(items, item);
+	}
+
+	lh_table_free(sources);
+
+	uc_value_t *obj = ucv_object_new(vm);
+	ucv_object_add(obj, "items", items);
+	debug_proto_write(fd, vm, "SOURCES", obj);
+	ucv_put(obj);
+}
+
+static void
+proto_cmd_print(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_value_t *exprv = ucv_object_get(payload, "expr", NULL);
+	uc_value_t *res = NULL;
+	char *errmsg = NULL;
+
+	if (ucv_type(exprv) != UC_STRING) {
+		send_error(fd, vm, "Usage: PRINT {\"expr\":\"...\"}");
+		return;
+	}
+
+	if (eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg)) {
+		uc_stringbuf_t vb = { 0 };
+		uc_value_t *obj = ucv_object_new(vm);
+
+		ucv_to_stringbuf_formatted(vm, &vb, res, 0, ' ', 2);
+
+		ucv_object_add(obj, "repr", ucv_string_new_length(vb.buf, vb.bpos));
+		debug_proto_write(fd, vm, "VALUE", obj);
+
+		ucv_put(obj);
+		ucv_put(res);
+		free(vb.buf);
+	}
+	else {
+		send_error(fd, vm, errmsg ? errmsg : "Evaluation failed");
+	}
+
+	free(errmsg);
+}
+
+/* Like PRINT, but for an expression run for its side effect (assignment,
+ * delete, a mutating call, ...) rather than its value - mirrors the ucode
+ * CLI's -e/-p distinction (uc_compile()'s two entry points in main.c).
+ * "set x.y 1" is just "eval x.y = 1" - ordinary assignment syntax handles
+ * plain variables, property paths and array indices alike, so there is no
+ * separate name-resolution/slot-writing logic here at all, unlike an
+ * earlier, since-removed dedicated SET command had. */
+static void
+proto_cmd_eval(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_value_t *exprv = ucv_object_get(payload, "expr", NULL);
+	uc_value_t *res = NULL;
+	char *errmsg = NULL;
+
+	if (ucv_type(exprv) != UC_STRING) {
+		send_error(fd, vm, "Usage: EVAL {\"expr\":\"...\"}");
+		return;
+	}
+
+	if (eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg)) {
+		ucv_put(res);
+		debug_proto_write(fd, vm, "OK", NULL);
+	}
+	else {
+		send_error(fd, vm, errmsg ? errmsg : "Evaluation failed");
+	}
+
+	free(errmsg);
+}
+
+static void
+proto_cmd_lines(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_function_t *fn = frame ? frame->closure->function : NULL;
+	uc_value_t *specv = ucv_object_get(payload, "spec", NULL);
+	uc_value_t *beforev = ucv_object_get(payload, "before", NULL);
+	uc_value_t *afterv = ucv_object_get(payload, "after", NULL);
+	const char *spec = (ucv_type(specv) == UC_STRING) ? ucv_string_get(specv) : NULL;
+	size_t ctx_before = (ucv_type(beforev) == UC_INTEGER || ucv_type(beforev) == UC_DOUBLE)
+		? (size_t)ucv_int64_get(beforev) : 2;
+	size_t ctx_after = (ucv_type(afterv) == UC_INTEGER || ucv_type(afterv) == UC_DOUBLE)
+		? (size_t)ucv_int64_get(afterv) : 2;
+	insn_span_t stmt = { .pos_start = SIZE_MAX, .pos_end = SIZE_MAX, .pos_ip = SIZE_MAX };
+	location_t loc;
+	size_t insn, from, to;
+	uc_value_t *obj;
+
+	if (!fn) {
+		send_error(fd, vm, "No active source location");
+		return;
+	}
+
+	insn = frame->ip - fn->chunk.entries;
+
+	loc = (location_t){
+		.program = fn->program,
+		.source = uc_program_function_source(fn),
+		.function = fn,
+		.offset = uc_program_function_srcpos(fn, insn),
+	};
+
+	if (!spec) {
+		if (find_statement_boundaries(fn, frame->ip, 0, &stmt))
+			loc.offset = stmt.pos_start;
+
+		loc.column = loc.offset;
+		loc.line = uc_source_get_line(loc.source, &loc.column);
+	}
+	else if (spec[0] >= '0' && spec[0] <= '9') {
+		char *end;
+		unsigned long n = strtoul(spec, &end, 10);
+
+		if (*end != '\0') {
+			send_error(fd, vm, "Invalid line number");
+			return;
+		}
+
+		loc.line = (n > 0) ? n : 1;
+	}
+	else if (strchr("+-#", spec[0]) != NULL && spec[1] >= '0' && spec[1] <= '9') {
+		char *end;
+		unsigned long n = strtoul(spec + 1, &end, 0);
+
+		if (*end != '\0') {
+			send_error(fd, vm, "Invalid offset");
+			return;
+		}
+
+		if (spec[0] == '+' || spec[0] == '-') {
+			if (find_statement_boundaries(fn, frame->ip, 0, &stmt))
+				loc.offset = stmt.pos_start;
+
+			loc.column = loc.offset;
+			loc.line = uc_source_get_line(loc.source, &loc.column);
+
+			if (spec[0] == '+')
+				loc.line += n;
+			else if (n < loc.line)
+				loc.line -= n;
+			else
+				loc.line = 1;
+		}
+		else {
+			loc.offset = uc_program_function_srcpos(fn, n);
+			loc.column = loc.offset;
+			loc.line = uc_source_get_line(loc.source, &loc.column);
+			stmt.pos_ip = loc.offset;
+		}
+	}
+	else {
+		bool found = false;
+
+		if (spec[0] != '(') {
+			loc = (location_t){ .path = spec, .line = 1, .column = 1 };
+			found = lookup_source(vm, &loc);
+
+			if (!found) {
+				uc_program_function_foreach(fn->program, pfn) {
+					if (!strcmp(pfn->name, spec)) {
+						loc = (location_t){ .function = pfn };
+						found = true;
+						break;
+					}
+				}
+			}
+		}
+
+		if (!found) {
+			uc_value_t *val = NULL;
+			char *errmsg = NULL;
+			char *specdup = xstrdup(spec);
+			bool ok = eval_expr(vm, frame, specdup, &val, &errmsg);
+
+			free(specdup);
+
+			if (!ok) {
+				send_error(fd, vm, errmsg ? errmsg : "Evaluation failed");
+				free(errmsg);
+				return;
+			}
+
+			free(errmsg);
+
+			if (ucv_type(val) != UC_CLOSURE) {
+				ucv_put(val);
+				send_error(fd, vm, "Value is not a function");
+				return;
+			}
+
+			loc = (location_t){ .function = ((uc_closure_t *)val)->function };
+			ucv_put(val);
+		}
+
+		if (loc.function) {
+			size_t beg = uc_program_function_srcpos(loc.function, 0);
+			size_t end2 = uc_program_function_srcpos(loc.function, SIZE_MAX);
+
+			loc.program = loc.function->program;
+			loc.source = uc_program_function_source(loc.function);
+			loc.offset = loc.column = beg;
+			loc.line = uc_source_get_line(loc.source, &loc.column);
+
+			ctx_before = 1;
+			ctx_after = uc_source_get_line(loc.source, &end2) + 2 - loc.line;
+		}
+	}
+
+	if (!lookup_function(vm, &loc)) {
+		send_error(fd, vm, "Unable to resolve source code location");
+		return;
+	}
+
+	from = (loc.line > ctx_before) ? loc.line - ctx_before : 1;
+	to = loc.line + ctx_after;
+
+	obj = ucv_object_new(vm);
+
+	{
+		uc_stringbuf_t pathbuf = { 0 };
+
+		printbuf_append_srcpath(&pathbuf, loc.source, SIZE_MAX);
+		ucv_object_add(obj, "file", ucv_string_new_length(pathbuf.buf, pathbuf.bpos));
+		free(pathbuf.buf);
+	}
+
+	ucv_object_add(obj, "from", ucv_uint64_new(from));
+	ucv_object_add(obj, "to", ucv_uint64_new(to));
+
+	if (loc.source == uc_program_function_source(fn) && stmt.pos_start != SIZE_MAX) {
+		size_t sline_byte = stmt.pos_start;
+		size_t sline = uc_source_get_line(loc.source, &sline_byte);
+		size_t eline_byte = stmt.pos_end;
+		size_t eline = uc_source_get_line(loc.source, &eline_byte);
+		uc_value_t *cursor = ucv_object_new(vm);
+
+		ucv_object_add(cursor, "from_line", ucv_uint64_new(sline));
+		ucv_object_add(cursor, "from_col", ucv_uint64_new(sline_byte));
+		ucv_object_add(cursor, "to_line", ucv_uint64_new(eline));
+		ucv_object_add(cursor, "to_col", ucv_uint64_new(eline_byte));
+		ucv_object_add(obj, "cursor", cursor);
+	}
+
+	debug_proto_write(fd, vm, "SOURCE_RANGE", obj);
+	ucv_put(obj);
+}
+
+static void
+proto_cmd_throw(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_value_t *typev = ucv_object_get(payload, "type", NULL);
+	uc_value_t *msgv = ucv_object_get(payload, "message", NULL);
+	uc_exception_type_t et = EXCEPTION_USER;
+
+	if (ucv_type(msgv) != UC_STRING) {
+		send_error(fd, vm, "Usage: THROW {\"message\":\"...\"}");
+		return;
+	}
+
+	if (ucv_type(typev) == UC_STRING) {
+		const char *t = ucv_string_get(typev);
+
+		if (str_startswith("syntax", t)) et = EXCEPTION_SYNTAX;
+		else if (str_startswith("runtime", t)) et = EXCEPTION_RUNTIME;
+		else if (str_startswith("type", t)) et = EXCEPTION_TYPE;
+		else if (str_startswith("reference", t)) et = EXCEPTION_REFERENCE;
+		else if (str_startswith("user", t)) et = EXCEPTION_USER;
+		else if (str_startswith("exit", t)) et = EXCEPTION_EXIT;
+		else {
+			char msg[128];
+			snprintf(msg, sizeof(msg), "Unrecognized exception type '%s'", t);
+			send_error(fd, vm, msg);
+			return;
+		}
+	}
+
+	uc_vm_raise_exception(vm, et, "%s", ucv_string_get(msgv));
+}
+
+static const char *insn_names[__I_MAX] = {
+#undef __insn
+#define __insn(_name) [I_##_name] = #_name,
+	__insns
+};
+
+static void
+proto_cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_value_t *specv = ucv_object_get(payload, "spec", NULL);
+	const char *spec = (ucv_type(specv) == UC_STRING) ? ucv_string_get(specv) : NULL;
+	uc_function_t *target = NULL;
+	uc_program_t *prog = NULL;
+	size_t from = 0, to = 0;
+	uc_value_t *insns, *obj;
+	uint8_t *bytecode;
+
+	if (!frame) {
+		send_error(fd, vm, "No active call frame");
+		return;
+	}
+
+	if (spec) {
+		if (*spec == '#') {
+			char *e;
+
+			from = strtoul(spec + 1, &e, 10);
+
+			if (*e == '-') {
+				to = strtoul(e + 1, &e, 10);
+
+				if (*e != '\0' || to < from) {
+					send_error(fd, vm, "Invalid instruction range");
+					return;
+				}
+			}
+			else if (*e == '+') {
+				to = from + strtoul(e + 1, &e, 10);
+
+				if (*e != '\0') {
+					send_error(fd, vm, "Invalid instruction count");
+					return;
+				}
+			}
+			else if (*e == '\0') {
+				to = from;
+			}
+			else {
+				send_error(fd, vm, "Invalid instruction offset");
+				return;
+			}
+
+			target = frame->closure->function;
+
+			if (from >= target->chunk.count || to >= target->chunk.count) {
+				send_error(fd, vm, "Instruction offset out of range");
+				return;
+			}
+		}
+		else if (*spec == '(') {
+			uc_parse_config_t conf = { .raw_mode = true };
+			uc_source_t *source = uc_source_new_buffer("[disasm expression]",
+				xstrdup(spec), strlen(spec));
+			char *err = NULL;
+
+			prog = uc_compile(&conf, source, &err);
+
+			uc_source_put(source);
+
+			if (!prog) {
+				send_error(fd, vm, err ? err : "Invalid expression");
+				free(err);
+				return;
+			}
+
+			target = uc_program_entry(prog);
+			from = 0;
+			to = target->chunk.count - 1;
+		}
+		else {
+			char *dup = xstrdup(spec);
+			char *p = strchr(dup, '+');
+			size_t limit = SIZE_MAX;
+
+			if (p) {
+				char *e;
+
+				limit = strtoul(p + 1, &e, 10);
+
+				if (e == p + 1 || *e != '\0' || limit == 0) {
+					send_error(fd, vm, "Invalid instruction count");
+					free(dup);
+					return;
+				}
+
+				*p = 0;
+			}
+
+			uc_program_function_foreach(frame->closure->function->program, fn) {
+				if (!strcmp(fn->name, dup)) {
+					target = fn;
+					from = 0;
+					to = (limit < target->chunk.count) ? limit : target->chunk.count - 1;
+					break;
+				}
+			}
+
+			if (!target) {
+				send_error(fd, vm, "Unable to find function");
+				free(dup);
+				return;
+			}
+
+			free(dup);
+		}
+	}
+	else {
+		insn_span_t stmt;
+
+		target = frame->closure->function;
+
+		if (!find_statement_boundaries(target, frame->ip, 0, &stmt)) {
+			send_error(fd, vm, "Unable to determine current statement boundaries");
+			return;
+		}
+
+		from = stmt.ip_start - target->chunk.entries;
+		to = (stmt.ip_end - target->chunk.entries) - 1;
+	}
+
+	bytecode = target->chunk.entries;
+
+	for (size_t i = 0; i < target->chunk.count; ) {
+		size_t len = insn_length(bytecode + i, target->program);
+
+		if (i + len > from) {
+			from = i;
+			break;
+		}
+
+		i += len;
+	}
+
+	insns = ucv_array_new(vm);
+
+	for (size_t i = from; i <= to; ) {
+		union { uint8_t u8; uint16_t u16; uint32_t u32; int32_t s32; } arg = { 0 };
+		size_t n = insn_length(bytecode + i, target->program);
+		uint8_t insn = bytecode[i];
+		uc_value_t *item = ucv_object_new(vm);
+		uc_value_t *operand = NULL;
+		uc_value_t *rawbytes = ucv_array_new_length(vm, n);
+
+		for (size_t j = 0; j < n; j++)
+			ucv_array_push(rawbytes, ucv_uint64_new(bytecode[i + j]));
+
+		ucv_object_add(item, "offset", ucv_uint64_new(i));
+		ucv_object_add(item, "mnemonic", ucv_string_new(insn_names[insn]));
+		ucv_object_add(item, "format", ucv_int64_new(uc_vm_insn_format[insn]));
+		ucv_object_add(item, "bytes", rawbytes);
+
+		switch (uc_vm_insn_format[insn]) {
+		case 0:
+			break;
+
+		case -4:
+			arg.s32 = insn_s32(bytecode + i + 1);
+			operand = ucv_int64_new(arg.s32);
+			break;
+
+		case 1:
+			arg.u8 = bytecode[i + 1];
+			operand = ucv_uint64_new(arg.u8);
+			break;
+
+		case 2:
+			arg.u16 = insn_u16(bytecode + i + 1);
+			operand = ucv_uint64_new(arg.u16);
+			break;
+
+		case 4:
+			arg.u32 = insn_u32(bytecode + i + 1);
+			operand = ucv_uint64_new(arg.u32);
+
+			if (insn == I_LOAD) {
+				uc_value_t *cv = load_constval(&target->program->constants, arg.u32);
+				ucv_object_add(item, "constant", cv);
+			}
+			else if (insn == I_LLOC || insn == I_SLOC || insn == I_LUPV || insn == I_SUPV) {
+				bool upval = (insn == I_LUPV || insn == I_SUPV);
+				uc_value_t *vn = uc_chunk_debug_get_variable(
+					&target->chunk, i, arg.u32, upval);
+
+				ucv_object_add(item, "variable_kind", ucv_string_new(upval ? "upval" : "local"));
+				ucv_object_add(item, "variable_name",
+					ucv_string_new(vn ? ucv_string_get(vn) : "(unknown)"));
+			}
+			else if (insn == I_LVAR || insn == I_SVAR) {
+				uc_value_t *vn = load_constval(&target->program->constants, arg.u32);
+
+				ucv_object_add(item, "variable_kind", ucv_string_new("global"));
+				ucv_object_add(item, "variable_name",
+					ucv_string_new(vn ? ucv_string_get(vn) : "(unknown)"));
+				ucv_put(vn);
+			}
+			else if (insn == I_CLFN || insn == I_ARFN) {
+				ucv_object_add(item, "closure_index", ucv_uint64_new(arg.u32));
+				ucv_object_add(item, "closure_kind",
+					ucv_string_new((insn == I_CLFN) ? "closure" : "arrow"));
+			}
+			else if (insn == I_CALL) {
+				/* See uc_vm_insn_call() in vm.c: top bit is the method-call
+				 * flag (this-context passed as an implicit extra argument
+				 * below the callee on the stack), low 16 bits are the
+				 * argument count. */
+				ucv_object_add(item, "call_mcall",
+					ucv_boolean_new((arg.u32 & 0x80000000) != 0));
+				ucv_object_add(item, "call_nargs",
+					ucv_uint64_new(arg.u32 & 0xffff));
+			}
+
+			break;
+
+		default:
+			break;
+		}
+
+		if (operand)
+			ucv_object_add(item, "operand", operand);
+
+		if (insn == I_CLFN || insn == I_ARFN) {
+			size_t id = 1, nupvals = 0;
+			uc_value_t *captures = ucv_array_new(vm);
+
+			uc_program_function_foreach(target->program, fn) {
+				if (id++ == arg.u32) {
+					nupvals = fn->nupvals;
+					break;
+				}
+			}
+
+			for (size_t j = 0; j < nupvals; j++) {
+				int32_t slot = insn_s32(bytecode + i + 5 + j * 4);
+				bool upval = (slot >= 0);
+				uc_value_t *vn = uc_chunk_debug_get_variable(
+					&target->chunk, i, (slot < 0) ? -(slot + 1) : slot, upval);
+				uc_value_t *cap = ucv_object_new(vm);
+				uc_value_t *capbytes = ucv_array_new_length(vm, 4);
+
+				for (size_t k = 0; k < 4; k++)
+					ucv_array_push(capbytes, ucv_uint64_new(bytecode[i + 5 + j * 4 + k]));
+
+				ucv_object_add(cap, "slot", ucv_int64_new(slot));
+				ucv_object_add(cap, "kind", ucv_string_new(upval ? "upval" : "local"));
+				ucv_object_add(cap, "name",
+					ucv_string_new(vn ? ucv_string_get(vn) : "(unknown)"));
+				ucv_object_add(cap, "bytes", capbytes);
+				ucv_array_push(captures, cap);
+			}
+
+			ucv_object_add(item, "captures", captures);
+		}
+		else if (insn == I_CALL) {
+			uc_value_t *unpacks = ucv_array_new(vm);
+
+			for (size_t j = 0; j < ((arg.u32 >> 16) & 0x7fff); j++) {
+				uint16_t slot = insn_u16(bytecode + i + 5 + j * 2);
+				uc_value_t *u = ucv_object_new(vm);
+				uc_value_t *ubytes = ucv_array_new_length(vm, 2);
+
+				for (size_t k = 0; k < 2; k++)
+					ucv_array_push(ubytes, ucv_uint64_new(bytecode[i + 5 + j * 2 + k]));
+
+				ucv_object_add(u, "slot", ucv_uint64_new(slot));
+				ucv_object_add(u, "stack_slot", ucv_int64_new(-(int64_t)(slot + 1)));
+				ucv_object_add(u, "bytes", ubytes);
+				ucv_array_push(unpacks, u);
+			}
+
+			ucv_object_add(item, "unpacks", unpacks);
+		}
+
+		ucv_array_push(insns, item);
+		i += n;
+	}
+
+	if (prog)
+		uc_program_put(prog);
+
+	obj = ucv_object_new(vm);
+	ucv_object_add(obj, "function", ucv_string_new(target->name));
+	ucv_object_add(obj, "instructions", insns);
+	debug_proto_write(fd, vm, "DISASSEMBLY", obj);
+	ucv_put(obj);
+}
+
+static void
+proto_cmd_source(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	uc_value_t *filev = ucv_object_get(payload, "file", NULL);
+	location_t loc = { 0 };
+	uc_value_t *obj;
+
+	if (ucv_type(filev) != UC_STRING) {
+		send_error(fd, vm, "Usage: SOURCE {\"file\":\"...\"}");
+		return;
+	}
+
+	loc.path = ucv_string_get(filev);
+	loc.line = 1;
+	loc.column = 1;
+
+	obj = ucv_object_new(vm);
+	ucv_object_add(obj, "file", ucv_get(filev));
+
+	if (!lookup_source(vm, &loc)) {
+		ucv_object_add(obj, "text", NULL);
+		ucv_object_add(obj, "error", ucv_string_new("source not available on server"));
+	}
+	else {
+		uc_stringbuf_t text = { 0 };
+		char buf[4096];
+		size_t n;
+
+		fseeko(loc.source->fp, 0, SEEK_SET);
+
+		while ((n = fread(buf, 1, sizeof(buf), loc.source->fp)) > 0)
+			printbuf_memappend_fast((&text), buf, n);
+
+		ucv_object_add(obj, "text", ucv_string_new_length(text.buf, text.bpos));
+		free(text.buf);
+	}
+
+	debug_proto_write(fd, vm, "SOURCE", obj);
+	ucv_put(obj);
+}
+
+static void
+proto_cmd_quit(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd, bool *proceed)
+{
+	vm->arg.s32 = -1;
+	uc_vm_raise_exception(vm, EXCEPTION_EXIT, "Terminated");
+	*proceed = false;
+}
+
+static const struct {
+	const char *verb;
+	void (*cb)(uc_vm_t *, debug_breakpoint_t *, uc_value_t *, int, bool *);
+} proto_commands[] = {
+	{ "BREAK",             proto_cmd_break },
+	{ "DELETE",            proto_cmd_delete },
+	{ "LIST_BREAKPOINTS",  proto_cmd_list },
+	{ "NEXT",              proto_cmd_next },
+	{ "STEP",              proto_cmd_step },
+	{ "CONTINUE",          proto_cmd_continue },
+	{ "RETURN",            proto_cmd_return },
+	{ "BACKTRACE",         proto_cmd_backtrace },
+	{ "VARIABLES",         proto_cmd_variables },
+	{ "SOURCES",           proto_cmd_sources },
+	{ "PRINT",             proto_cmd_print },
+	{ "EVAL",              proto_cmd_eval },
+	{ "LINES",             proto_cmd_lines },
+	{ "THROW",             proto_cmd_throw },
+	{ "DISASSEMBLE",       proto_cmd_disasm },
+	{ "SOURCE",            proto_cmd_source },
+	{ "HELP",              proto_cmd_help },
+	{ "QUIT",              proto_cmd_quit },
+};
+
+/* Incremental read buffer for the current session connection - must persist
+ * across separate bk_enter_session() calls (one per breakpoint hit) for the
+ * same connection, exactly like the connection fd itself
+ * (debug_remote_{set,get}_active_fd()), since a single logical debug session
+ * spans many such calls (one per "next"/"step"/breakpoint hit). */
+static debug_proto_buf_t session_buf;
+
+static void
+bk_enter_session(uc_vm_t *vm, uc_breakpoint_t *bk)
+{
+	debug_breakpoint_t *dbk = (debug_breakpoint_t *)bk;
+	uint8_t *entry_ip = bk->ip;
+	uc_value_t *paused;
+	int fd;
+
+	/* If a remote client is already connected - either because this is a
+	 * BK_STEP breakpoint hit during an ongoing "next"/"step" sequence, or a
+	 * reentrant SIGUSR1 while already attached - reuse it as-is instead of
+	 * tearing it down to accept a redundant second connection, which would
+	 * just disconnect the live one mid-session. */
+	if (debug_attach_mode && !debug_remote_has_active_connection()) {
+		int client_fd = debug_remote_handle_break(vm);
+
+		if (client_fd < 0)
+			return; /* timeout or fatal error - resume unattended */
+
+		debug_remote_set_active_fd(client_fd);
+		debug_proto_buf_init(&session_buf);
+
+		fprintf(stderr, "Connected to ucode debugger\n\n");
+	}
+
+	fd = debug_remote_get_active_fd();
+
+	/* No session fd available yet (e.g. local `-x` mode before its client
+	 * has been spawned) - nothing to do. */
+	if (fd < 0)
+		return;
+
+	paused = build_paused_payload(vm, dbk);
+	debug_proto_write(fd, vm, "PAUSED", paused);
+	ucv_put(paused);
+
+	for (;;) {
+		char *verb = NULL;
+		uc_value_t *payload = NULL;
+		int rv = debug_proto_read(fd, &session_buf, vm, &verb, &payload);
+		bool proceed = true;
+		bool handled = false;
+
+		if (rv <= 0) {
+			bool exiting = (vm->exception.type == EXCEPTION_EXIT);
+
+			free(verb);
+			ucv_put(payload);
+
+			close(fd);
+			debug_remote_set_active_fd(-1);
+
+			if (debug_attach_mode && !exiting) {
+				/* The client dropped the connection without an explicit
+				 * QUIT - tear the dead connection down and go back to
+				 * waiting for a fresh one, rather than silently resuming
+				 * the paused script and losing the session for good. */
+				bk_enter_session(vm, bk);
+				return;
+			}
+
+			if (debug_attach_mode)
+				debug_remote_cleanup_attach_socket();
+
+			break;
+		}
+
+		for (size_t i = 0; i < ARRAY_SIZE(proto_commands); i++) {
+			if (!strcmp(proto_commands[i].verb, verb)) {
+				proto_commands[i].cb(vm, dbk, payload, fd, &proceed);
+				handled = true;
+				break;
+			}
+		}
+
+		if (!handled) {
+			char msg[128];
+
+			snprintf(msg, sizeof(msg), "Unrecognized command '%s'", verb);
+			send_error(fd, vm, msg);
+		}
+
+		free(verb);
+		ucv_put(payload);
+
+		if (!proceed)
+			break;
+	}
+
+	/* If "DELETE" removed this very breakpoint during the session above, it
+	 * only unlinked it and deferred the actual free() until now - see the
+	 * `deleted` field comment. Do that first and skip the kind-based checks
+	 * below entirely: dbk was already unlinked, so free_breakpoint() here
+	 * just frees the struct without touching vm->breakpoints again. */
+	if (dbk->deleted) {
+		free_breakpoint(vm, &dbk->bk);
+	}
+	/* BK_STEP is a single, reused breakpoint object (see get_breakpoint()):
+	 * a "next"/"step" command handled above may have already re-armed it
+	 * in place, via update_breakpoint(), to a new target instruction so a
+	 * later hit can continue the stepping sequence - in that case dbk->bk.ip
+	 * no longer matches the instruction we were entered for and freeing it
+	 * here would silently cancel that re-arm before it ever fires, letting
+	 * the script run to completion instead of stopping at the next step.
+	 * Only free it when it's still pointing at the same place we started
+	 * at, i.e. nothing re-armed it (e.g. plain "continue"). */
+	else if (dbk->kind == BK_ONCE || (dbk->kind == BK_STEP && dbk->bk.ip == entry_ip)) {
+		free_breakpoint(vm, &dbk->bk);
+	}
+}
+
+/* Run a full interactive debugger session over an already-connected remote
+ * client socket, reusing the exact same command set as the local session -
+ * see bk_enter_session() above. */
+void
+debug_run_session(uc_vm_t *vm, int client_fd)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	debug_breakpoint_t dbk;
+
+	if (!frame) {
+		close(client_fd);
+		return;
+	}
+
+	debug_remote_set_active_fd(client_fd);
+	debug_proto_buf_init(&session_buf);
+
+	dbk = (debug_breakpoint_t){
+		.bk = { .ip = frame->ip },
+		.fn = frame->closure->function,
+		.kind = BK_USER
+	};
+
+	bk_enter_session(vm, &dbk.bk);
+
+	/* Unless "QUIT" was issued (which already raised EXCEPTION_EXIT),
+	 * resume script execution; further breakpoints hit during this call
+	 * reenter bk_enter_session() directly, still using the fd set up
+	 * above. */
+	if (vm->exception.type != EXCEPTION_EXIT)
+		uc_vm_resume(vm);
+
+	debug_remote_set_active_fd(-1);
+	close(client_fd);
+
+	/* No-op unless this session came from the SIGUSR1 attach socket. */
+	debug_remote_cleanup_attach_socket();
+}
+
+static uc_value_t *uc_debug_sigint_handler(uc_vm_t *vm, size_t nargs);
+
+static uc_value_t *
+uc_debug_sigusr1_attach_handler(uc_vm_t *vm, size_t nargs)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+
+	if (!frame)
+		return NULL;
+
+	debug_breakpoint_t dbk = {
+		.bk = { .ip = frame->ip },
+		.fn = frame->closure->function,
+		.kind = BK_USER
+	};
+
+	bk_enter_session(vm, &dbk.bk);
+
+	return NULL;
+}
+
+static bool debug_attach_initialized = false;
+
+static uc_value_t *
+uc_debug_attach(uc_vm_t *vm, size_t nargs)
+{
+	uc_cfn_ptr_t ucsignal = uc_stdlib_function("signal");
+	uc_value_t *mainfn = uc_fn_arg(0);
+
+	debug_attach_mode = true;
+
+	if (!debug_attach_initialized) {
+		uc_vm_stack_push(vm, ucv_string_new("SIGINT"));
+		uc_vm_registry_set(vm, "debug.orig_int_signal", ucsignal(vm, 1));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		uc_vm_stack_push(vm, ucv_string_new("SIGINT"));
+		uc_vm_stack_push(vm,
+			ucv_cfunction_new("debug_sigint_handler", uc_debug_sigint_handler));
+		ucv_put(ucsignal(vm, 2));
+		ucv_put(uc_vm_stack_pop(vm));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		/* For attach mode, SIGUSR1 launches the debugger CLI directly */
+		uc_vm_stack_push(vm, ucv_string_new("SIGUSR1"));
+		uc_vm_stack_push(vm,
+			ucv_cfunction_new("debug_sigusr1_attach_handler", uc_debug_sigusr1_attach_handler));
+		ucv_put(ucsignal(vm, 2));
+		ucv_put(uc_vm_stack_pop(vm));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		/* Attach mode never actually interacts over the target's own
+		 * stdin/stdout - the debug session only ever runs over the client
+		 * fd accepted once a remote debugger connects (see
+		 * bk_enter_session()), so there is no local tty state to set up
+		 * here at all. */
+
+		install_debug_system_breakpoints(vm);
+
+		debug_attach_initialized = true;
+	}
+
+	if (ucv_type(mainfn) == UC_CLOSURE) {
+		uc_function_t *fn = ((uc_closure_t *)mainfn)->function;
+		update_breakpoint(vm, BK_STEP, bk_enter_session, fn->chunk.entries, fn, 1);
+	}
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_debug_break(uc_vm_t *vm, size_t nargs)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+
+	if (!frame)
+		return ucv_boolean_new(false);
+
+	debug_breakpoint_t dbk = {
+		.bk = { .ip = frame->ip },
+		.fn = frame->closure->function,
+		.kind = BK_USER
+	};
+
+	bk_enter_session(vm, &dbk.bk);
+
+	return ucv_boolean_new(true);
+}
+
+/**
+ * Install a user breakpoint from a location specification, using the exact
+ * same grammar as the interactive `break` CLI command (`path[:line[:offset]]`,
+ * a bare function name, or a ucode expression evaluating to a function).
+ *
+ * Unlike the `break` CLI command, this may be called before the program has
+ * started running and thus without any active script call frame - e.g. by
+ * the `-x <expr>`/`-X <expr>` command line options, which use this function
+ * to resolve their argument early, before `uc_vm_execute()` is even called.
+ * In that case, `mainfn` is used to resolve bare function names instead of
+ * the (nonexistent) current frame; a `:line` spec without an explicit path,
+ * or an arbitrary expression, cannot be resolved without a frame and are
+ * reported as an error.
+ *
+ * @function module:debug#breakpoint
+ *
+ * @param {string} spec
+ * The breakpoint location specification.
+ *
+ * @param {function} [mainfn]
+ * The program entry function, used to resolve bare function names when
+ * there is no active call frame yet.
+ *
+ * @returns {number|boolean}
+ * The installed breakpoint id, or `false` on failure.
+ */
+static uc_value_t *
+uc_debug_breakpoint(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *specarg = uc_fn_arg(0);
+	uc_value_t *mainfn = uc_fn_arg(1);
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+	uc_program_t *program = NULL;
+	char *spec, *errmsg = NULL;
+	size_t id;
+
+	if (ucv_type(specarg) != UC_STRING)
+		return ucv_boolean_new(false);
+
+	if (!frame && ucv_type(mainfn) == UC_CLOSURE)
+		program = ((uc_closure_t *)mainfn)->function->program;
+
+	spec = xstrdup(ucv_string_get(specarg));
+	id = resolve_breakpoint(vm, frame, program, spec, BK_USER, &errmsg);
+	free(spec);
+
+	if (!id) {
+		if (errmsg)
+			fprintf(stderr, "%s\n", errmsg);
+
+		free(errmsg);
+
+		return ucv_boolean_new(false);
+	}
+
+	return ucv_uint64_new(id);
+}
+
+/**
+ * Notify an attached remote debugger client, if any, that the target is
+ * about to exit, with the final VM status (successful completion,
+ * `exit()`/`quit`, or an uncaught error). A no-op when nobody is attached,
+ * or for the local interactive debugger, where the exit is immediately
+ * visible on the same terminal.
+ *
+ * Called by main.c right after `uc_vm_execute()` returns, passing its raw
+ * `uc_vm_status_t` return value plus the corresponding detail (exit code, or
+ * an exception object), so a remote client learns the final outcome as an
+ * explicit event instead of only noticing sometime later that the
+ * connection dropped, with no indication of why.
+ *
+ * The detail arguments must be passed in explicitly by the caller rather
+ * than read off the vm here: by the time this C function body runs,
+ * uc_vm_call() has already cleared vm->exception as its own first action
+ * (a normal safety reset for ordinary calls), so main.c has to snapshot
+ * vm->arg.s32 / call uc_vm_exception_object() into locals before making
+ * this call.
+ *
+ * @function module:debug#notifyExit
+ *
+ * @param {number} status
+ * The `uc_vm_status_t` value `uc_vm_execute()` returned.
+ *
+ * @param {number} exitCode
+ * `vm->arg.s32` at the time `status` was returned, meaningful only for
+ * `STATUS_EXIT`.
+ *
+ * @param {object} [exception]
+ * `uc_vm_exception_object(vm)` at the time `status` was returned - the same
+ * `{type, message, stacktrace}` shape script code sees via try/catch.
+ * Meaningful only for `ERROR_COMPILE`/`ERROR_RUNTIME`.
+ */
+static uc_value_t *
+uc_debug_notify_exit(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *status = uc_fn_arg(0);
+	uc_value_t *exit_code = uc_fn_arg(1);
+	uc_value_t *exception_obj = uc_fn_arg(2);
+
+	debug_remote_notify_exit(vm,
+		(ucv_type(status) == UC_INTEGER) ? (uc_vm_status_t)ucv_int64_get(status) : STATUS_OK,
+		(ucv_type(exit_code) == UC_INTEGER) ? (int32_t)ucv_int64_get(exit_code) : 0,
+		exception_obj);
+
+	return NULL;
+}
+
+static bool debug_remote_listen_armed = false;
+
+/* Registered as a ucode-level SIGUSR1 handler via the builtin signal()
+ * function, exactly like uc_debug_sigusr1_attach_handler() above. This
+ * matters for embedding: ucode-level signal handlers are invoked from
+ * uc_vm_signal_dispatch(), which is only ever called from inside
+ * uc_vm_execute_chunk()'s own per-instruction loop (see vm.c) - so this
+ * runs nested within whatever uc_vm_call()/uc_vm_execute() invocation the
+ * host application (uhttpd, uwsd, ...) is currently making, and returns
+ * normally once the debug session ends. It never unwinds the host's own
+ * C call stack the way the -X flag's raw POSIX SIGUSR1 handler does via
+ * uc_vm_break_request()/STATUS_BREAK, which a host application that embeds
+ * the VM directly (rather than driving it through ucode's own -X main
+ * loop) would have no way to handle. */
+static uc_value_t *
+uc_debug_listen_sigusr1_handler(uc_vm_t *vm, size_t nargs)
+{
+	int client_fd = debug_remote_handle_break(vm);
+
+	if (client_fd >= 0)
+		debug_run_session(vm, client_fd);
+
+	return NULL;
+}
+
+/**
+ * Listen for a remote debugger connection.
+ *
+ * With no argument (or a boolean), this arms `SIGUSR1`-triggered remote
+ * debugging on the PID-derived attach socket `/tmp/ucode-debug-<pid>.sock`
+ * - the same socket `-X` and `udbg <pid>` use. This is the counterpart to
+ * the `-X` command line flag for scripts running inside a host application
+ * that embeds the ucode VM directly (e.g. uhttpd or uwsd) and therefore has
+ * no `-X` flag or `SIGUSR1`-triggered break infrastructure of its own. Once
+ * armed, sending `SIGUSR1` to the process makes it pause at the next
+ * instruction boundary, open the attach socket and hand off to the very
+ * same interactive CLI session used locally or via `-X` - the exact same
+ * command set, tab completion and ANSI rendering.
+ *
+ * With a string argument, it instead binds the given Unix domain socket
+ * path and blocks immediately (right here, synchronously, indefinitely)
+ * until a client connects on that path - independent of `SIGUSR1` and of
+ * the PID-derived attach socket. This is useful for host applications that
+ * want to expose the debugger on a well-known path of their own choosing.
+ *
+ * @param {boolean|string} [wait]
+ * If a string, treated as a socket path to bind and block on (see above).
+ * If truish (and not a string), block immediately, right here, until a
+ * debugger client connects on the PID-derived attach socket or a 30 second
+ * timeout elapses, exactly as if `SIGUSR1` had just been received - in
+ * addition to arming `SIGUSR1` for later. If omitted or falsy, only arm the
+ * `SIGUSR1` handler and return immediately; the process keeps running
+ * normally until a signal is actually sent.
+ *
+ * @returns {boolean}
+ * `true` on success, `false` if binding an explicit socket path failed.
+ *
+ * @example
+ * import { listen } from 'debug';
+ *
+ * // Arm SIGUSR1-triggered remote debugging, keep running
+ * listen();
+ *
+ * // ... or pause right here until a debugger attaches
+ * listen(true);
+ *
+ * // ... or listen on an explicit, caller-chosen socket path
+ * listen("/tmp/ucode-debug.sock");
+ */
+static uc_value_t *
+uc_debug_listen(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *arg = uc_fn_arg(0);
+
+	if (ucv_type(arg) == UC_STRING) {
+		int client_fd = debug_remote_accept_on_path(ucv_string_get(arg));
+
+		if (client_fd < 0)
+			return ucv_boolean_new(false);
+
+		debug_run_session(vm, client_fd);
+
+		return ucv_boolean_new(true);
+	}
+
+	if (!debug_remote_listen_armed) {
+		uc_cfn_ptr_t ucsignal = uc_stdlib_function("signal");
+
+		uc_vm_stack_push(vm, ucv_string_new("SIGUSR1"));
+		uc_vm_stack_push(vm,
+			ucv_cfunction_new("debug_listen_sigusr1_handler", uc_debug_listen_sigusr1_handler));
+		ucv_put(ucsignal(vm, 2));
+		ucv_put(uc_vm_stack_pop(vm));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		install_debug_system_breakpoints(vm);
+
+		debug_remote_listen_armed = true;
+	}
+
+	if (ucv_is_truish(arg)) {
+		int client_fd = debug_remote_handle_break(vm);
+
+		if (client_fd >= 0)
+			debug_run_session(vm, client_fd);
+	}
+
+	return ucv_boolean_new(true);
+}
+
+static uc_value_t *
+uc_debug_sigint_handler(uc_vm_t *vm, size_t nargs)
+{
+	uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+
+	if (!frame)
+		return NULL;
+
+	debug_breakpoint_t dbk = {
+		.bk = { .ip = frame->ip },
+		.fn = frame->closure->function,
+		.kind = BK_USER
+	};
+
+	bk_enter_session(vm, &dbk.bk);
+
+	uc_value_t *sigint_handler =
+		uc_vm_registry_get(vm, "debug.orig_int_signal");
+
+	if (ucv_is_callable(sigint_handler)) {
+		uc_vm_stack_push(vm, ucv_get(sigint_handler));
+		uc_vm_stack_push(vm, ucv_get(uc_fn_arg(0)));
+
+		if (uc_vm_call(vm, false, 1) == EXCEPTION_NONE)
+			return uc_vm_stack_pop(vm);
+	}
+
+	return NULL;
+}
+
+/**
+ * Initialize interactive debugger.
+ *
+ * The `debugger()` function sets up the interactive command line debugger and
+ * immediately starts it, or - when a function argument is provided - defers the
+ * debugger invocation until the given function is called.
+ *
+ * This function does not return any value.
+ *
+ * @function module:debug#debugger
+ *
+ * @param {function} [target]
+ * An optional function to attach the debugger to. When provided, a debug
+ * breakpoint is installed at the first instruction of the given function,
+ * causing the debug cli to get launched as soon as this function is entered.
+ *
+ * @example
+ * // Launch debugger immediately
+ * debug.debugger();
+ *
+ *
+ * // Attach debugger to function
+ * function test(a, b) {
+ *   print(`Result is ${a * b}\n`);
+ * }
+ *
+ * debug.debugger(test); // Install debug breakpoint in `test()` function
+ * test();               // Starts debugger, breaking before `print(…)`
+ */
+/* Fork a co-process running the interactive protocol client (the `udbg`
+ * binary, in its `--fd` mode) connected to us via a socketpair, and make it
+ * the current session connection - the local `-x` CLI counterpart to a
+ * remote `debug.listen()`/`-X` connection being accepted. The child owns the
+ * real controlling terminal (it never touches the inherited fd 3 for
+ * anything but the protocol connection, so its own stdin/stdout still are
+ * whatever tty invoked `ucode -x`); the parent (this process, running the
+ * debugged script) never sets up any tty state of its own and only ever
+ * speaks the line protocol over the session fd, exactly like the remote
+ * case. */
+static bool
+spawn_local_client(void)
+{
+	int sv[2];
+	pid_t pid;
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0)
+		return false;
+
+	pid = fork();
+
+	if (pid < 0) {
+		close(sv[0]);
+		close(sv[1]);
+
+		return false;
+	}
+
+	if (pid == 0) {
+		close(sv[0]);
+
+		if (sv[1] != 3) {
+			dup2(sv[1], 3);
+			close(sv[1]);
+		}
+
+		execlp("udbg", "udbg", "--fd", "3", NULL);
+		_exit(127);
+	}
+
+	close(sv[1]);
+
+	debug_remote_set_active_fd(sv[0]);
+	debug_proto_buf_init(&session_buf);
+
+	return true;
+}
+
+static bool debug_local_initialized = false;
+
+static uc_value_t *
+uc_debugger(uc_vm_t *vm, size_t nargs)
+{
+	uc_cfn_ptr_t ucsignal = uc_stdlib_function("signal");
+	uc_value_t *mainfn = uc_fn_arg(0);
+
+	if (!debug_local_initialized) {
+		if (!spawn_local_client()) {
+			fprintf(stderr, "Failed to launch debugger client (udbg)\n");
+
+			return NULL;
+		}
+
+		uc_vm_stack_push(vm, ucv_string_new("SIGINT"));
+		uc_vm_registry_set(vm, "debug.orig_int_signal", ucsignal(vm, 1));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		uc_vm_stack_push(vm, ucv_string_new("SIGINT"));
+		uc_vm_stack_push(vm,
+			ucv_cfunction_new("debug_sigint_handler", uc_debug_sigint_handler));
+		ucv_put(ucsignal(vm, 2));
+		ucv_put(uc_vm_stack_pop(vm));
+		ucv_put(uc_vm_stack_pop(vm));
+
+		install_debug_system_breakpoints(vm);
+
+		debug_local_initialized = true;
+	}
+
+	if (ucv_type(mainfn) == UC_CLOSURE) {
+		uc_function_t *fn = ((uc_closure_t *)mainfn)->function;
+		update_breakpoint(vm, BK_STEP, bk_enter_session, fn->chunk.entries, fn, 1);
+	}
+	else {
+		uc_callframe_t *frame = uc_debug_curr_frame(vm, 0);
+
+		if (frame) {
+			debug_breakpoint_t dbk = {
+				.bk = { .ip = frame->ip },
+				.fn = frame->closure->function,
+				.kind = BK_USER
+			};
+
+			bk_enter_session(vm, &dbk.bk);
+		}
+	}
+
+	return NULL;
+}
+
+
 static const uc_function_list_t debug_fns[] = {
 	{ "memdump",	uc_memdump },
 	{ "traceback",	uc_traceback },
@@ -1661,11 +5518,48 @@ static const uc_function_list_t debug_fns[] = {
 	{ "setlocal",	uc_setlocal },
 	{ "getupval",	uc_getupval },
 	{ "setupval",	uc_setupval },
+	{ "debugger",	uc_debugger },
+	{ "attach",	uc_debug_attach },
+	{ "break",	uc_debug_break },
+	{ "breakpoint",	uc_debug_breakpoint },
+	{ "listen",	uc_debug_listen },
+	{ "notifyExit",	uc_debug_notify_exit },
 };
 
-void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
+/* Callback invoked by main.c when STATUS_BREAK is returned in -X mode.
+ * debug_remote_handle_break() (in debug_remote.c) only deals with socket
+ * transport: it creates the attach socket and waits for a udbg client to
+ * connect, returning the accepted client fd, -1 on timeout/no client, or
+ * -2 on a fatal socket error. On success, the full interactive CLI session
+ * is driven by debug_run_session() above, which also resumes
+ * script execution once the session ends.
+ * Returns 0 if execution should resume unattended, 1 if the program has
+ * already finished or should exit. */
+static int
+debug_server_handle_break(uc_vm_t *vm)
+{
+	int client_fd = debug_remote_handle_break(vm);
+
+	if (client_fd == -1)
+		return 0;
+
+	if (client_fd < 0)
+		return 1;
+
+	debug_run_session(vm, client_fd);
+
+	return 1;
+}
+
+void
+uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, debug_fns);
 
 	debug_setup(vm);
+
+
+	/* Register break handler so main.c can find it via registry */
+	uc_vm_registry_set(vm, "debug.server_handle_break",
+		ucv_resource_new(NULL, (void *)(uintptr_t)debug_server_handle_break));
 }
