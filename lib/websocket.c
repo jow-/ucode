@@ -83,6 +83,7 @@
 #define WS_DEFAULT_TIMEOUT 15000
 #define WS_DEFAULT_MAX_MSG (256 * 1024)
 #define WS_MIN_TIMEOUT 100
+#define WS_CLOSE_TIMEOUT 5000
 
 #ifndef MSG_MORE
 #define MSG_MORE 0
@@ -117,6 +118,9 @@ typedef struct {
 	int port;
 	int io_errno;
 	bool eof;
+	int dispatching;
+	bool need_flush;
+	bool in_recv;
 
 	char *host;
 	char *path;
@@ -127,10 +131,18 @@ typedef struct {
 
 	char hs_buf[WS_HS_BUFSIZE];
 	size_t hs_len;
+	size_t hs_pendoff;
+	size_t hs_pendlen;
 	char hs_accept[32];
 
 	uint64_t max_msg_len;
+
+	int close_code;
+	char close_reason[124];
 } uc_websocket_t;
+
+static void ws_flush(uc_websocket_t *ws);
+static void ws_readable(uc_websocket_t *ws);
 
 /* ---------------------------------------------------------------------- */
 /* SHA-1 (RFC 3174) and base64 encoding for the opening handshake        */
@@ -377,7 +389,7 @@ ws_parse_url(const char *url, char **host, int *port, char **path, bool *tls)
 			}
 		}
 
-		hostlen = (size_t)((port_start ? port_start : host_end) - host_start);
+		hostlen = (size_t)((port_start ? port_start - 1 : host_end) - host_start);
 
 		if (!hostlen || hostlen >= sizeof(hostbuf))
 			return false;
@@ -482,8 +494,23 @@ ws_invoke(uc_websocket_t *ws, size_t slot, uc_value_t **args, size_t nargs)
 	for (i = 0; i < nargs; i++)
 		uc_vm_stack_push(ws->vm, ucv_get(args[i]));
 
+	ws->dispatching++;
+
 	if (ws_vm_call(ws->vm, true, nargs + 1))
 		ucv_put(uc_vm_stack_pop(ws->vm));
+
+	ws->dispatching--;
+
+	/* defer wslay_event_send() until we are completely outside of the
+	 * wslay_event_recv() call stack: the epilogue below still runs while
+	 * wslay_event_recv() is active, so an ongoing receive is another
+	 * reason to keep the flush pending */
+	if (!ws->dispatching && !ws->in_recv && ws->need_flush) {
+		ws->need_flush = false;
+
+		if (ws->state == WS_STATE_OPEN || ws->state == WS_STATE_CLOSING)
+			ws_flush(ws);
+	}
 }
 
 static void
@@ -563,8 +590,22 @@ ws_wslay_recv(wslay_event_context_ptr ctx, uint8_t *buf, size_t len,
 {
 	uc_websocket_t *ws = user_data;
 	ssize_t n;
+	size_t chunk;
 
 	(void)flags;
+
+	/* serve bytes that arrived pipelined with the handshake response
+	 * before reading new data from the socket */
+	if (ws->hs_pendlen) {
+		chunk = (ws->hs_pendlen < len) ? ws->hs_pendlen : len;
+
+		memcpy(buf, ws->hs_buf + ws->hs_pendoff, chunk);
+
+		ws->hs_pendoff += chunk;
+		ws->hs_pendlen -= chunk;
+
+		return (ssize_t)chunk;
+	}
 
 	do {
 		n = read(ws->ufd.fd, buf, len);
@@ -634,6 +675,18 @@ ws_wslay_on_msg(wslay_event_context_ptr ctx,
 	switch (arg->opcode) {
 	case WSLAY_CONNECTION_CLOSE:
 		/* reply close frame is queued automatically by wslay_event_recv() */
+		ws->close_code = (int)arg->status_code;
+
+		if (arg->msg_length > 2) {
+			size_t n = arg->msg_length - 2;
+
+			if (n > sizeof(ws->close_reason) - 1)
+				n = sizeof(ws->close_reason) - 1;
+
+			memcpy(ws->close_reason, arg->msg + 2, n);
+			ws->close_reason[n] = '\0';
+		}
+
 		break;
 
 	case WSLAY_TEXT_FRAME:
@@ -670,14 +723,26 @@ static const struct wslay_event_callbacks ws_wslay_callbacks = {
 static void
 ws_update_poll(uc_websocket_t *ws)
 {
-	unsigned int flags = ULOOP_READ;
+	unsigned int flags = 0;
 
-	if (ws->state == WS_STATE_HANDSHAKE_WRITE)
+	if (ws->state == WS_STATE_CONNECTING || ws->state == WS_STATE_HANDSHAKE_WRITE) {
 		flags = ULOOP_WRITE;
-	else if (ws->ctx && wslay_event_want_write(ws->ctx))
-		flags |= ULOOP_WRITE;
+	}
+	else if (ws->state == WS_STATE_HANDSHAKE_READ) {
+		flags = ULOOP_READ;
+	}
+	else if (ws->ctx) {
+		if (wslay_event_get_read_enabled(ws->ctx))
+			flags |= ULOOP_READ;
 
-	uloop_fd_add(&ws->ufd, flags);
+		if (wslay_event_want_write(ws->ctx))
+			flags |= ULOOP_WRITE;
+	}
+
+	if (flags)
+		uloop_fd_add(&ws->ufd, flags);
+	else
+		uloop_fd_delete(&ws->ufd);
 }
 
 static void
@@ -686,7 +751,17 @@ ws_check_lifecycle(uc_websocket_t *ws)
 	if (ws->state != WS_STATE_OPEN && ws->state != WS_STATE_CLOSING)
 		return;
 
-	if (ws->eof && !wslay_event_get_close_received(ws->ctx)) {
+	/* entering the closing phase: either the peer started the close
+	 * handshake, or wslay disabled reads after queueing an automatic
+	 * close reply (oversized message, protocol error, ...) */
+	if (ws->state == WS_STATE_OPEN && ws->ctx &&
+	    (!wslay_event_get_read_enabled(ws->ctx) ||
+	     wslay_event_get_close_received(ws->ctx))) {
+		ws->state = WS_STATE_CLOSING;
+		uloop_timeout_set(&ws->timeout, WS_CLOSE_TIMEOUT);
+	}
+
+	if ((ws->eof || ws->io_errno) && !wslay_event_get_close_received(ws->ctx)) {
 		ws_emit_error(ws, ws->io_errno
 			? strerror(ws->io_errno) : "connection closed unexpectedly");
 		ws_emit_close(ws, 1006, "");
@@ -694,8 +769,30 @@ ws_check_lifecycle(uc_websocket_t *ws)
 		return;
 	}
 
+	/* once our close frame is sent and no further reads are possible
+	 * (wslay disabled reads after a protocol violation or oversized
+	 * message), the close handshake cannot progress any further */
+	if (ws->ctx && wslay_event_get_close_sent(ws->ctx) &&
+	    !wslay_event_get_read_enabled(ws->ctx)) {
+		int code = ws->close_code;
+		const char *reason = ws->close_reason;
+
+		if (!wslay_event_get_close_received(ws->ctx)) {
+			code = (int)wslay_event_get_status_code_sent(ws->ctx);
+
+			if (code < 1000 || code > 4999)
+				code = 1006;
+
+			reason = "";
+		}
+
+		ws_emit_close(ws, code, reason);
+		ws_teardown(ws);
+		return;
+	}
+
 	if (wslay_event_get_close_received(ws->ctx) && wslay_event_get_close_sent(ws->ctx)) {
-		ws_emit_close(ws, (int)wslay_event_get_status_code_received(ws->ctx), "");
+		ws_emit_close(ws, ws->close_code, ws->close_reason);
 		ws_teardown(ws);
 	}
 }
@@ -713,6 +810,7 @@ ws_flush(uc_websocket_t *ws)
 	if (rv < 0) {
 		ws_emit_error(ws, rv == WSLAY_ERR_NOMEM
 			? "out of memory" : "send failure");
+		ws_emit_close(ws, 1006, "");
 		ws_teardown(ws);
 		return;
 	}
@@ -724,21 +822,29 @@ ws_flush(uc_websocket_t *ws)
 static bool
 ws_validate_handshake(uc_websocket_t *ws)
 {
-	const char *eol, *p = ws->hs_buf;
+	const char *eol, *end, *p = ws->hs_buf;
 	bool have_upgrade = false, have_connection = false, have_accept = false;
 	char line[256];
 	size_t len;
 
-	if (ws->hs_len < 4 || memcmp(ws->hs_buf + ws->hs_len - 4, "\r\n\r\n", 4))
+	/* data may be pipelined behind the handshake response, so split
+	 * at the header terminator instead of requiring it at the end */
+	end = strstr(ws->hs_buf, "\r\n\r\n");
+
+	if (!end || ws->hs_len < 4 ||
+	    (size_t)(end + 4 - ws->hs_buf) > ws->hs_len)
 		return false;
+
+	ws->hs_pendoff = (size_t)(end + 4 - ws->hs_buf);
+	ws->hs_pendlen = ws->hs_len - ws->hs_pendoff;
 
 	if (strncmp(p, "HTTP/1.1 101", 12) && strncmp(p, "HTTP/1.0 101", 12))
 		return false;
 
-	while (*p && (size_t)(p - ws->hs_buf) < ws->hs_len) {
+	while (*p && p < end) {
 		eol = strstr(p, "\r\n");
 
-		if (!eol)
+		if (!eol || eol > end)
 			break;
 
 		len = (size_t)(eol - p);
@@ -796,10 +902,14 @@ ws_established(uc_websocket_t *ws)
 
 	ws_invoke(ws, 0, NULL, 0);
 
-	if (ws->state == WS_STATE_OPEN)
+	if (ws->state == WS_STATE_OPEN || ws->state == WS_STATE_CLOSING)
 		ws_update_poll(ws);
-	else if (ws->state == WS_STATE_CLOSING)
-		ws_flush(ws);
+
+	/* data pipelined behind the handshake response is already waiting
+	 * in hs_buf; no further read event would ever fire, so drain it
+	 * through wslay right away */
+	if (ws->hs_pendlen && ws->state == WS_STATE_OPEN)
+		ws_readable(ws);
 }
 
 static void
@@ -903,13 +1013,25 @@ ws_readable(uc_websocket_t *ws)
 		return;
 	}
 
+	ws->in_recv = true;
 	rv = wslay_event_recv(ws->ctx);
+	ws->in_recv = false;
 
 	if (rv < 0 && !ws->eof && !ws->io_errno) {
 		ws_emit_error(ws, rv == WSLAY_ERR_NOMEM
 			? "out of memory" : "receive failure");
 		ws_teardown(ws);
 		return;
+	}
+
+	/* flush data queued from within message callbacks now that the
+	 * receive operation completed; a fatal send error tears the
+	 * connection down safely here */
+	if (ws->need_flush && !ws->dispatching) {
+		ws->need_flush = false;
+
+		if (ws->state == WS_STATE_OPEN || ws->state == WS_STATE_CLOSING)
+			ws_flush(ws);
 	}
 
 	ws_check_lifecycle(ws);
@@ -952,7 +1074,18 @@ ws_timeout_cb(struct uloop_timeout *timeout)
 {
 	uc_websocket_t *ws = container_of(timeout, uc_websocket_t, timeout);
 
-	ws_emit_error(ws, "connection or handshake timeout");
+	if (ws->state == WS_STATE_CLOSING && ws->ctx) {
+		ws_emit_error(ws, "close handshake timeout");
+		ws_emit_close(ws, wslay_event_get_close_received(ws->ctx)
+			? ws->close_code : 1006,
+			wslay_event_get_close_received(ws->ctx)
+				? ws->close_reason : "");
+	}
+	else {
+		ws_emit_error(ws, "connection or handshake timeout");
+		ws_emit_close(ws, 1006, "");
+	}
+
 	ws_teardown(ws);
 }
 
@@ -1088,14 +1221,23 @@ uc_ws_on(uc_vm_t *vm, size_t nargs)
 	if (!ws)
 		err_return(EINVAL);
 
+	if (!ws->obj || ws->state == WS_STATE_CLOSED)
+		err_return(ENOTCONN);
+
 	name = ucv_string_get(event);
 
-	if (!name || (slot = ws_event_slot(name)) < 0)
+	if (!name || (slot = ws_event_slot(name)) < 0) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 			"Event must be one of 'open', 'message', 'close' or 'error'");
 
-	if (!ucv_is_callable(fn))
+		return NULL;
+	}
+
+	if (!ucv_is_callable(fn)) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Callback must be a function");
+
+		return NULL;
+	}
 
 	ucv_resource_value_set(ws->obj, slot, ucv_get(fn));
 
@@ -1163,7 +1305,10 @@ uc_ws_send(uc_vm_t *vm, size_t nargs)
 	if (rv < 0)
 		err_return(rv == WSLAY_ERR_NO_MORE_MSG ? EPIPE : ENOMEM);
 
-	ws_flush(ws);
+	if (ws->dispatching)
+		ws->need_flush = true;
+	else
+		ws_flush(ws);
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -1188,9 +1333,12 @@ uc_ws_ping(uc_vm_t *vm, size_t nargs)
 		payload = ucv_string_get(data);
 		len = ucv_string_length(data);
 
-		if (len > 125)
+		if (len > 125) {
 			uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				"Ping payload must not exceed 125 bytes");
+
+			return NULL;
+		}
 	}
 
 	msg.opcode = WSLAY_PING;
@@ -1202,7 +1350,10 @@ uc_ws_ping(uc_vm_t *vm, size_t nargs)
 	if (rv < 0)
 		err_return(rv == WSLAY_ERR_NO_MORE_MSG ? EPIPE : ENOMEM);
 
-	ws_flush(ws);
+	if (ws->dispatching)
+		ws->need_flush = true;
+	else
+		ws_flush(ws);
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -1221,38 +1372,60 @@ uc_ws_close(uc_vm_t *vm, size_t nargs)
 	if (!ws)
 		err_return(EINVAL);
 
-	if (ws->state != WS_STATE_OPEN && ws->state != WS_STATE_CLOSING)
+	if (ws->state == WS_STATE_CLOSED)
 		err_return(ENOTCONN);
+
+	/* close() while the connection is still being established aborts it */
+	if (ws->state != WS_STATE_OPEN && ws->state != WS_STATE_CLOSING) {
+		ws_emit_close(ws, 1006, "");
+		ws_teardown(ws);
+		ok_return(ucv_boolean_new(true));
+	}
+
+	/* subsequent close() calls while already closing are no-ops */
+	if (ws->state == WS_STATE_CLOSING)
+		ok_return(ucv_boolean_new(true));
 
 	if (code) {
 		errno = 0;
 		n = ucv_int64_get(code);
 
-		if (errno || n < 1000 || n > 4999)
+		if (errno || n < 1000 || n > 4999) {
 			uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				"Close code must be between 1000 and 4999");
+
+			return NULL;
+		}
 	}
 
 	if (reason && ucv_type(reason) == UC_STRING) {
 		r = ucv_string_get(reason);
 
-		if (strlen(r) > 123 || strchr(r, '\r') || strchr(r, '\n'))
+		if (strlen(r) > 123 || strchr(r, '\r') || strchr(r, '\n')) {
 			uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 				"Close reason must not exceed 123 bytes or contain line breaks");
+
+			return NULL;
+		}
 	}
 
 	c = (uint16_t)n;
 
 	ws->state = WS_STATE_CLOSING;
 
+	uloop_timeout_set(&ws->timeout, WS_CLOSE_TIMEOUT);
+
 	rv = wslay_event_queue_close(ws->ctx, c, (const uint8_t *)r, strlen(r));
 
 	if (rv < 0)
 		err_return(EPIPE);
 
-	ws_flush(ws);
-
-	ws_check_lifecycle(ws);
+	if (ws->dispatching)
+		ws->need_flush = true;
+	else {
+		ws_flush(ws);
+		ws_check_lifecycle(ws);
+	}
 
 	ok_return(ucv_boolean_new(true));
 }
@@ -1309,7 +1482,7 @@ uc_ws_connect(uc_vm_t *vm, size_t nargs)
 {
 	uc_value_t *url = uc_fn_arg(0);
 	uc_value_t *options = uc_fn_arg(1);
-	uc_value_t *hv;
+	uc_value_t *hv, *hdrs = NULL;
 	struct addrinfo hints, *res = NULL, *rp;
 	uc_websocket_t *ws = NULL;
 	char *host = NULL, *path = NULL;
@@ -1318,13 +1491,18 @@ uc_ws_connect(uc_vm_t *vm, size_t nargs)
 	int64_t timeout = WS_DEFAULT_TIMEOUT;
 	uint64_t maxmsg = WS_DEFAULT_MAX_MSG;
 
-	if (ucv_type(url) != UC_STRING)
+	if (ucv_type(url) != UC_STRING) {
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "URL must be a string");
+
+		return NULL;
+	}
 
 	if (!ws_parse_url(ucv_string_get(url), &host, &port, &path, &tls)) {
 		free(host);
 		free(path);
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Invalid WebSocket URL");
+
+		return NULL;
 	}
 
 	if (tls) {
@@ -1332,6 +1510,8 @@ uc_ws_connect(uc_vm_t *vm, size_t nargs)
 		free(path);
 		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
 			"TLS (wss://) is not supported yet");
+
+		return NULL;
 	}
 
 	if (options && ucv_type(options) == UC_OBJECT) {
@@ -1355,6 +1535,8 @@ uc_ws_connect(uc_vm_t *vm, size_t nargs)
 			if (maxmsg > 16 * 1024 * 1024)
 				maxmsg = 16 * 1024 * 1024;
 		}
+
+		hdrs = ucv_object_get(options, "headers", NULL);
 	}
 
 	if (timeout && timeout < WS_MIN_TIMEOUT)
@@ -1416,8 +1598,10 @@ uc_ws_connect(uc_vm_t *vm, size_t nargs)
 		err_return(ENOMEM);
 	}
 
+	memset(ws, 0, sizeof(*ws));
+
 	ws->vm = vm;
-	ws->obj = hv;
+	ws->obj = ucv_get(hv);
 	ws->host = host;
 	ws->path = path;
 	ws->port = port;
@@ -1430,10 +1614,11 @@ uc_ws_connect(uc_vm_t *vm, size_t nargs)
 	ucv_resource_persistent_set(ws->obj, true);
 
 	ws->hs_req = ws_build_request(vm, ws,
-		options && ucv_type(options) == UC_OBJECT ? options : NULL);
+		(hdrs && ucv_type(hdrs) == UC_OBJECT) ? hdrs : NULL);
 
 	if (!ws->hs_req) {
 		ws_teardown(ws);
+		ucv_put(hv);
 		err_return(EINVAL);
 	}
 
@@ -1443,6 +1628,7 @@ uc_ws_connect(uc_vm_t *vm, size_t nargs)
 
 	if (uloop_fd_add(&ws->ufd, ULOOP_WRITE) != 0) {
 		ws_teardown(ws);
+		ucv_put(hv);
 		err_return(errno ? errno : EINVAL);
 	}
 
@@ -1452,7 +1638,7 @@ uc_ws_connect(uc_vm_t *vm, size_t nargs)
 	if (immediate)
 		ws_handshake_write(ws);
 
-	ok_return(ws->obj);
+	ok_return(hv);
 }
 
 /* ---------------------------------------------------------------------- */
