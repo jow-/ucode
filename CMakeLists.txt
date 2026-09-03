@@ -22,7 +22,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
-add_compile_definitions( _GNU_SOURCE )
+add_compile_definitions( _GNU_SOURCE UCODE_INTERNAL )
 add_compile_options(
   -Wall
   -Werror
