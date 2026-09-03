@@ -325,6 +325,11 @@ typedef struct {
 	size_t stackframe;
 	uc_value_t *ctx;
 	bool mcall, strict;
+	/* number of tail calls that reused this frame, i.e. the number of call
+	 * frames collapsed into it by tail call optimization. stored as a uint16_t
+	 * so it fits in the struct's trailing padding and does not change its size,
+	 * preserving the ABI; the count saturates at 0xffff rather than wrapping */
+	uint16_t tco;
 } uc_callframe_t;
 
 uc_declare_vector(uc_callframes_t, uc_callframe_t);

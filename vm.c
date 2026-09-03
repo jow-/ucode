@@ -462,6 +462,10 @@ uc_vm_frame_dump(uc_vm_t *vm, uc_callframe_t *frame)
 	fprintf(stderr, "   |- ctx %s\n",
 		uc_vm_format_val(vm, frame->ctx));
 
+	if (frame->tco)
+		fprintf(stderr, "   |- tailcall (%u callframes omitted)\n",
+			frame->tco);
+
 	if (chunk) {
 		closure = frame->closure;
 		function = closure->function;
@@ -659,7 +663,9 @@ uc_vm_frame_reinit(uc_vm_t *vm, uc_closure_t *closure, uc_value_t *ctx,
 	vm->stack.count = blockdst + blocklen;
 
 	/* reinitialize the call frame in place; the receiver value of a method call
-	 * occupies the slot below the invoked function value */
+	 * occupies the slot below the invoked function value. the tco counter records
+	 * that this frame replaced the tail calling one, so stack traces can indicate
+	 * the collapsed frames */
 	frame->stackframe = blockdst + (mcall ? 1 : 0);
 	frame->cfunction = NULL;
 	frame->closure = closure;
@@ -667,6 +673,11 @@ uc_vm_frame_reinit(uc_vm_t *vm, uc_closure_t *closure, uc_value_t *ctx,
 	frame->ip = closure->function->chunk.entries;
 	frame->mcall = mcall;
 	frame->strict = closure->function->strict;
+
+	/* saturate rather than wrap, so the count stays a valid (if capped) number
+	 * of omitted frames */
+	if (frame->tco < 0xffff)
+		frame->tco++;
 
 	if (vm->trace)
 		uc_vm_frame_dump(vm, frame);
@@ -1105,6 +1116,11 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 
 			ucv_object_add(entry, "function", ucv_string_new(name));
 		}
+
+		/* record the number of call frames collapsed into this one by tail call
+		 * optimization, so consumers can indicate the missing frames */
+		if (frame->tco)
+			ucv_object_add(entry, "tco", ucv_int64_new(frame->tco));
 
 		if (!ucv_is_equal(last, entry)) {
 			ucv_array_push(stacktrace, entry);
