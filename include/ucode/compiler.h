@@ -114,7 +114,7 @@ typedef struct uc_compiler {
 	uc_function_t *function;
 	uc_parser_t *parser;
 	uc_program_t *program;
-	size_t scope_depth, current_srcpos, last_insn;
+	size_t scope_depth, current_srcpos, last_insn, try_depth, tailcall_off;
 } uc_compiler_t;
 
 typedef struct {
