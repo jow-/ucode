@@ -449,6 +449,40 @@ size_t ucv_object_length(uc_value_t *);
 	                 : 0);																		\
 	     entry##key = entry_next##key)
 
+/* dict (value-key object) detection via hash table equal_fn sentinel */
+extern int uc_dict_equal(const void *k1, const void *k2);
+
+static inline bool
+ucv_is_dict(uc_value_t *uv)
+{
+	uc_object_t *obj;
+
+	if (((uintptr_t)uv & 3) != 0 || uv == NULL || uv->type != UC_OBJECT)
+		return false;
+
+	obj = (uc_object_t *)uv;
+
+	return (obj->table->equal_fn == uc_dict_equal);
+}
+
+#define ucv_dict_foreach(dict, key, val)                                                       \
+	uc_value_t *key = NULL;                                                                      \
+	uc_value_t *val = NULL;                                                                      \
+	struct lh_entry *entry##key;                                                                 \
+	struct lh_entry *entry_next##key = NULL;                                                     \
+	for (entry##key = (ucv_type(dict) == UC_OBJECT) ? ((uc_object_t *)dict)->table->head : NULL; \
+	     (entry##key ? (key = (uc_value_t *)lh_entry_k(entry##key),                              \
+	                 val = (uc_value_t *)lh_entry_v(entry##key),                                 \
+	                 entry_next##key = entry##key->next, entry##key)                             \
+	              : 0);                                                                          \
+	     entry##key = entry_next##key)
+
+uc_value_t *ucv_dict_new(uc_vm_t *, uc_value_t *src);
+uc_value_t *ucv_dict_get(uc_vm_t *, uc_value_t *, uc_value_t *);
+uc_value_t *ucv_dict_set(uc_vm_t *, uc_value_t *, uc_value_t *, uc_value_t *);
+bool ucv_dict_delete(uc_vm_t *, uc_value_t *, uc_value_t *);
+size_t ucv_dict_length(uc_value_t *);
+
 uc_value_t *ucv_cfunction_new(const char *, uc_cfn_ptr_t);
 
 uc_value_t *ucv_closure_new(uc_vm_t *, uc_function_t *, bool);
