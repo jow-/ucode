@@ -92,3 +92,101 @@ In line 2, byte 19:
 
 
 -- End --
+
+
+Setting the prototype of a value to itself is rejected, as it would
+create a circular prototype chain causing endless loops in lookups.
+
+-- Testcase --
+{%
+	let a = {};
+	proto(a, a);
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Cannot set circular prototype
+In line 3, byte 12:
+
+ `    proto(a, a);`
+  Near here ----^
+
+
+-- End --
+
+
+Setting the prototype of a value to a value in its own prototype chain
+is rejected as well.
+
+-- Testcase --
+{%
+	let a = {};
+	let b = {};
+
+	proto(a, b);
+	proto(b, a);
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Cannot set circular prototype
+In line 6, byte 12:
+
+ `    proto(b, a);`
+  Near here ----^
+
+
+-- End --
+
+
+Longer circular chains are rejected as well.
+
+-- Testcase --
+{%
+	let a = {};
+	let b = {};
+	let c = {};
+
+	proto(a, b);
+	proto(b, c);
+	proto(c, a);
+%}
+-- End --
+
+-- Expect stderr --
+Type error: Cannot set circular prototype
+In line 8, byte 12:
+
+ `    proto(c, a);`
+  Near here ----^
+
+
+-- End --
+
+
+Reassigning a prototype to a value that is not in its chain remains
+allowed, including pointing at a former ancestor.
+
+-- Testcase --
+{%
+	let a = {};
+	let b = { x: 1 };
+	let c = { y: 2 };
+
+	proto(a, b);
+	proto(b, c);
+
+	// a -> b -> c, pointing a at c does not create a cycle
+	proto(a, c);
+
+	// b is no longer in a's chain, so a.x is null but a.y resolves
+	printf("%.J\n", [ a.x, a.y ]);
+%}
+-- End --
+
+-- Expect stdout --
+[
+	null,
+	2
+]
+-- End --

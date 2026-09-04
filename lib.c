@@ -4246,7 +4246,9 @@ uc_trace(uc_vm_t *vm, size_t nargs)
  * When invoked with a second prototype argument, the given `proto` value is set
  * as the prototype on the array or object in `val`.
  *
- * Throws an exception if the given prototype value is not an object.
+ * Throws an exception if the given prototype value is not an object, if the
+ * given value does not support prototypes, or if setting the prototype would
+ * create a circular prototype chain.
  *
  * @function module:core#proto
  *
@@ -4274,8 +4276,31 @@ uc_proto(uc_vm_t *vm, size_t nargs)
 
 	proto = uc_fn_arg(1);
 
-	if (!ucv_prototype_set(val, proto))
-		uc_vm_raise_exception(vm, EXCEPTION_TYPE, "Passed value is neither a prototype, resource or object");
+	/* Reject a circular prototype chain up front so we can raise a specific
+	 * error without invoking ucv_prototype_set(). */
+	if (ucv_type(proto) == UC_OBJECT) {
+		uc_value_t *p;
+
+		for (p = proto; p; p = ucv_prototype_get(p)) {
+			if (p == val) {
+				uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+					"Cannot set circular prototype");
+
+				return NULL;
+			}
+		}
+	}
+
+	/* ucv_prototype_set() takes ownership of the passed reference, so hand it
+	 * an owned ref (uc_fn_arg() only borrows from the stack). Release the
+	 * extra ref if the set is rejected so it is not leaked. */
+	if (!ucv_prototype_set(val, ucv_get(proto))) {
+		ucv_put(proto);
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+			"Passed value is neither a prototype, resource or object");
+
+		return NULL;
+	}
 
 	ucv_get(proto);
 
