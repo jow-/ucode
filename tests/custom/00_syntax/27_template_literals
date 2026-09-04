@@ -100,3 +100,23 @@ In line 2, byte 13:
 
 
 -- End --
+
+
+7. Adjacent template literals are not implicitly concatenated and require an
+   explicit operator between them.
+
+-- Testcase --
+{{
+	`foo` `bar`
+}}
+-- End --
+
+-- Expect stderr --
+Syntax error: Adjacent template literals are not implicitly concatenated
+In line 2, byte 8:
+
+ `    `foo` `bar``
+            ^-- Near here
+
+
+-- End --

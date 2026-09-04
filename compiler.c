@@ -1862,7 +1862,21 @@ uc_compiler_compile_template(uc_compiler_t *compiler)
 	uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
 
 	while (true) {
-		if (uc_compiler_parse_match(compiler, TK_TEMPLATE)) {
+		if (uc_compiler_parse_check(compiler, TK_TEMPLATE)) {
+			/* a TK_TEMPLATE token only continues the current literal when the
+			 * previous one was left open by a `${...}` placeholder, in which
+			 * case the lexer emits a TK_PLACEH token in between; two adjacent
+			 * TK_TEMPLATE tokens are separate literals and must be joined
+			 * with an explicit operator
+			 */
+			if (compiler->parser->prev.type == TK_TEMPLATE) {
+				uc_compiler_syntax_error(compiler, compiler->parser->curr.pos,
+					"Adjacent template literals are not implicitly concatenated");
+
+				return;
+			}
+
+			uc_compiler_parse_advance(compiler);
 			uc_compiler_emit_constant(compiler, compiler->parser->prev.pos, compiler->parser->prev.uv);
 			uc_compiler_emit_insn(compiler, 0, I_ADD);
 		}
