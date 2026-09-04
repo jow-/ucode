@@ -129,6 +129,7 @@ uc_compiler_init(uc_compiler_t *compiler, const char *name, uc_source_t *source,
 	uc_function_t *fn;
 
 	compiler->scope_depth = 0;
+	compiler->try_depth = 0;
 
 	compiler->program = program;
 	compiler->function = uc_program_function_new(program, name, source, srcpos);
@@ -144,6 +145,7 @@ uc_compiler_init(uc_compiler_t *compiler, const char *name, uc_source_t *source,
 	compiler->parent = NULL;
 
 	compiler->current_srcpos = srcpos;
+	compiler->tailcall_off = SIZE_MAX;
 
 	fn = (uc_function_t *)compiler->function;
 	fn->strict = strict;
@@ -580,6 +582,54 @@ uc_compiler_set_u32(uc_compiler_t *compiler, size_t off, uint32_t n)
 	chunk->entries[off + 1] = (n / 0x10000) % 0x100;
 	chunk->entries[off + 2] = (n / 0x100) % 0x100;
 	chunk->entries[off + 3] = n % 0x100;
+}
+
+/* Returns true if the most recently emitted instruction sequence is a function
+ * call whose operands end exactly at the current end of the chunk, i.e. the call
+ * is the last thing compiled before the upcoming return. */
+static bool
+uc_compiler_last_insn_is_tailcall(uc_compiler_t *compiler)
+{
+	/* tailcall_off records the chunk end right after the last emitted call's
+	 * operands; it is a tail call candidate only if nothing has been compiled
+	 * since, so it must equal the current chunk end */
+	return compiler->tailcall_off ==
+		uc_compiler_current_chunk(compiler)->count;
+}
+
+/* Invoking a function in tail position allows the VM to reuse the current call
+ * frame for the callee, which permits unbounded tail recursion.
+ *
+ * A function call in return position is marked by emitting a 0x00 marker byte
+ * immediately after the enclosing I_RETURN. The VM recognizes a call whose
+ * operands are followed by I_RETURN + marker as a tail call and reuses the
+ * current frame for the callee.
+ *
+ * The marker is placed after the return so that neither VM ever executes it:
+ * older VMs return (and unwind) before reaching it, and the optimized VM jumps
+ * to the callee at the call site. It is therefore pure data, and the emitted
+ * bytecode remains compatible with interpreters predating tail call
+ * optimization.
+ *
+ * uc_compiler_tailcall_pending() must be called before the I_RETURN is emitted
+ * (while the call is still the last instruction); if it returns true, the
+ * caller must emit the I_RETURN and then uc_compiler_emit_tailcall_marker(). */
+
+static bool
+uc_compiler_tailcall_pending(uc_compiler_t *compiler)
+{
+	/* an enclosing try block might need to catch exceptions raised by the
+	 * invoked function, which requires the current frame to stay in place */
+	if (compiler->try_depth > 0)
+		return false;
+
+	return uc_compiler_last_insn_is_tailcall(compiler);
+}
+
+static void
+uc_compiler_emit_tailcall_marker(uc_compiler_t *compiler)
+{
+	uc_chunk_add(uc_compiler_current_chunk(compiler), 0x00, 0);
 }
 
 static size_t
@@ -1519,7 +1569,14 @@ uc_compiler_compile_arrowfn(uc_compiler_t *compiler, uc_value_t *args, bool rest
 	}
 	else {
 		uc_compiler_parse_precedence(&fncompiler, P_ASSIGN);
+
+		/* invoke a function call in tail position to avoid growing the stack */
+		bool tailcall = uc_compiler_tailcall_pending(&fncompiler);
+
 		uc_compiler_emit_insn(&fncompiler, 0, I_RETURN);
+
+		if (tailcall)
+			uc_compiler_emit_tailcall_marker(&fncompiler);
 	}
 
 	/* emit load instruction for function value */
@@ -1764,6 +1821,10 @@ uc_compiler_compile_call(uc_compiler_t *compiler)
 		uc_compiler_emit_u16(compiler, 0, nargs - spreads.entries[i] - 1);
 
 	uc_vector_clear(&spreads);
+
+	/* remember the chunk end right after the invocation's operands for potential
+	 * tail call optimization */
+	compiler->tailcall_off = uc_compiler_current_chunk(compiler)->count;
 
 	compiler->patchlist->depth = uc_compiler_current_chunk(compiler)->count;
 }
@@ -3153,6 +3214,10 @@ uc_compiler_compile_try(uc_compiler_t *compiler)
 	/* Try block ------------------------------------------------------------ */
 	uc_compiler_enter_scope(compiler);
 
+	/* while compiling the protected block, tail calls are avoided since the
+	 * current frame must be kept around to catch callee exceptions */
+	compiler->try_depth++;
+
 	uc_compiler_parse_consume(compiler, TK_LBRACE);
 
 	while (!uc_compiler_parse_check(compiler, TK_RBRACE) &&
@@ -3160,6 +3225,8 @@ uc_compiler_compile_try(uc_compiler_t *compiler)
 		uc_compiler_compile_declaration(compiler);
 
 	uc_compiler_parse_consume(compiler, TK_RBRACE);
+
+	compiler->try_depth--;
 
 	uc_compiler_leave_scope(compiler);
 
@@ -3266,7 +3333,13 @@ uc_compiler_compile_return(uc_compiler_t *compiler)
 	else
 		uc_chunk_pop(chunk);
 
+	/* invoke a function call in tail position to avoid growing the stack */
+	bool tailcall = uc_compiler_tailcall_pending(compiler);
+
 	uc_compiler_emit_insn(compiler, compiler->parser->prev.pos, I_RETURN);
+
+	if (tailcall)
+		uc_compiler_emit_tailcall_marker(compiler);
 }
 
 static void
@@ -4088,7 +4161,15 @@ uc_compile_from_source(uc_parse_config_t *config, uc_source_t *source, uc_progra
 
 	if (!compiler.function->module && last_statement_type == TK_SCOL) {
 		uc_chunk_pop(uc_compiler_current_chunk(&compiler));
+
+		/* invoke a trailing call statement in tail position */
+		bool tailcall = uc_compiler_tailcall_pending(&compiler);
+
 		uc_compiler_emit_insn(&compiler, 0, I_RETURN);
+
+		if (tailcall)
+			uc_compiler_emit_tailcall_marker(&compiler);
+
 		last_statement_type = TK_RETURN;
 	}
 

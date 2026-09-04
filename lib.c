@@ -171,7 +171,7 @@ uc_source_context_format(uc_stringbuf_t *buf, uc_source_t *src, size_t off, bool
 bool
 uc_error_context_format(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stacktrace, size_t off)
 {
-	uc_value_t *e, *fn, *file, *line, *byte;
+	uc_value_t *e, *fn, *file, *line, *byte, *tco;
 	const char *path;
 	size_t idx;
 
@@ -179,6 +179,7 @@ uc_error_context_format(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stack
 		e = ucv_array_get(stacktrace, idx);
 		fn = ucv_object_get(e, "function", NULL);
 		file = ucv_object_get(e, "filename", NULL);
+		tco = ucv_object_get(e, "tco", NULL);
 
 		if (idx == 0) {
 			path = (file && strcmp(ucv_string_get(file), "[stdin]"))
@@ -213,6 +214,13 @@ uc_error_context_format(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stack
 			else
 				ucv_stringbuf_append(buf, "[C])\n");
 		}
+
+		/* indicate the call frames collapsed into this one by tail call
+		 * optimization, which are absent from the trace */
+		if (tco)
+			ucv_stringbuf_printf(buf,
+				"  (%" PRId64 " tail call frames omitted)\n",
+				ucv_int64_get(tco));
 	}
 
 	return uc_source_context_format(buf, src, off, false);

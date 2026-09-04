@@ -1,0 +1,333 @@
+Testing tail call optimization of function invocations in return position.
+
+
+1. Testing unbounded direct tail recursion.
+
+-- Expect stdout --
+done
+-- End --
+
+-- Testcase --
+{%
+	function count(n) {
+		if (n === 0)
+			return "done";
+
+		return count(n - 1);
+	}
+
+	print(count(200000), "\n");
+%}
+-- End --
+
+
+2. Testing tail recursive accumulator and mutual recursion.
+
+-- Expect stdout --
+125250
+even
+even
+-- End --
+
+-- Testcase --
+{%
+	function sum(n, acc) {
+		return n === 0 ? acc : sum(n - 1, acc + n);
+	}
+
+	let isEven, isOdd;
+
+	isEven = (n) => n === 0 ? true : isOdd(n - 1);
+	isOdd = (n) => n === 0 ? false : isEven(n - 1);
+
+	print(sum(500, 0), "\n");
+	print(isEven(100000) ? "even" : "odd", "\n");
+	print(isOdd(100000) ? "odd" : "even", "\n");
+%}
+-- End --
+
+
+3. Testing method invocation tail calls preserving the receiver.
+
+-- Expect stdout --
+called 4 times, counter=12
+-- End --
+
+-- Testcase --
+{%
+	let o = {
+		count: 0,
+		counter: 0,
+		inc(n) {
+			this.count++;
+			this.counter += n;
+
+			if (this.count < 4)
+				return this.inc(3);
+
+			return `called ${this.count} times, counter=${this.counter}`;
+		}
+	};
+
+	print(o.inc(3), "\n");
+%}
+-- End --
+
+
+4. Testing tail calls in conditional and logical expressions.
+
+-- Expect stdout --
+yes no or and nullish y g -
+-- End --
+
+-- Testcase --
+{%
+	function id(x) {
+		return x;
+	}
+
+	function pick(n) {
+		return n ? id("yes") : id("no");
+	}
+
+	function logical(n) {
+		return n || id("or");
+	}
+
+	function coalesce(n) {
+		return n ?? id("nullish");
+	}
+
+	function optional(fn) {
+		return fn?.("g");
+	}
+
+	print(pick(1), " ", pick(0), " ",
+	      logical(null), " ", logical("and"), " ",
+	      coalesce(null), " ", coalesce("y"), " ",
+	      optional(id), " ", optional(null) ?? "-",
+	"\n");
+%}
+-- End --
+
+
+5. Testing tail calls with spread, missing and excess arguments.
+
+-- Expect stdout --
+6 12 0 nob 5
+-- End --
+
+-- Testcase --
+{%
+	function total(...vals) {
+		let r = 0;
+
+		for (let v in vals)
+			r += v;
+
+		return r;
+	}
+
+	function defaults(a, b, c) {
+		return b ?? "nob";
+	}
+
+	function nargs(...vals) {
+		return length(vals);
+	}
+
+	function spread(arr, n) {
+		return n === 0 ? total(...arr) : spread(arr, n - 1);
+	}
+
+	function mixed(arr, n) {
+		return n === 0 ? total(1, ...arr, 6) : mixed(arr, n - 1);
+	}
+
+	function empty(n) {
+		return n === 0 ? total() : empty(n - 1);
+	}
+
+	function missing(n) {
+		return n === 0 ? defaults() : missing(n - 1);
+	}
+
+	function excess(n) {
+		return n === 0 ? nargs(1, 2, 3, 4, 5) : excess(n - 1);
+	}
+
+	print(spread([1, 2, 3], 10000), " ",
+	      mixed([2, 3], 10000), " ",
+	      empty(10000), " ",
+	      missing(10000), " ",
+	      excess(10000),
+	"\n");
+%}
+-- End --
+
+
+6. Testing that tail calls do not disturb enclosing local variables.
+
+-- Expect stdout --
+T1000:1 { "tag": "T1000" }
+-- End --
+
+-- Testcase --
+{%
+	function inner(o, arr, n) {
+		if (n === 0)
+			return `${o.tag}:${arr[1]} ${o}`;
+
+		arr[1] = n;
+
+		return inner(o, arr, n - 1);
+	}
+
+	function outer(n) {
+		let obj = { tag: `T${n}` };
+		let list = [n];
+
+		return inner(obj, list, 5);
+	}
+
+	print(outer(1000), "\n");
+%}
+-- End --
+
+
+7. Testing tail calls of closures over locals of the replaced frame.
+
+-- Expect stdout --
+#7 #100000 done
+-- End --
+
+-- Testcase --
+{%
+	function mk(n) {
+		let label = `#${n}`;
+		let walk;
+
+		walk = (k) => k === 0 ? label : walk(k - 1);
+
+		return n === 0 ? "done" : walk(n);
+	}
+
+	print(mk(7), " ", mk(100000), " ", mk(0), "\n");
+%}
+-- End --
+
+
+8. Testing tail calls through callback invocation.
+
+-- Expect stdout --
+applied deep-done
+-- End --
+
+-- Testcase --
+{%
+	function apply(cb, n) {
+		return cb(n);
+	}
+
+	function repeater(n) {
+		return apply((x) => x === 0 ? "applied" : repeater(x - 1), n);
+	}
+
+	function tramp(n, f) {
+		return n === 0 ? f() : tramp(n - 1, f);
+	}
+
+	print(repeater(50000), " ", tramp(50000, () => "deep-done"), "\n");
+%}
+-- End --
+
+
+9. Testing exceptions raised by tail called functions.
+
+-- Expect stdout --
+caught: boom in-try: recovered
+-- End --
+
+-- Testcase --
+{%
+	function fail() {
+		die("boom");
+	}
+
+	function deep(n) {
+		return n === 0 ? fail() : deep(n - 1);
+	}
+
+	function direct(n) {
+		return n === 0 ? die("nope") : direct(n - 1);
+	}
+
+	function recover(n) {
+		try {
+			return direct(n);
+		}
+		catch (e) {
+			return "recovered";
+		}
+	}
+
+	function intry(n) {
+		try {
+			return deep(n);
+		}
+		catch (e) {
+			return `caught: ${e.message} in-try: ${recover(n)}`;
+		}
+	}
+
+	print(intry(20000), "\n");
+%}
+-- End --
+
+
+10. Testing that non-tail invocations still hit the recursion limit.
+
+-- Expect stderr --
+Runtime error: Too much recursion
+In tailrec(), line 3, byte 11:
+  called from anonymous function ([stdin]:6:10)
+
+ `        tailrec();`
+  Near here ------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	function tailrec() {
+		tailrec();
+	}
+
+	tailrec();
+%}
+-- End --
+
+
+11. Testing that calls contributing to an expression still hit the recursion limit.
+
+-- Expect stderr --
+Runtime error: Too much recursion
+In tailrec(), line 3, byte 18:
+  called from anonymous function ([stdin]:6:10)
+
+ `        return tailrec() + 1;`
+  Near here -------------^
+
+
+-- End --
+
+-- Testcase --
+{%
+	function tailrec() {
+		return tailrec() + 1;
+	}
+
+	tailrec();
+%}
+-- End --

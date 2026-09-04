@@ -122,6 +122,9 @@ static uc_value_t *
 uc_vm_callframe_pop(uc_vm_t *vm);
 
 static void
+uc_vm_close_upvals(uc_vm_t *vm, size_t slot);
+
+static void
 uc_vm_reset_callframes(uc_vm_t *vm)
 {
 	while (vm->callframes.count > 0)
@@ -459,6 +462,10 @@ uc_vm_frame_dump(uc_vm_t *vm, uc_callframe_t *frame)
 	fprintf(stderr, "   |- ctx %s\n",
 		uc_vm_format_val(vm, frame->ctx));
 
+	if (frame->tco)
+		fprintf(stderr, "   |- tailcall (%u callframes omitted)\n",
+			frame->tco);
+
 	if (chunk) {
 		closure = frame->closure;
 		function = closure->function;
@@ -601,8 +608,88 @@ uc_vm_call_native(uc_vm_t *vm, uc_value_t *ctx, uc_cfunction_t *fptr, bool mcall
 		ucv_put(res);
 }
 
+/* Replaces the current call frame by an invocation frame for the given closure,
+ * reusing the stack slots formerly occupied by the current frame.
+ *
+ * Since neither the call frame vector nor the value stack grow when invoking the
+ * callee, this allows unbounded tail recursion.
+ *
+ * On entry, the stack holds the invoked function value and its arguments at the
+ * top, optionally preceded by the receiver value of a method invocation. */
+static void
+uc_vm_frame_reinit(uc_vm_t *vm, uc_closure_t *closure, uc_value_t *ctx,
+                   bool mcall, size_t nargs)
+{
+	size_t i, blocksrc, blockdst, blocklen, blockofs;
+	uc_callframe_t *frame = uc_vm_current_frame(vm);
+	uc_value_t *oldclosure, *oldctx, *val;
+
+	/* the slot the invoking code expects the eventual return value at, which is
+	 * the slot of the current frame's function value, or - for method calls - of
+	 * the receiver value immediately below it */
+	blockdst = frame->stackframe - (frame->mcall ? 1 : 0);
+
+	/* number of stack slots occupied by the receiver, function and arguments */
+	blocklen = nargs + 1 + (mcall ? 1 : 0);
+
+	/* slot of the invoked function value, or of the receiver value preceding it */
+	blocksrc = vm->stack.count - blocklen;
+
+	/* the value block is relocated towards the start of the stack, so the slots
+	 * it occupies are always read before being overwritten */
+	blockofs = blocksrc - blockdst;
+
+	/* close upvalues referring to the current frame's stack slots before overwriting them */
+	uc_vm_close_upvals(vm, frame->stackframe);
+
+	/* remember the value references owned by the current frame */
+	oldclosure = frame->closure ? &frame->closure->header : NULL;
+	oldctx = frame->ctx;
+
+	/* move receiver, function value and arguments down into the slots of the frame
+	 * being replaced, releasing the local variable, temporary and receiver values
+	 * formerly held by them and clearing stale slots left above the new frame */
+	for (i = blockdst; i < vm->stack.count; i++) {
+		val = (i - blockdst < blocklen) ? vm->stack.entries[i + blockofs] : NULL;
+
+		/* the slot holds a value owned by the current frame unless it is part of
+		 * the value block being relocated */
+		if (i < blocksrc)
+			ucv_put(vm->stack.entries[i]);
+
+		vm->stack.entries[i] = val;
+	}
+
+	vm->stack.count = blockdst + blocklen;
+
+	/* reinitialize the call frame in place; the receiver value of a method call
+	 * occupies the slot below the invoked function value. the tco counter records
+	 * that this frame replaced the tail calling one, so stack traces can indicate
+	 * the collapsed frames */
+	frame->stackframe = blockdst + (mcall ? 1 : 0);
+	frame->cfunction = NULL;
+	frame->closure = closure;
+	frame->ctx = ctx;
+	frame->ip = closure->function->chunk.entries;
+	frame->mcall = mcall;
+	frame->strict = closure->function->strict;
+
+	/* saturate rather than wrap, so the count stays a valid (if capped) number
+	 * of omitted frames */
+	if (frame->tco < 0xffff)
+		frame->tco++;
+
+	if (vm->trace)
+		uc_vm_frame_dump(vm, frame);
+
+	/* release the references formerly owned by the current frame */
+	ucv_put(oldclosure);
+	ucv_put(oldctx);
+}
+
 static bool
-uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, size_t argspec)
+uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall,
+                   size_t argspec, bool tail)
 {
 	size_t i, j, stackoff, nargs = argspec & 0xffff;
 	size_t nspreads = (argspec >> 16) & 0x7fff;
@@ -613,8 +700,8 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 	uint16_t slot, tmp;
 	char *s;
 
-	/* XXX: make dependent on stack size */
-	if (vm->callframes.count >= 1000) {
+	/* a tail invocation reuses the current frame, so it never grows the stack */
+	if (!tail && vm->callframes.count >= 1000) {
 		uc_vm_raise_exception(vm, EXCEPTION_RUNTIME, "Too much recursion");
 		ucv_put(ctx);
 		ucv_put(fno);
@@ -679,7 +766,9 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 		nargs = vm->stack.count - stackoff - 1;
 	}
 
-	/* is a native function */
+	/* is a native function; such functions are always invoked in a fresh frame,
+	 * even when requested as tail call, since the foreign code may rely on the
+	 * stack layout of an ordinary invocation */
 	if (ucv_type(fno) == UC_CFUNCTION) {
 		uc_vm_call_native(vm, ctx, (uc_cfunction_t *)fno, mcall, nargs);
 
@@ -727,6 +816,15 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall, s
 			for (i = function->nargs; i < nargs; i++)
 				ucv_put(uc_vm_stack_pop(vm));
 		}
+	}
+
+	/* tail call: reuse the current call frame instead of pushing a new one. The
+	 * number of values above the invoked function may differ from the encoded
+	 * argument count due to spread operations or excess argument handling */
+	if (tail) {
+		uc_vm_frame_reinit(vm, closure, ctx, mcall, vm->stack.count - stackoff - 1);
+
+		return true;
 	}
 
 	frame = uc_vector_push(&vm->callframes, {
@@ -1018,6 +1116,11 @@ uc_vm_capture_stacktrace(uc_vm_t *vm, size_t i)
 
 			ucv_object_add(entry, "function", ucv_string_new(name));
 		}
+
+		/* record the number of call frames collapsed into this one by tail call
+		 * optimization, so consumers can indicate the missing frames */
+		if (frame->tco)
+			ucv_object_add(entry, "tco", ucv_int64_new(frame->tco));
 
 		if (!ucv_is_equal(last, entry)) {
 			ucv_array_push(stacktrace, entry);
@@ -2542,19 +2645,29 @@ uc_vm_insn_close_upval(uc_vm_t *vm, uc_vm_insn_t insn)
 }
 
 static void
-uc_vm_insn_call(uc_vm_t *vm, uc_vm_insn_t insn)
+uc_vm_insn_call(uc_vm_t *vm)
 {
 	bool mcall = (vm->arg.u32 & 0x80000000);
 	size_t nargs = (vm->arg.u32 & 0xffff);
+	size_t nspreads = (vm->arg.u32 >> 16) & 0x7fff;
+	uint8_t *ip = uc_vm_current_frame(vm)->ip + 2 * nspreads;
 	uc_value_t *fno = uc_vm_stack_peek(vm, nargs);
 	uc_value_t *ctx = NULL;
+	bool tail;
 
 	if (!ucv_is_arrowfn(fno))
 		ctx = mcall ? uc_vm_stack_peek(vm, nargs + 1) : NULL;
 	else if (vm->callframes.count > 0)
 		ctx = uc_vm_current_frame(vm)->ctx;
 
-	uc_vm_call_function(vm, ucv_get(ctx), ucv_get(fno), mcall, vm->arg.u32);
+	/* a tail call is indicated by a 0x00 marker that the compiler emits
+	 * immediately after the enclosing I_RETURN. ip points just past the call's
+	 * operand span, so ip[0] is the I_RETURN and ip[1] the marker. Neither VM
+	 * executes the marker: older VMs return before reaching it, and this VM
+	 * jumps to the callee at the call site. */
+	tail = (ip[0] == I_RETURN) && (ip[1] == 0x00);
+
+	uc_vm_call_function(vm, ucv_get(ctx), ucv_get(fno), mcall, vm->arg.u32, tail);
 }
 
 static void
@@ -3100,7 +3213,7 @@ uc_vm_execute_chunk(uc_vm_t *vm)
 			break;
 
 		case I_CALL:
-			uc_vm_insn_call(vm, insn);
+			uc_vm_insn_call(vm);
 			break;
 
 		case I_RETURN:
@@ -3245,7 +3358,7 @@ uc_vm_call(uc_vm_t *vm, bool mcall, size_t nargs)
 
 	uc_vm_clear_exception(vm);
 
-	if (uc_vm_call_function(vm, ctx, fno, mcall, nargs & 0xffff)) {
+	if (uc_vm_call_function(vm, ctx, fno, mcall, nargs & 0xffff, false)) {
 		if (ucv_type(fno) != UC_CFUNCTION)
 			uc_vm_execute_chunk(vm);
 	}
