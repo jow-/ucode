@@ -1,0 +1,94 @@
+The `__set__` metamethod is consulted when a property is assigned which is
+not already an own property of the object. It is invoked as a method on the
+instance, with the key and the value as arguments.
+
+-- Testcase --
+{%
+	let log = [];
+
+	let o = proto({ own: 1 }, {
+		__set__(key, val) {
+			push(log, key + "=" + val);
+			rawset(this, "backing:" + key, val);
+		}
+	});
+
+	o.nw = 2;
+	o.own = 3;
+
+	print(rawget(o, "backing:nw"), " ", o.own, "\n");
+	print(log, "
+");
+%}
+-- End --
+
+-- Expect stdout --
+2 3
+[ "nw=2" ]
+-- End --
+
+An assignment evaluates to the assigned value, not to whatever the invoked
+`__set__` returns.
+
+-- Testcase --
+{%
+	let o = proto({}, {
+		__set__(key, val) {
+			rawset(this, key, val * 2);
+			return "ignored";
+		}
+	});
+
+	print((o.x = 21) === 21, " ", o.x, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+true 42
+-- End --
+
+Object literals store their members without dispatching `__set__`, including
+a metamethod of the very same object.
+
+-- Testcase --
+{%
+	let o = {
+		__set__(key, val) {
+			die("intercepted " + key);
+		},
+		a: 1,
+		b: null
+	};
+
+	print(o.a, " ", o.b === null, " ", length(keys(o)), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+1 true 3
+-- End --
+
+A null value is stored and read back like any other value.
+
+-- Testcase --
+{%
+	let o = proto({ n: null }, { __get__(key) { return "virtual"; } });
+
+	print(o.n === null, " ");
+
+	o.a = 1;
+	o.a = null;
+	print(o.a === null, " ", rawget(o, "a") === null, " ");
+
+	rawset(o, "b", null);
+	printf("%.J\n", keys(o));
+%}
+-- End --
+
+-- Expect stdout --
+true true true [
+	"n",
+	"a",
+	"b"
+]
+-- End --
