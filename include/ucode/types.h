@@ -624,6 +624,12 @@ ucv_to_unsigned(uc_value_t *v)
 	return u;
 }
 
+/* Walk the prototype chain of the given value (own keys of the value itself
+ * do not count) and return the first function stored under the given name,
+ * or NULL. The result is a function itself; a value providing a `__call__`
+ * method is not followed here. */
+uc_value_t *ucv_metamethod_lookup(uc_value_t *, const char *);
+
 static inline bool
 ucv_is_callable(uc_value_t *uv)
 {
@@ -631,6 +637,13 @@ ucv_is_callable(uc_value_t *uv)
 	case UC_CLOSURE:
 	case UC_CFUNCTION:
 		return true;
+
+	case UC_OBJECT:
+	case UC_ARRAY:
+	case UC_RESOURCE:
+		/* a value whose prototype chain provides a `__call__` method can be
+		 * invoked like a function itself */
+		return ucv_metamethod_lookup(uv, "__call__") != NULL;
 
 	default:
 		return false;
@@ -693,9 +706,21 @@ bool ucv_is_truish(uc_value_t *);
 
 bool ucv_compare(int, uc_value_t *, uc_value_t *, int *);
 
+/* Property accessors behind `foo.bar`, `foo.bar = x` and `delete foo.bar`.
+ * Own keys and numeric array indices take precedence, the __get__, __set__ and
+ * __delete__ metamethods of the accessed value serve as fallback; with a null
+ * vm nothing is dispatched. ucv_key_set() retains the value stored and returns
+ * a reference to it, or NULL if the store failed. */
 uc_value_t *ucv_key_get(uc_vm_t *, uc_value_t *, uc_value_t *);
 uc_value_t *ucv_key_set(uc_vm_t *, uc_value_t *, uc_value_t *, uc_value_t *);
 bool ucv_key_delete(uc_vm_t *, uc_value_t *, uc_value_t *);
+
+/* Raw counterparts, exposed to scripts as rawget(), rawset() and rawdelete():
+ * the escape hatch for a metamethod which needs to reach the storage below
+ * itself, since a __set__ doing this[key] = val would dispatch itself again. */
+uc_value_t *ucv_key_rawget(uc_vm_t *, uc_value_t *, uc_value_t *);
+uc_value_t *ucv_key_rawset(uc_vm_t *, uc_value_t *, uc_value_t *, uc_value_t *);
+bool ucv_key_rawdelete(uc_vm_t *, uc_value_t *, uc_value_t *);
 
 
 static inline bool

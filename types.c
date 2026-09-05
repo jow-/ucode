@@ -1596,6 +1596,29 @@ ucv_prototype_set(uc_value_t *uv, uc_value_t *proto)
 }
 
 uc_value_t *
+ucv_metamethod_lookup(uc_value_t *v, const char *name)
+{
+	uc_value_t *m;
+
+	/* The walk starts at the prototype, not at the instance: an own property
+	 * with a dunder name is plain data, not a metamethod. Honoring own keys
+	 * would let ordinary property writes (mixin loops, external data, a
+	 * function stored under a dunder name) silently change how the value
+	 * behaves; metamethods are an explicit, prototype-level mechanism. */
+	for (v = ucv_prototype_get(v); v; v = ucv_prototype_get(v)) {
+		m = ucv_object_get(v, name, NULL);
+
+		/* only functions count as metamethods; resolving a value carrying a
+		 * `__call__` method here would let self-referential ones recurse the C
+		 * stack without bound */
+		if (ucv_type(m) == UC_CLOSURE || ucv_type(m) == UC_CFUNCTION)
+			return m;
+	}
+
+	return NULL;
+}
+
+uc_value_t *
 ucv_property_get(uc_value_t *uv, const char *key)
 {
 	uc_value_t *val;
@@ -1822,13 +1845,19 @@ ucv_to_string_json_encoded(uc_stringbuf_t *pb, const char *s, size_t len, bool r
 static bool
 ucv_call_tostring(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 {
-	uc_value_t *proto = ucv_prototype_get(uv);
-	uc_value_t *tostr = ucv_object_get(proto, "tostring", NULL);
+	uc_value_t *tostr;
 	uc_value_t *str;
 	size_t l;
 	char *s;
 
-	if (!ucv_is_callable(tostr))
+	/* Generalized from the old direct-prototype `tostring` lookup: the full
+	 * chain is walked, `__tostring__` wins over the legacy `tostring` alias, a
+	 * strict superset of the old behavior */
+	tostr = ucv_metamethod_lookup(uv, "__tostring__");
+	if (tostr == NULL)
+		tostr = ucv_metamethod_lookup(uv, "tostring");
+
+	if (tostr == NULL)
 		return false;
 
 	uc_vm_stack_push(vm, ucv_get(uv));
@@ -2516,14 +2545,20 @@ ucv_key_to_index(uc_value_t *val)
 	return INT64_MIN;
 }
 
-uc_value_t *
-ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
+/*
+ * Raw key lookup: array index, resource type-proto, object prototype chain.
+ * Sets *found and returns the located value (or NULL). Does NOT resolve
+ * upvalue references and does NOT dispatch __get__ — those are layered on by
+ * the aware ucv_key_get().
+ */
+static uc_value_t *
+ucv_key_get_raw(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, bool *found)
 {
 	uc_value_t *o, *v = NULL;
-	bool found = false;
-	uc_upvalref_t *ref;
 	int64_t idx;
 	char *k;
+
+	*found = false;
 
 	if (ucv_type(scope) == UC_ARRAY) {
 		idx = ucv_key_to_index(key);
@@ -2533,11 +2568,11 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 
 		if (idx >= 0 && (uint64_t)idx < ucv_array_length(scope)) {
 			v = ucv_array_get(scope, idx);
-			found = true;
+			*found = true;
 		}
 	}
 
-	if (!found) {
+	if (!*found) {
 		k = ucv_key_to_string(vm, key);
 
 		/* Check resource type prototype first */
@@ -2551,31 +2586,31 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 				if (ext->hasproto) {
 					uc_value_t *inst_proto = *(uc_value_t **)(ext + 1);
 					if (inst_proto) {
-						v = ucv_object_get(inst_proto, k ? k : ucv_string_get(key), &found);
+						v = ucv_object_get(inst_proto, k ? k : ucv_string_get(key), found);
 					}
 				}
 
 				/* Then fall back to type prototype */
-				if (!found && ext->type && ext->type->proto) {
-					v = ucv_object_get(ext->type->proto, k ? k : ucv_string_get(key), &found);
+				if (!*found && ext->type && ext->type->proto) {
+					v = ucv_object_get(ext->type->proto, k ? k : ucv_string_get(key), found);
 				}
 			} else {
 				uc_resource_t *res = (uc_resource_t *)scope;
 				if (res->type && res->type->proto) {
-					v = ucv_object_get(res->type->proto, k ? k : ucv_string_get(key), &found);
+					v = ucv_object_get(res->type->proto, k ? k : ucv_string_get(key), found);
 				}
 			}
 		}
 
 		/* Then check object prototype chain */
-		if (!found) {
+		if (!*found) {
 			for (o = scope; o; o = ucv_prototype_get(o)) {
 				if (ucv_type(o) != UC_OBJECT)
 					continue;
 
-				v = ucv_object_get(o, k ? k : ucv_string_get(key), &found);
+				v = ucv_object_get(o, k ? k : ucv_string_get(key), found);
 
-				if (found)
+				if (*found)
 					break;
 			}
 		}
@@ -2583,9 +2618,15 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 		free(k);
 	}
 
-	/* Handle upvalue values in objects; under some specific circumstances
-	   objects may contain upvalues, this primarily happens with wildcard module
-	   import namespace dictionaries. */
+	return v;
+}
+
+/* Resolve an upvalue reference (if any) to its current value. */
+static uc_value_t *
+ucv_key_resolve_upval(uc_vm_t *vm, uc_value_t *v)
+{
+	uc_upvalref_t *ref;
+
 #ifdef __clang_analyzer__
 	/* Clang static analyzer does not understand that ucv_type(NULL) can't
 	 * possibly yield UC_UPVALUE. Nudge it. */
@@ -2607,51 +2648,302 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 	return ucv_get(v);
 }
 
-uc_value_t *
-ucv_key_set(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
+/*
+ * Property accessors implementing `foo.bar`, `foo.bar = x` and
+ * `delete foo.bar` for any kind of value. Own keys respectively numeric array
+ * indices take precedence, metamethods - looked up in the prototype chain of
+ * the accessed value, see ucv_metamethod_lookup() - serve as fallback:
+ *
+ *   __get__(key)      invoked when a raw lookup yields nothing; returning a
+ *                     table delegates the lookup to that table, any other
+ *                     value becomes the result of the expression
+ *   __set__(key, val) invoked when writing a key an object does not have yet,
+ *                     like Lua's __newindex; its return value is discarded
+ *   __delete__(key)   invoked when deleting a key an object does not have
+ *                     yet; a truthy result means "deleted"
+ *
+ * Arrays keep their dense storage: keys which are valid indices never dispatch
+ * a metamethod at all. Passing vm == NULL performs the raw operation only.
+ */
+
+/* Invoke `meta` as method on `scope`, passing `key` and optionally `val` and
+ * storing the result in `rvp`. Returns false if the metamethod raised, in
+ * which case the exception is left pending for the interpreter loop to unwind.
+ *
+ * The operands are pushed on the VM stack to form the method call argument
+ * list, but also to keep them reachable: a garbage collection may run at any
+ * instruction of the invoked metamethod and its mark pass walks the VM stack,
+ * not C locals. */
+static bool
+ucv_meta_call(uc_vm_t *vm, uc_value_t *scope, uc_value_t *meta,
+              uc_value_t *key, uc_value_t *val, uc_value_t **rvp)
 {
-	int64_t idx;
-	char *s;
-	bool rv;
+	size_t base = vm->stack.count, nargs = 1;
 
-	if (!key)
-		return NULL;
+	*rvp = NULL;
 
-	if (ucv_type(scope) == UC_ARRAY) {
-		idx = ucv_key_to_index(key);
+	uc_vm_stack_push(vm, ucv_get(scope));
+	uc_vm_stack_push(vm, ucv_get(meta));
+	uc_vm_stack_push(vm, ucv_get(key));
 
-		if (idx < 0 && idx > INT64_MIN && (uint64_t)llabs(idx) <= ucv_array_length(scope))
-			idx += ucv_array_length(scope);
-
-		if (idx < 0 || !ucv_array_set(scope, idx, val))
-			return NULL;
-
-		return ucv_get(val);
+	if (val != NULL) {
+		uc_vm_stack_push(vm, ucv_get(val));
+		nargs = 2;
 	}
 
-	s = ucv_key_to_string(vm, key);
-	rv = ucv_object_add(scope, s ? s : ucv_string_get(key), val);
-	free(s);
+	if (uc_vm_call(vm, true, nargs) != EXCEPTION_NONE) {
+		/* An exception raised within the metamethod unwinds its frame - and
+		 * with it the operands pushed above - while one raised before that
+		 * frame got established, out of recursion for instance, leaves them
+		 * behind; either way, drop back to the slots pushed here. */
+		while (vm->stack.count > base)
+			ucv_put(uc_vm_stack_pop(vm));
 
-	return rv ? ucv_get(val) : NULL;
+		return false;
+	}
+
+	*rvp = uc_vm_stack_pop(vm);
+
+	return true;
 }
 
-bool
-ucv_key_delete(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
+/* ucv_object_get(), ucv_object_add() and ucv_object_delete() taking a script
+ * level key value instead of a C string. Like ucv_object_add(), the value to
+ * store is consumed, also where the store fails - which it does for a frozen
+ * object or a value which is not an object at all. */
+static bool
+ucv_object_has_key(uc_vm_t *vm, uc_value_t *obj, uc_value_t *key)
 {
-	char *s;
+	char *s = ucv_key_to_string(vm, key);
+	bool found = false;
+
+	ucv_object_get(obj, s ? s : ucv_string_get(key), &found);
+	free(s);
+
+	return found;
+}
+
+static bool
+ucv_object_put_key(uc_vm_t *vm, uc_value_t *obj, uc_value_t *key, uc_value_t *val)
+{
+	char *s = ucv_key_to_string(vm, key);
 	bool rv;
 
-	if (!key)
-		return NULL;
+	rv = ucv_object_add(obj, s ? s : ucv_string_get(key), val);
+	free(s);
 
-	s = ucv_key_to_string(vm, key);
-	rv = ucv_object_delete(scope, s ? s : ucv_string_get(key));
+	if (!rv)
+		ucv_put(val);
+
+	return rv;
+}
+
+static bool
+ucv_object_del_key(uc_vm_t *vm, uc_value_t *obj, uc_value_t *key)
+{
+	char *s = ucv_key_to_string(vm, key);
+	bool rv;
+
+	rv = ucv_object_delete(obj, s ? s : ucv_string_get(key));
 	free(s);
 
 	return rv;
 }
 
+/* Store `val` at the array index denoted by `key`, extending the array as
+ * needed. Returns false for keys which are no indices and for negative ones
+ * which denote no element; like ucv_array_set(), the value to store is
+ * consumed either way. */
+static bool
+ucv_array_set_key(uc_value_t *arr, uc_value_t *key, uc_value_t *val)
+{
+	int64_t idx = ucv_key_to_index(key);
+
+	if (idx != INT64_MIN) {
+		if (idx < 0 && (uint64_t)llabs(idx) <= ucv_array_length(arr))
+			idx += ucv_array_length(arr);
+
+		if (idx >= 0 && ucv_array_set(arr, idx, val))
+			return true;
+	}
+
+	ucv_put(val);
+
+	return false;
+}
+
+uc_value_t *
+ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
+{
+	uc_value_t *meta, *val, *res;
+	bool found;
+
+	if (!scope || !key)
+		return NULL;
+
+	val = ucv_key_get_raw(vm, scope, key, &found);
+
+	if (found)
+		return ucv_key_resolve_upval(vm, val);
+
+	/* a valid array index which is out of bounds reads as null, it does not
+	 * dispatch __get__ */
+	if (vm == NULL || (ucv_type(scope) == UC_ARRAY && ucv_key_to_index(key) != INT64_MIN))
+		return NULL;
+
+	meta = ucv_metamethod_lookup(scope, "__get__");
+
+	if (meta == NULL || !ucv_meta_call(vm, scope, meta, key, NULL, &val))
+		return NULL;
+
+	/* like Lua's __index tables, a __get__ yielding a table delegates the
+	 * lookup to that table; since each delegation involves a call, chains
+	 * looping onto themselves hit the VM's recursion limit */
+	if (ucv_type(val) == UC_OBJECT || ucv_type(val) == UC_ARRAY) {
+		res = ucv_key_get(vm, val, key);
+		ucv_put(val);
+
+		return res;
+	}
+
+	return val;
+}
+
+uc_value_t *
+ucv_key_set(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
+{
+	uc_value_t *meta, *rv;
+
+	/* only a null key is invalid, a null value stores null */
+	if (!scope || !key)
+		return NULL;
+
+	switch (ucv_type(scope)) {
+	case UC_ARRAY:
+		if (ucv_key_to_index(key) != INT64_MIN)
+			return ucv_array_set_key(scope, key, ucv_get(val)) ? ucv_get(val) : NULL;
+
+		break;
+
+	case UC_OBJECT:
+		if (ucv_object_has_key(vm, scope, key))
+			return ucv_object_put_key(vm, scope, key, ucv_get(val)) ? ucv_get(val) : NULL;
+
+		break;
+
+	case UC_RESOURCE:
+		break;
+
+	default:
+		return NULL;
+	}
+
+	if (vm != NULL) {
+		meta = ucv_metamethod_lookup(scope, "__set__");
+
+		if (meta != NULL) {
+			if (!ucv_meta_call(vm, scope, meta, key, val, &rv))
+				return NULL;
+
+			/* an assignment evaluates to the assigned value, not to whatever
+			 * the metamethod returned */
+			ucv_put(rv);
+
+			return ucv_get(val);
+		}
+	}
+
+	/* without a __set__ in effect, the value ends up as own key */
+	return ucv_object_put_key(vm, scope, key, ucv_get(val)) ? ucv_get(val) : NULL;
+}
+
+bool
+ucv_key_delete(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
+{
+	uc_value_t *meta, *rv;
+	bool deleted;
+
+	if (!scope || !key)
+		return false;
+
+	switch (ucv_type(scope)) {
+	case UC_OBJECT:
+		if (ucv_object_has_key(vm, scope, key))
+			return ucv_object_del_key(vm, scope, key);
+
+		break;
+
+	case UC_RESOURCE:
+		break;
+
+	/* arrays consist of positional elements, they are not deletable */
+	default:
+		return false;
+	}
+
+	if (vm != NULL) {
+		meta = ucv_metamethod_lookup(scope, "__delete__");
+
+		if (meta != NULL) {
+			/* by convention, a truthy return value means "deleted" */
+			deleted = ucv_meta_call(vm, scope, meta, key, NULL, &rv) && ucv_is_truish(rv);
+			ucv_put(rv);
+
+			return deleted;
+		}
+	}
+
+	return ucv_object_del_key(vm, scope, key);
+}
+
+/*
+ * Raw counterparts of the accessors above: what `foo.bar`, `foo.bar = x` and
+ * `delete foo.bar` do in the absence of metamethods. These are the escape
+ * hatch for a metamethod which needs to reach the storage below itself without
+ * dispatching again, and are exposed to scripts as rawget(), rawset() and
+ * rawdelete().
+ */
+
+uc_value_t *
+ucv_key_rawget(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
+{
+	uc_value_t *val;
+	bool found;
+
+	if (!scope || !key)
+		return NULL;
+
+	val = ucv_key_get_raw(vm, scope, key, &found);
+
+	return (found ? ucv_key_resolve_upval(vm, val) : NULL);
+}
+
+uc_value_t *
+ucv_key_rawset(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
+{
+	if (!scope || !key)
+		return NULL;
+
+	switch (ucv_type(scope)) {
+	case UC_ARRAY:
+		return ucv_array_set_key(scope, key, ucv_get(val)) ? ucv_get(val) : NULL;
+
+	case UC_OBJECT:
+		return ucv_object_put_key(vm, scope, key, ucv_get(val)) ? ucv_get(val) : NULL;
+
+	default:
+		return NULL;
+	}
+}
+
+bool
+ucv_key_rawdelete(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
+{
+	if (!scope || !key)
+		return false;
+
+	return ucv_object_del_key(vm, scope, key);
+}
 
 static void
 ucv_gc_common(uc_vm_t *vm, bool final)
