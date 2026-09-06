@@ -1578,9 +1578,11 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(o)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
+	case UC_RESOURCE:
 		if (assert_mutable_value(vm, o)) {
 			/* ucv_key_set() retains the stored value on its own and returns a
-			 * reference to it, which becomes the value of the assignment */
+			 * reference to it, which becomes the value of the assignment; for
+			 * resources it dispatches a __set__ metamethod when present */
 			uc_vm_stack_push(vm, ucv_key_set(vm, o, k, v));
 		}
 
@@ -2054,6 +2056,7 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
 	case UC_ARRAY:
+	case UC_RESOURCE:
 		if (assert_mutable_value(vm, v)) {
 			uc_value_t *nv, *rv;
 

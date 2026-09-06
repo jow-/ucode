@@ -869,10 +869,60 @@ clib_dlsym(uc_vm_t *vm, uc_ffi_clib_t *lib, uc_value_t *name)
 
 static uc_value_t *
 uc_ctype_call(uc_vm_t *vm, size_t nargs);
-
+static uc_value_t *uc_ctype_get(uc_vm_t *vm, size_t nargs);
+static uc_value_t *uc_ctype_set(uc_vm_t *vm, size_t nargs);
 static uc_value_t *
 ct_to_uv(uc_vm_t *vm, CTState *cts, CTypeID cid, void *cdata, size_t size,
          uc_value_t *refs);
+
+/* __get__ / __set__ metamethods for cdata, so that a struct field or array
+ * element can be read/written with plain property syntax (p.x, arr[1])
+ * instead of the explicit get() / set() methods. The dispatch hands the
+ * cdata as `this` and the key (plus value for __set__) as arguments, which
+ * is exactly the calling convention get() / set() already use. */
+
+/* __get__: resolve the key like get() does, but yield a live cdata reference
+ * for a struct field instead of a snapshot table. A table result would make
+ * the __get__ dispatch delegate the lookup into the copy (and lose it),
+ * whereas a cdata reference supports further property access (r.min.x) and
+ * writes through it (r.min.x = 1) via its own __get__ / __set__. Scalars and
+ * array elements yield their converted value, as get() does. */
+static uc_value_t *
+uc_ctype_meta_get(uc_vm_t *vm, size_t nargs)
+{
+	GCcdata *cd = uc_fn_thisval("ffi.ctype");
+	CTState *cts = ctype_cts(vm);
+	uc_value_t *key = uc_fn_arg(0);
+	CTInfo qual = 0;
+	uint8_t *p;
+	CType *ct;
+
+	if (!cd || !key)
+		return NULL;
+
+	ct = uc_cdata_index(cts, cd, key, &p, &qual);
+
+	if (!ct || (qual & 1))
+		return NULL;
+
+	ct = ctype_child(cts, ct);
+
+	/* struct and pointer fields yield a live cdata reference so that further
+	 * property access (r.min.x, w.p.x) works through the reference's own
+	 * __get__ / __set__; scalars and array elements yield their converted
+	 * value, as get() does */
+	if (ctype_isstruct(ct->info) || ctype_isptr(ct->info))
+		return uc_cdata_newref(vm, p, ctype_typeid(cts, ct));
+
+	return ct_to_uv(vm, cts, ctype_typeid(cts, ct), p, ct->size, cd->refs);
+}
+
+/* __set__: store the value at the key, exactly as set() does. */
+static uc_value_t *
+uc_ctype_meta_set(uc_vm_t *vm, size_t nargs)
+{
+	return uc_ctype_set(vm, nargs);
+}
 
 /* Path token types */
 typedef enum {
@@ -5179,6 +5229,8 @@ static const uc_function_list_t ctype_fns[] = {
 	{ "cast",		uc_ctype_cast },
 	{ "copy",		uc_ctype_copy },
 	{ "string",		uc_ctype_string },
+	{ "__get__",		uc_ctype_meta_get },
+	{ "__set__",		uc_ctype_meta_set },
 };
 
 static const uc_function_list_t global_fns[] = {

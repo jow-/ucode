@@ -1,0 +1,154 @@
+Cdata instances support `__get__` / `__set__`, so struct fields and array
+elements can be read and written with plain property syntax instead of the
+explicit get() / set() methods.
+
+Struct field access with property syntax.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef struct { int x; int y; } point;');
+let p = ffi.ctype('point');
+
+p.x = 10;
+p.y = 20;
+print("x: ", p.x, " y: ", p.y, "\n");
+-- End --
+
+-- Expect stdout --
+x: 10 y: 20
+-- End --
+
+
+Array element access with index syntax.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef int intarr[3];');
+let a = ffi.ctype('intarr');
+
+a[0] = 10;
+a[1] = 20;
+a[2] = 30;
+print("array: ", a[0], " ", a[1], " ", a[2], "\n");
+-- End --
+
+-- Expect stdout --
+array: 10 20 30
+-- End --
+
+
+Nested struct fields are live references, so chained access works.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef struct { int x; int y; } point;');
+ffi.cdef('typedef struct { point min; point max; } rect;');
+let r = ffi.ctype('rect');
+
+r.min.x = 1;
+r.min.y = 2;
+r.max.x = 100;
+r.max.y = 200;
+print("min.x: ", r.min.x, " max.y: ", r.max.y, "\n");
+-- End --
+
+-- Expect stdout --
+min.x: 1 max.y: 200
+-- End --
+
+
+Pointer fields are live references too, so they can be dereferenced further.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef struct { int x; int y; } point;');
+ffi.cdef('typedef struct { point *p; } holder;');
+let h = ffi.ctype('holder');
+let pt = ffi.ctype('point');
+
+pt.x = 7;
+pt.y = 8;
+h.p = pt.ptr();
+
+print("p.x: ", h.p.x, " p.y: ", h.p.y, "\n");
+
+h.p.x = 99;
+print("after write: ", h.p.x, "\n");
+-- End --
+
+-- Expect stdout --
+p.x: 7 p.y: 8
+after write: 99
+-- End --
+
+
+Compound assignment works through the metamethods.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef struct { int x; int y; } point;');
+let p = ffi.ctype('point');
+
+p.x = 5;
+p.x += 10;
+p.y = 1;
+p.y *= 4;
+print("x: ", p.x, " y: ", p.y, "\n");
+-- End --
+
+-- Expect stdout --
+x: 15 y: 4
+-- End --
+
+
+Arrays of structs support indexed struct-field access.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef struct { int a; int b; } pair;');
+let pairs = ffi.ctype('pair[3]');
+
+pairs[0].a = 1;
+pairs[0].b = 2;
+pairs[2].a = 3;
+pairs[2].b = 4;
+print("pairs[0].a: ", pairs[0].a, " pairs[2].b: ", pairs[2].b, "\n");
+-- End --
+
+-- Expect stdout --
+pairs[0].a: 1 pairs[2].b: 4
+-- End --
+
+
+The explicit get() / set() / index() methods keep working alongside the
+property syntax.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef('typedef struct { int x; int y; } point;');
+let p = ffi.ctype('point');
+
+p.x = 1;
+p.set('y', 2);
+print("get: ", p.get('x'), " ", p.get('y'), "\n");
+print("index type: ", type(p.index('x')), "\n");
+-- End --
+
+-- Expect stdout --
+get: 1 2
+index type: resource
+-- End --
