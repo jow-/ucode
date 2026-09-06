@@ -529,6 +529,14 @@ typedef struct {
 	uc_value_t *cache;
 } uc_ffi_clib_t;
 
+/* A wrapped C function. The value is an "ffi.cfn" resource whose prototype
+ * carries a __call__ metamethod; the C symbol pointer and its C type id live
+ * in the resource data area. */
+typedef struct {
+	CTypeID cid;
+	void *fp;
+} uc_ffi_cfn_t;
+
 typedef struct {
 	ffi_cif cif;
 	ffi_abi abi;
@@ -1059,17 +1067,19 @@ path_navigate(CTState *cts, GCcdata *start_cd, path_tokens *tokens,
 	return ct;
 }
 
+/* __call__ metamethod for wrapped C functions. The instance is an "ffi.cfn"
+ * resource whose data area holds the C type id and symbol pointer; the body
+ * is identical to the former clib_wrapped_call() cfunction, except the
+ * context is read from the resource data instead of being smuggled after the
+ * cfunction's name[] flexible array. */
 static uc_value_t *
 clib_wrapped_call(uc_vm_t *vm, size_t nargs)
 {
+	uc_ffi_cfn_t *cfn = uc_fn_thisval("ffi.cfn");
 	uc_callframe_t *call = uc_vector_last(&vm->callframes);
-	uc_cfunction_t *cfn = call->cfunction;
-	size_t off = ALIGN(sizeof(*cfn) + strlen(cfn->name) + 1);
-	CTypeID cid = *(CTypeID *)((char *)cfn + off);
-	void *fp = *(void **)((char *)cfn + off + sizeof(cid));
 
-	uc_value_t *sym = uc_cdata_new(vm, cid, CTSIZE_PTR);
-	*(void **)uc_cdata_dataptr(sym) = fp;
+	uc_value_t *sym = uc_cdata_new(vm, cfn->cid, CTSIZE_PTR);
+	*(void **)uc_cdata_dataptr(sym) = cfn->fp;
 
 	uc_value_t *ctx = call->ctx;
 	call->ctx = sym;
@@ -1101,6 +1111,30 @@ clib_wrapped_call(uc_vm_t *vm, size_t nargs)
 	call->ctx = ctx;
 
 	return ret;
+}
+
+/* Create a wrapped C function value: an "ffi.cfn" resource whose data area
+ * holds the C type id and symbol pointer. All such values share the type's
+ * prototype, which provides the __call__ metamethod, so the value is
+ * invocable like a function. */
+static uc_value_t *
+clib_wrap_new(uc_vm_t *vm, CTypeID cid, void *fp)
+{
+	uc_resource_type_t *type = ucv_resource_type_lookup(vm, "ffi.cfn");
+	uc_value_t *res;
+	uc_ffi_cfn_t *cfn;
+
+	if (!type)
+		return NULL;
+
+	/* the data area (sized to hold uc_ffi_cfn_t) is filled in via the
+	 * out-pointer ucv_resource_new_ex() points at res + 1 */
+	res = ucv_resource_new_ex(vm, type, (void **)&cfn, 0, sizeof(*cfn));
+
+	cfn->cid = cid;
+	cfn->fp = fp;
+
+	return res;
 }
 
 
@@ -1515,7 +1549,6 @@ uc_clib_wrap(uc_vm_t *vm, size_t nargs)
 		return NULL;
 
 	CTypeID cid = ctype_typeid(cts, ct);
-	uc_value_t *sym_name = ct->uv_name;
 
 	if (ctype_isptr(ct->info))
 		ct = ctype_rawchild(cts, ct);
@@ -1534,27 +1567,10 @@ uc_clib_wrap(uc_vm_t *vm, size_t nargs)
 	}
 
 	void *fp = *(void **)uc_cdata_dataptr(sym);
-	uc_cfunction_t *cfn = NULL;
-	size_t namelen, off;
-
-	namelen = snprintf(NULL, 0, "ffi.%s.%s",
-		this->name ? this->name : "C", ucv_string_get(sym_name));
-
-	off = ALIGN(sizeof(*cfn) + namelen + 1);
-
-	cfn = xalloc(off + sizeof(cid) + sizeof(fp));
-	cfn->header.type = UC_CFUNCTION;
-	cfn->cfn = clib_wrapped_call;
-
-	snprintf(cfn->name, namelen + 1, "ffi.%s.%s",
-		this->name ? this->name : "C", ucv_string_get(sym_name));
-
-	memcpy((char *)cfn + off, &cid, sizeof(cid));
-	memcpy((char *)cfn + off + sizeof(cid), &fp, sizeof(fp));
 
 	ucv_put(sym);
 
-	return ucv_get(&cfn->header);
+	return clib_wrap_new(vm, cid, fp);
 }
 
 
@@ -4872,19 +4888,11 @@ uc_ffi_dlopen(uc_vm_t *vm, size_t nargs)
 						continue;
 
 					CTypeID cid = ctype_typeid(cts, ct);
-					size_t namelen = strlen(symname);
-					size_t off = ALIGN(sizeof(uc_cfunction_t) + namelen + 1);
 
-					uc_cfunction_t *cfn = xalloc(off + sizeof(cid) + sizeof(fp));
-					cfn->header.type = UC_CFUNCTION;
-					cfn->cfn = clib_wrapped_call;
-					snprintf(cfn->name, namelen + 1, "ffi.C.%s", symname);
+					uc_value_t *wrapped = clib_wrap_new(vm, cid, fp);
 
-					memcpy((char *)cfn + off, &cid, sizeof(cid));
-					memcpy((char *)cfn + off + sizeof(cid), &fp, sizeof(fp));
-
-					uc_value_t *wrapped = ucv_get(&cfn->header);
-					ucv_object_add(methods, symname, wrapped);
+					if (wrapped)
+						ucv_object_add(methods, symname, wrapped);
 				}
 				uc_vector_clear(&cp.func_ids_buf);
 			}
@@ -5000,19 +5008,11 @@ uc_ffi_dlopen(uc_vm_t *vm, size_t nargs)
 			}
 
 			CTypeID cid = ctype_typeid(cts, ct);
-			size_t fnamelen = strlen(symname);
-			size_t off = ALIGN(sizeof(uc_cfunction_t) + fnamelen + 1);
 
-			uc_cfunction_t *cfn = xalloc(off + sizeof(cid) + sizeof(fp));
-			cfn->header.type = UC_CFUNCTION;
-			cfn->cfn = clib_wrapped_call;
-			snprintf(cfn->name, fnamelen + 1, "ffi.%s.%s", lib->name, symname);
+			uc_value_t *wrapped = clib_wrap_new(vm, cid, fp);
 
-			memcpy((char *)cfn + off, &cid, sizeof(cid));
-			memcpy((char *)cfn + off + sizeof(cid), &fp, sizeof(fp));
-
-			uc_value_t *wrapped = ucv_get(&cfn->header);
-			ucv_object_add(methods, symname, wrapped);
+			if (wrapped)
+				ucv_object_add(methods, symname, wrapped);
 		}
 
 		uc_vector_clear(&cp.func_ids_buf);
@@ -5141,23 +5141,13 @@ uc_ffi_import(uc_vm_t *vm, size_t nargs)
 			return NULL;
 		}
 
-		/* Wrap the function - create cfunction wrapper */
+		/* Wrap the function as an "ffi.cfn" resource */
 		CTypeID cid = ctype_typeid(cts, ct);
-		size_t namelen = strlen(symname);
-		size_t off = ALIGN(sizeof(uc_cfunction_t) + namelen + 1);
 
-		uc_cfunction_t *cfn = xalloc(off + sizeof(cid) + sizeof(fp));
-		cfn->header.type = UC_CFUNCTION;
-		cfn->cfn = clib_wrapped_call;
-		snprintf(cfn->name, namelen + 1, "ffi.import.%s", symname);
+		uc_value_t *wrapped = clib_wrap_new(vm, cid, fp);
 
-		/* Store cid and fp after the cfunction struct */
-		memcpy((char *)cfn + off, &cid, sizeof(cid));
-		memcpy((char *)cfn + off + sizeof(cid), &fp, sizeof(fp));
-
-		uc_value_t *wrapped = ucv_get(&cfn->header);
-		ucv_object_add(result, symname, wrapped);
-		/* ucv_object_add already increments refcount, no need to put */
+		if (wrapped)
+			ucv_object_add(result, symname, wrapped);
 	}
 
 	uc_vector_clear(&cp.func_ids_buf);
@@ -5264,6 +5254,19 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 
 	uc_type_declare(vm, "ffi.clib", clib_fns, close_clib);
 	uc_type_declare(vm, "ffi.ctype", ctype_fns, close_ctype);
+
+	/* Wrapped C functions are "ffi.cfn" resources; the shared prototype
+	 * carries a __call__ metamethod so the value is invocable like a
+	 * function. The context (C type id + symbol pointer) lives in the
+	 * resource data area, not smuggled after a cfunction's name[]. */
+	{
+		uc_value_t *cfn_proto = ucv_object_new(vm);
+
+		ucv_object_add(cfn_proto, "__call__",
+			ucv_cfunction_new("ffi.cfn.__call__", clib_wrapped_call));
+
+		ucv_resource_type_add(vm, "ffi.cfn", cfn_proto, NULL);
+	}
 
 	uc_function_list_register(scope, global_fns);
 
