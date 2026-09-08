@@ -894,6 +894,81 @@ uc_exists(uc_vm_t *vm, size_t nargs)
 }
 
 /**
+ * Raw property read: the non-metamethod counterpart of `obj[key]`.
+ *
+ * Reads the property the way the VM would if `obj` had no `__get__` in its
+ * prototype chain (array index / resource type-proto / object own key +
+ * prototype chain), without dispatching `__get__`. This is the escape hatch a
+ * `__get__` uses to read the underlying storage without re-dispatching itself
+ * (a `__get__` that did `return this[key]` would otherwise recurse).
+ *
+ * @example
+ * let o = proto({}, { __get__: function(k) { return rawget(this, k) || 'x'; } });
+ *
+ * @param  {object|array|resource} obj  The value to read from.
+ * @param  {string|number}         key  The property key.
+ * @return {*} The property value, or null if not present.
+ */
+static uc_value_t *
+uc_rawget(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *obj = uc_fn_arg(0);
+	uc_value_t *key = uc_fn_arg(1);
+
+	return ucv_key_rawget(vm, obj, key);
+}
+
+/**
+ * Raw property write: the non-metamethod counterpart of `obj[key] = val`.
+ *
+ * Stores the property the way the VM would if `obj` had no `__set__` in its
+ * prototype chain (own-key store for objects, index store for arrays), without
+ * dispatching `__set__`. Escape hatch for a `__set__` that needs to write the
+ * underlying storage without re-dispatching itself.
+ *
+ * @example
+ * let o = proto({}, { __set__: function(k, v) { rawset(this, k, v); } });
+ *
+ * @param  {object|array} obj  The value to write to.
+ * @param  {string|number} key  The property key.
+ * @param  {*}            val  The value to store.
+ * @return {*} The stored value (null on failure, e.g. non-container).
+ */
+static uc_value_t *
+uc_rawset(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *obj = uc_fn_arg(0);
+	uc_value_t *key = uc_fn_arg(1);
+	uc_value_t *val = uc_fn_arg(2);
+
+	return ucv_key_rawset(vm, obj, key, val);
+}
+
+/**
+ * Raw property delete: the non-metamethod counterpart of `delete obj[key]`.
+ *
+ * Deletes the own property the way the VM would if `obj` had no `__delete__`
+ * in its prototype chain, without dispatching `__delete__`. Escape hatch for a
+ * `__delete__` that needs to remove the underlying storage without
+ * re-dispatching itself.
+ *
+ * @example
+ * let o = proto({}, { __delete__: function(k) { return rawdelete(this, k); } });
+ *
+ * @param  {object} obj  The value to delete from.
+ * @param  {string|number} key  The property key.
+ * @return {boolean} true if a property was deleted, false otherwise.
+ */
+static uc_value_t *
+uc_rawdelete(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *obj = uc_fn_arg(0);
+	uc_value_t *key = uc_fn_arg(1);
+
+	return ucv_boolean_new(ucv_key_rawdelete(vm, obj, key));
+}
+
+/**
  * Terminate the interpreter with the given exit code.
  *
  * This function does not return.
@@ -6083,6 +6158,9 @@ const uc_function_list_t uc_stdlib_functions[] = {
 	{ "chr",		uc_chr },
 	{ "die",		uc_die },
 	{ "exists",		uc_exists },
+	{ "rawget",		uc_rawget },
+	{ "rawset",		uc_rawset },
+	{ "rawdelete",		uc_rawdelete },
 	{ "exit",		uc_exit },
 	{ "filter",		uc_filter },
 	{ "getenv",		uc_getenv },

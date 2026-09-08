@@ -1,0 +1,52 @@
+rawget(), rawset() and rawdelete() access the underlying storage of a value
+without dispatching the `__get__`, `__set__` and `__delete__` metamethods.
+They are the escape hatch a metamethod uses to reach the value below itself.
+
+-- Testcase --
+{%
+	let o = proto({ own: 1 }, {
+		__get__(key) {
+			return "virtual";
+		},
+		__set__(key, val) {
+			die("__set__ dispatched");
+		},
+		__delete__(key) {
+			die("__delete__ dispatched");
+		}
+	});
+
+	print(rawget(o, "own"), " ", rawget(o, "missing") === null, "\n");
+	rawset(o, "stored", 2);
+	print(rawget(o, "stored"), " ", rawdelete(o, "stored"), " ", rawdelete(o, "stored"), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+1 true
+2 true false
+-- End --
+
+With the raw accessors, a metamethod can keep its backing store in the
+instance itself.
+
+-- Testcase --
+{%
+	let o = proto({}, {
+		__get__(key) {
+			let v = rawget(this, "_" + key);
+			return v === null ? "computed:" + key : v;
+		},
+		__set__(key, val) {
+			rawset(this, "_" + key, val * 10);
+		}
+	});
+
+	o.n = 4;
+	print(o.n, " ", o.other, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+40 computed:other
+-- End --

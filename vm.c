@@ -766,6 +766,24 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall,
 		nargs = vm->stack.count - stackoff - 1;
 	}
 
+	/* __call__ dispatch: if fno is not itself callable (not a closure or
+	 * cfunction) but carries a __call__ metamethod somewhere in its prototype
+	 * chain, invoke that method with the instance as `this`. The instance
+	 * becomes the new ctx; the original ctx (if any) is discarded. The tail
+	 * flag is preserved so `return foo()` still TCOs through the dispatch. */
+	if (ucv_type(fno) != UC_CFUNCTION && ucv_type(fno) != UC_CLOSURE) {
+		uc_value_t *meta = ucv_metamethod_lookup(fno, "__call__");
+
+		if (meta != NULL) {
+			ucv_put(ctx);
+
+			/* the instance becomes `this` and is invoked in place of the
+			 * __call__ method, so hand the reference to ctx over */
+			ctx = fno;
+			fno = ucv_get(meta);
+		}
+	}
+
 	/* is a native function; such functions are always invoked in a fresh frame,
 	 * even when requested as tail call, since the foreign code may rely on the
 	 * stack layout of an ordinary invocation */
@@ -1341,6 +1359,7 @@ uc_vm_insn_load_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_RESOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
+		/* aware read: dispatches __get__ on a missing key */
 		uc_vm_stack_push(vm, ucv_key_get(vm, v, k));
 		break;
 
@@ -1366,6 +1385,7 @@ uc_vm_insn_peek_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_RESOURCE:
 	case UC_OBJECT:
 	case UC_ARRAY:
+		/* aware read: dispatches __get__ on a missing key */
 		uc_vm_stack_push(vm, ucv_key_get(vm, v, k));
 		break;
 
@@ -1562,15 +1582,9 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	case UC_OBJECT:
 	case UC_ARRAY:
 		if (assert_mutable_value(vm, o)) {
-			uc_value_t *rv = ucv_key_set(vm, o, k, v);
-
-			/* on success rv is a reference to the stored value that gets
-			 * pushed onto the stack; clear v so the cleanup below does not
-			 * release the reference now owned by the stack */
-			if (rv)
-				v = NULL;
-
-			uc_vm_stack_push(vm, rv);
+			/* ucv_key_set() retains the stored value on its own and returns a
+			 * reference to it, which becomes the value of the assignment */
+			uc_vm_stack_push(vm, ucv_key_set(vm, o, k, v));
 		}
 
 		break;
@@ -2038,6 +2052,7 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *k = uc_vm_stack_pop(vm);
 	uc_value_t *v = uc_vm_stack_pop(vm);
 	uc_value_t *val = NULL;
+	uc_vm_insn_t op;
 
 	switch (ucv_type(v)) {
 	case UC_OBJECT:
@@ -2045,15 +2060,27 @@ uc_vm_insn_update_val(uc_vm_t *vm, uc_vm_insn_t insn)
 		if (assert_mutable_value(vm, v)) {
 			uc_value_t *nv, *rv;
 
-			val = ucv_key_get(vm, v, k);
-			nv = uc_vm_value_arith(vm, vm->arg.u8, val, inc);
-			rv = ucv_key_set(vm, v, k, nv);
+			/* reading the property may dispatch a __get__ metamethod which runs
+			 * on the current stack, clobbers vm->arg and may collect garbage, so
+			 * remember the operation and keep the operands reachable */
+			op = vm->arg.u8;
+			uc_vm_stack_push(vm, ucv_get(inc));
 
-			/* on success rv is a reference to the stored value that gets
-			 * pushed onto the stack; on failure nv was not stored, so
-			 * release it here */
-			if (!rv)
-				ucv_put(nv);
+			val = ucv_key_get(vm, v, k);
+			uc_vm_stack_push(vm, ucv_get(val));
+
+			nv = uc_vm_value_arith(vm, op, val, inc);
+
+			ucv_put(uc_vm_stack_pop(vm));
+			ucv_put(uc_vm_stack_pop(vm));
+
+			/* an aborted read leaves nothing to store; the exception it raised is
+			 * left to propagate instead of overwriting the property */
+			rv = vm->exception.type != EXCEPTION_NONE ? NULL : ucv_key_set(vm, v, k, nv);
+
+			/* the store keeps a reference of its own; rv is the value of the
+			 * update expression, null if storing failed */
+			ucv_put(nv);
 
 			uc_vm_stack_push(vm, rv);
 		}
@@ -2180,10 +2207,12 @@ uc_vm_insn_sobj(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_value_t *obj = uc_vm_stack_peek(vm, vm->arg.u32);
 	size_t idx;
 
+	/* object literals create own keys, a __set__ metamethod of the object under
+	 * construction must not intercept the keys it is built from */
 	for (idx = 0; idx < vm->arg.u32; idx += 2)
-		ucv_key_set(vm, obj,
+		ucv_put(ucv_key_rawset(vm, obj,
 			uc_vm_stack_peek(vm, vm->arg.u32 - idx - 1),
-			uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2));
+			uc_vm_stack_peek(vm, vm->arg.u32 - idx - 2)));
 
 	for (idx = 0; idx < vm->arg.u32; idx++)
 		ucv_put(uc_vm_stack_pop(vm));
@@ -2363,6 +2392,24 @@ uc_vm_insn_rel(uc_vm_t *vm, uc_vm_insn_t insn)
 	uc_vm_stack_push(vm, ucv_boolean_new(res));
 }
 
+/* Test whether `key` names a property of `scope` or of anything in its
+ * prototype chain, the way a property read resolves it - but without
+ * dispatching __get__, so a purely virtual property stays hidden. */
+static bool
+uc_vm_key_exists(uc_value_t *scope, uc_value_t *key)
+{
+	uc_value_t *o;
+	bool found = false;
+
+	if (ucv_type(key) != UC_STRING)
+		return false;
+
+	for (o = scope; o != NULL && !found; o = ucv_prototype_get(o))
+		ucv_object_get(o, ucv_string_get(key), &found);
+
+	return found;
+}
+
 static void
 uc_vm_insn_in(uc_vm_t *vm, uc_vm_insn_t insn)
 {
@@ -2374,6 +2421,7 @@ uc_vm_insn_in(uc_vm_t *vm, uc_vm_insn_t insn)
 
 	switch (ucv_type(r2)) {
 	case UC_ARRAY:
+		/* value membership: is r1 one of the array elements? */
 		for (arridx = 0, arrlen = ucv_array_length(r2);
 		     arridx < arrlen; arridx++) {
 			item = ucv_array_get(r2, arridx);
@@ -2384,11 +2432,14 @@ uc_vm_insn_in(uc_vm_t *vm, uc_vm_insn_t insn)
 			}
 		}
 
+		/* arrays can carry a prototype providing the tested key as well */
+		if (!found)
+			found = uc_vm_key_exists(r2, r1);
+
 		break;
 
 	case UC_OBJECT:
-		if (ucv_type(r1) == UC_STRING)
-			ucv_object_get(r2, ucv_string_get(r1), &found);
+		found = uc_vm_key_exists(r2, r1);
 
 		break;
 

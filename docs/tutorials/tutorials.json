@@ -13,5 +13,8 @@
 	},
 	"05-dictionaries": {
 		"title": "Working with Dictionaries"
+	},
+	"06-metamethods": {
+		"title": "Metamethods"
 	}
 }

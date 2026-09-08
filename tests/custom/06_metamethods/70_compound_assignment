@@ -1,0 +1,83 @@
+A compound assignment dispatches one read and one write of the same key. The
+backing store below these metamethods lives under a different key, so the
+property stays virtual throughout the test.
+
+-- Testcase --
+{%
+	let log = [];
+
+	let o = proto({}, {
+		__get__(key) {
+			push(log, "get:" + key);
+			return rawget(this, "_" + key);
+		},
+		__set__(key, val) {
+			push(log, "set:" + key + "=" + val);
+			rawset(this, "_" + key, val);
+		}
+	});
+
+	o.n += 5;
+	o.n *= 2;
+
+	print(log, "\n");
+	print(o.n, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+[ "get:n", "set:n=5", "get:n", "set:n=10" ]
+10
+-- End --
+
+The short-circuiting assignments read the property, but write only when the
+current value does not already satisfy them.
+
+-- Testcase --
+{%
+	let log = [];
+
+	let o = proto({}, {
+		__get__(key) {
+			return rawget(this, "_" + key);
+		},
+		__set__(key, val) {
+			push(log, key + "=" + val);
+			rawset(this, "_" + key, val);
+		}
+	});
+
+	o.a ??= 1;
+	o.a ??= 2;
+	o.b ||= 3;
+
+	print(log, "\n");
+	print(o.a, " ", o.b, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+[ "a=1", "b=3" ]
+1 3
+-- End --
+
+Increment and decrement dispatch the read and the write of the same key.
+
+-- Testcase --
+{%
+	let o = proto({ n: 1 }, {
+		__get__(key) {
+			return rawget(this, key);
+		},
+		__set__(key, val) {
+			rawset(this, key, val);
+		}
+	});
+
+	print(++o.n, " ", o.n--, " ", o.n, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+2 2 1
+-- End --

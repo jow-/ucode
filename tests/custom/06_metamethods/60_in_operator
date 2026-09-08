@@ -1,0 +1,40 @@
+The `in` operator tests keys along the whole prototype chain, but it never
+dispatches `__get__`: a property which exists only as a virtual one is not
+visible to `in`.
+
+-- Testcase --
+{%
+	let o = proto({ own: 1 }, {
+		inherited: 2,
+		__get__(key) {
+			return "virtual";
+		}
+	});
+
+	print("own" in o, " ", "inherited" in o, " ", "virtual" in o, " ", "__get__" in o, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+true true false true
+-- End --
+
+For arrays, `in` tests element values first and keys of the prototype chain
+second, without dispatching a metamethod either.
+
+-- Testcase --
+{%
+	let a = proto([1, 2], {
+		named: 3,
+		__get__(key) {
+			return "virtual";
+		}
+	});
+
+	print(1 in a, " ", 3 in a, " ", "named" in a, " ", "virtual" in a, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+true false true false
+-- End --

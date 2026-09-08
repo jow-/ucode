@@ -1,0 +1,72 @@
+The `__call__` metamethod makes a value invocable. It is invoked as a method
+on the instance, receiving the call arguments.
+
+-- Testcase --
+{%
+	let c = proto({ base: 10 }, {
+		__call__(a, b) {
+			return this.base + a + b;
+		}
+	});
+
+	print(c(1, 2), " ", length(c), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+13 1
+-- End --
+
+A method call on a non-callable property value dispatches `__call__` of that
+value, with the value itself as `this`.
+
+-- Testcase --
+{%
+	let inner = proto({ tag: "inner" }, {
+		__call__(n) {
+			return this.tag + ":" + n;
+		}
+	});
+
+	let outer = { m: inner };
+
+	print(outer.m(7), "\n");
+	print(inner("x"), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+inner:7
+inner:x
+-- End --
+
+A `__call__` which is not a function is not honored, and a value referring
+to itself as `__call__` does not make it callable.
+
+-- Testcase --
+{%
+	let o = proto({}, { __call__: "not callable" });
+
+	try {
+		o();
+	}
+	catch (e) {
+		print(e, "\n");
+	}
+
+	let c = {};
+	c.__call__ = c;
+
+	try {
+		c();
+	}
+	catch (e) {
+		print(e, "\n");
+	}
+%}
+-- End --
+
+-- Expect stdout --
+left-hand side is not a function
+left-hand side is not a function
+-- End --

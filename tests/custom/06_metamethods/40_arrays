@@ -1,0 +1,78 @@
+Arrays keep their dense storage: a key which is a valid numeric index never
+dispatches a metamethod, whether the element exists or not. Only non-index
+keys are passed to `__get__` and `__set__`.
+
+-- Testcase --
+{%
+	let log = [];
+
+	let a = proto([1, 2], {
+		__get__(key) {
+			push(log, "get:" + key);
+			return "virtual";
+		},
+		__set__(key, val) {
+			push(log, "set:" + key);
+			rawset(this, key, val);
+		}
+	});
+
+	a[2] = 3;
+	a[-1] = 4;
+
+	print(a[0], " ", a[1], " ", a[2], " ", length(a), " ", a[9] === null, "\n");
+	a.name = "stored";
+	print(a.name, "\n");
+	print(log, "
+");
+%}
+-- End --
+
+-- Expect stdout --
+1 2 4 3 true
+virtual
+[ "set:name", "get:name" ]
+-- End --
+
+The raw accessors reach the storage below the metamethods.
+
+-- Testcase --
+{%
+	let log = [];
+
+	let a = proto([1], {
+		__get__(key) {
+			push(log, key);
+			return rawget(this, key);
+		}
+	});
+
+	print(a[0], " ", a.foo === null, " ", rawget(a, "foo") === null, "\n");
+	print(log, "
+");
+%}
+-- End --
+
+-- Expect stdout --
+1 true true
+[ "foo" ]
+-- End --
+
+Keys which are no array indices reach no storage. Without a `__set__` to take
+them they are dropped, and so are negative indices which denote no element.
+
+-- Testcase --
+{%
+	let a = [1, 2];
+
+	a.foo = 3;
+	a[-5] = 4;
+
+	print(length(a), " ", a.foo === null, " ");
+	print(rawset(a, "bar", 5) === null, " ", rawdelete(a, "bar"), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+2 true true false
+-- End --
