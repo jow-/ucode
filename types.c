@@ -2519,7 +2519,7 @@ ucv_key_to_index(uc_value_t *val)
 uc_value_t *
 ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 {
-	uc_value_t *o, *v = NULL;
+	uc_value_t *o, *v = NULL, *inst_proto;
 	bool found = false;
 	uc_upvalref_t *ref;
 	int64_t idx;
@@ -2547,12 +2547,11 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 			if (uv->ext_flag) {
 				uc_resource_ext_t *ext = (uc_resource_ext_t *)scope;
 
-				/* Check instance-specific proto first (set via ucv_resource_new_prototyped) */
-				if (ext->hasproto) {
-					uc_value_t *inst_proto = *(uc_value_t **)(ext + 1);
-					if (inst_proto) {
-						v = ucv_object_get(inst_proto, k ? k : ucv_string_get(key), &found);
-					}
+				/* Check instance-specific proto first (set via
+				 * ucv_resource_new_prototyped); returns NULL for resources
+				 * without an instance proto. */
+				if ((inst_proto = ucv_resource_proto_get(scope)) != NULL) {
+					v = ucv_object_get(inst_proto, k ? k : ucv_string_get(key), &found);
 				}
 
 				/* Then fall back to type prototype */
