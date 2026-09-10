@@ -669,25 +669,6 @@ uc_ubus_error(uc_vm_t *vm, size_t nargs)
 	return rv;
 }
 
-static void
-uc_ubus_put_res(uc_value_t **rp)
-{
-	uc_value_t *res = *rp;
-	uc_resource_ext_t *ext;
-
-	*rp = NULL;
-
-	if (!res)
-		return;
-
-	ext = (uc_resource_ext_t *)res;
-	for (size_t i = 0; i < ext->uvcount; i++)
-		ucv_resource_value_set(res, i, NULL);
-
-	ucv_resource_persistent_set(res, false);
-	ucv_put(res);
-}
-
 enum {
 	CONN_RES_FD,
 	CONN_RES_CB,
@@ -726,6 +707,38 @@ enum {
 	SUB_RES_PATTERNS,
 	__SUB_RES_MAX,
 };
+
+/* Largest value slot count across all ubus resource types. Keep in sync
+ * with the largest __*_RES_MAX above; used to sweep a resource's value
+ * slots without needing to know its specific type. */
+enum {
+	UBUS_RES_MAX = __DEFER_RES_MAX
+};
+
+static void
+uc_ubus_put_res(uc_value_t **rp)
+{
+	uc_value_t *res = *rp;
+	size_t i;
+
+	*rp = NULL;
+
+	if (!res)
+		return;
+
+	/* drop the stored references (including a per-instance prototype, if
+	 * present) to break resource <-> closure reference cycles
+	 * deterministically, without waiting for a gc pass. The setter
+	 * ignores indexes beyond the resource's own value count, so it is
+	 * safe to sweep up to the largest ubus resource slot count. */
+	for (i = 0; i < UBUS_RES_MAX; i++)
+		ucv_resource_value_set(res, i, NULL);
+
+	ucv_resource_proto_set(res, NULL);
+
+	ucv_resource_persistent_set(res, false);
+	ucv_put(res);
+}
 
 static uc_value_t *
 blob_to_ucv(uc_vm_t *vm, struct blob_attr *attr, bool table, const char **name);
