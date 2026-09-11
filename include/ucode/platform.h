@@ -18,10 +18,6 @@
 #define UCODE_PLATFORM_H
 
 #include <signal.h>
-#include <fcntl.h>
-#include <time.h>
-
-#include "ucode/util.h"
 
 #ifdef NSIG
 # define UC_SYSTEM_SIGNAL_COUNT NSIG
@@ -30,50 +26,5 @@
 #endif
 
 extern const char *uc_system_signal_names[];
-
-#if defined(__linux__)
-# include <endian.h>
-# include <sys/sysmacros.h>
-#elif defined(__APPLE__)
-# include <unistd.h>
-# include <crt_externs.h>
-# include <machine/endian.h>
-# include <libkern/OSByteOrder.h>
-
-# define htobe16(x) OSSwapHostToBigInt16(x)
-# define htole16(x) OSSwapHostToLittleInt16(x)
-# define be16toh(x) OSSwapBigToHostInt16(x)
-# define le16toh(x) OSSwapLittleToHostInt16(x)
-
-# define htobe32(x) OSSwapHostToBigInt32(x)
-# define htole32(x) OSSwapHostToLittleInt32(x)
-# define be32toh(x) OSSwapBigToHostInt32(x)
-# define le32toh(x) OSSwapLittleToHostInt32(x)
-
-# define htobe64(x) OSSwapHostToBigInt64(x)
-# define htole64(x) OSSwapHostToLittleInt64(x)
-# define be64toh(x) OSSwapBigToHostInt64(x)
-# define le64toh(x) OSSwapLittleToHostInt64(x)
-
-# define environ (*_NSGetEnviron())
-
-__hidden int pipe2(int[2], int);
-__hidden int sigtimedwait(const sigset_t *, siginfo_t *, const struct timespec *);
-
-static inline int
-execvpe(const char *program, char * const *argv, char * const *envp)
-{
-	char **saved = environ;
-	int rc;
-
-	environ = (char **)envp;
-	rc = execvp(program, argv);
-	environ = saved;
-
-	return rc;
-}
-#else
-# error Unsupported platform
-#endif
 
 #endif /* UCODE_PLATFORM_H */

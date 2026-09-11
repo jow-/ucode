@@ -14,8 +14,8 @@
 #ifndef _UC_CPARSE_H
 #define _UC_CPARSE_H
 
-#include <ucode/types.h>
-#include <ucode/vm.h>
+#include "ucode/types.h"
+#include "ucode/vm.h"
 
 #include "uc_def.h"
 #include "uc_ctype.h"

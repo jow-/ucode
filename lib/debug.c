@@ -56,21 +56,20 @@
  * @module debug
  */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <assert.h>
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
 
 #ifdef HAVE_ULOOP
 #include <libubox/uloop.h>
 #endif
 
-#include <json-c/printbuf.h>
-#include <json-c/linkhash.h>
 
 #include "ucode/module.h"
-#include "ucode/platform.h"
+#include "ucode/internal/lib.h"
+#include "ucode/internal/program.h"
+#include "ucode/internal/chunk.h"
 
 
 static char *memdump_signal = "USR2";

@@ -14,11 +14,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <string.h>
 #include <errno.h>
 
-#include "ucode/source.h"
-#include "ucode/platform.h"
+#include "ucode/internal/source.h"
+#include "ucode/internal/platform.h"
 
 
 uc_source_t *
@@ -68,6 +67,18 @@ uc_source_new_buffer(const char *name, char *buf, size_t len)
 	src->lineinfo.entries = NULL;
 
 	return src;
+}
+
+uc_source_t *
+uc_source_get(uc_source_t *source)
+{
+	return (uc_source_t *)ucv_get(source ? &source->header : NULL);
+}
+
+void
+uc_source_put(uc_source_t *source)
+{
+	ucv_put(source ? &source->header : NULL);
 }
 
 size_t

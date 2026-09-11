@@ -23,8 +23,8 @@
 #include <signal.h>
 #include <json-c/json.h>
 
-#include "util.h"
-#include "platform.h"
+#include <ucode/util.h>
+#include <ucode/platform.h>
 
 
 /* Value types and generic value header */
@@ -54,77 +54,26 @@ typedef struct uc_value {
 } uc_value_t;
 
 
-/* Constant list defintions */
+struct uc_vm;
+struct uc_source;
+struct uc_program;
+struct uc_function;
 
-typedef struct {
-	size_t isize;
-	size_t dsize;
-	uint64_t *index;
-	char *data;
-} uc_value_list_t;
+struct uc_parse_config;
+typedef struct uc_parse_config uc_parse_config_t;
 
-
-/* Source buffer defintions */
-
-uc_declare_vector(uc_lineinfo_t, uint8_t);
-
-typedef struct {
-	uc_value_t header;
-	char *filename, *runpath, *buffer;
-	FILE *fp;
-	size_t off;
-	uc_lineinfo_t lineinfo;
-	struct {
-		size_t count, offset;
-		uc_value_t **entries;
-	} exports;
-} uc_source_t;
+typedef struct uc_vm uc_vm_t;
+typedef struct uc_source uc_source_t;
+typedef struct uc_program uc_program_t;
+typedef struct uc_function uc_function_t;
 
 
-/* Bytecode chunk defintions */
-
-typedef struct {
-	size_t from, to, target, slot;
-} uc_ehrange_t;
-
-typedef struct {
-	size_t from, to, slot, nameidx;
-} uc_varrange_t;
-
-uc_declare_vector(uc_ehranges_t, uc_ehrange_t);
-uc_declare_vector(uc_variables_t, uc_varrange_t);
-uc_declare_vector(uc_offsetinfo_t, uint8_t);
-
-typedef struct {
-	size_t count;
-	uint8_t *entries;
-	uc_ehranges_t ehranges;
-	struct {
-		uc_variables_t variables;
-		uc_value_list_t varnames;
-		uc_offsetinfo_t offsets;
-	} debuginfo;
-} uc_chunk_t;
-
-
-/* Value type structures */
+/* Value type structures. */
 
 typedef struct uc_weakref {
 	struct uc_weakref *prev;
 	struct uc_weakref *next;
 } uc_weakref_t;
-
-typedef struct uc_function {
-	uc_weakref_t progref;
-	bool arrow, vararg, strict, module;
-	size_t nargs;
-	size_t nupvals;
-	size_t srcidx;
-	size_t srcpos;
-	uc_chunk_t chunk;
-	struct uc_program *program;
-	char name[];
-} uc_function_t;
 
 typedef struct {
 	uc_value_t header;
@@ -183,7 +132,6 @@ typedef struct {
 	uc_upvalref_t **upvals;
 } uc_closure_t;
 
-typedef struct uc_vm uc_vm_t;
 typedef uc_value_t *(*uc_cfn_ptr_t)(uc_vm_t *, size_t);
 
 typedef struct {
@@ -220,84 +168,8 @@ typedef struct {
 
 uc_declare_vector(uc_resource_types_t, uc_resource_type_t *);
 
-typedef struct {
-	uc_list_t list;
-	struct lh_table *table;
-	union {
-		struct lh_entry *pos;
-		struct {
-			const void *k;
-			unsigned long hash;
-		} kh;
-	} u;
-} uc_object_iterator_t;
 
-
-/* Program structure definitions */
-
-uc_declare_vector(uc_sources_t, uc_source_t *);
-uc_declare_vector(uc_modexports_t, uc_upvalref_t *);
-
-typedef struct uc_program {
-	uc_value_t header;
-	uc_value_list_t constants;
-	uc_weakref_t functions;
-	uc_sources_t sources;
-	uc_modexports_t exports;
-} uc_program_t;
-
-
-/* Parser definitions */
-
-uc_declare_vector(uc_search_path_t, char *);
-
-typedef struct {
-	bool lstrip_blocks;
-	bool trim_blocks;
-	bool strict_declarations;
-	bool raw_mode;
-	uc_search_path_t module_search_path;
-	uc_search_path_t force_dynlink_list;
-	bool setup_signal_handlers;
-	bool compile_module;
-} uc_parse_config_t;
-
-extern uc_parse_config_t uc_default_parse_config;
-
-void uc_search_path_init(uc_search_path_t *search_path);
-
-static inline void
-uc_search_path_add(uc_search_path_t *search_path, char *path) {
-	uc_vector_push(search_path, xstrdup(path));
-}
-
-static inline void
-uc_search_path_free(uc_search_path_t *search_path) {
-	while (search_path->count > 0)
-		free(search_path->entries[--search_path->count]);
-
-	uc_vector_clear(search_path);
-}
-
-
-/* TLS data */
-
-typedef struct {
-	/* VM owning installed signal handlers */
-	uc_vm_t *signal_handler_vm;
-
-	/* Reference counter of this thread context for deallocation purposes */
-	size_t refcount;
-
-	/* Object iteration */
-	uc_list_t object_iterators;
-} uc_thread_context_t;
-
-__hidden uc_thread_context_t *uc_thread_context_get(void);
-
-__hidden void uc_thread_context_free(void);
-
-/* VM definitions */
+/* VM exception, call-frame and stack state */
 
 typedef enum {
 	EXCEPTION_NONE,
@@ -339,6 +211,8 @@ typedef struct printbuf uc_stringbuf_t;
 
 typedef void (uc_exception_handler_t)(uc_vm_t *, uc_exception_t *);
 
+uc_declare_vector(uc_modexports_t, uc_upvalref_t *);
+
 struct uc_vm {
 	uc_stack_t stack;
 	uc_exception_t exception;
@@ -376,10 +250,6 @@ struct uc_vm {
 
 
 /* Value API */
-
-__hidden void ucv_free(uc_value_t *, bool);
-__hidden void ucv_unref(uc_weakref_t *);
-__hidden void ucv_ref(uc_weakref_t *, uc_weakref_t *);
 
 uc_value_t *ucv_get(uc_value_t *uv);
 void ucv_put(uc_value_t *);
@@ -719,7 +589,5 @@ ucv_clear_mark(uc_value_t *uv)
 }
 
 void ucv_gc(uc_vm_t *);
-
-__hidden void ucv_freeall(uc_vm_t *);
 
 #endif /* UCODE_TYPES_H */

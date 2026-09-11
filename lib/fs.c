@@ -46,13 +46,10 @@
  * @module fs
  */
 
-#include <stdio.h>
 #include <errno.h>
-#include <string.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/file.h>
 #include <grp.h>
@@ -116,7 +113,7 @@ mac_ioctl_cmd(unsigned int dir, unsigned int type, unsigned int num, size_t size
 #endif
 
 #include "ucode/module.h"
-#include "ucode/platform.h"
+#include "ucode/internal/platform.h"
 
 #define err_return(err) do { \
 	uc_vm_registry_set(vm, "fs.last_error", ucv_int64_new(err)); \

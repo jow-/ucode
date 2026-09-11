@@ -48,15 +48,10 @@
  * @module io
  */
 
-#include <stdio.h>
 #include <errno.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <termios.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <limits.h>
 
 #if defined(__linux__)
@@ -110,7 +105,6 @@ mac_ioctl_cmd(unsigned int dir, unsigned int type, unsigned int num, size_t size
 #endif
 
 #include "ucode/module.h"
-#include "ucode/platform.h"
 
 #define err_return(err) do { \
 	uc_vm_registry_set(vm, "io.last_error", ucv_int64_new(err)); \

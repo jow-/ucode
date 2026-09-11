@@ -17,12 +17,11 @@
 #include <assert.h>
 #include <errno.h>
 
-#include "ucode/compiler.h"
-#include "ucode/chunk.h"
-#include "ucode/vm.h" /* I_* */
-#include "ucode/source.h"
-#include "ucode/program.h"
-#include "ucode/lib.h" /* uc_error_context_format() */
+#include "ucode/internal/compiler.h"
+#include "ucode/internal/chunk.h"
+#include "ucode/internal/vm.h" /* ISA: I_*, uc_vm_insn_t */
+#include "ucode/internal/program.h"
+#include "ucode/internal/lib.h" /* uc_error_context_format() */
 
 #ifndef NO_COMPILE
 

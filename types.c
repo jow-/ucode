@@ -14,20 +14,17 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdarg.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
 #include <math.h>
-#include <ctype.h>
 #include <float.h>
 
-#include "json-c-compat.h"
 
-#include "ucode/types.h"
-#include "ucode/util.h"
-#include "ucode/vm.h"
-#include "ucode/program.h"
+#include "ucode/internal/types.h"
+#include "ucode/internal/vm.h" /* ISA: I_* opcodes */
+#include "ucode/internal/program.h"
+#include "ucode/internal/chunk.h"
 
 static char *uc_default_search_path[] = { LIB_SEARCH_PATH };
 

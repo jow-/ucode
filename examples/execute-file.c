@@ -16,9 +16,9 @@
 
 #include <stdio.h>
 
-#include <ucode/compiler.h>
-#include <ucode/lib.h>
-#include <ucode/vm.h>
+#include "ucode/compiler.h"
+#include "ucode/lib.h"
+#include "ucode/vm.h"
 
 
 static uc_parse_config_t config = {

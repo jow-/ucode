@@ -13,11 +13,13 @@
 */
 
 #include <ctype.h>
-#include <ucode/vm.h>
+#include "ucode/vm.h"
 #include "uc_ctype.h"
 #include "uc_cparse.h"
 
 #include "ucode/util.h"
+#include "ucode/internal/types.h"
+#include "ucode/internal/util.h"
 
 /*
 ** Important note: this is NOT a validating C parser! This is a minimal

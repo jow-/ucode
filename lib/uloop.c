@@ -64,16 +64,15 @@
  */
 
 #include <errno.h>
-#include <sys/wait.h>
-#include <string.h>
 #include <unistd.h>
 #include <limits.h>
 #include <fcntl.h>
+#include <sys/wait.h>
 
 #include <libubox/uloop.h>
 
 #include "ucode/module.h"
-#include "ucode/platform.h"
+#include "ucode/internal/platform.h"
 
 #define ok_return(expr) do { last_error = 0; return (expr); } while(0)
 #define err_return(err) do { last_error = err; return NULL; } while(0)

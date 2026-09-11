@@ -127,6 +127,7 @@
 #endif
 
 #include "ucode/module.h"
+#include "ucode/internal/lib.h"
 
 
 static char log_ident[32];

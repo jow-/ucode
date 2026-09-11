@@ -22,7 +22,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include "types.h"
+#include "ucode/internal/types.h"
+#include "ucode/internal/util.h"
 
 typedef enum {
 	TAG_INVAL = 0,

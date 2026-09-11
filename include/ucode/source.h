@@ -21,8 +21,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#include "util.h"
-#include "types.h"
+#include <ucode/util.h>
+#include <ucode/types.h>
 
 
 #define UC_PRECOMPILED_BYTECODE_MAGIC 0x1b756362  /* <esc> 'u' 'c' 'b' */
@@ -32,29 +32,18 @@ typedef enum {
 	UC_SOURCE_TYPE_PRECOMPILED = 1,
 } uc_source_type_t;
 
+/* Create a source from a file or an in-memory buffer. The buffer variant
+ * takes ownership of `buf` (it is freed when the source is released). */
 uc_source_t *uc_source_new_file(const char *path);
 uc_source_t *uc_source_new_buffer(const char *name, char *buf, size_t len);
 
+/* Fetch the line containing the given byte offset; *offset is set to the
+ * offset of the first character of that line. Returns the 1-based line number. */
 size_t uc_source_get_line(uc_source_t *source, size_t *offset);
 
-static inline uc_source_t *
-uc_source_get(uc_source_t *source) {
-	return (uc_source_t *)ucv_get(source ? &source->header : NULL);
-}
-
-static inline void
-uc_source_put(uc_source_t *source) {
-	ucv_put(source ? &source->header : NULL);
-}
-
-__hidden uc_source_type_t uc_source_type_test(uc_source_t *source);
-
-__hidden void uc_source_line_next(uc_source_t *source);
-__hidden void uc_source_line_update(uc_source_t *source, size_t off);
-
-__hidden void uc_source_runpath_set(uc_source_t *source, const char *runpath);
-
-__hidden bool uc_source_export_add(uc_source_t *source, uc_value_t *name);
-__hidden ssize_t uc_source_export_lookup(uc_source_t *source, uc_value_t *name);
+/* Reference counting. uc_source_t is an opaque refcounted value; these are
+ * the only ways downstream should acquire/release a source. */
+uc_source_t *uc_source_get(uc_source_t *source);
+void uc_source_put(uc_source_t *source);
 
 #endif /* UCODE_SOURCE_H */

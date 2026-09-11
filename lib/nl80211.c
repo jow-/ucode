@@ -62,37 +62,23 @@ limitations under the License.
 * @module nl80211
 */
 
-#include <stdio.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdarg.h>
-#include <unistd.h>
 #include <errno.h>
-#include <string.h>
-#include <limits.h>
-#include <math.h>
 #include <assert.h>
 #include <fcntl.h>
-#include <poll.h>
-#include <time.h>
 
 #include <net/if.h>
 #include <netinet/ether.h>
 #include <arpa/inet.h>
-#include <netlink/msg.h>
-#include <netlink/attr.h>
-#include <netlink/socket.h>
 #include <netlink/genl/genl.h>
 #include <netlink/genl/family.h>
 #include <netlink/genl/ctrl.h>
 
-#include <linux/nl80211.h>
 #include <linux/ieee80211.h>
 #include <linux/mac80211_hwsim.h>
 #include <libubox/uloop.h>
 
 #include "ucode/module.h"
-#include "ucode/platform.h"
+#include "ucode/internal/platform.h"
 
 #define DIV_ROUND_UP(n, d)      (((n) + (d) - 1) / (d))
 

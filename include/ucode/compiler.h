@@ -14,123 +14,54 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Public compilation API: uc_compile() and the parse configuration. */
+
 #ifndef UCODE_COMPILER_H
 #define UCODE_COMPILER_H
 
 #include <stddef.h>
-#include <stdint.h>
 #include <stdbool.h>
 
-#include "source.h"
-#include "lexer.h"
-#include "types.h"
-#include "util.h"
+#include <ucode/types.h>
+#include <ucode/source.h>
 
-typedef enum {
-	P_NONE,
 
-	P_COMMA,	/* , */
+uc_declare_vector(uc_search_path_t, char *);
 
-	P_ASSIGN,	/* = += -= *= /= %= <<= >>= &= ^= |= ||= &&= **= ??= */
+struct uc_parse_config {
+	bool lstrip_blocks;
+	bool trim_blocks;
+	bool strict_declarations;
+	bool raw_mode;
+	uc_search_path_t module_search_path;
+	uc_search_path_t force_dynlink_list;
+	bool setup_signal_handlers;
+	bool compile_module;
+};
 
-	P_TERNARY,	/* ?: */
+extern uc_parse_config_t uc_default_parse_config;
 
-	P_OR,		/* || ?? */
-	P_AND,		/* && */
-	P_BOR,		/* | */
-	P_BXOR,		/* ^ */
-	P_BAND,		/* & */
+void uc_search_path_init(uc_search_path_t *search_path);
 
-	P_EQUAL,	/* === !== == != */
-	P_COMPARE,	/* < <= > >= in */
+static inline void
+uc_search_path_add(uc_search_path_t *search_path, char *path) {
+	uc_vector_push(search_path, xstrdup(path));
+}
 
-	P_SHIFT,	/* << >> */
+static inline void
+uc_search_path_free(uc_search_path_t *search_path) {
+	while (search_path->count > 0)
+		free(search_path->entries[--search_path->count]);
 
-	P_ADD,		/* + - */
-	P_MUL,		/* * / % */
+	uc_vector_clear(search_path);
+}
 
-	P_EXP,		/* ** */
-
-	P_UNARY,	/* ! ~ +… -… ++… --… */
-
-	P_INC,		/* …++ …-- */
-
-	P_CALL,		/* ….…, …[…], …(…) */
-
-	P_PRIMARY	/* (…) */
-} uc_precedence_t;
-
-typedef enum {
-	F_ASSIGNABLE = (1 << 0),
-	F_ALTBLOCKMODE = (1 << 1),
-} uc_exprflag_t;
-
-typedef struct uc_patchlist {
-	struct uc_patchlist *parent;
-	size_t depth, count, *entries;
-	uc_tokentype_t token;
-} uc_patchlist_t;
-
-typedef struct uc_exprstack {
-	struct uc_exprstack *parent;
-	uint32_t flags;
-	uc_tokentype_t token;
-} uc_exprstack_t;
-
-typedef struct {
-	uc_value_t *name;
-	ssize_t depth;
-	size_t from;
-	bool captured;
-	bool constant;
-	bool funcstub;
-} uc_local_t;
-
-typedef struct {
-	uc_value_t *name;
-	size_t index;
-	bool local;
-	bool constant;
-} uc_upval_t;
-
-uc_declare_vector(uc_locals_t, uc_local_t);
-uc_declare_vector(uc_upvals_t, uc_upval_t);
-uc_declare_vector(uc_jmplist_t, size_t);
-
-typedef struct {
-	uc_parse_config_t *config;
-	uc_lexer_t lex;
-	uc_token_t prev, curr;
-	bool synchronizing;
-	uc_stringbuf_t *error;
-} uc_parser_t;
-
-typedef struct uc_compiler {
-	struct uc_compiler *parent;
-	uc_locals_t locals;
-	uc_upvals_t upvals;
-	uc_patchlist_t *patchlist;
-	uc_exprstack_t *exprstack;
-	uc_function_t *function;
-	uc_parser_t *parser;
-	uc_program_t *program;
-	size_t scope_depth, current_srcpos, last_insn, try_depth, tailcall_off;
-} uc_compiler_t;
-
-typedef struct {
-	void (*prefix)(uc_compiler_t *);
-	void (*infix)(uc_compiler_t *);
-	uc_precedence_t precedence;
-} uc_parse_rule_t;
-
+/*
+ * Compile the given source into a program. On success returns a new
+ * uc_program_t (caller must release with uc_program_put()); on failure
+ * returns NULL and, if errp is non-NULL, stores a heap-allocated error
+ * message (caller must free()).
+ */
 uc_program_t *uc_compile(uc_parse_config_t *config, uc_source_t *source, char **errp);
-
-#define uc_compiler_exprstack_push(compiler, token, flags) \
-	uc_exprstack_t expr = { compiler->exprstack, flags, token }; \
-	compiler->exprstack = &expr
-
-#define uc_compiler_exprstack_pop(compiler) \
-	if (compiler->exprstack) \
-		compiler->exprstack = compiler->exprstack->parent
 
 #endif /* UCODE_COMPILER_H */

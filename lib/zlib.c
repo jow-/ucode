@@ -22,14 +22,12 @@
  * @module zlib
  */
 
-#include <stdio.h>
-#include <string.h>
 #include <assert.h>
 #include <errno.h>
 #include <zlib.h>
 
 #include "ucode/module.h"
-#include "ucode/platform.h"
+#include "ucode/internal/util.h"
 
 // https://zlib.net/zlib_how.html
 

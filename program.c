@@ -17,12 +17,10 @@
 #include <assert.h>
 #include <errno.h>
 
-#include "ucode/program.h"
-#include "ucode/source.h"
-#include "ucode/vallist.h"
-#include "ucode/chunk.h"
-#include "ucode/vm.h"
-#include "ucode/platform.h"
+#include "ucode/internal/program.h"
+#include "ucode/internal/source.h"
+#include "ucode/internal/chunk.h"
+#include "ucode/internal/platform.h"
 
 
 uc_program_t *
@@ -41,6 +39,18 @@ uc_program_new(void)
 	uc_vallist_init(&prog->constants);
 
 	return prog;
+}
+
+uc_program_t *
+uc_program_get(uc_program_t *prog)
+{
+	return (uc_program_t *)ucv_get(prog ? &prog->header : NULL);
+}
+
+void
+uc_program_put(uc_program_t *prog)
+{
+	ucv_put(prog ? &prog->header : NULL);
 }
 
 uc_function_t *

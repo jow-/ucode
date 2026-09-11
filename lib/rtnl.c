@@ -56,30 +56,18 @@ limitations under the License.
  * @module rtnl
  */
 
-#include <stdio.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdarg.h>
-#include <unistd.h>
 #include <errno.h>
-#include <string.h>
-#include <limits.h>
-#include <math.h>
 #include <assert.h>
 
 #include <netinet/ether.h>
 #include <arpa/inet.h>
-#include <netlink/msg.h>
 #include <netlink/attr.h>
-#include <netlink/socket.h>
 
-#include <linux/rtnetlink.h>
 #include <linux/if_tunnel.h>
 #include <linux/ip6_tunnel.h>
 #include <linux/lwtunnel.h>
 #include <linux/mpls.h>
 #include <linux/mpls_iptunnel.h>
-#include <linux/seg6.h>
 #include <linux/seg6_iptunnel.h>
 #include <linux/seg6_hmac.h>
 #include <linux/veth.h>
@@ -95,7 +83,6 @@ limitations under the License.
 #include <libubox/uloop.h>
 
 #include "ucode/module.h"
-#include "ucode/platform.h"
 
 #define DIV_ROUND_UP(n, d)      (((n) + (d) - 1) / (d))
 
