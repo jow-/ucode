@@ -15,8 +15,10 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 
-#include "ucode/platform.h"
+#include "ucode/internal/platform.h"
 
 const char *uc_system_signal_names[UC_SYSTEM_SIGNAL_COUNT] = {
 #if defined(SIGINT)
@@ -108,6 +110,9 @@ const char *uc_system_signal_names[UC_SYSTEM_SIGNAL_COUNT] = {
 #endif
 #if defined(SIGUSR2)
 	[SIGUSR2] = "USR2",
+#endif
+#if defined(SIGWINCH)
+	[SIGWINCH] = "WINCH",
 #endif
 };
 

@@ -1,7 +1,6 @@
 #define _DEFAULT_SOURCE
 
 #include <errno.h>
-#include <string.h>
 #include <limits.h>
 #include <unistd.h>
 #include <termios.h>

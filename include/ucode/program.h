@@ -17,50 +17,28 @@
 #ifndef UCODE_PROGRAM_H
 #define UCODE_PROGRAM_H
 
-#include "types.h"
+#include <stdio.h>
 
+#include <ucode/types.h>
 
+/* Serialized bytecode format version. */
+#define UCODE_BYTECODE_VERSION 0x02
+
+/* Create a new, empty program. */
 uc_program_t *uc_program_new(void);
 
-static inline uc_program_t *
-uc_program_get(uc_program_t *prog) {
-	return (uc_program_t *)ucv_get(prog ? &prog->header : NULL);
-}
+/* Reference counting. uc_program_t is an opaque refcounted value; these are
+ * the only ways downstream should acquire/release a program. */
+uc_program_t *uc_program_get(uc_program_t *prog);
+void uc_program_put(uc_program_t *prog);
 
-static inline void
-uc_program_put(uc_program_t *prog) {
-	ucv_put(prog ? &prog->header : NULL);
-}
+/* Serialize a program to a stream, or load one (plain or precompiled) from a
+ * source. uc_program_load takes ownership of the source. */
+void uc_program_write(uc_program_t *prog, FILE *fp, bool compressed);
+uc_program_t *uc_program_load(uc_source_t *source, char **errp);
 
-#define uc_program_function_foreach(prog, fn)			\
-	uc_function_t *fn;									\
-	for (fn = (uc_function_t *)prog->functions.prev;	\
-	     fn != (uc_function_t *)&prog->functions; 		\
-	     fn = (uc_function_t *)fn->progref.prev)
-
-#define uc_program_function_foreach_safe(prog, fn)		\
-	uc_function_t *fn, *fn##_tmp;						\
-	for (fn = (uc_function_t *)prog->functions.prev, 	\
-	     fn##_tmp = (uc_function_t *)fn->progref.prev;	\
-	     fn != (uc_function_t *)&prog->functions; 		\
-	     fn = fn##_tmp, 								\
-	     fn##_tmp = (uc_function_t *)fn##_tmp->progref.prev)
-
-#define uc_program_function_last(prog) (uc_function_t *)prog->functions.next
-
-__hidden uc_function_t *uc_program_function_new(uc_program_t *, const char *, uc_source_t *, size_t);
-__hidden size_t uc_program_function_id(uc_program_t *, uc_function_t *);
-__hidden uc_function_t *uc_program_function_load(uc_program_t *, size_t);
-uc_source_t *uc_program_function_source(uc_function_t *);
-size_t uc_program_function_srcpos(uc_function_t *, size_t);
-__hidden void uc_program_function_free(uc_function_t *);
-
-__hidden uc_value_t *uc_program_get_constant(uc_program_t *, size_t);
-__hidden ssize_t uc_program_add_constant(uc_program_t *, uc_value_t *);
-
-void uc_program_write(uc_program_t *, FILE *, bool);
-uc_program_t *uc_program_load(uc_source_t *, char **);
-
-uc_function_t *uc_program_entry(uc_program_t *);
+/* Return the program's top-level entry function, or NULL if the program is
+ * empty. The returned function is owned by the program. */
+uc_function_t *uc_program_entry(uc_program_t *prog);
 
 #endif /* UCODE_PROGRAM_H */

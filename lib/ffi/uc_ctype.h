@@ -15,8 +15,9 @@
 #ifndef _UC_CTYPE_H
 #define _UC_CTYPE_H
 
-#include <ucode/types.h>
-#include <ucode/vm.h>
+#include "ucode/types.h"
+#include "ucode/vm.h"
+#include "ucode/internal/util.h"
 
 #include "uc_def.h"
 

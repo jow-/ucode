@@ -384,12 +384,11 @@
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
-#include <stdlib.h>
 #include <float.h>
 #include <assert.h>
 
 #include "ucode/module.h"
-#include "ucode/vallist.h"
+#include "ucode/internal/vallist.h"
 
 typedef struct formatdef {
 	char format;

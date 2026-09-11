@@ -17,8 +17,8 @@
 #ifndef UCODE_MODULE_H
 #define UCODE_MODULE_H
 
-#include "lib.h"
-#include "vm.h"
+#include <ucode/lib.h>
+#include <ucode/vm.h>
 
 
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope) __attribute__((weak));

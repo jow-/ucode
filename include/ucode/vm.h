@@ -20,109 +20,28 @@
 #include <stdbool.h>
 #include <stdarg.h>
 
-#include "chunk.h"
-#include "util.h"
-#include "lexer.h"
-#include "types.h"
-#include "program.h"
-
-#define UCODE_BYTECODE_VERSION 0x02
-
-#define __insns \
-__insn(NOOP) \
-__insn(LOAD) \
-__insn(LOAD8) \
-__insn(LOAD16) \
-__insn(LOAD32) \
-__insn(LTHIS) \
-__insn(LREXP) \
-__insn(LNULL) \
-__insn(LTRUE) \
-__insn(LFALSE) \
-__insn(LLOC) \
-__insn(LUPV) \
-__insn(LVAR) \
-__insn(LVAL) \
-__insn(PVAL) \
-__insn(CLFN) \
-__insn(ARFN) \
-__insn(SLOC) \
-__insn(SUPV) \
-__insn(SVAR) \
-__insn(SVAL) \
-__insn(ULOC) \
-__insn(UUPV) \
-__insn(UVAR) \
-__insn(UVAL) \
-__insn(NARR) \
-__insn(PARR) \
-__insn(MARR) \
-__insn(NOBJ) \
-__insn(SOBJ) \
-__insn(MOBJ) \
-__insn(BOR) \
-__insn(BXOR) \
-__insn(BAND) \
-__insn(EQS) \
-__insn(NES) \
-__insn(EQ) \
-__insn(NE) \
-__insn(LT) \
-__insn(LE) \
-__insn(GT) \
-__insn(GE) \
-__insn(IN) \
-__insn(LSHIFT) \
-__insn(RSHIFT) \
-__insn(ADD) \
-__insn(SUB) \
-__insn(MUL) \
-__insn(DIV) \
-__insn(MOD) \
-__insn(EXP) \
-__insn(NOT) \
-__insn(COMPL) \
-__insn(PLUS) \
-__insn(MINUS) \
-__insn(JMP) \
-__insn(JMPZ) \
-__insn(JMPNT) \
-__insn(COPY) \
-__insn(POP) \
-__insn(CUPV) \
-__insn(RETURN) \
-__insn(CALL) \
-__insn(PRINT) \
-__insn(NEXTK) \
-__insn(NEXTKV) \
-__insn(DELETE) \
-__insn(IMPORT) \
-__insn(EXPORT) \
-__insn(DYNLOAD)
-
-
-#undef __insn
-#define __insn(_name) I_##_name,
-
-typedef enum {
-	__insns
-	__I_MAX
-} uc_vm_insn_t;
+#include <ucode/util.h>
+#include <ucode/types.h>
+#include <ucode/compiler.h>
+#include <ucode/program.h>
 
 typedef enum {
 	STATUS_OK,
 	STATUS_EXIT,
+	STATUS_BREAK,
 	ERROR_COMPILE,
 	ERROR_RUNTIME
 } uc_vm_status_t;
 
 typedef enum {
-	GC_ENABLED = (1 << 0)
+	UC_GC_ENABLED = (1 << 0)
 } uc_vm_gc_flags_t;
 
-#define GC_DEFAULT_INTERVAL 1000
+#define UC_GC_DEFAULT_INTERVAL 1000
 
-extern uint32_t insns[__I_MAX];
+/* Deprecated bare aliases -- prefer the UC_-prefixed names above. */
+#define GC_ENABLED UC_GC_ENABLED
+#define GC_DEFAULT_INTERVAL UC_GC_DEFAULT_INTERVAL
 
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config);
 void uc_vm_free(uc_vm_t *vm);
@@ -160,5 +79,33 @@ uc_value_t *uc_vm_invoke(uc_vm_t *vm, const char *fname, size_t nargs, ...);
 uc_exception_type_t uc_vm_signal_dispatch(uc_vm_t *vm);
 void uc_vm_signal_raise(uc_vm_t *vm, int signo);
 int uc_vm_signal_notifyfd(uc_vm_t *vm);
+
+/* Lazily wire up the self-pipe/handler array needed for the signal()
+ * builtin to work, independent of whether the embedding host opted into
+ * this via uc_parse_config_t.setup_signal_handlers. Without this, a VM
+ * initialized with that flag left unset (e.g. uc_vm_init(vm, NULL)) would
+ * silently install a NULL/SIG_DFL signal disposition the first time
+ * script code calls signal() with a callable handler - terminating the
+ * process on the next occurrence of that signal instead of invoking the
+ * handler. Call this before relying on signal() from C code that doesn't
+ * control how the VM was initialized (see lib/debug.c). Safe to call more
+ * than once. */
+void uc_vm_signal_handlers_ensure(uc_vm_t *vm);
+
+bool uc_vm_break_requested(uc_vm_t *vm);
+void uc_vm_break_request(uc_vm_t *vm);
+int uc_vm_break_notifyfd(uc_vm_t *vm);
+void uc_vm_break_init(uc_vm_t *vm);
+void uc_vm_break_cleanup(uc_vm_t *vm);
+
+uc_vm_status_t uc_vm_resume(uc_vm_t *vm);
+
+/* Well-known sentinel `uc_breakpoint_t.ip` value identifying the dedicated
+ * "break on uncaught exception" system breakpoint. Not a real bytecode
+ * address - install a breakpoint with this as its `ip` (and any `cb`) to
+ * have it invoked, with callframes fully intact, right before an exception
+ * that nothing would catch starts unwinding the stack. See the comment on
+ * uc_vm_exception_would_be_caught() in vm.c for the exact semantics. */
+extern uint8_t *const UC_BREAKPOINT_UNCAUGHT_EXCEPTION;
 
 #endif /* UCODE_VM_H */
