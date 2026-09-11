@@ -20,94 +20,10 @@
 #include <stdbool.h>
 #include <stdarg.h>
 
-#include "chunk.h"
-#include "util.h"
-#include "lexer.h"
-#include "types.h"
-#include "program.h"
-
-#define UCODE_BYTECODE_VERSION 0x02
-
-#define __insns \
-__insn(NOOP) \
-__insn(LOAD) \
-__insn(LOAD8) \
-__insn(LOAD16) \
-__insn(LOAD32) \
-__insn(LTHIS) \
-__insn(LREXP) \
-__insn(LNULL) \
-__insn(LTRUE) \
-__insn(LFALSE) \
-__insn(LLOC) \
-__insn(LUPV) \
-__insn(LVAR) \
-__insn(LVAL) \
-__insn(PVAL) \
-__insn(CLFN) \
-__insn(ARFN) \
-__insn(SLOC) \
-__insn(SUPV) \
-__insn(SVAR) \
-__insn(SVAL) \
-__insn(ULOC) \
-__insn(UUPV) \
-__insn(UVAR) \
-__insn(UVAL) \
-__insn(NARR) \
-__insn(PARR) \
-__insn(MARR) \
-__insn(NOBJ) \
-__insn(SOBJ) \
-__insn(MOBJ) \
-__insn(BOR) \
-__insn(BXOR) \
-__insn(BAND) \
-__insn(EQS) \
-__insn(NES) \
-__insn(EQ) \
-__insn(NE) \
-__insn(LT) \
-__insn(LE) \
-__insn(GT) \
-__insn(GE) \
-__insn(IN) \
-__insn(LSHIFT) \
-__insn(RSHIFT) \
-__insn(ADD) \
-__insn(SUB) \
-__insn(MUL) \
-__insn(DIV) \
-__insn(MOD) \
-__insn(EXP) \
-__insn(NOT) \
-__insn(COMPL) \
-__insn(PLUS) \
-__insn(MINUS) \
-__insn(JMP) \
-__insn(JMPZ) \
-__insn(JMPNT) \
-__insn(COPY) \
-__insn(POP) \
-__insn(CUPV) \
-__insn(RETURN) \
-__insn(CALL) \
-__insn(PRINT) \
-__insn(NEXTK) \
-__insn(NEXTKV) \
-__insn(DELETE) \
-__insn(IMPORT) \
-__insn(EXPORT) \
-__insn(DYNLOAD)
-
-
-#undef __insn
-#define __insn(_name) I_##_name,
-
-typedef enum {
-	__insns
-	__I_MAX
-} uc_vm_insn_t;
+#include <ucode/util.h>
+#include <ucode/types.h>
+#include <ucode/compiler.h>
+#include <ucode/program.h>
 
 typedef enum {
 	STATUS_OK,
@@ -117,12 +33,14 @@ typedef enum {
 } uc_vm_status_t;
 
 typedef enum {
-	GC_ENABLED = (1 << 0)
+	UC_GC_ENABLED = (1 << 0)
 } uc_vm_gc_flags_t;
 
-#define GC_DEFAULT_INTERVAL 1000
+#define UC_GC_DEFAULT_INTERVAL 1000
 
-extern uint32_t insns[__I_MAX];
+/* Deprecated bare aliases -- prefer the UC_-prefixed names above. */
+#define GC_ENABLED UC_GC_ENABLED
+#define GC_DEFAULT_INTERVAL UC_GC_DEFAULT_INTERVAL
 
 void uc_vm_init(uc_vm_t *vm, uc_parse_config_t *config);
 void uc_vm_free(uc_vm_t *vm);

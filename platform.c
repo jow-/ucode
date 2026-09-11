@@ -15,8 +15,10 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 
-#include "ucode/platform.h"
+#include "ucode/internal/platform.h"
 
 const char *uc_system_signal_names[UC_SYSTEM_SIGNAL_COUNT] = {
 #if defined(SIGINT)

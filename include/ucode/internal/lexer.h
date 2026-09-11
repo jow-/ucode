@@ -14,11 +14,13 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef UCODE_LEXER_H
-#define UCODE_LEXER_H
+#ifndef UCODE_INTERNAL_LEXER_H
+#define UCODE_INTERNAL_LEXER_H
 
-#include "source.h"
-#include "types.h"
+#include "ucode/internal/source.h"
+#include "ucode/internal/types.h"
+#include "ucode/internal/util.h"
+#include "ucode/compiler.h"
 
 
 typedef enum {
@@ -188,4 +190,4 @@ __hidden bool utf8enc(char **out, int *rem, int code);
 
 __hidden const char *uc_tokenname(unsigned type);
 
-#endif /* UCODE_LEXER_H */
+#endif /* UCODE_INTERNAL_LEXER_H */

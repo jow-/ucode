@@ -14,20 +14,24 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef UCODE_MODULE_H
-#define UCODE_MODULE_H
+#ifndef UCODE_CHUNK_H
+#define UCODE_CHUNK_H
 
-#include <ucode/lib.h>
-#include <ucode/vm.h>
+#include <stdint.h>
+#include <stddef.h>
 
+#include "ucode/internal/vallist.h"
+#include "ucode/internal/util.h"
+#include "ucode/internal/types.h"
 
-void uc_module_init(uc_vm_t *vm, uc_value_t *scope) __attribute__((weak));
+__hidden void uc_chunk_init(uc_chunk_t *chunk);
+__hidden void uc_chunk_free(uc_chunk_t *chunk);
+__hidden size_t uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t line);
 
-void uc_module_entry(uc_vm_t *vm, uc_value_t *scope);
-void uc_module_entry(uc_vm_t *vm, uc_value_t *scope)
-{
-	if (uc_module_init)
-		uc_module_init(vm, scope);
-}
+__hidden void uc_chunk_pop(uc_chunk_t *chunk);
 
-#endif /* UCODE_MODULE_H */
+size_t uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t offset);
+__hidden void uc_chunk_debug_add_variable(uc_chunk_t *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name);
+uc_value_t *uc_chunk_debug_get_variable(uc_chunk_t *chunk, size_t offset, size_t slot, bool upval);
+
+#endif /* UCODE_CHUNK_H */

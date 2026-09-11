@@ -14,24 +14,30 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef UCODE_CHUNK_H
-#define UCODE_CHUNK_H
+/* Internal ucode utility header: the public util.h plus the `unused`,
+ * `localfunc` and `__hidden` convenience macros. */
 
-#include <stdint.h>
-#include <stddef.h>
+#ifndef UCODE_INTERNAL_UTIL_H
+#define UCODE_INTERNAL_UTIL_H
 
-#include "vallist.h"
-#include "util.h"
-#include "types.h"
+#include "ucode/util.h"
 
-__hidden void uc_chunk_init(uc_chunk_t *chunk);
-__hidden void uc_chunk_free(uc_chunk_t *chunk);
-__hidden size_t uc_chunk_add(uc_chunk_t *chunk, uint8_t byte, size_t line);
+#ifndef __hidden
+#define __hidden __attribute__((visibility("hidden")))
+#endif
 
-__hidden void uc_chunk_pop(uc_chunk_t *chunk);
+#ifndef unused
+# if defined(__GNUC__) || defined(__clang__)
+#  define unused __attribute__((unused))
+# endif
+#endif
 
-size_t uc_chunk_debug_get_srcpos(uc_chunk_t *chunk, size_t offset);
-__hidden void uc_chunk_debug_add_variable(uc_chunk_t *chunk, size_t from, size_t to, size_t slot, bool upval, uc_value_t *name);
-uc_value_t *uc_chunk_debug_get_variable(uc_chunk_t *chunk, size_t offset, size_t slot, bool upval);
+#ifndef localfunc
+# if defined(__GNUC__) || defined(__clang__)
+#  define localfunc static unused __attribute__((noinline))
+# else
+#  define localfunc static inline
+# endif
+#endif
 
-#endif /* UCODE_CHUNK_H */
+#endif /* UCODE_INTERNAL_UTIL_H */
