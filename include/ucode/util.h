@@ -30,15 +30,23 @@
 #define __hidden __attribute__((visibility("hidden")))
 #endif
 
-#ifndef unused
-# if defined(__GNUC__) || defined(__clang__)
-#  define unused __attribute__((unused))
+/*
+ * Inside GNU attribute syntax `unused` is a plain identifier, so a macro of
+ * that name rewrites the `__attribute__((unused))` of every header a
+ * consumer includes after this one. The shorthand is therefore reserved to
+ * ucode's own translation units, which are built with UCODE_INTERNAL.
+ */
+#ifdef UCODE_INTERNAL
+# ifndef unused
+#  if defined(__GNUC__) || defined(__clang__)
+#   define unused __attribute__((unused))
+#  endif
 # endif
 #endif
 
 #ifndef localfunc
 # if defined(__GNUC__) || defined(__clang__)
-#  define localfunc static unused __attribute__((noinline))
+#  define localfunc static __attribute__((__unused__, __noinline__))
 # else
 #  define localfunc static inline
 # endif
