@@ -14,19 +14,13 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <string.h> /* memcpy(), memset() */
 #include <math.h> /* isnan(), INFINITY */
 #include <ctype.h> /* isspace(), isdigit(), isxdigit() */
 #include <assert.h>
 #include <errno.h>
-#include <assert.h>
 
-#include "ucode/util.h"
-#include "ucode/chunk.h"
-#include "ucode/program.h"
-#include "ucode/vallist.h"
-#include "ucode/vm.h"
-#include "ucode/platform.h"
+#include "ucode/internal/vallist.h"
+#include "ucode/internal/platform.h"
 
 #define TAG_TYPE			uint64_t
 #define TAG_BITS			3

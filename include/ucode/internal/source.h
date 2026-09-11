@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020-2021 Jo-Philipp Wich <jo@mein.io>
+ * Copyright (C) 2021 Jo-Philipp Wich <jo@mein.io>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,20 +14,23 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef UCODE_MODULE_H
-#define UCODE_MODULE_H
+/* Internal source API. */
 
-#include <ucode/lib.h>
-#include <ucode/vm.h>
+#ifndef UCODE_INTERNAL_SOURCE_H
+#define UCODE_INTERNAL_SOURCE_H
 
+#include "ucode/source.h"
+#include "ucode/internal/types.h"
+#include "ucode/internal/util.h"
 
-void uc_module_init(uc_vm_t *vm, uc_value_t *scope) __attribute__((weak));
+__hidden uc_source_type_t uc_source_type_test(uc_source_t *source);
 
-void uc_module_entry(uc_vm_t *vm, uc_value_t *scope);
-void uc_module_entry(uc_vm_t *vm, uc_value_t *scope)
-{
-	if (uc_module_init)
-		uc_module_init(vm, scope);
-}
+__hidden void uc_source_line_next(uc_source_t *source);
+__hidden void uc_source_line_update(uc_source_t *source, size_t off);
 
-#endif /* UCODE_MODULE_H */
+__hidden void uc_source_runpath_set(uc_source_t *source, const char *runpath);
+
+__hidden bool uc_source_export_add(uc_source_t *source, uc_value_t *name);
+__hidden ssize_t uc_source_export_lookup(uc_source_t *source, uc_value_t *name);
+
+#endif /* UCODE_INTERNAL_SOURCE_H */

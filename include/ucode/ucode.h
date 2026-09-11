@@ -14,20 +14,18 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef UCODE_MODULE_H
-#define UCODE_MODULE_H
+/* ucode public API umbrella header. */
 
-#include <ucode/lib.h>
+#ifndef UCODE_UCODE_H
+#define UCODE_UCODE_H
+
+#include <ucode/platform.h>
+#include <ucode/types.h>
 #include <ucode/vm.h>
+#include <ucode/compiler.h>
+#include <ucode/source.h>
+#include <ucode/program.h>
+#include <ucode/module.h>
+#include <ucode/lib.h>
 
-
-void uc_module_init(uc_vm_t *vm, uc_value_t *scope) __attribute__((weak));
-
-void uc_module_entry(uc_vm_t *vm, uc_value_t *scope);
-void uc_module_entry(uc_vm_t *vm, uc_value_t *scope)
-{
-	if (uc_module_init)
-		uc_module_init(vm, scope);
-}
-
-#endif /* UCODE_MODULE_H */
+#endif /* UCODE_UCODE_H */

@@ -21,9 +21,9 @@
 
 #include <stdio.h>
 
-#include <ucode/compiler.h>
-#include <ucode/lib.h>
-#include <ucode/vm.h>
+#include "ucode/compiler.h"
+#include "ucode/lib.h"
+#include "ucode/vm.h"
 
 
 #define MULTILINE_STRING(...) #__VA_ARGS__
