@@ -1,0 +1,38 @@
+Process callbacks preserve normal exit codes and report signal termination
+as a negative signal number, consistently with system().
+
+-- Testcase --
+{%
+	import * as uloop from 'uloop';
+
+	uloop.init();
+
+	for (let command in ['exit 0', 'exit 7', 'exit 137', 'kill -TERM $$', 'kill -KILL $$']) {
+		let completed = false;
+		let expected = system(['/bin/sh', '-c', command]);
+		let child = uloop.process('/bin/sh', ['-c', command], null, (status) => {
+			completed = true;
+			printf('%s: %s\n', command, status == expected ? 'ok' : 'mismatch');
+			uloop.end();
+		});
+
+		if (!child)
+			die('Unable to start child');
+
+		uloop.run();
+
+		if (!completed)
+			die('Missing process callback');
+	}
+
+	uloop.done();
+%}
+-- End --
+
+-- Expect stdout --
+exit 0: ok
+exit 7: ok
+exit 137: ok
+kill -TERM $$: ok
+kill -KILL $$: ok
+-- End --
