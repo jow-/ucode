@@ -64,6 +64,7 @@
  */
 
 #include <errno.h>
+#include <sys/wait.h>
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
@@ -961,7 +962,9 @@ static void
 uc_uloop_process_cb(struct uloop_process *proc, int exitcode)
 {
 	uc_uloop_process_t *process = container_of(proc, uc_uloop_process_t, process);
-	uc_value_t *e = ucv_int64_new(exitcode >> 8);
+	int status = WIFEXITED(exitcode) ? WEXITSTATUS(exitcode) :
+		WIFSIGNALED(exitcode) ? -WTERMSIG(exitcode) : -1;
+	uc_value_t *e = ucv_int64_new(status);
 
 	uc_uloop_cb_invoke(&process->cb, &e, 1);
 	uc_uloop_process_clear(process);
@@ -990,6 +993,8 @@ uc_uloop_process_cb(struct uloop_process *proc, int exitcode)
  *
  * @param {Function} callback
  * The callback function to be invoked when the invoked process ends.
+ * Receives the exit code for a normally exited process, or the negative
+ * signal number if the process was terminated by a signal.
  *
  * @returns {?module:uloop.process}
  * Returns a process instance for executing external programs.
