@@ -1964,8 +1964,14 @@ uc_ctype_call(uc_vm_t *vm, size_t nargs)
 				did = CTID_DOUBLE;
 			}
 			else if (ucv_is_callable(*argp)) {
-				/* callback -> function pointer (void*) */
-				did = CTID_P_VOID;
+				/* A function passed to a variadic argument cannot be bound to a
+				 * C function pointer: the C signature is unknown, so no FFI
+				 * closure can be generated. (Inferred as void* below it would
+				 * fail in ct_to_closure() and crash on a NULL context.) */
+				uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+					"cannot pass a function as a variadic argument: "
+					"the C function pointer type cannot be inferred");
+				goto out;
 			}
 			else {
 				uc_vm_raise_exception(vm, EXCEPTION_TYPE,
@@ -2069,6 +2075,17 @@ uc_ctype_call(uc_vm_t *vm, size_t nargs)
 			}
 			else if (ucv_is_callable(*argp)) {
 				uc_closure_context_t *cc = ct_to_closure(vm, cts, d, *argp);
+
+				/* ct_to_closure() raises the specific error and returns NULL on
+				 * failure; abort the call rather than dereference a NULL context.
+				 *
+				 * The check is hidden from the static analyzer: it cannot track the
+				 * heap-allocated `atype` through the argtypes vector to the `out:`
+				 * cleanup, and reports a false positive leak on this early exit path. */
+				#ifndef __clang_analyzer__
+				if (!cc)
+					goto out;
+				#endif
 
 				memp = (void *)((uintptr_t)cc | 1u);
 				valp = &cc->codeloc;
