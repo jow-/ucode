@@ -52,15 +52,10 @@
  * @module socket
  */
 
-#include <stdio.h>
 #include <errno.h>
-#include <string.h>
 #include <ctype.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
-#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <arpa/inet.h>
@@ -71,10 +66,8 @@
 #include <poll.h>
 #include <limits.h>
 #include <dirent.h>
-#include <assert.h>
 
 #include "ucode/module.h"
-#include "ucode/platform.h"
 
 #if defined(__linux__)
 # include <linux/in6.h>

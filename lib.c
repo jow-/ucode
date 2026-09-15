@@ -42,15 +42,14 @@
 #include <fnmatch.h>
 #include <assert.h>
 
-#include "json-c-compat.h"
 
-#include "ucode/lexer.h"
-#include "ucode/compiler.h"
-#include "ucode/vm.h"
-#include "ucode/lib.h"
-#include "ucode/source.h"
-#include "ucode/program.h"
-#include "ucode/platform.h"
+#include "ucode/internal/vm.h" /* ISA: I_* opcodes */
+#include "ucode/internal/types.h"
+#include "ucode/internal/lexer.h" /* utf8enc() */
+#include "ucode/internal/lib.h"
+#include "ucode/internal/source.h"
+#include "ucode/internal/program.h"
+#include "ucode/internal/platform.h"
 
 static void
 format_context_line(uc_stringbuf_t *buf, const char *line, size_t off, bool compact)
@@ -5537,7 +5536,7 @@ uc_gc(uc_vm_t *vm, size_t nargs)
 			return NULL;
 
 		if (n == 0)
-			n = GC_DEFAULT_INTERVAL;
+			n = UC_GC_DEFAULT_INTERVAL;
 
 		return ucv_boolean_new(uc_vm_gc_start(vm, n));
 	}

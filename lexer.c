@@ -14,20 +14,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdio.h>
-
-#include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
 #include <ctype.h>
-#include <regex.h>
-#include <math.h>
-#include <errno.h>
 
-#include "ucode/vm.h"
-#include "ucode/lib.h"
-#include "ucode/lexer.h"
-#include "ucode/platform.h"
+#include "ucode/internal/lexer.h"
+#include "ucode/internal/vallist.h"
 
 struct keyword {
 	unsigned type;

@@ -19,17 +19,14 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <errno.h>
-#include <ctype.h>
 #include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
+#include <getopt.h>
 
-#include "json-c-compat.h"
 
 #include "ucode/compiler.h"
-#include "ucode/lexer.h"
 #include "ucode/lib.h"
 #include "ucode/vm.h"
+#include "ucode/types.h"
 #include "ucode/source.h"
 #include "ucode/program.h"
 

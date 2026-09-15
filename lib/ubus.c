@@ -434,11 +434,9 @@
  * sub.remove();
  */
 
-#include <unistd.h>
 #include <limits.h>
 #include <fnmatch.h>
 #include <libubus.h>
-#include <libubox/blobmsg.h>
 
 #include "ucode/module.h"
 

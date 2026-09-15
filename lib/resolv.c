@@ -214,15 +214,11 @@
  * @module resolv
  */
 
-#include <stdio.h>
 #include <resolv.h>
-#include <string.h>
 #include <errno.h>
 #include <time.h>
 #include <poll.h>
 #include <unistd.h>
-#include <stdlib.h>
-#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <netdb.h>

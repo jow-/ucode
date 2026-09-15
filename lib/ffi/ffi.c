@@ -508,8 +508,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <ffi.h>
-#include <ucode/module.h>
-#include <ucode/util.h>
+#include "ucode/module.h"
+#include "ucode/util.h"
+#include "ucode/internal/types.h"
 
 #ifdef HAVE_ULOG
 #include <libubox/ulog.h>

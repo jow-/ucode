@@ -48,7 +48,6 @@
  * @module uci
  */
 
-#include <string.h>
 #include <uci.h>
 
 #include "ucode/module.h"
@@ -1976,17 +1975,17 @@ uc_uci_foreach(uc_vm_t *vm, size_t nargs)
 		if (type && strcmp(sc->type, ucv_string_get(type)))
 			continue;
 
-		uc_value_push(ucv_get(func));
-		uc_value_push(section_to_uval(vm, sc, i - 1));
+		uc_vm_stack_push(vm, ucv_get(func));
+		uc_vm_stack_push(vm, section_to_uval(vm, sc, i - 1));
 
-		ex = uc_call(1);
+		ex = uc_vm_call(vm, false, 1);
 
 		/* stop on exception in callback */
 		if (ex)
 			break;
 
 		ret = true;
-		rv = uc_value_pop();
+		rv = uc_vm_stack_pop(vm);
 		stop = (ucv_type(rv) == UC_BOOLEAN && !ucv_boolean_get(rv));
 
 		ucv_put(rv);

@@ -14,20 +14,22 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef UCODE_MODULE_H
-#define UCODE_MODULE_H
+/* Internal library / stdlib entry points. */
 
-#include <ucode/lib.h>
-#include <ucode/vm.h>
+#ifndef UCODE_INTERNAL_LIB_H
+#define UCODE_INTERNAL_LIB_H
 
+#include "ucode/lib.h"
+#include "ucode/internal/util.h"
 
-void uc_module_init(uc_vm_t *vm, uc_value_t *scope) __attribute__((weak));
+__hidden extern const uc_function_list_t uc_stdlib_functions[];
 
-void uc_module_entry(uc_vm_t *vm, uc_value_t *scope);
-void uc_module_entry(uc_vm_t *vm, uc_value_t *scope)
-{
-	if (uc_module_init)
-		uc_module_init(vm, scope);
-}
+/* Cross-library: called by modules (e.g. debug) from libucode, so it must stay exported. */
+bool uc_source_context_format(uc_stringbuf_t *buf, uc_source_t *src, size_t off, bool compact);
 
-#endif /* UCODE_MODULE_H */
+__hidden bool uc_error_context_format(uc_stringbuf_t *buf, uc_source_t *src, uc_value_t *stacktrace, size_t off);
+__hidden void uc_error_message_indent(char **msg);
+
+__hidden uc_value_t *uc_require_library(uc_vm_t *vm, uc_value_t *nameval, bool module_mode);
+
+#endif /* UCODE_INTERNAL_LIB_H */

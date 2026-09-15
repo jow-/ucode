@@ -14,21 +14,18 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdarg.h>
-#include <string.h>
 #include <assert.h>
-#include <ctype.h>
 #include <math.h>
 #include <errno.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "ucode/vm.h"
-#include "ucode/compiler.h"
-#include "ucode/program.h"
-#include "ucode/lib.h" /* uc_error_context_format() */
-#include "ucode/platform.h"
+#include "ucode/internal/vm.h" /* ISA: I_*, uc_vm_insn_t, __insns */
+#include "ucode/internal/program.h"
+#include "ucode/internal/chunk.h"
+#include "ucode/internal/lib.h" /* uc_error_context_format() */
+#include "ucode/internal/platform.h"
 
 #undef __insn
 #define __insn(_name) #_name,
@@ -2877,7 +2874,7 @@ uc_vm_gc_step(uc_vm_t *vm)
 	size_t curr_count = 0, prev_count = 0;
 	uc_weakref_t *ref;
 
-	if (!(vm->gc_flags & GC_ENABLED))
+	if (!(vm->gc_flags & UC_GC_ENABLED))
 		return;
 
 	if (vm->alloc_refs >= vm->gc_interval) {
@@ -3480,8 +3477,8 @@ uc_vm_gc_start(uc_vm_t *vm, uint16_t interval)
 		changed = true;
 	}
 
-	if (!(vm->gc_flags & GC_ENABLED)) {
-		vm->gc_flags |= GC_ENABLED;
+	if (!(vm->gc_flags & UC_GC_ENABLED)) {
+		vm->gc_flags |= UC_GC_ENABLED;
 		changed = true;
 	}
 
@@ -3491,10 +3488,10 @@ uc_vm_gc_start(uc_vm_t *vm, uint16_t interval)
 bool
 uc_vm_gc_stop(uc_vm_t *vm)
 {
-	if (!(vm->gc_flags & GC_ENABLED))
+	if (!(vm->gc_flags & UC_GC_ENABLED))
 		return false;
 
-	vm->gc_flags &= ~GC_ENABLED;
+	vm->gc_flags &= ~UC_GC_ENABLED;
 
 	return true;
 }

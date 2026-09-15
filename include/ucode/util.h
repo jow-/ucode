@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Failsafe x* allocators and ALIGN / ARRAY_SIZE helpers. */
+
 #ifndef UCODE_UTIL_H
 #define UCODE_UTIL_H
 
@@ -24,25 +26,6 @@
 #include <stdarg.h> /* va_start(), va_end(), va_list */
 #include <string.h> /* strdup() */
 #include <json-c/json.h>
-
-
-#ifndef __hidden
-#define __hidden __attribute__((visibility("hidden")))
-#endif
-
-#ifndef unused
-# if defined(__GNUC__) || defined(__clang__)
-#  define unused __attribute__((unused))
-# endif
-#endif
-
-#ifndef localfunc
-# if defined(__GNUC__) || defined(__clang__)
-#  define localfunc static unused __attribute__((noinline))
-# else
-#  define localfunc static inline
-# endif
-#endif
 
 
 /* alignment & array size */
@@ -183,7 +166,7 @@ static inline void uc_list_remove(uc_list_t *item)
 		type *entries; \
 	} name
 
-localfunc size_t
+static inline size_t
 uc_vector_capacity(size_t init, size_t count)
 {
 	if (count == 0)
@@ -197,7 +180,7 @@ uc_vector_capacity(size_t init, size_t count)
 	return capacity;
 }
 
-localfunc void
+static inline void
 uc_vector_reduce_(char **base, size_t itemsize, size_t count, size_t remove)
 {
 	if (*base == NULL)
@@ -212,7 +195,7 @@ uc_vector_reduce_(char **base, size_t itemsize, size_t count, size_t remove)
 		*base = (__typeof__(*base))xrealloc(*base, itemsize * next_capacity);
 }
 
-localfunc void *
+static inline void *
 uc_vector_extend_(char **base, size_t itemsize, size_t count, size_t add)
 {
 	size_t curr_capacity = uc_vector_capacity(UC_VECTOR_INIT_SIZE, count);
