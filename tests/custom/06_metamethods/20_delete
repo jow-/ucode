@@ -1,0 +1,43 @@
+The `__delete__` metamethod is consulted when a property is deleted which is
+not an own property of the object. It is invoked as a method on the instance,
+with the key as single argument. A truthy return value means "deleted".
+
+-- Testcase --
+{%
+	let log = [];
+
+	let o = proto({ own: 1 }, {
+		__delete__(key) {
+			push(log, key);
+			return key == "virtual";
+		}
+	});
+
+	print(delete o.virtual, " ", delete o.other, " ", delete o.own, " ", o.own === null, "\n");
+	print(log, "
+");
+%}
+-- End --
+
+-- Expect stdout --
+true false true true
+[ "virtual", "other" ]
+-- End --
+
+Deleting an own property does not consult the metamethod.
+
+-- Testcase --
+{%
+	let o = proto({ own: 1 }, {
+		__delete__(key) {
+			die("intercepted " + key);
+		}
+	});
+
+	print(delete o.own, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+true
+-- End --

@@ -1,0 +1,77 @@
+There is no re-entrancy guard: a metamethod which re-enters the operation it
+customizes re-dispatches itself until the VM's call depth limit is exceeded,
+which raises "Too much recursion" instead of hanging or crashing.
+
+-- Testcase --
+{%
+	let get = proto({}, { __get__(key) { return this[key]; } });
+	let set = proto({}, { __set__(key, val) { this[key] = val; } });
+
+	for (let o in [ get, set ]) {
+		try {
+			o.x;
+			o.x = 1;
+		}
+		catch (e) {
+			print(e, "\n");
+		}
+	}
+
+	print("alive\n");
+%}
+-- End --
+
+-- Expect stdout --
+Too much recursion
+Too much recursion
+alive
+-- End --
+
+An exception raised by a metamethod fails the operation and propagates to
+its caller, for reads, writes and deletes alike, and leaves the VM usable.
+
+-- Testcase --
+{%
+	let o = proto({}, {
+		__get__(key) { die("get:" + key); },
+		__set__(key, val) { die("set:" + key); },
+		__delete__(key) { die("del:" + key); }
+	});
+
+	try { o.a; } catch (e) { print(e, "\n"); }
+	try { o.a = 1; } catch (e) { print(e, "\n"); }
+	try { delete o.a; } catch (e) { print(e, "\n"); }
+	try { o.a += 1; } catch (e) { print(e, "\n"); }
+	try { print("never\n", o.a); } catch (e) { print(e, "\n"); }
+
+	print("alive\n");
+%}
+-- End --
+
+-- Expect stdout --
+get:a
+set:a
+del:a
+get:a
+get:a
+alive
+-- End --
+
+A nested dispatch on a different key is an ordinary recursive lookup and
+returns.
+
+-- Testcase --
+{%
+	let o = proto({}, {
+		__get__(key) {
+			return key == "a" ? this.b : "value:" + key;
+		}
+	});
+
+	print(o.a, " ", o.b, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+value:b value:b
+-- End --

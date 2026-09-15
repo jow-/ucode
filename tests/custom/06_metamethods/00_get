@@ -1,0 +1,110 @@
+The `__get__` metamethod is consulted when a property lookup yields nothing
+in the instance itself nor in its prototype chain. It is invoked as a method
+on the instance, with the key as single argument.
+
+-- Testcase --
+{%
+	let o = proto({}, {
+		__get__(key) {
+			return key == "bar" ? "virtual:bar" : null;
+		}
+	});
+
+	print(o.bar, "\n");
+	print(o.foo === null, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+virtual:bar
+true
+-- End --
+
+Properties found by the normal lookup shadow the metamethod, both own ones
+and ones inherited from the prototype chain.
+
+-- Testcase --
+{%
+	let hits = [];
+
+	let o = proto({ own: 1 }, {
+		inherited: 2,
+		__get__(key) {
+			push(hits, key);
+			return "virtual";
+		}
+	});
+
+	print(o.own, " ", o.inherited, " ", o.missing, "\n");
+	printf("%.J\n", hits);
+%}
+-- End --
+
+-- Expect stdout --
+1 2 virtual
+[
+	"missing"
+]
+-- End --
+
+Metamethods are resolved by walking the whole prototype chain, so a
+grandparent prototype provides them as well. An own property with a dunder
+name is plain data, not a metamethod: it does not shadow the prototype's
+metamethod and is readable like any other property.
+
+-- Testcase --
+{%
+	let grand = { __get__(key) { return "grand:" + key; } };
+	let parent = proto({}, grand);
+	let child = proto({}, parent);
+
+	print(child.x, "\n");
+
+	let o = proto({}, { __get__(key) { return "parent"; } });
+	o.__get__ = function(key) { return "own"; };
+
+	print(o.x, "\n");
+	print(type(o.__get__), "\n");
+%}
+-- End --
+
+-- Expect stdout --
+grand:x
+parent
+function
+-- End --
+
+A `__get__` which returns a table delegates the lookup to that table. This
+is how a common set of virtual properties can be shared without copying.
+
+-- Testcase --
+{%
+	let base = { greeting: "hi", shared: "base", n: 1 };
+	let o = proto({ shared: "own" }, { __get__(key) { return base; } });
+
+	print(o.greeting, " ", o.shared, " ", o.n + 1, " ", o.nope === null, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+hi own 2 true
+-- End --
+
+A metamethod is only honored when it is an actual function. Optional
+chaining goes through the same lookup, so `?.` yields virtual properties
+too.
+
+-- Testcase --
+{%
+	let o = proto({}, { __get__: "not callable" });
+	let p = proto({}, { __get__(key) { return "virtual:" + key; } });
+
+	print(o.x === null, "\n");
+	print(p?.y, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+true
+virtual:y
+-- End --
