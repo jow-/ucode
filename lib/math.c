@@ -61,6 +61,49 @@
 #ifndef M_PI
 #define M_PI   3.14159265358979323846264338327950288
 #endif
+#ifndef M_E
+#define M_E    2.71828182845904523536028747135266250
+#endif
+#ifndef M_SQRT2
+#define M_SQRT2 1.41421356237309504880168872420969808
+#endif
+#ifndef M_SQRT1_2
+#define M_SQRT1_2 0.70710678118654752440084436210484904
+#endif
+#ifndef M_LN2
+#define M_LN2 0.693147180559945309417232121458176568
+#endif
+#ifndef M_LN10
+#define M_LN10 2.302585092994045684017991454684364208
+#endif
+#ifndef M_LOG2_10
+#define M_LOG2_10 3.321928094887362347870319429489390529
+#endif
+#ifndef M_LOG10_2
+#define M_LOG10_2 0.30102999566398119521373890567845649694
+#endif
+#ifndef M_PI_2
+#define M_PI_2 1.570796326794896619231321691639751442
+#endif
+#ifndef M_PI_4
+#define M_PI_4 0.785398163397448309615660845819875721
+#endif
+#ifndef M_1_PI
+#define M_1_PI 0.318309886183790671537767526745028724069
+#endif
+#ifndef M_2_PI
+#define M_2_PI 0.636619772367581343075535053490057448138
+#endif
+#ifndef M_2_SQRTPI
+#define M_2_SQRTPI 1.12837916709551257389615890312154517
+#endif
+#ifndef M_LOG2E
+#define M_LOG2E 1.44269504088896340735992468100189214
+#endif
+#ifndef M_LOG10E
+#define M_LOG10E 0.434294481903251827651128918916605082
+#endif
+
 #define degToRad(angleInDegrees) ((angleInDegrees) * M_PI / 180.0)
 #define radToDeg(angleInRadians) ((angleInRadians) * 180.0 / M_PI)
 
@@ -1399,6 +1442,22 @@ static const uc_function_list_t math_fns[] = {
 void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 {
 	uc_function_list_register(scope, math_fns);
+
+	ucv_object_add(scope, "PI", ucv_double_new(M_PI));
+	ucv_object_add(scope, "E", ucv_double_new(M_E));
+	ucv_object_add(scope, "SQRT2", ucv_double_new(M_SQRT2));
+	ucv_object_add(scope, "SQRT1_2", ucv_double_new(M_SQRT1_2));
+	ucv_object_add(scope, "LN2", ucv_double_new(M_LN2));
+	ucv_object_add(scope, "LN10", ucv_double_new(M_LN10));
+	ucv_object_add(scope, "LOG2E", ucv_double_new(M_LOG2E));
+	ucv_object_add(scope, "LOG10E", ucv_double_new(M_LOG10E));
+	ucv_object_add(scope, "LOG2_10", ucv_double_new(M_LOG2_10));
+	ucv_object_add(scope, "LOG10_2", ucv_double_new(M_LOG10_2));
+	ucv_object_add(scope, "PI_2", ucv_double_new(M_PI_2));
+	ucv_object_add(scope, "PI_4", ucv_double_new(M_PI_4));
+	ucv_object_add(scope, "INV_PI", ucv_double_new(M_1_PI));
+	ucv_object_add(scope, "INV_2PI", ucv_double_new(M_2_PI));
+	ucv_object_add(scope, "INV_SQRT2PI", ucv_double_new(M_2_SQRTPI));
 
 	uc_vm_registry_set(vm, "math.srand_called", ucv_boolean_new(false));
 }
