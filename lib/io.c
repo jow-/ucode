@@ -1276,8 +1276,12 @@ uc_io_open(uc_vm_t *vm, size_t nargs)
  * @returns {?Array<module:io.handle>}
  *
  * @example
- * const [reader, writer] = io.pipe();
+ * const pair = io.pipe();
+ * const reader = pair[0], writer = pair[1];
+ *
  * writer.write('Hello from pipe!');
+ * writer.close();
+ *
  * const data = reader.read(100);
  * print(data, "\n");  // Prints: Hello from pipe!
  */
