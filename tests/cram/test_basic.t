@@ -80,6 +80,21 @@ check that ucode provides exepected help:
     Omit (strip) debug information when compiling files.
     Only meaningful in conjunction with `-c`.
   
+  -x[expr]
+    Start program in interactive debugger. If given, stop at the location
+    described by `expr` (a function name, `path:line[:offset]`, or a ucode
+    expression evaluating to a function - the same grammar the `break`
+    debugger CLI command accepts) instead of the first instruction.
+  
+  -X[expr]
+    Enable debugger infrastructure (SIGUSR1 break, uloop) without
+    launching the interactive debugger automatically. If given, `expr` is
+    resolved the same way as for `-x` and a breakpoint is installed at
+    that location; once hit, execution pauses and waits for a remote
+    debugger to attach, the same way the SIGUSR1 break does.
+  
+
+
 
 check that ucode prints greetings:
 
