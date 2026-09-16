@@ -840,7 +840,8 @@ send_queries(resolve_ctx_t *ctx, uc_vm_t *vm, uc_value_t *res_obj)
 
 	pfd.fd = fd;
 	pfd.events = POLLIN;
-	retry_interval = timeout / ctx->retries;
+	/* ctx->retries is validated on option parsing; guard the division anyway */
+	retry_interval = timeout / (ctx->retries > 0 ? ctx->retries : 1);
 	t0 = t2 = mtime();
 	t1 = t2 - retry_interval;
 
@@ -1175,17 +1176,27 @@ parse_options(resolve_ctx_t *ctx, uc_value_t *opts)
 
 	v = ucv_object_get(opts, "retries", NULL);
 
-	if (ucv_type(v) == UC_INTEGER)
+	if (ucv_type(v) == UC_INTEGER) {
+		if (ucv_int64_get(v) < 1)
+			err_return(EINVAL, "Retries must be a positive integer");
+
 		ctx->retries = ucv_uint64_get(v);
-	else if (v)
+	}
+	else if (v) {
 		err_return(EINVAL, "Retries value not an integer");
+	}
 
 	v = ucv_object_get(opts, "timeout", NULL);
 
-	if (ucv_type(v) == UC_INTEGER)
+	if (ucv_type(v) == UC_INTEGER) {
+		if (ucv_int64_get(v) < 0)
+			err_return(EINVAL, "Timeout must not be negative");
+
 		ctx->timeout = ucv_uint64_get(v);
-	else if (v)
+	}
+	else if (v) {
 		err_return(EINVAL, "Timeout value not an integer");
+	}
 
 	v = ucv_object_get(opts, "edns_maxsize", NULL);
 
@@ -1245,7 +1256,8 @@ parse_options(resolve_ctx_t *ctx, uc_value_t *opts)
  * Total timeout for all queries in milliseconds.
  *
  * @param {number} [options.retries=2]
- * Number of retry attempts for failed queries.
+ * Number of attempts spread over the timeout; must be at least 1. Passing 0 or a
+ * negative value is rejected with an EINVAL error.
  *
  * @param {number} [options.edns_maxsize=4096]
  * Maximum UDP packet size for EDNS (Extension Mechanisms for DNS). Set to 0
