@@ -777,6 +777,110 @@ print(outer(), "\n");`,
 	);
 }
 
+function test_eval_sandbox() {
+	printf("\n## Eval Sandbox Tests\n\n");
+
+	// "return" at the top of an eval sandbox: the expression's outermost frame
+	// has no parent (the call was tail-optimized into the entry frame), so a
+	// normal "return" cannot arm a step breakpoint anywhere. Before the fix
+	// this wedged the client: the inner session ended, the expression ran to
+	// completion, the outer program (still paused) never re-paused, and the
+	// client waited forever for a PAUSED that never came. The server now
+	// synthesizes a PAUSED for the outer frame when the eval sandbox
+	// completes, so the client's prompt comes back and the session continues.
+	run_test("return_in_toplevel_eval",
+		`print("done");`,
+		['EVAL {"expr":"fn = x => x"}',
+		 'BREAK {"spec":"fn"}',
+		 'EVAL {"expr":"fn()"}',
+		 'RETURN'],
+		{
+			must_connect: true,
+			no_crash: true,
+			no_timeout: true,
+			messages_contain: ['PAUSED', 'BREAKPOINT_ADDED']
+		}
+	);
+
+	// A plain eval that hits no breakpoint still completes and re-pauses at
+	// the outer frame (the synthesized PAUSED), leaving the session usable.
+	run_test("eval_no_breakpoint_repauses",
+		`print("done");`,
+		['EVAL {"expr":"1 + 2"}', 'CONTINUE'],
+		{
+			must_connect: true,
+			no_crash: true,
+			no_timeout: true,
+			messages_contain: ['PAUSED', 'OK']
+		}
+	);
+
+	// Stepping off the end of the program ("No next instruction"): the step
+	// cannot resume, so before the fix the server sent a bare ERROR and the
+	// client - having cleared its prompt on sending the resuming STEP - never
+	// got a PAUSED back and wedged with no prompt and no input. The server
+	// now follows the ERROR with a synthesized PAUSED for the still-paused
+	// frame, so the prompt comes back and the session continues to a clean
+	// exit.
+	run_test("step_off_end_repauses",
+		`print("done");`,
+		['STEP', 'STEP', 'CONTINUE'],
+		{
+			must_connect: true,
+			no_crash: true,
+			no_timeout: true,
+			stdout_contains: ['done'],
+			messages_contain: ['PAUSED'],
+			check: (r) => {
+				// The "No next instruction" error must have been reported.
+				for (let m in r.messages) {
+					if (m.verb != 'ERROR') continue;
+					if (match(m.payload.message ?? '', /No next instruction/))
+						return null;
+				}
+				return "expected a 'No next instruction' ERROR";
+			}
+		}
+	);
+
+	// Nested evals: an eval issued while already paused inside another eval's
+	// sandbox. The eval state save/restore is a plain struct copy into each
+	// eval_expr()'s own C frame (no explicit stack), so this only works
+	// because C's LIFO call-stack order restores each capture in reverse and
+	// the sandbox never frees the buffer the outer frame still points at. Pin
+	// the behavior: define/call fn, then (paused in fn) define/call fn2, then
+	// return out of both - the session must stay coherent and reach main.
+	run_test("nested_eval",
+		`print("done");`,
+		['EVAL {"expr":"fn = x => x"}',
+		 'BREAK {"spec":"fn"}',
+		 'EVAL {"expr":"fn()"}',
+		 'EVAL {"expr":"fn2 = x => x"}',
+		 'BREAK {"spec":"fn2"}',
+		 'EVAL {"expr":"fn2()"}',
+		 'RETURN',
+		 'RETURN'],
+		{
+			must_connect: true,
+			no_crash: true,
+			no_timeout: true,
+			stdout_contains: ['done'],
+			messages_contain: ['PAUSED', 'BREAKPOINT_ADDED'],
+			check: (r) => {
+				// After returning out of both evals we must be back in the
+				// top-level frame, not wedged inside an eval expression.
+				let saw_main = false;
+				for (let m in r.messages) {
+					if (m.verb != 'PAUSED') continue;
+					let f = m.payload.function ?? '';
+					if (f == 'main') saw_main = true;
+				}
+				return saw_main ? null : "never re-paused in the main frame";
+			}
+		}
+	);
+}
+
 function test_help_and_misc() {
 	printf("\n## Help and Miscellaneous Tests\n\n");
 
@@ -994,6 +1098,7 @@ try {
 	test_source_view();
 	test_disassembly();
 	test_tail_call_optimization();
+	test_eval_sandbox();
 	test_help_and_misc();
 	test_debug_api();
 	test_edge_cases();

@@ -3285,7 +3285,12 @@ build_variables_json(uc_vm_t *vm, uc_callframe_t *frame)
  * is set to a newly allocated diagnostic string the caller must free(), or to
  * NULL if the caller should fall back to a generic message. */
 static bool eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr,
-                      uc_value_t **res, char **errmsg);
+                      uc_value_t **res, char **errmsg, bool send_paused);
+
+/* Forward declaration: defined further down, but needed by eval_expr() to
+ * synthesize a PAUSED for the outer frame when the eval sandbox completes
+ * (see the send_paused handling at the end of eval_expr()). */
+static uc_value_t *build_paused_payload(uc_vm_t *vm, debug_breakpoint_t *dbk);
 
 static size_t
 resolve_breakpoint(uc_vm_t *vm, uc_callframe_t *frame, uc_program_t *program,
@@ -3355,7 +3360,7 @@ resolve_breakpoint(uc_vm_t *vm, uc_callframe_t *frame, uc_program_t *program,
 		if (id == 0 && frame != NULL) {
 			char *errmsg2 = NULL;
 
-			if (eval_expr(vm, frame, spec, &val, &errmsg2)) {
+			if (eval_expr(vm, frame, spec, &val, &errmsg2, false)) {
 				if (ucv_type(val) == UC_CLOSURE) {
 					id = patch_breakpoint(vm,
 						((uc_closure_t *)val)->function, 0, kind, 1);
@@ -3503,7 +3508,7 @@ eval_sandbox_leave(uc_vm_t *vm, eval_sandbox_t saved)
 
 static bool
 eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
-          char **errmsg)
+          char **errmsg, bool send_paused)
 {
 	uc_chunk_t *caller_chunk = &frame->closure->function->chunk;
 	uc_variables_t *decls = &caller_chunk->debuginfo.variables;
@@ -3606,7 +3611,17 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 
 	uc_vm_scope_set(vm, scope);
 
-	/* Save VM callframes and stack */
+	/* Save VM callframes and stack. These are plain struct copies (a vector
+	 * is just {count, entries-pointer}) taken into THIS call's C frame, so
+	 * nested evals are safe without any explicit save/restore stack: a
+	 * nested eval_expr() captures the same paused state its parent saved
+	 * into its own local, and C's LIFO call-stack order guarantees each
+	 * eval restores its own capture before the outer one runs. This relies
+	 * on the sandbox only ever *reassigning* vm->callframes/stack (setting
+	 * entries to NULL below) and never *freeing* the buffer, so the outer
+	 * frame's saved entries-pointer stays valid for the whole nested call.
+	 * Don't add a free() of vm->stack/callframes here without turning this
+	 * into a real stack. */
 	uc_upvalref_t *upvals = vm->open_upvals;
 	uc_callframes_t frames = vm->callframes;
 	uc_stack_t stack = vm->stack;
@@ -3710,6 +3725,29 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 	uc_vm_scope_set(vm, prev_scope);
 	uc_program_put(prog);
 	ucv_put(exprfn);
+
+	/* The paused program's callframes/stack are back in place (restored
+	 * above). If this was an interactive `eval` (send_paused), tell the
+	 * client we're paused at the outer frame - the expression has finished
+	 * (or been unwound by a "return" at the sandbox's top) and control is
+	 * back where the program was sitting before the eval. This is what
+	 * brings the client's prompt back in the "return" case, where the inner
+	 * session ended without arming any breakpoint that would re-pause the
+	 * VM: the outer program never actually resumed, it was paused the whole
+	 * time, so a synthesized PAUSED for its frame is accurate. The client
+	 * tolerates the unsolicited PAUSED (it just re-renders the context and
+	 * re-shows the prompt). */
+	if (send_paused) {
+		int fd = debug_remote_get_active_fd();
+
+		if (fd >= 0) {
+			uc_value_t *paused =
+			    build_paused_payload(vm, &(debug_breakpoint_t){ .kind = BK_STEP });
+
+			debug_proto_write(fd, vm, "PAUSED", paused);
+			ucv_put(paused);
+		}
+	}
 
 	return rv;
 }
@@ -4104,9 +4142,21 @@ cmd_step_common(uc_vm_t *vm, debug_breakpoint_t *dbk, bool single, int fd, bool 
 
 	/* Returning from the outermost frame - nothing further to step to and
 	 * the program is about to terminate. Stay paused instead of resuming
-	 * unattended (see STEP_STAY_PAUSED comment). */
+	 * unattended (see STEP_STAY_PAUSED comment). Report the error, then
+	 * synthesize a PAUSED for the current (still-paused) frame so the
+	 * client's prompt comes back: a resuming command that does not actually
+	 * resume must always be followed by a PAUSED (or an EVENT exit), never
+	 * by a bare ERROR, so the client never has to special-case "ERROR while
+	 * awaiting a resume" to know the prompt is back. */
 	if (nextinsn == STEP_STAY_PAUSED(vm)) {
 		send_error(fd, vm, "No next instruction - program will terminate on 'continue'");
+
+		uc_value_t *paused =
+		    build_paused_payload(vm, &(debug_breakpoint_t){ .kind = BK_STEP });
+
+		debug_proto_write(fd, vm, "PAUSED", paused);
+		ucv_put(paused);
+
 		*proceed = true;
 		return;
 	}
@@ -4304,7 +4354,7 @@ proto_cmd_print(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int f
 		return;
 	}
 
-	if (eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg)) {
+	if (eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg, false)) {
 		uc_stringbuf_t vb = { 0 };
 		uc_value_t *obj = ucv_object_new(vm);
 
@@ -4344,7 +4394,7 @@ proto_cmd_eval(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int fd
 		return;
 	}
 
-	if (eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg)) {
+	if (eval_expr(vm, frame, ucv_string_get(exprv), &res, &errmsg, true)) {
 		ucv_put(res);
 		debug_proto_write(fd, vm, "OK", NULL);
 	}
@@ -4457,7 +4507,7 @@ proto_cmd_lines(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int f
 			uc_value_t *val = NULL;
 			char *errmsg = NULL;
 			char *specdup = xstrdup(spec);
-			bool ok = eval_expr(vm, frame, specdup, &val, &errmsg);
+			bool ok = eval_expr(vm, frame, specdup, &val, &errmsg, false);
 
 			free(specdup);
 
