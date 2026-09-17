@@ -88,6 +88,35 @@
  *       (a, b) => cmp(a.deref('const char *'), b.deref('const char *')));
  * ```
  *
+ * ## Passing ucode Functions to C (Closures)
+ *
+ * When a C function expects a callback, the ucode function can be passed
+ * directly as the corresponding function-pointer argument: the FFI layer
+ * transparently creates a C closure for the call's duration and invokes the
+ * ucode function for each C call.
+ *
+ * A closure can also be created explicitly with `closure()`, the counterpart
+ * of `wrap()`, and stored in a variable or passed to other ucode functions
+ * that accept function pointers:
+ *
+ * ```javascript
+ * let qsort = ffi.C.wrap('void qsort(void *, size_t, size_t, int (*)(const void *, const void *))');
+ * let arr = ffi.ctype('int[5]', [56, 4, 12, 1, 5]);
+ *
+ * // Explicit closure: a function-pointer cdata ("ffi.closure") bound to a ucode function
+ * let cmp = ffi.closure('int (*)(const void *, const void *)',
+ *                     (a, b) => a.deref('int') - b.deref('int'));
+ * qsort(arr.ptr(), arr.length(), arr.itemsize(), cmp);
+ *
+ * // Or simply pass the ucode function directly:
+ * qsort(arr.ptr(), arr.length(), arr.itemsize(),
+ *       (a, b) => a.deref('int') - b.deref('int'));
+ * ```
+ *
+ * The returned cdata keeps the ucode function alive for as long as it is
+ * reachable; dropping all references to it releases the closure. A function
+ * may be re-bound to a new function-pointer type with `cast()`.
+ *
  * ## Memory Management for char* Return Values
  *
  * When a wrapped C function returns `char*`, the return value is a **cdata pointer
@@ -204,7 +233,8 @@
  *
  * ## Limitations
  *
- * - **No vararg closures**: `wrap()` cannot create closures with variable arguments
+ * - **No vararg closures**: closures (automatic or via `closure()`) cannot be
+ *   created for function types with variable arguments
  * - **Fixed ABI**: Calling convention determined at closure creation time
  * - **Platform constraints**: Some architectures have limited support for certain type combinations
  *
@@ -546,6 +576,20 @@ typedef struct {
 } uc_ffi_cc_t;
 
 
+
+
+/* Returns the GCcdata for a value that is either an "ffi.ctype" cdata or
+ * an "ffi.closure" (function-pointer cdata). NULL if neither. */
+static GCcdata *
+ucv_cdata_data(uc_value_t *uv)
+{
+	GCcdata *cd = ucv_resource_data(uv, "ffi.ctype");
+
+	if (!cd)
+		cd = ucv_resource_data(uv, "ffi.closure");
+
+	return cd;
+}
 
 /* Check first argument for a C type and returns its ID. */
 static CTypeID ffi_checkctype(uc_vm_t *vm, size_t nargs, size_t narg, CTState *cts, uc_value_t **param)
@@ -1885,6 +1929,198 @@ out:
 	return NULL;
 }
 
+/* Destructor for "ffi.closure" resources (C closures bound to a ucode
+ * function). The data area holds the cdata header (function pointer type)
+ * followed by the libffi closure context pointer; value slot 0 retains
+ * the bound ucode function as long as the resource is reachable.
+ * The destructor frees the closure context. */
+static void
+close_closure(void *ud)
+{
+	GCcdata *cd = (GCcdata *)ud;
+	uc_closure_context_t *ctx = *(uc_closure_context_t **)(cd + 1);
+
+	if (ctx)
+		ffi_closure_free(ctx);
+}
+
+/* --- ffi.closure methods ------------------------------------------------ */
+/*
+ * The closure resource has the same GCcdata header as a plain cdata, but
+ * with a trailing uc_closure_context_t * in the data area. These methods
+ * extract the GCcdata and perform the same operations as their ffi.ctype
+ * counterparts, minus the ones that don't make sense on a function pointer
+ * (deref, get, set, index, slice, copy, fill, etc.).
+ */
+
+static uc_value_t *
+uc_closure_ptr(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *this_arg = _uc_fn_this_res(vm);
+	GCcdata *cd = ucv_resource_data(this_arg, "ffi.closure");
+
+	if (!cd)
+		return NULL;
+
+	uc_value_t *pres = uc_cdata_new(vm, CTID_P_VOID, CTSIZE_PTR);
+	*(void **)uc_cdata_dataptr(pres) = cdataptr(cd);
+
+	return pres;
+}
+
+static uc_value_t *
+uc_closure_tostring(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *this_arg = _uc_fn_this_res(vm);
+	GCcdata *cd = ucv_resource_data(this_arg, "ffi.closure");
+
+	if (!cd)
+		return NULL;
+
+	uc_value_t *type_repr = uc_ctype_repr(vm, cd->ctypeid, NULL);
+	uc_stringbuf_t *sb = ucv_stringbuf_new();
+
+	ucv_stringbuf_printf(sb, "%s %p",
+		ucv_string_get(type_repr), *(void **)cdataptr(cd));
+
+	ucv_put(type_repr);
+
+	return ucv_stringbuf_finish(sb);
+}
+
+static uc_value_t *
+uc_closure_cast(uc_vm_t *vm, size_t nargs)
+{
+	uc_value_t *this_arg = _uc_fn_this_res(vm);
+	GCcdata *cd = ucv_resource_data(this_arg, "ffi.closure");
+
+	if (!cd)
+		return NULL;
+
+	CTState *cts = ctype_cts(vm);
+	CTypeID id = ffi_checkctype(vm, nargs, 0, cts, NULL);
+	CType *d = ctype_raw(cts, id);
+
+	if (!ctype_isptr(d->info)) {
+		uc_value_t *repr = uc_ctype_repr(vm, id, NULL);
+
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+		                      "invalid cast to type '%s', can only cast to pointer types",
+		                      repr ? ucv_string_get(repr) : "NULL");
+
+		ucv_put(repr);
+
+		return NULL;
+	}
+
+	if (cd->ctypeid == id)
+		return ucv_get(this_arg);
+
+	/* create a new plain cdata with the target type, copying the pointer value */
+	uc_value_t *res = uc_cdata_new(vm, id, d->size);
+	*(void **)uc_cdata_dataptr(res) = *(void **)cdataptr(cd);
+
+	return res;
+}
+
+/* Create a C closure bound to a ucode function: allocate a libffi closure
+ * for the given function type and return a function-pointer cdata pointing
+ * at the closure code.
+ *
+ * The result is an "ffi.closure" resource (a cdata-like value): its data
+ * area holds the closure code address and the closure context pointer, and
+ * a value slot retains the bound ucode function. The C callback is valid
+ * for as long as the resource is reachable; dropping all references
+ * releases the closure via its destructor.
+ *
+ * @function module:ffi#closure
+ *
+ * @param {string|module:ffi.CData} type
+ * A C function type or function pointer type declaration, e.g.
+ * `'int (*)(char *, void *)'`. The type must not be variadic.
+ *
+ * @param {function} func
+ * The ucode function to bind to the C closure.
+ *
+ * @returns {?module:ffi.CData}
+ * A function-pointer cdata bound to the ucode function, or `null` if the
+ * type or function is invalid.
+ *
+ * @throws {Error}
+ * Throws an exception if the type is not a function type or the value is
+ * not callable.
+ *
+ * @example
+ * // Create a closure for a comparison function and pass it to qsort
+ * let qsort = ffi.C.wrap('void qsort(void *, size_t, size_t, int (*)(const void *, const void *))');
+ * let arr = ffi.ctype('int[5]', [56, 4, 12, 1, 5]);
+ * let cmp = ffi.closure('int (*)(const void *, const void *)',
+ *                     (a, b) => a.deref('int') - b.deref('int'));
+ * qsort(arr.ptr(), arr.length(), arr.itemsize(), cmp);
+ */
+static uc_value_t *
+uc_ffi_closure(uc_vm_t *vm, size_t nargs)
+{
+	CTState *cts = ctype_cts(vm);
+	uc_value_t *func = uc_fn_arg(1), *res;
+	CTypeID cid;
+	CType *ct;
+	uc_closure_context_t *ctx;
+
+	cid = ffi_checkctype(vm, nargs, 0, cts, NULL);
+
+	if (!cid || !func)
+		return NULL;
+
+	ct = ctype_raw(cts, cid);
+
+	/* accept pointers to function types too, e.g. 'int (*)(int, char *)' */
+	if (ctype_isptr(ct->info))
+		ct = ctype_rawchild(cts, ct);
+
+	if (!ct || !ctype_isfunc(ct->info)) {
+		uc_value_t *repr = uc_ctype_repr(vm, cid, NULL);
+
+		uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+			"attempt to wrap non-function C type '%s'",
+			repr ? ucv_string_get(repr) : "NULL");
+
+		ucv_put(repr);
+
+		return NULL;
+	}
+
+	ctx = ct_to_closure(vm, cts, ct, func);
+
+	if (!ctx)
+		return NULL;
+
+	/* create the "ffi.closure" resource: the data area holds the cdata
+	 * context (pointer type) followed by a pointer to the libffi closure
+	 * context, and a value slot retains the bound ucode function. The
+	 * destructor (close_closure) frees the libffi closure. */
+	GCcdata *cd;
+
+	res = ucv_resource_create_ex(vm, "ffi.closure", (void **)&cd, 1,
+	                             sizeof(GCcdata) + sizeof(void *));
+
+	if (!res)
+		return NULL;
+
+	/* use the original type id (which is the function pointer type,
+	 * e.g. 'int (*)(...)') — not a new pointer-to-pointer */
+	cd->ctypeid = ctype_check(cts, cid);
+	cd->isvla = 0;
+	cd->refs = NULL;
+
+	*(void **)(cd + 1) = ctx;
+
+	/* retain the bound ucode function for the lifetime of the resource */
+	ucv_resource_value_set(res, 0, ucv_get(func));
+
+	return res;
+}
+
 static uc_value_t *
 uc_ctype_call(uc_vm_t *vm, size_t nargs)
 {
@@ -2011,7 +2247,7 @@ uc_ctype_call(uc_vm_t *vm, size_t nargs)
 			is_vararg = true;
 			/* For variadic args, infer type from ucode value */
 			uc_value_t **argp = &vm->stack.entries[vm->stack.count - nargs + i];
-			GCcdata *arg_cd = ucv_resource_data(*argp, "ffi.ctype");
+			GCcdata *arg_cd = ucv_cdata_data(*argp);
 
 			if (arg_cd && arg_cd->ctypeid != CTID_CTYPEID) {
 				/* cdata argument: use its type directly */
@@ -2134,6 +2370,7 @@ uc_ctype_call(uc_vm_t *vm, size_t nargs)
 		}
 		else {
 			void *memp, *valp;
+			GCcdata *cd;
 
 			if (ucv_type(*argp) == UC_STRING) {
 				memp = valp = xalloc(sz);
@@ -2155,6 +2392,14 @@ uc_ctype_call(uc_vm_t *vm, size_t nargs)
 
 				memp = (void *)((uintptr_t)cc | 1u);
 				valp = &cc->codeloc;
+			}
+			else if ((cd = ucv_resource_data(*argp, "ffi.closure")) != NULL) {
+				/* pre-wrapped closure: extract the function pointer from the
+				 * closure context; the resource owns the closure */
+				uc_closure_context_t *cc = *(uc_closure_context_t **)(cd + 1);
+
+				valp = &cc->codeloc;
+				memp = NULL;
 			}
 			else {
 				memp = valp = xalloc(sz);
@@ -4490,7 +4735,7 @@ uc_ffi_cast(uc_vm_t *vm, size_t nargs)
 	CTypeID id = ffi_checkctype(vm, nargs, 0, cts, NULL);
 	CType *d = ctype_raw(cts, id);
 	uc_value_t *init = uc_fn_arg(1);
-	GCcdata *cd = ucv_resource_data(init, "ffi.ctype");
+	GCcdata *cd = ucv_cdata_data(init);
 
 	if (!ctype_isnum(d->info) && !ctype_isptr(d->info) && !ctype_isenum(d->info)) {
 		uc_value_t *repr = uc_ctype_repr(vm, id, NULL);
@@ -5209,7 +5454,7 @@ uc_ffi_import(uc_vm_t *vm, size_t nargs)
 
 static const uc_function_list_t clib_fns[] = {
 	{ "dlsym",		uc_clib_dlsym },
-	{ "resolve",	uc_clib_resolve },
+	{ "resolve",		uc_clib_resolve },
 	{ "wrap",		uc_clib_wrap },
 };
 
@@ -5223,9 +5468,9 @@ static const uc_function_list_t ctype_fns[] = {
 	{ "deref",		uc_ctype_deref },
 	{ "size",		uc_ctype_sizeof },
 	{ "length",		uc_ctype_length },
-	{ "itemsize",	uc_ctype_itemsize },
+	{ "itemsize",		uc_ctype_itemsize },
 	{ "slice",		uc_ctype_slice },
-	{ "tostring",	uc_ctype_tostring },
+	{ "tostring",		uc_ctype_tostring },
 	{ "cast",		uc_ctype_cast },
 	{ "copy",		uc_ctype_copy },
 	{ "string",		uc_ctype_string },
@@ -5233,13 +5478,19 @@ static const uc_function_list_t ctype_fns[] = {
 	{ "__set__",		uc_ctype_meta_set },
 };
 
+static const uc_function_list_t closure_fns[] = {
+	{ "ptr",		uc_closure_ptr },
+	{ "tostring",		uc_closure_tostring },
+	{ "cast",		uc_closure_cast },
+};
+
 static const uc_function_list_t global_fns[] = {
 	{ "ctype",		uc_ffi_ctype },
 	{ "cdef",		uc_ffi_cdef },
 	{ "typeof",		uc_ffi_typeof },
 	{ "sizeof",		uc_ffi_sizeof },
-	{ "alignof",	uc_ffi_alignof },
-	{ "offsetof",	uc_ffi_offsetof },
+	{ "alignof",		uc_ffi_alignof },
+	{ "offsetof",		uc_ffi_offsetof },
 	{ "errno",		uc_ffi_errno },
 	{ "string",		uc_ffi_string },
 	{ "copy",		uc_ffi_copy },
@@ -5247,6 +5498,7 @@ static const uc_function_list_t global_fns[] = {
 	{ "cast",		uc_ffi_cast },
 	{ "dlopen",		uc_ffi_dlopen },
 	{ "import",		uc_ffi_import },
+	{ "closure",		uc_ffi_closure },
 };
 
 
@@ -5306,6 +5558,7 @@ void uc_module_init(uc_vm_t *vm, uc_value_t *scope)
 
 	uc_type_declare(vm, "ffi.clib", clib_fns, close_clib);
 	uc_type_declare(vm, "ffi.ctype", ctype_fns, close_ctype);
+	uc_type_declare(vm, "ffi.closure", closure_fns, close_closure);
 
 	/* Wrapped C functions are "ffi.cfn" resources; the shared prototype
 	 * carries a __call__ metamethod so the value is invocable like a

@@ -1,0 +1,193 @@
+ffi.closure() creates a C function pointer bound to a ucode function. The
+result is an "ffi.closure" resource that can be passed to C functions
+expecting function pointers. It supports ptr(), tostring(), and cast() methods.
+
+Create a closure and pass it to qsort.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef(`
+    void qsort(void *base, size_t nmemb, size_t size,
+               int (*compar)(const void *, const void *));
+`);
+
+let narr = ffi.ctype('int[5]', [56, 4, 12, 1, 5]);
+let qsort_fn = ffi.C.wrap('qsort');
+
+let cmp = ffi.closure('int (*)(const void *, const void *)',
+                    (a, b) => a.deref('int') - b.deref('int'));
+qsort_fn(narr.ptr(), narr.length(), narr.itemsize(), cmp);
+
+print("sorted: ");
+for (let i = 0; i < 5; i++) {
+    print(narr.get(i), " ");
+}
+print("\n");
+-- End --
+
+-- Expect stdout --
+sorted: 1 4 5 12 56 
+-- End --
+
+Closure ptr() returns a non-null pointer cdata.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let cmp = ffi.closure('int (*)(const void *, const void *)',
+                    (a, b) => a.deref('int') - b.deref('int'));
+
+let p = cmp.ptr();
+print(p != null, "\n");
+-- End --
+
+-- Expect stdout --
+true
+-- End --
+
+Closure tostring() shows the type and address.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let cmp = ffi.closure('int (*)(const void *, const void *)',
+                    (a, b) => a.deref('int') - b.deref('int'));
+
+let s = cmp.tostring();
+print(match(s, /^int \(\*\)\(\) 0x/) != null, "\n");
+-- End --
+
+-- Expect stdout --
+true
+-- End --
+
+Closure cast() to the same type returns a cdata.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let cmp = ffi.closure('int (*)(const void *, const void *)',
+                    (a, b) => a.deref('int') - b.deref('int'));
+
+let casted = cmp.cast('int (*)(const void *, const void *)');
+print(casted != null, "\n");
+print(match(casted.tostring(), /^int \(\*\)\(\) /) != null, "\n");
+-- End --
+
+-- Expect stdout --
+true
+true
+-- End --
+
+Pass closure as value for a struct function pointer member.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef(`
+    struct sorter { int (*compare)(const void *, const void *); };
+`);
+
+let cmp = ffi.closure('int (*)(const void *, const void *)',
+                    (a, b) => a.deref('int') - b.deref('int'));
+
+let s = ffi.ctype('struct sorter');
+s.set('compare', cmp);
+print("set ok", "\n");
+-- End --
+
+-- Expect stdout --
+set ok
+-- End --
+
+ffi.cast() accepts a closure as the source value.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+let cmp = ffi.closure('int (*)(const void *, const void *)',
+                    (a, b) => a.deref('int') - b.deref('int'));
+
+let casted = ffi.cast('int (*)(const void *, const void *)', cmp);
+print(casted != null, "\n");
+-- End --
+
+-- Expect stdout --
+true
+-- End --
+
+Closing over local variables in a callback.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef(`
+    void qsort(void *base, size_t nmemb, size_t size,
+               int (*compar)(const void *, const void *));
+`);
+
+let factor = 10;
+let narr = ffi.ctype('int[4]', [30, 10, 20, 40]);
+let qsort_fn = ffi.C.wrap('qsort');
+
+let cmp = ffi.closure('int (*)(const void *, const void *)',
+                    (a, b) => (a.deref('int') / factor) - (b.deref('int') / factor));
+qsort_fn(narr.ptr(), narr.length(), narr.itemsize(), cmp);
+
+print("sorted: ");
+for (let i = 0; i < 4; i++) {
+    print(narr.get(i), " ");
+}
+print("\n");
+-- End --
+
+-- Expect stdout --
+sorted: 10 20 30 40 
+-- End --
+
+Multiple closures can coexist independently.
+
+-- Testcase --
+{%
+import * as ffi from 'ffi';
+
+ffi.cdef(`
+    void qsort(void *base, size_t nmemb, size_t size,
+               int (*compar)(const void *, const void *));
+`);
+
+let qsort_fn = ffi.C.wrap('qsort');
+let arr = ffi.ctype('int[4]', [4, 3, 2, 1]);
+
+let asc = ffi.closure('int (*)(const void *, const void *)',
+                    (a, b) => a.deref('int') - b.deref('int'));
+let desc = ffi.closure('int (*)(const void *, const void *)',
+                     (a, b) => b.deref('int') - a.deref('int'));
+
+qsort_fn(arr.ptr(), arr.length(), arr.itemsize(), asc);
+print("asc: ");
+for (let i = 0; i < 4; i++) {
+    print(arr.get(i), " ");
+}
+print("\n");
+
+qsort_fn(arr.ptr(), arr.length(), arr.itemsize(), desc);
+print("desc: ");
+for (let i = 0; i < 4; i++) {
+    print(arr.get(i), " ");
+}
+print("\n");
+-- End --
+
+-- Expect stdout --
+asc: 1 2 3 4 
+desc: 4 3 2 1 
+-- End --

@@ -817,7 +817,9 @@ bool uc_cconv_ct_tv(CTState *cts, CType *d,
 		sid = CTID_DOUBLE;
 		flags |= CCF_FROMTV;
 	}
-	else if (ut == UC_RESOURCE && (cd = ucv_resource_data(uv, "ffi.ctype")) != NULL)
+	else if (ut == UC_RESOURCE &&
+	         ((cd = ucv_resource_data(uv, "ffi.ctype")) != NULL ||
+	          (cd = ucv_resource_data(uv, "ffi.closure")) != NULL))
 	{
 		sp = cdataptr(cd);
 		sid = cd->ctypeid;
@@ -1123,14 +1125,19 @@ static bool cconv_struct_object_init(CTState *cts, CType *d, CTSize sz, uint8_t 
 int uc_cconv_multi_init(CTState *cts, CType *d, uc_value_t *uv)
 {
 	uc_type_t ut = ucv_type(uv);
-	GCcdata *cd = (ut == UC_RESOURCE) ? ucv_resource_data(uv, "ffi.ctype") : NULL;
+	GCcdata *cd;
 
 	if (!(ctype_isrefarray(d->info) || ctype_isstruct(d->info)))
 		return 0; /* Destination is not an aggregate. */
+
 	if (ut == UC_ARRAY || ut == UC_OBJECT || (ut == UC_STRING && !ctype_isstruct(d->info)))
 		return 0; /* Initializer is not a value. */
-	if (cd && uc_ctype_rawref(cts, cd->ctypeid) == d)
+
+	if ((((cd = ucv_resource_data(uv, "ffi.ctype")) != NULL) ||
+	     ((cd = ucv_resource_data(uv, "ffi.closure")) != NULL)) &&
+	    uc_ctype_rawref(cts, cd->ctypeid) == d)
 		return 0; /* Source and destination are identical aggregates. */
+
 	return 1;	  /* Otherwise the initializer is a value. */
 }
 
