@@ -554,6 +554,8 @@ typedef struct {
 
 	uc_vm_t *vm;
 	uc_value_t *res;
+	uc_value_t *self;
+	uloop_fd_handler orig_fd_cb;
 } uc_ubus_connection_t;
 
 typedef struct {
@@ -909,11 +911,36 @@ uc_ubus_conn_alloc(uc_vm_t *vm, uc_value_t *timeout, const char *type)
 
 	c->vm = vm;
 	c->res = res;
+	c->self = res;
 	c->timeout = timeout ? ucv_int64_get(timeout) : 30;
 	if (c->timeout < 0)
 		c->timeout = 30;
 
 	return c;
+}
+
+/* libubus keeps using ctx after the handlers it dispatched have returned, so
+ * pin the resource for the whole dispatch: a handler may drop the last ref. */
+static void
+uc_ubus_conn_fd_cb(struct uloop_fd *fd, unsigned int events)
+{
+	struct ubus_context *ctx = container_of(fd, struct ubus_context, sock);
+	uc_ubus_connection_t *c = container_of(ctx, uc_ubus_connection_t, ctx);
+	uc_value_t *self = ucv_get(c->self);
+
+	c->orig_fd_cb(fd, events);
+
+	ucv_put(self);
+}
+
+static void
+uc_ubus_conn_add_uloop(uc_ubus_connection_t *c)
+{
+	if (c->ctx.sock.cb != uc_ubus_conn_fd_cb)
+		c->orig_fd_cb = c->ctx.sock.cb;
+
+	c->ctx.sock.cb = uc_ubus_conn_fd_cb;
+	ubus_add_uloop(&c->ctx);
 }
 
 /**
@@ -960,7 +987,7 @@ uc_ubus_connect(uc_vm_t *vm, size_t nargs)
 	if (c->timeout < 0)
 		c->timeout = 30;
 
-	ubus_add_uloop(&c->ctx);
+	uc_ubus_conn_add_uloop(c);
 
 	ok_return(ucv_get(c->res));
 }
@@ -1010,7 +1037,7 @@ _conn_get(uc_vm_t *vm, uc_ubus_connection_t **conn)
 			err_return(UBUS_STATUS_UNKNOWN_ERROR, "Unable to connect to ubus socket");
 		}
 
-		ubus_add_uloop(&c->ctx);
+		uc_ubus_conn_add_uloop(c);
 
 		uc_vm_registry_set(vm, "ubus.connection", ucv_get(c->res));
 	}
@@ -3674,7 +3701,7 @@ uc_ubus_channel_add(uc_ubus_connection_t *c, uc_value_t *cb,
 	ucv_resource_value_set(c->res, CONN_RES_CB, ucv_get(cb));
 	ucv_resource_value_set(c->res, CONN_RES_DISCONNECT_CB, ucv_get(disconnect_cb));
 	c->ctx.connection_lost = uc_ubus_channel_disconnect_cb;
-	ubus_add_uloop(&c->ctx);
+	uc_ubus_conn_add_uloop(c);
 
 	ok_return(ucv_get(c->res));
 }
@@ -3914,11 +3941,13 @@ static void free_connection(void *ud) {
 
 	blob_buf_free(&conn->buf);
 
+	/* a closed fd can still be registered, so unregister unconditionally */
+	uloop_fd_delete(&conn->ctx.sock);
+
 	if (conn->ctx.sock.fd >= 0) {
-		if (conn->fd_handle) {
-			uloop_fd_delete(&conn->ctx.sock);
+		if (conn->fd_handle)
 			conn->ctx.sock.fd = -1;
-		}
+
 		ubus_shutdown(&conn->ctx);
 	}
 }
