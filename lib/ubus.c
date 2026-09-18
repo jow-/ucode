@@ -1378,6 +1378,14 @@ uc_ubus_call_common(uc_vm_t *vm, uc_ubus_connection_t *c, uc_ubus_call_res_t *re
 			rv = ubus_complete_request(&c->ctx, &defer.request, c->timeout * 1000);
 	}
 
+	/* replies already converted by uc_ubus_call_cb() are ours to release when
+	 * the request ends non-OK; the callers only hand res->res to the script on
+	 * success */
+	if (rv != UBUS_STATUS_OK) {
+		ucv_put(res->res);
+		res->res = NULL;
+	}
+
 	return rv;
 }
 
