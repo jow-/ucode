@@ -2552,7 +2552,6 @@ static uc_value_t *
 ucv_key_get_raw(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, bool *found)
 {
 	uc_value_t *o, *v = NULL, *inst_proto;
-	uc_upvalref_t *ref;
 	int64_t idx;
 	char *k;
 
