@@ -3533,7 +3533,7 @@ eval_expr(uc_vm_t *vm, uc_callframe_t *frame, char *expr, uc_value_t **res,
 		return false;
 	}
 
-	uc_value_t *exprfn = ucv_closure_new(vm, uc_program_entry(prog), false);
+	uc_value_t *exprfn = uc_program_main(vm, prog);
 
 	/* No restriction on the compiled shape here: raw_mode compiles `expr`
 	 * as an ordinary sequence of ucode statements, so a bare literal
@@ -4690,7 +4690,10 @@ proto_cmd_disasm(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int 
 				return;
 			}
 
-			target = uc_program_entry(prog);
+			obj = uc_program_main(vm, prog);
+			target = ucv_as_closure(obj)->function;
+			ucv_put(obj);
+
 			from = 0;
 			to = target->chunk.count - 1;
 		}

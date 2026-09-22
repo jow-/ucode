@@ -37,8 +37,8 @@ void uc_program_put(uc_program_t *prog);
 void uc_program_write(uc_program_t *prog, FILE *fp, bool compressed);
 uc_program_t *uc_program_load(uc_source_t *source, char **errp);
 
-/* Return the program's top-level entry function, or NULL if the program is
- * empty. The returned function is owned by the program. */
-uc_function_t *uc_program_entry(uc_program_t *prog);
+/* Return a new-reference closure for the program's top-level entry function,
+ * or NULL if the program is empty. The caller owns the returned reference. */
+uc_value_t *uc_program_main(uc_vm_t *vm, uc_program_t *prog);
 
 #endif /* UCODE_PROGRAM_H */

@@ -3479,8 +3479,8 @@ exception:
 uc_vm_status_t
 uc_vm_execute(uc_vm_t *vm, uc_program_t *program, uc_value_t **retval)
 {
-	uc_function_t *fn = uc_program_entry(program);
-	uc_closure_t *closure = (uc_closure_t *)ucv_closure_new(vm, fn, false);
+	uc_closure_t *closure = ucv_as_closure(uc_program_main(vm, program));
+	uc_function_t *fn = closure->function;
 	uc_vm_status_t status;
 	uc_callframe_t *frame;
 	uc_stringbuf_t *buf;
@@ -3489,7 +3489,7 @@ uc_vm_execute(uc_vm_t *vm, uc_program_t *program, uc_value_t **retval)
 	frame = uc_vector_push(&vm->callframes, {
 		.closure = closure,
 		.stackframe = 0,
-		.ip = closure->function->chunk.entries,
+		.ip = fn->chunk.entries,
 		.strict = fn->strict
 	});
 

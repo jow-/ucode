@@ -148,9 +148,27 @@ __hidden void uc_thread_context_free(void);
 
 /* Internal value entry points */
 
+__hidden bool ucv_compare(int, uc_value_t *, uc_value_t *, int *);
+
+__hidden uc_value_t *ucv_closure_new(uc_vm_t *, uc_function_t *, bool);
+
 __hidden void ucv_free(uc_value_t *, bool);
 __hidden void ucv_unref(uc_weakref_t *);
 __hidden void ucv_ref(uc_weakref_t *, uc_weakref_t *);
 __hidden void ucv_freeall(uc_vm_t *);
+
+/* Type-cast helpers */
+#define ucv_as_integer(v)   ((uc_integer_t *)   (v))
+#define ucv_as_double(v)    ((uc_double_t *)    (v))
+#define ucv_as_string(v)    ((uc_string_t *)    (v))
+#define ucv_as_array(v)     ((uc_array_t *)     (v))
+#define ucv_as_object(v)    ((uc_object_t *)    (v))
+#define ucv_as_regexp(v)    ((uc_regexp_t *)    (v))
+#define ucv_as_upvalue(v)   ((uc_upvalref_t *)  (v))
+#define ucv_as_closure(v)   ((uc_closure_t *)   (v))
+#define ucv_as_cfunction(v) ((uc_cfunction_t *) (v))
+#define ucv_as_resource(v)  ((uc_resource_t *)  (v))
+#define ucv_as_program(v)   ((uc_program_t *)   (v))
+#define ucv_as_source(v)    ((uc_source_t *)    (v))
 
 #endif /* UCODE_INTERNAL_TYPES_H */

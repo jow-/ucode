@@ -329,8 +329,6 @@ size_t ucv_object_length(uc_value_t *);
 
 uc_value_t *ucv_cfunction_new(const char *, uc_cfn_ptr_t);
 
-uc_value_t *ucv_closure_new(uc_vm_t *, uc_function_t *, bool);
-
 uc_resource_type_t *ucv_resource_type_add(uc_vm_t *, const char *, uc_value_t *, void (*)(void *));
 uc_resource_type_t *ucv_resource_type_lookup(uc_vm_t *, const char *);
 
@@ -581,8 +579,6 @@ ucv_is_scalar(uc_value_t *uv)
 
 bool ucv_is_equal(uc_value_t *, uc_value_t *);
 bool ucv_is_truish(uc_value_t *);
-
-bool ucv_compare(int, uc_value_t *, uc_value_t *, int *);
 
 /* Property accessors behind `foo.bar`, `foo.bar = x` and `delete foo.bar`.
  * Own keys and numeric array indices take precedence, the __get__, __set__ and

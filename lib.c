@@ -5720,7 +5720,7 @@ uc_load_common(uc_vm_t *vm, size_t nargs, uc_source_t *source)
 	uc_compile_parse_config(&conf, uc_fn_arg(1));
 
 	program = uc_compile(&conf, source, &err);
-	closure = program ? ucv_closure_new(vm, uc_program_entry(program), false) : NULL;
+	closure = program ? uc_program_main(vm, program) : NULL;
 
 	uc_program_put(program);
 

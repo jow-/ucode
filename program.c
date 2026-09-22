@@ -964,3 +964,11 @@ uc_program_entry(uc_program_t *program)
 
 	return (uc_function_t *)program->functions.prev;
 }
+
+uc_value_t *
+uc_program_main(uc_vm_t *vm, uc_program_t *prog)
+{
+	uc_function_t *fn = uc_program_entry(prog);
+
+	return fn ? ucv_closure_new(vm, fn, false) : NULL;
+}
