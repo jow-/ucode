@@ -114,13 +114,13 @@ ucv_get_weakref(uc_value_t *uv)
 {
 	switch (ucv_type(uv)) {
 	case UC_ARRAY:
-		return &((uc_array_t *)uv)->ref;
+		return &ucv_as_array(uv)->ref;
 
 	case UC_OBJECT:
-		return &((uc_object_t *)uv)->ref;
+		return &ucv_as_object(uv)->ref;
 
 	case UC_CLOSURE:
-		return &((uc_closure_t *)uv)->ref;
+		return &ucv_as_closure(uv)->ref;
 
 	default:
 		return NULL;
@@ -165,7 +165,7 @@ ucv_gc_mark(uc_value_t *uv)
 
 	switch (ucv_type(uv)) {
 	case UC_ARRAY:
-		array = (uc_array_t *)uv;
+		array = ucv_as_array(uv);
 
 		if (array->ref.next)
 			ucv_set_mark(uv);
@@ -178,7 +178,7 @@ ucv_gc_mark(uc_value_t *uv)
 		break;
 
 	case UC_OBJECT:
-		object = (uc_object_t *)uv;
+		object = ucv_as_object(uv);
 
 		if (object->ref.next)
 			ucv_set_mark(uv);
@@ -191,7 +191,7 @@ ucv_gc_mark(uc_value_t *uv)
 		break;
 
 	case UC_CLOSURE:
-		closure = (uc_closure_t *)uv;
+		closure = ucv_as_closure(uv);
 		function = closure->function;
 
 		if (closure->ref.next)
@@ -205,7 +205,7 @@ ucv_gc_mark(uc_value_t *uv)
 		break;
 
 	case UC_UPVALUE:
-		upval = (uc_upvalref_t *)uv;
+		upval = ucv_as_upvalue(uv);
 		ucv_gc_mark(upval->value);
 		break;
 
@@ -232,7 +232,7 @@ ucv_gc_mark(uc_value_t *uv)
 		break;
 
 	case UC_PROGRAM:
-		program = (uc_program_t *)uv;
+		program = ucv_as_program(uv);
 
 		for (i = 0; i < program->sources.count; i++)
 			ucv_gc_mark(&program->sources.entries[i]->header);
@@ -273,7 +273,7 @@ ucv_free(uc_value_t *uv, bool retain)
 
 	switch (uv->type) {
 	case UC_ARRAY:
-		array = (uc_array_t *)uv;
+		array = ucv_as_array(uv);
 		ref = &array->ref;
 		ucv_put_value(array->proto, retain);
 
@@ -284,19 +284,19 @@ ucv_free(uc_value_t *uv, bool retain)
 		break;
 
 	case UC_OBJECT:
-		object = (uc_object_t *)uv;
+		object = ucv_as_object(uv);
 		ref = &object->ref;
 		ucv_put_value(object->proto, retain);
 		lh_table_free(object->table);
 		break;
 
 	case UC_REGEXP:
-		regexp = (uc_regexp_t *)uv;
+		regexp = ucv_as_regexp(uv);
 		regfree(&regexp->regexp);
 		break;
 
 	case UC_CLOSURE:
-		closure = (uc_closure_t *)uv;
+		closure = ucv_as_closure(uv);
 		function = closure->function;
 		ref = &closure->ref;
 
@@ -326,7 +326,7 @@ ucv_free(uc_value_t *uv, bool retain)
 			ref = &res->ref;
 		}
 		else {
-			uc_resource_t *res = (uc_resource_t *)uv;
+			uc_resource_t *res = ucv_as_resource(uv);
 
 			if (res->type && res->type->free)
 				res->type->free(res->data);
@@ -334,12 +334,12 @@ ucv_free(uc_value_t *uv, bool retain)
 		break;
 
 	case UC_UPVALUE:
-		upval = (uc_upvalref_t *)uv;
+		upval = ucv_as_upvalue(uv);
 		ucv_put_value(upval->value, retain);
 		break;
 
 	case UC_PROGRAM:
-		program = (uc_program_t *)uv;
+		program = ucv_as_program(uv);
 
 		uc_program_function_foreach_safe(program, func)
 			uc_program_function_free(func);
@@ -357,7 +357,7 @@ ucv_free(uc_value_t *uv, bool retain)
 		break;
 
 	case UC_SOURCE:
-		source = (uc_source_t *)uv;
+		source = ucv_as_source(uv);
 
 		if (source->runpath != source->filename)
 			free(source->runpath);
@@ -526,7 +526,7 @@ _ucv_string_get(uc_value_t **uv)
 size_t
 ucv_string_length(uc_value_t *uv)
 {
-	uc_string_t *str = (uc_string_t *)uv;
+	uc_string_t *str = ucv_as_string(uv);
 	uintptr_t pv = (uintptr_t)uv;
 
 	if ((pv & 3) == UC_STRING)
@@ -603,7 +603,7 @@ ucv_uint64_get(uc_value_t *uv)
 
 	switch (ucv_type(uv)) {
 	case UC_INTEGER:
-		integer = (uc_integer_t *)uv;
+		integer = ucv_as_integer(uv);
 
 		if (integer->header.ext_flag)
 			return integer->i.u64;
@@ -657,7 +657,7 @@ ucv_int64_get(uc_value_t *uv)
 
 	switch (ucv_type(uv)) {
 	case UC_INTEGER:
-		integer = (uc_integer_t *)uv;
+		integer = ucv_as_integer(uv);
 
 		if (integer->header.ext_flag && integer->i.u64 <= (uint64_t)INT64_MAX)
 			return (int64_t)integer->i.u64;
@@ -719,7 +719,7 @@ ucv_double_get(uc_value_t *uv)
 
 	switch (ucv_type(uv)) {
 	case UC_DOUBLE:
-		dbl = (uc_double_t *)uv;
+		dbl = ucv_as_double(uv);
 
 		return dbl->dbl;
 
@@ -780,7 +780,7 @@ ucv_array_new_length(uc_vm_t *vm, size_t length)
 uc_value_t *
 ucv_array_pop(uc_value_t *uv)
 {
-	uc_array_t *array = (uc_array_t *)uv;
+	uc_array_t *array = ucv_as_array(uv);
 	uc_value_t *item;
 
 	if (ucv_type(uv) != UC_ARRAY || array->count == 0)
@@ -796,7 +796,7 @@ ucv_array_pop(uc_value_t *uv)
 uc_value_t *
 ucv_array_push(uc_value_t *uv, uc_value_t *item)
 {
-	uc_array_t *array = (uc_array_t *)uv;
+	uc_array_t *array = ucv_as_array(uv);
 
 	if (ucv_type(uv) != UC_ARRAY || uv->ext_flag)
 		return NULL;
@@ -809,7 +809,7 @@ ucv_array_push(uc_value_t *uv, uc_value_t *item)
 uc_value_t *
 ucv_array_shift(uc_value_t *uv)
 {
-	uc_array_t *array = (uc_array_t *)uv;
+	uc_array_t *array = ucv_as_array(uv);
 	uc_value_t *item;
 
 	if (ucv_type(uv) != UC_ARRAY || array->count == 0)
@@ -825,7 +825,7 @@ ucv_array_shift(uc_value_t *uv)
 uc_value_t *
 ucv_array_unshift(uc_value_t *uv, uc_value_t *item)
 {
-	uc_array_t *array = (uc_array_t *)uv;
+	uc_array_t *array = ucv_as_array(uv);
 	size_t i;
 
 	if (ucv_type(uv) != UC_ARRAY)
@@ -855,7 +855,7 @@ ucv_array_sort_r(uc_value_t *uv,
                  int (*cmp)(uc_value_t *, uc_value_t *, void *), void *ud)
 {
 	array_sort_ctx_t ctx = { .cmp = cmp, .ud = ud };
-	uc_array_t *array = (uc_array_t *)uv;
+	uc_array_t *array = ucv_as_array(uv);
 
 	if (ucv_type(uv) != UC_ARRAY || array->count <= 1)
 		return;
@@ -866,7 +866,7 @@ ucv_array_sort_r(uc_value_t *uv,
 void
 ucv_array_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
 {
-	uc_array_t *array = (uc_array_t *)uv;
+	uc_array_t *array = ucv_as_array(uv);
 
 	if (ucv_type(uv) != UC_ARRAY || array->count <= 1)
 		return;
@@ -877,7 +877,7 @@ ucv_array_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
 bool
 ucv_array_delete(uc_value_t *uv, size_t offset, size_t count)
 {
-	uc_array_t *array = (uc_array_t *)uv;
+	uc_array_t *array = ucv_as_array(uv);
 	size_t i;
 
 	if (ucv_type(uv) != UC_ARRAY || array->count == 0)
@@ -908,7 +908,7 @@ ucv_array_delete(uc_value_t *uv, size_t offset, size_t count)
 bool
 ucv_array_set(uc_value_t *uv, size_t index, uc_value_t *item)
 {
-	uc_array_t *array = (uc_array_t *)uv;
+	uc_array_t *array = ucv_as_array(uv);
 
 	if (ucv_type(uv) != UC_ARRAY)
 		return false;
@@ -929,7 +929,7 @@ ucv_array_set(uc_value_t *uv, size_t index, uc_value_t *item)
 uc_value_t *
 ucv_array_get(uc_value_t *uv, size_t index)
 {
-	uc_array_t *array = (uc_array_t *)uv;
+	uc_array_t *array = ucv_as_array(uv);
 
 	if (ucv_type(uv) != UC_ARRAY)
 		return NULL;
@@ -942,7 +942,7 @@ ucv_array_get(uc_value_t *uv, size_t index)
 size_t
 ucv_array_length(uc_value_t *uv)
 {
-	uc_array_t *array = (uc_array_t *)uv;
+	uc_array_t *array = ucv_as_array(uv);
 
 	if (ucv_type(uv) != UC_ARRAY)
 		return 0;
@@ -994,7 +994,7 @@ ucv_object_new(uc_vm_t *vm)
 bool
 ucv_object_add(uc_value_t *uv, const char *key, uc_value_t *val)
 {
-	uc_object_t *object = (uc_object_t *)uv;
+	uc_object_t *object = ucv_as_object(uv);
 	struct lh_entry *existing_entry;
 	uc_value_t *existing_value;
 	unsigned long hash;
@@ -1087,7 +1087,7 @@ static uc_vector_sort_cb(ucv_object_sort_r_cb, const struct lh_entry *, object_s
 static void
 ucv_object_sort_common(uc_value_t *uv, object_sort_ctx_t *ctx)
 {
-	uc_object_t *object = (uc_object_t *)uv;
+	uc_object_t *object = ucv_as_object(uv);
 	struct lh_table *t;
 	struct lh_entry *e;
 	size_t i;
@@ -1149,7 +1149,7 @@ ucv_object_sort(uc_value_t *uv, int (*cmp)(const void *, const void *))
 bool
 ucv_object_delete(uc_value_t *uv, const char *key)
 {
-	uc_object_t *object = (uc_object_t *)uv;
+	uc_object_t *object = ucv_as_object(uv);
 
 	if (ucv_type(uv) != UC_OBJECT || uv->ext_flag)
 		return false;
@@ -1160,7 +1160,7 @@ ucv_object_delete(uc_value_t *uv, const char *key)
 uc_value_t *
 ucv_object_get(uc_value_t *uv, const char *key, bool *found)
 {
-	uc_object_t *object = (uc_object_t *)uv;
+	uc_object_t *object = ucv_as_object(uv);
 	uc_value_t *val = NULL;
 	bool rv;
 
@@ -1181,7 +1181,7 @@ ucv_object_get(uc_value_t *uv, const char *key, bool *found)
 size_t
 ucv_object_length(uc_value_t *uv)
 {
-	uc_object_t *object = (uc_object_t *)uv;
+	uc_object_t *object = ucv_as_object(uv);
 
 	if (ucv_type(uv) != UC_OBJECT)
 		return 0;
@@ -1391,7 +1391,7 @@ ucv_resource_data(uc_value_t *uv, const char *name)
 		return data;
 	}
 	else {
-		uc_resource_t *res = (uc_resource_t *)uv;
+		uc_resource_t *res = ucv_as_resource(uv);
 
 		return res->data;
 	}
@@ -1400,7 +1400,7 @@ ucv_resource_data(uc_value_t *uv, const char *name)
 void **
 ucv_resource_dataptr(uc_value_t *uv, const char *name)
 {
-	uc_resource_t *res = (uc_resource_t *)uv;
+	uc_resource_t *res = ucv_as_resource(uv);
 
 	if (!ucv_resource_check(uv, name) || res->header.ext_flag)
 		return NULL;
@@ -1521,12 +1521,12 @@ ucv_prototype_get(uc_value_t *uv)
 
 	switch (ucv_type(uv)) {
 	case UC_ARRAY:
-		array = (uc_array_t *)uv;
+		array = ucv_as_array(uv);
 
 		return array->proto;
 
 	case UC_OBJECT:
-		object = (uc_object_t *)uv;
+		object = ucv_as_object(uv);
 
 		return object->proto;
 
@@ -1554,14 +1554,14 @@ ucv_prototype_set(uc_value_t *uv, uc_value_t *proto)
 
 	switch (ucv_type(uv)) {
 	case UC_ARRAY:
-		array = (uc_array_t *)uv;
+		array = ucv_as_array(uv);
 		ucv_put(array->proto);
 		array->proto = proto;
 
 		return true;
 
 	case UC_OBJECT:
-		object = (uc_object_t *)uv;
+		object = ucv_as_object(uv);
 		ucv_put(object->proto);
 		object->proto = proto;
 
@@ -1737,7 +1737,7 @@ ucv_to_json(uc_value_t *uv)
 		return json_object_new_string_len(ucv_string_get(uv), ucv_string_length(uv));
 
 	case UC_ARRAY:
-		array = (uc_array_t *)uv;
+		array = ucv_as_array(uv);
 		jso = json_object_new_array_ext(array->count);
 
 		for (i = 0; i < array->count; i++)
@@ -1754,7 +1754,7 @@ ucv_to_json(uc_value_t *uv)
 		return jso;
 
 	case UC_REGEXP:
-		regexp = (uc_regexp_t *)uv;
+		regexp = ucv_as_regexp(uv);
 		i = asprintf(&s, "/%s/%s%s%s",
 			regexp->source,
 			regexp->global ? "g" : "",
@@ -1996,7 +1996,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		break;
 
 	case UC_ARRAY:
-		array = (uc_array_t *)uv;
+		array = ucv_as_array(uv);
 
 		ucv_stringbuf_append(pb, "[");
 
@@ -2031,7 +2031,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		break;
 
 	case UC_REGEXP:
-		regexp = (uc_regexp_t *)uv;
+		regexp = ucv_as_regexp(uv);
 
 		if (json)
 			ucv_stringbuf_append(pb, "\"");
@@ -2055,7 +2055,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		break;
 
 	case UC_CLOSURE:
-		closure = (uc_closure_t *)uv;
+		closure = ucv_as_closure(uv);
 		function = closure->function;
 
 		if (json)
@@ -2103,7 +2103,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		break;
 
 	case UC_CFUNCTION:
-		cfunction = (uc_cfunction_t *)uv;
+		cfunction = ucv_as_cfunction(uv);
 
 		ucv_stringbuf_printf(pb, "%sfunction%s%s(...) { [native code] }%s",
 			json ? "\"" : "",
@@ -2125,7 +2125,7 @@ ucv_to_stringbuf_formatted(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, size
 		break;
 
 	case UC_UPVALUE:
-		ref = (uc_upvalref_t *)uv;
+		ref = ucv_as_upvalue(uv);
 
 		if (ref->closed)
 			ucv_to_stringbuf_formatted(vm, pb, ref->value, depth, pad_char, pad_size);
@@ -2591,7 +2591,7 @@ ucv_key_get_raw(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, bool *found)
 					v = ucv_object_get(ext->type->proto, k ? k : ucv_string_get(key), found);
 				}
 			} else {
-				uc_resource_t *res = (uc_resource_t *)scope;
+				uc_resource_t *res = ucv_as_resource(scope);
 				if (res->type && res->type->proto) {
 					v = ucv_object_get(res->type->proto, k ? k : ucv_string_get(key), found);
 				}
@@ -2631,7 +2631,7 @@ ucv_key_resolve_upval(uc_vm_t *vm, uc_value_t *v)
 	if (ucv_type(v) == UC_UPVALUE)
 #endif
 	{
-		ref = (uc_upvalref_t *)v;
+		ref = ucv_as_upvalue(v);
 
 		if (ref->closed)
 			return ucv_get(ref->value);

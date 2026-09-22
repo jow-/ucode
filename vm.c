@@ -547,7 +547,7 @@ uc_vm_resolve_upval(uc_vm_t *vm, uc_value_t *value)
 	if (ucv_type(value) == UC_UPVALUE)
 #endif
 	{
-		ref = (uc_upvalref_t *)value;
+		ref = ucv_as_upvalue(value);
 
 		if (ref->closed)
 			rv = ucv_get(ref->value);
@@ -823,7 +823,7 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall,
 	 * even when requested as tail call, since the foreign code may rely on the
 	 * stack layout of an ordinary invocation */
 	if (ucv_type(fno) == UC_CFUNCTION) {
-		uc_vm_call_native(vm, ctx, (uc_cfunction_t *)fno, mcall, nargs);
+		uc_vm_call_native(vm, ctx, ucv_as_cfunction(fno), mcall, nargs);
 
 		return true;
 	}
@@ -836,7 +836,7 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall,
 		return false;
 	}
 
-	closure = (uc_closure_t *)fno;
+	closure = ucv_as_closure(fno);
 	function = closure->function;
 
 	/* fewer arguments on stack than function expects => pad */
@@ -1302,8 +1302,8 @@ uc_vm_test_strict_equality(uc_value_t *v1, uc_value_t *v2, bool nan_equal)
 
 	switch (t1) {
 	case UC_DOUBLE:
-		d1 = ((uc_double_t *)v1)->dbl;
-		d2 = ((uc_double_t *)v2)->dbl;
+		d1 = ucv_as_double(v1)->dbl;
+		d2 = ucv_as_double(v2)->dbl;
 
 		if (isnan(d1) && isnan(d2))
 			return nan_equal;
@@ -2647,8 +2647,8 @@ static bool
 uc_vm_object_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
                            uc_value_t *k, uc_value_t *v)
 {
-	uc_resource_t *res = (uc_resource_t *)k;
-	uc_object_t *obj = (uc_object_t *)v;
+	uc_resource_t *res = ucv_as_resource(k);
+	uc_object_t *obj = ucv_as_object(v);
 	uc_object_iterator_t *iter;
 
 	if (!res) {
@@ -2733,7 +2733,7 @@ uc_vm_array_iterator_next(uc_vm_t *vm, uc_vm_insn_t insn,
 	uc_vm_stack_push(vm, k);
 	ucv_put(v);
 
-	((uc_resource_t *)k)->data = (void *)(uintptr_t)(n + 1);
+	ucv_as_resource(k)->data = (void *)(uintptr_t)(n + 1);
 
 	return true;
 }

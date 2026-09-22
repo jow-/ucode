@@ -154,7 +154,7 @@ uc_debug_discover_ucv(uc_value_t *uv, struct lh_table *seen)
 
 	switch (ucv_type(uv)) {
 	case UC_ARRAY:
-		array = (uc_array_t *)uv;
+		array = ucv_as_array(uv);
 
 		uc_debug_discover_ucv(array->proto, seen);
 
@@ -164,7 +164,7 @@ uc_debug_discover_ucv(uc_value_t *uv, struct lh_table *seen)
 		break;
 
 	case UC_OBJECT:
-		object = (uc_object_t *)uv;
+		object = ucv_as_object(uv);
 
 		uc_debug_discover_ucv(object->proto, seen);
 
@@ -174,7 +174,7 @@ uc_debug_discover_ucv(uc_value_t *uv, struct lh_table *seen)
 		break;
 
 	case UC_CLOSURE:
-		closure = (uc_closure_t *)uv;
+		closure = ucv_as_closure(uv);
 		function = closure->function;
 
 		for (i = 0; i < function->nupvals; i++)
@@ -185,7 +185,7 @@ uc_debug_discover_ucv(uc_value_t *uv, struct lh_table *seen)
 		break;
 
 	case UC_UPVALUE:
-		upval = (uc_upvalref_t *)uv;
+		upval = ucv_as_upvalue(uv);
 		uc_debug_discover_ucv(upval->value, seen);
 		break;
 
@@ -198,7 +198,7 @@ uc_debug_discover_ucv(uc_value_t *uv, struct lh_table *seen)
 		break;
 
 	case UC_PROGRAM:
-		program = (uc_program_t *)uv;
+		program = ucv_as_program(uv);
 
 		for (i = 0; i < program->sources.count; i++)
 			uc_debug_discover_ucv(&program->sources.entries[i]->header, seen);
@@ -255,7 +255,7 @@ print_value(FILE *out, size_t pad, struct lh_table *seen,
 	free(s);
 
 	if (ucv_type(uv) == UC_CLOSURE) {
-		closure = (uc_closure_t *)uv;
+		closure = ucv_as_closure(uv);
 
 		for (i = 0; i < closure->function->nupvals; i++) {
 			for (j = 0; j < pad + 1; j++)
@@ -274,7 +274,7 @@ print_value(FILE *out, size_t pad, struct lh_table *seen,
 		}
 	}
 	else if (ucv_type(uv) == UC_OBJECT) {
-		object = (uc_object_t *)uv;
+		object = ucv_as_object(uv);
 
 		if (object->proto) {
 			for (j = 0; j < pad + 1; j++)
@@ -285,7 +285,7 @@ print_value(FILE *out, size_t pad, struct lh_table *seen,
 		}
 	}
 	else if (ucv_type(uv) == UC_ARRAY) {
-		array = (uc_array_t *)uv;
+		array = ucv_as_array(uv);
 
 		if (array->proto) {
 			for (j = 0; j < pad + 1; j++)
@@ -1384,7 +1384,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 
 	case UC_STRING:
 		if (!(pv & 3)) {
-			uvstr = (uc_string_t *)uv;
+			uvstr = ucv_as_string(uv);
 
 			ucv_object_add(rv, "address",
 				ucv_uint64_new((uintptr_t)uvstr->str));
@@ -1395,7 +1395,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 		break;
 
 	case UC_ARRAY:
-		uvarr = (uc_array_t *)uv;
+		uvarr = ucv_as_array(uv);
 
 		ucv_object_add(rv, "address",
 			ucv_uint64_new((uintptr_t)uvarr->entries));
@@ -1407,7 +1407,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 		break;
 
 	case UC_OBJECT:
-		uvobj = (uc_object_t *)uv;
+		uvobj = ucv_as_object(uv);
 
 		ucv_object_add(rv, "address",
 			ucv_uint64_new((uintptr_t)uvobj->table));
@@ -1421,7 +1421,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 		break;
 
 	case UC_REGEXP:
-		uvreg = (uc_regexp_t *)uv;
+		uvreg = ucv_as_regexp(uv);
 
 		ucv_object_add(rv, "source", ucv_string_new(uvreg->source));
 		ucv_object_add(rv, "icase", ucv_boolean_new(uvreg->icase));
@@ -1432,7 +1432,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 		break;
 
 	case UC_CFUNCTION:
-		uvcfn = (uc_cfunction_t *)uv;
+		uvcfn = ucv_as_cfunction(uv);
 
 		ucv_object_add(rv, "name", ucv_string_new(uvcfn->name));
 		ucv_object_add(rv, "address", ucv_uint64_new((uintptr_t)uvcfn->cfn));
@@ -1440,7 +1440,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 		break;
 
 	case UC_CLOSURE:
-		uvfun = (uc_closure_t *)uv;
+		uvfun = ucv_as_closure(uv);
 		byte = uvfun->function->srcpos;
 		source = uc_program_function_source(uvfun->function);
 
@@ -1460,7 +1460,7 @@ uc_getinfo(uc_vm_t *vm, size_t nargs)
 		break;
 
 	case UC_RESOURCE:
-		uvres = (uc_resource_t *)uv;
+		uvres = ucv_as_resource(uv);
 
 		ucv_object_add(rv, "address", ucv_uint64_new((uintptr_t)uvres->data));
 
@@ -1720,7 +1720,7 @@ uc_xupval(uc_vm_t *vm, uc_value_t *target, uc_value_t *var, uc_value_t **set)
 		closure = vm->callframes.entries[depth].closure;
 	}
 	else if (ucv_type(target) == UC_CLOSURE) {
-		closure = (uc_closure_t *)target;
+		closure = ucv_as_closure(target);
 	}
 
 	if (!closure)
@@ -2172,7 +2172,7 @@ printbuf_append_funcname(uc_stringbuf_t *sb, uc_vm_t *vm, uc_value_t *val,
 
 name:
 	if (ucv_type(val) == UC_CLOSURE) {
-		uc_function_t *fn = ((uc_closure_t *)val)->function;
+		uc_function_t *fn = ucv_as_closure(val)->function;
 
 		if (fn->name[0]) {
 			printbuf_strcat(sb, fn->name);
@@ -2182,7 +2182,7 @@ name:
 		placeholder = fn->arrow ? "λ" : "𝑓";
 	}
 	else if (ucv_type(val) == UC_CFUNCTION) {
-		uc_cfunction_t *cf = (uc_cfunction_t *)val;
+		uc_cfunction_t *cf = ucv_as_cfunction(val);
 
 		if (cf->name[0]) {
 			printbuf_strcat(sb, cf->name);
@@ -2258,7 +2258,7 @@ printbuf_append_function(uc_stringbuf_t *sb, uc_vm_t *vm, uc_value_t *val,
 		printbuf_strappend(sb, ")");
 	}
 	else if (t == UC_CLOSURE) {
-		uc_closure_t *cl = (uc_closure_t *)val;
+		uc_closure_t *cl = ucv_as_closure(val);
 		uc_source_t *source = uc_program_function_source(cl->function);
 
 		if (cl->function->module) {
@@ -2911,7 +2911,7 @@ bk_enter_function(uc_vm_t *vm, uc_breakpoint_t *bk)
 			uc_value_t *fno = vm->stack.entries[vm->stack.count - nargs - 1];
 
 			if (ucv_type(fno) == UC_CLOSURE) {
-				uc_function_t *fn = ((uc_closure_t *)fno)->function;
+				uc_function_t *fn = ucv_as_closure(fno)->function;
 
 				dbk->bk.cb = bk_enter_session;
 				dbk->bk.ip = fn->chunk.entries;
@@ -3363,7 +3363,7 @@ resolve_breakpoint(uc_vm_t *vm, uc_callframe_t *frame, uc_program_t *program,
 			if (eval_expr(vm, frame, spec, &val, &errmsg2, false)) {
 				if (ucv_type(val) == UC_CLOSURE) {
 					id = patch_breakpoint(vm,
-						((uc_closure_t *)val)->function, 0, kind, 1);
+						ucv_as_closure(val)->function, 0, kind, 1);
 				}
 				else {
 					char *s = ucv_to_string(vm, val);
@@ -4525,7 +4525,7 @@ proto_cmd_lines(uc_vm_t *vm, debug_breakpoint_t *dbk, uc_value_t *payload, int f
 				return;
 			}
 
-			loc = (location_t){ .function = ((uc_closure_t *)val)->function };
+			loc = (location_t){ .function = ucv_as_closure(val)->function };
 			ucv_put(val);
 		}
 
@@ -5242,7 +5242,7 @@ uc_debug_attach(uc_vm_t *vm, size_t nargs)
 	}
 
 	if (ucv_type(mainfn) == UC_CLOSURE) {
-		uc_function_t *fn = ((uc_closure_t *)mainfn)->function;
+		uc_function_t *fn = ucv_as_closure(mainfn)->function;
 		update_breakpoint(vm, BK_STEP, bk_enter_session, fn->chunk.entries, fn, 1);
 	}
 
@@ -5308,7 +5308,7 @@ uc_debug_breakpoint(uc_vm_t *vm, size_t nargs)
 		return ucv_boolean_new(false);
 
 	if (!frame && ucv_type(mainfn) == UC_CLOSURE)
-		program = ((uc_closure_t *)mainfn)->function->program;
+		program = ucv_as_closure(mainfn)->function->program;
 
 	spec = xstrdup(ucv_string_get(specarg));
 	id = resolve_breakpoint(vm, frame, program, spec, BK_USER, &errmsg);
@@ -5624,7 +5624,7 @@ uc_debugger(uc_vm_t *vm, size_t nargs)
 	}
 
 	if (ucv_type(mainfn) == UC_CLOSURE) {
-		uc_function_t *fn = ((uc_closure_t *)mainfn)->function;
+		uc_function_t *fn = ucv_as_closure(mainfn)->function;
 		update_breakpoint(vm, BK_STEP, bk_enter_session, fn->chunk.entries, fn, 1);
 	}
 	else {

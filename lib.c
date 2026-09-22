@@ -1963,7 +1963,7 @@ uc_split(uc_vm_t *vm, size_t nargs)
 		goto out;
 
 	if (ucv_type(sep) == UC_REGEXP) {
-		re = (uc_regexp_t *)sep;
+		re = ucv_as_regexp(sep);
 
 		while (limit > 1) {
 			res = regexec(&re->regexp, splitstr, 1, &pmatch, eflags);
@@ -2854,7 +2854,7 @@ uc_callfunc(uc_vm_t *vm, size_t nargs);
 static uc_value_t *
 uc_require_imports(uc_vm_t *vm, uc_value_t *closure)
 {
-	uc_function_t *fn = ((uc_closure_t *)closure)->function;
+	uc_function_t *fn = ucv_as_closure(closure)->function;
 	uc_source_t *src = uc_program_function_source(fn);
 	uc_value_t *ns = ucv_object_new(vm);
 	size_t i = 0;
@@ -3308,7 +3308,7 @@ uc_match(uc_vm_t *vm, size_t nargs)
 	if (ucv_type(pattern) != UC_REGEXP || !subject)
 		return NULL;
 
-	re = (uc_regexp_t *)pattern;
+	re = ucv_as_regexp(pattern);
 
 	pmatch = calloc(1 + re->regexp.re_nsub, sizeof(regmatch_t));
 
@@ -3535,7 +3535,7 @@ uc_replace(uc_vm_t *vm, size_t nargs)
 	nmatch = 1;
 
 	if (ucv_type(pattern) == UC_REGEXP) {
-		re = (uc_regexp_t *)pattern;
+		re = ucv_as_regexp(pattern);
 		nmatch += re->regexp.re_nsub;
 	}
 
