@@ -3952,12 +3952,12 @@ static void free_connection(void *ud) {
 	/* a closed fd can still be registered, so unregister unconditionally */
 	uloop_fd_delete(&conn->ctx.sock);
 
-	if (conn->ctx.sock.fd >= 0) {
-		if (conn->fd_handle)
-			conn->ctx.sock.fd = -1;
+	if (conn->fd_handle)
+		conn->ctx.sock.fd = -1;
 
+	/* msgbuf.data outlives a closed socket; shutdown guards the fd itself */
+	if (conn->ctx.msgbuf.data)
 		ubus_shutdown(&conn->ctx);
-	}
 }
 
 static void free_deferred(void *ud) {
