@@ -852,7 +852,7 @@ ucv_as_size_t(uc_vm_t *vm, uc_value_t *v, size_t *p)
 }
 
 static bool
-ucv_as_double(uc_vm_t *vm, uc_value_t *v, double *p)
+ucv_as_float64(uc_vm_t *vm, uc_value_t *v, double *p)
 {
 	char *s, *e;
 	int64_t i;
@@ -1618,7 +1618,7 @@ native_pack_halffloat(uc_vm_t *vm, char *p, uc_value_t *v, const formatdef_t *f)
 {
 	double x;
 
-	if (!ucv_as_double(vm, v, &x))
+	if (!ucv_as_float64(vm, v, &x))
 		return false;
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -1634,7 +1634,7 @@ native_pack_float(uc_vm_t *vm, char *p, uc_value_t *v, const formatdef_t *f)
 	double d = 0.0;
 	float x = 0.0;
 
-	if (!ucv_as_double(vm, v, &d))
+	if (!ucv_as_float64(vm, v, &d))
 		return false;
 
 	x = (float)d;
@@ -1648,7 +1648,7 @@ native_pack_double(uc_vm_t *vm, char *p, uc_value_t *v, const formatdef_t *f)
 {
 	double x = 0.0;
 
-	if (!ucv_as_double(vm, v, &x))
+	if (!ucv_as_float64(vm, v, &x))
 		return false;
 
 	memcpy(p, &x, sizeof(x));
@@ -1891,7 +1891,7 @@ be_pack_halffloat(uc_vm_t *vm, char *p, uc_value_t *v, const formatdef_t *f)
 {
 	double x = 0.0;
 
-	if (!ucv_as_double(vm, v, &x))
+	if (!ucv_as_float64(vm, v, &x))
 		return false;
 
 	return double_pack16(x, p, false);
@@ -1902,7 +1902,7 @@ be_pack_float(uc_vm_t *vm, char *p, uc_value_t *v, const formatdef_t *f)
 {
 	double x = 0.0;
 
-	if (!ucv_as_double(vm, v, &x))
+	if (!ucv_as_float64(vm, v, &x))
 		return false;
 
 	if (!double_pack32(x, p, 0)) {
@@ -1919,7 +1919,7 @@ be_pack_double(uc_vm_t *vm, char *p, uc_value_t *v, const formatdef_t *f)
 {
 	double x = 0.0;
 
-	if (!ucv_as_double(vm, v, &x))
+	if (!ucv_as_float64(vm, v, &x))
 		return false;
 
 	if (!double_pack64(x, p, 0)) {
@@ -2151,7 +2151,7 @@ le_pack_halffloat(uc_vm_t *vm, char *p, uc_value_t *v, const formatdef_t *f)
 {
 	double x = 0.0;
 
-	if (!ucv_as_double(vm, v, &x))
+	if (!ucv_as_float64(vm, v, &x))
 		return false;
 
 	return double_pack16(x, p, true);
@@ -2162,7 +2162,7 @@ le_pack_float(uc_vm_t *vm, char *p, uc_value_t *v, const formatdef_t *f)
 {
 	double x = 0.0;
 
-	if (!ucv_as_double(vm, v, &x))
+	if (!ucv_as_float64(vm, v, &x))
 		return false;
 
 	if (!double_pack32(x, p, 1)) {
@@ -2179,7 +2179,7 @@ le_pack_double(uc_vm_t *vm, char *p, uc_value_t *v, const formatdef_t *f)
 {
 	double x = 0.0;
 
-	if (!ucv_as_double(vm, v, &x))
+	if (!ucv_as_float64(vm, v, &x))
 		return false;
 
 	if (!double_pack64(x, p, 1)) {
