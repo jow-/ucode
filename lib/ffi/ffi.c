@@ -4478,7 +4478,7 @@ uc_ffi_string(uc_vm_t *vm, size_t nargs)
 
 		/* Copy string including null terminator */
 		const char *src = ucv_string_get(arg);
-		uint8_t *dst = (uint8_t *)cdataptr((GCcdata *)((uc_resource_t *)arr)->data);
+		uint8_t *dst = (uint8_t *)cdataptr((GCcdata *)ucv_as_resource(arr)->data);
 		memcpy(dst, src, len);
 
 		return arr;

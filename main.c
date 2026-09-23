@@ -199,7 +199,7 @@ compile(uc_vm_t *vm, uc_source_t *src, FILE *precompile, const compile_opts_t *o
 			goto out;
 		}
 
-		entryfn = ucv_closure_new(vm, uc_program_entry(program), false);
+		entryfn = uc_program_main(vm, program);
 
 		/* -x: launch local debugger, breaking at `breakpoint` if given,
 		 * else at the first instruction.

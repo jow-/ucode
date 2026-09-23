@@ -39,6 +39,8 @@
 
 #define uc_program_function_last(prog) (uc_function_t *)prog->functions.next
 
+__hidden uc_function_t *uc_program_entry(uc_program_t *);
+
 __hidden uc_function_t *uc_program_function_new(uc_program_t *, const char *, uc_source_t *, size_t);
 __hidden size_t uc_program_function_id(uc_program_t *, uc_function_t *);
 __hidden uc_function_t *uc_program_function_load(uc_program_t *, size_t);
