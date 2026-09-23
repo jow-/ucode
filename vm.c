@@ -809,7 +809,7 @@ uc_vm_call_function(uc_vm_t *vm, uc_value_t *ctx, uc_value_t *fno, bool mcall,
 	if (ucv_type(fno) != UC_CFUNCTION && ucv_type(fno) != UC_CLOSURE) {
 		uc_value_t *meta = ucv_metamethod_lookup(fno, "__call__");
 
-		if (meta != NULL) {
+		if (ucv_is_callable(meta)) {
 			ucv_put(ctx);
 
 			/* the instance becomes `this` and is invoked in place of the

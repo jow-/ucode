@@ -41,3 +41,45 @@ Deleting an own property does not consult the metamethod.
 -- Expect stdout --
 true
 -- End --
+
+A `__delete__` which is itself an object (rather than a function) delegates the
+delete to that object.
+
+-- Testcase --
+{%
+	let target = { a: 1, b: 2 };
+	let o = proto({}, { __delete__: target });
+
+	print(delete o.a, " ", delete o.c, "\n");
+	print(target.a === null, " ", target.b, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+true false
+true 2
+-- End --
+
+A delegated delete re-dispatches the target's own metamethods.
+
+-- Testcase --
+{%
+	let store = { x: 1 };
+	let log = [];
+	let mid = proto({}, {
+		__delete__(key) {
+			push(log, key);
+			return delete store[key];
+		}
+	});
+	let o = proto({}, { __delete__: mid });
+
+	print(delete o.x, " ", delete o.missing, "\n");
+	print(store.x === null, " ", log, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+true false
+true [ "x", "missing" ]
+-- End --

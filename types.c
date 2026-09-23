@@ -1605,10 +1605,7 @@ ucv_metamethod_lookup(uc_value_t *v, const char *name)
 	for (v = ucv_prototype_get(v); v; v = ucv_prototype_get(v)) {
 		m = ucv_object_get(v, name, NULL);
 
-		/* only functions count as metamethods; resolving a value carrying a
-		 * `__call__` method here would let self-referential ones recurse the C
-		 * stack without bound */
-		if (ucv_type(m) == UC_CLOSURE || ucv_type(m) == UC_CFUNCTION)
+		if (ucv_type(m) != UC_NULL)
 			return m;
 	}
 
@@ -1854,7 +1851,7 @@ ucv_call_tostring(uc_vm_t *vm, uc_stringbuf_t *pb, uc_value_t *uv, bool json)
 	if (tostr == NULL)
 		tostr = ucv_metamethod_lookup(uv, "tostring");
 
-	if (tostr == NULL)
+	if (!ucv_is_callable(tostr))
 		return false;
 
 	uc_vm_stack_push(vm, ucv_get(uv));
@@ -2650,13 +2647,18 @@ ucv_key_resolve_upval(uc_vm_t *vm, uc_value_t *v)
  * indices take precedence, metamethods - looked up in the prototype chain of
  * the accessed value, see ucv_metamethod_lookup() - serve as fallback:
  *
- *   __get__(key)      invoked when a raw lookup yields nothing; returning a
- *                     table delegates the lookup to that table, any other
- *                     value becomes the result of the expression
+ *   __get__(key)      invoked when a raw lookup yields nothing; the result
+ *                     of the read is its return value
  *   __set__(key, val) invoked when writing a key an object does not have yet,
  *                     like Lua's __newindex; its return value is discarded
  *   __delete__(key)   invoked when deleting a key an object does not have
  *                     yet; a truthy result means "deleted"
+ *
+ * A metamethod which is an object (or array) rather than a function is not
+ * invoked: the operation is re-dispatched on that value with the same key,
+ * which gives the delegated value a chance to store or delete the key itself
+ * or provide its own metamethod. Cycles are not a problem, each hop is a
+ * fresh property access bound by the VM's recursion limit.
  *
  * Arrays keep their dense storage: keys which are valid indices never dispatch
  * a metamethod at all. Passing vm == NULL performs the raw operation only.
@@ -2676,7 +2678,8 @@ ucv_meta_call(uc_vm_t *vm, uc_value_t *scope, uc_value_t *meta,
 {
 	size_t base = vm->stack.count, nargs = 1;
 
-	*rvp = NULL;
+	if (rvp)
+		*rvp = NULL;
 
 	uc_vm_stack_push(vm, ucv_get(scope));
 	uc_vm_stack_push(vm, ucv_get(meta));
@@ -2699,6 +2702,24 @@ ucv_meta_call(uc_vm_t *vm, uc_value_t *scope, uc_value_t *meta,
 	}
 
 	*rvp = uc_vm_stack_pop(vm);
+
+	return true;
+}
+
+/* Invoke the metamethod held in `meta` on `scope`, passing `key` and
+ * optionally `val`, without storing its return value anywhere. Returns
+ * false if the call raised, in which case the exception is left pending for
+ * the interpreter loop to unwind. */
+static bool
+ucv_meta_invoke(uc_vm_t *vm, uc_value_t *scope, uc_value_t *meta,
+                uc_value_t *key, uc_value_t *val)
+{
+	uc_value_t *rv;
+
+	if (!ucv_meta_call(vm, scope, meta, key, val, &rv))
+		return false;
+
+	ucv_put(rv);
 
 	return true;
 }
@@ -2771,7 +2792,7 @@ ucv_array_set_key(uc_value_t *arr, uc_value_t *key, uc_value_t *val)
 uc_value_t *
 ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 {
-	uc_value_t *meta, *val, *res;
+	uc_value_t *meta, *val;
 	bool found;
 
 	if (!scope || !key)
@@ -2789,18 +2810,17 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 
 	meta = ucv_metamethod_lookup(scope, "__get__");
 
-	if (meta == NULL || !ucv_meta_call(vm, scope, meta, key, NULL, &val))
+	/* a __get__ which is itself an object is a delegation target: look the key
+	 * up inside it instead, where it may exist, be virtual, or miss just as
+	 * on the original scope */
+	if (ucv_type(meta) == UC_OBJECT || ucv_type(meta) == UC_ARRAY)
+		return ucv_key_get(vm, meta, key);
+
+	if (!ucv_is_callable(meta))
 		return NULL;
 
-	/* like Lua's __index tables, a __get__ yielding a table delegates the
-	 * lookup to that table; since each delegation involves a call, chains
-	 * looping onto themselves hit the VM's recursion limit */
-	if (ucv_type(val) == UC_OBJECT || ucv_type(val) == UC_ARRAY) {
-		res = ucv_key_get(vm, val, key);
-		ucv_put(val);
-
-		return res;
-	}
+	if (!ucv_meta_call(vm, scope, meta, key, NULL, &val))
+		return NULL;
 
 	return val;
 }
@@ -2808,7 +2828,7 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 uc_value_t *
 ucv_key_set(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
 {
-	uc_value_t *meta = NULL, *rv;
+	uc_value_t *meta = NULL;
 	int64_t idx;
 
 	/* only a null key is invalid, a null value stores null */
@@ -2855,16 +2875,23 @@ ucv_key_set(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
 	}
 
 	/* meta may already be set from the strict array check above */
-	if (vm != NULL &&
-	    (meta || (meta = ucv_metamethod_lookup(scope, "__set__")) != NULL)) {
-		if (!ucv_meta_call(vm, scope, meta, key, val, &rv))
-			return NULL;
+	if (vm != NULL) {
+		if (meta == NULL)
+			meta = ucv_metamethod_lookup(scope, "__set__");
 
-		/* an assignment evaluates to the assigned value, not to whatever
-		 * the metamethod returned */
-		ucv_put(rv);
+		/* a __set__ which is itself an object is a delegation target: store the
+		 * key inside it instead, mirroring an object __get__ */
+		if (ucv_type(meta) == UC_OBJECT || ucv_type(meta) == UC_ARRAY)
+			return ucv_key_set(vm, meta, key, val);
 
-		return ucv_get(val);
+		if (ucv_is_callable(meta)) {
+			if (!ucv_meta_invoke(vm, scope, meta, key, val))
+				return NULL;
+
+			/* an assignment evaluates to the assigned value, not to whatever
+			 * the metamethod returned */
+			return ucv_get(val);
+		}
 	}
 
 	/* without a __set__ in effect, the value ends up as own key */
@@ -2898,7 +2925,12 @@ ucv_key_delete(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 	if (vm != NULL) {
 		meta = ucv_metamethod_lookup(scope, "__delete__");
 
-		if (meta != NULL) {
+		/* a __delete__ which is itself an object is a delegation target:
+		 * delete the key inside it, mirroring an object __get__ */
+		if (ucv_type(meta) == UC_OBJECT || ucv_type(meta) == UC_ARRAY)
+			return ucv_key_delete(vm, meta, key);
+
+		if (ucv_is_callable(meta)) {
 			/* by convention, a truthy return value means "deleted" */
 			deleted = ucv_meta_call(vm, scope, meta, key, NULL, &rv) && ucv_is_truish(rv);
 			ucv_put(rv);

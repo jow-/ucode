@@ -92,3 +92,62 @@ true true true [
 	"b"
 ]
 -- End --
+
+A `__set__` which is itself an object (rather than a function) delegates the
+store to that object.
+
+-- Testcase --
+{%
+	let target = {};
+	let o = proto({}, { __set__: target });
+
+	o.x = 42;
+	o.y = "hello";
+
+	print(target.x, " ", target.y, "\n");
+	print(rawget(o, "x") === null, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+42 hello
+true
+-- End --
+
+A delegated store re-dispatches the target's own metamethods, so a chain of
+delegation reaches the final storage.
+
+-- Testcase --
+{%
+	let store = {};
+	let mid = proto({}, { __set__(key, val) { store[key] = val; } });
+	let o = proto({}, { __set__: mid });
+
+	o.n = 7;
+
+	print(store.n, " ", rawget(o, "n") === null, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+7 true
+-- End --
+
+Arrays with their own prototype take part in `__set__` delegation for non-index
+keys just like objects do.
+
+-- Testcase --
+{%
+	let target = {};
+	let a = proto([10, 20], { __set__: target, __get__: target });
+
+	a[0] = 99;
+	a.name = "lan";
+
+	print(a[0], " ", a.name, " ", target.name, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+99 lan lan
+-- End --
