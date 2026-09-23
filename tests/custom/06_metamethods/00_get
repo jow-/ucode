@@ -74,13 +74,14 @@ parent
 function
 -- End --
 
-A `__get__` which returns a table delegates the lookup to that table. This
-is how a common set of virtual properties can be shared without copying.
+A `__get__` which is itself an object (rather than a function) delegates the
+lookup to that object. This is how a common set of virtual properties can be
+shared without copying.
 
 -- Testcase --
 {%
 	let base = { greeting: "hi", shared: "base", n: 1 };
-	let o = proto({ shared: "own" }, { __get__(key) { return base; } });
+	let o = proto({ shared: "own" }, { __get__: base });
 
 	print(o.greeting, " ", o.shared, " ", o.n + 1, " ", o.nope === null, "\n");
 %}
@@ -88,6 +89,22 @@ is how a common set of virtual properties can be shared without copying.
 
 -- Expect stdout --
 hi own 2 true
+-- End --
+
+A `__get__` function may return any value; that value becomes the result of
+the property read, including objects and arrays.
+
+-- Testcase --
+{%
+	let base = { greeting: "hi", shared: "base", n: 1 };
+	let o = proto({}, { __get__(key) { return base; } });
+
+	print(o.anything.greeting, " ", o.anything.shared, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+hi base
 -- End --
 
 A metamethod is only honored when it is an actual function. Optional
@@ -107,4 +124,20 @@ too.
 -- Expect stdout --
 true
 virtual:y
+-- End --
+
+Arrays with their own prototype participate in `__get__` delegation for
+non-index keys.
+
+-- Testcase --
+{%
+	let base = { label: "lan", mode: "up" };
+	let a = proto([1, 2, 3], { __get__: base });
+
+	print(a[0], " ", a.label, " ", a.mode, " ", a.nope === null, "\n");
+%}
+-- End --
+
+-- Expect stdout --
+1 lan up true
 -- End --

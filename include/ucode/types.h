@@ -501,14 +501,16 @@ ucv_to_unsigned(uc_value_t *v)
 }
 
 /* Walk the prototype chain of the given value (own keys of the value itself
- * do not count) and return the first function stored under the given name,
- * or NULL. The result is a function itself; a value providing a `__call__`
- * method is not followed here. */
+ * do not count) and return the first non-null value stored under the given
+ * name, or NULL. The result may be a function (for invocation) or an object
+ * (for delegation); callers must check ucv_is_callable() before invoking. */
 uc_value_t *ucv_metamethod_lookup(uc_value_t *, const char *);
 
 static inline bool
 ucv_is_callable(uc_value_t *uv)
 {
+	uc_value_t *m;
+
 	switch (ucv_type(uv)) {
 	case UC_CLOSURE:
 	case UC_CFUNCTION:
@@ -517,9 +519,11 @@ ucv_is_callable(uc_value_t *uv)
 	case UC_OBJECT:
 	case UC_ARRAY:
 	case UC_RESOURCE:
-		/* a value whose prototype chain provides a `__call__` method can be
-		 * invoked like a function itself */
-		return ucv_metamethod_lookup(uv, "__call__") != NULL;
+		/* a value whose prototype chain provides a callable `__call__` method
+		 * can be invoked like a function itself */
+		m = ucv_metamethod_lookup(uv, "__call__");
+
+		return ucv_type(m) == UC_CLOSURE || ucv_type(m) == UC_CFUNCTION;
 
 	default:
 		return false;
