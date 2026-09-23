@@ -760,11 +760,14 @@ uc_ctype_requires_ffi_struct(CTState *cts, CTypeID cid)
 }
 
 static ffi_type *
-uc_ctype_to_ffi_type(CTState *cts, CTypeID cid, ffi_type *st)
+uc_ctype_to_ffi_type(CTState *cts, CTypeID cid, ffi_type *st, ffi_type **stmem)
 {
 	CType *ct = ctype_get(cts, cid);
 	CTInfo info = ct->info;
 	CTSize size = ct->size;
+
+	if (stmem)
+		*stmem = NULL;
 
 	switch (ctype_type(info)) {
 	case CT_NUM:
@@ -834,6 +837,9 @@ uc_ctype_to_ffi_type(CTState *cts, CTypeID cid, ffi_type *st)
 		st->type = FFI_TYPE_STRUCT;
 		st->size = size;
 		st->alignment = ctype_align(info);
+
+		if (stmem)
+			*stmem = st;
 
 		return st;
 	}
@@ -1753,7 +1759,7 @@ uc_ctype_closure_cb(ffi_cif *cif, void *ret, void *args[], void *ud)
 static uc_closure_context_t *
 ct_to_closure(uc_vm_t *vm, CTState *cts, CType *ct, uc_value_t *func)
 {
-	ffi_type *custom_type, **argument_type, *atype, *rtype;
+	ffi_type *custom_type, **argument_type, *atype, *rtype, *stype;
 	uc_closure_context_t *context;
 	ffi_abi abi = FFI_DEFAULT_ABI;
 	size_t context_size;
@@ -1851,7 +1857,7 @@ ct_to_closure(uc_vm_t *vm, CTState *cts, CType *ct, uc_value_t *func)
 #endif
 	}
 
-	rtype = uc_ctype_to_ffi_type(cts, ctype_cid(ct->info), custom_type);
+	rtype = uc_ctype_to_ffi_type(cts, ctype_cid(ct->info), custom_type, &stype);
 
 	if (!rtype) {
 		uc_value_t *repr = uc_ctype_repr(vm, ctype_cid(ct->info), NULL);
@@ -1876,7 +1882,7 @@ ct_to_closure(uc_vm_t *vm, CTState *cts, CType *ct, uc_value_t *func)
 		assert(ctype_isfield(ct_arg->info));
 
 		cid_arg = ct_arg->sib;
-		atype = uc_ctype_to_ffi_type(cts, ctype_cid(ct_arg->info), custom_type);
+		atype = uc_ctype_to_ffi_type(cts, ctype_cid(ct_arg->info), custom_type, NULL);
 
 		if (!atype) {
 			uc_value_t *repr = uc_ctype_repr(vm, ctype_cid(ct->info), NULL);
@@ -1920,10 +1926,13 @@ ct_to_closure(uc_vm_t *vm, CTState *cts, CType *ct, uc_value_t *func)
 #endif
 
 	case FFI_OK:
+		free(stype);
+
 		return context;
 	}
 
 out:
+	free(stype);
 	ffi_closure_free(context);
 
 	return NULL;
@@ -2148,7 +2157,7 @@ uc_ctype_call(uc_vm_t *vm, size_t nargs)
 
 	ffi_cif cif;
 	ffi_abi abi = FFI_DEFAULT_ABI;
-	ffi_type *rtype = &ffi_type_void;
+	ffi_type *rtype = &ffi_type_void, *stype = NULL;
 
 	/* select ABI */
 #ifdef X86
@@ -2178,7 +2187,7 @@ uc_ctype_call(uc_vm_t *vm, size_t nargs)
 #endif
 	}
 
-	rtype = uc_ctype_to_ffi_type(cts, ctype_cid(ct_ret->info), NULL);
+	rtype = uc_ctype_to_ffi_type(cts, ctype_cid(ct_ret->info), NULL, &stype);
 
 	if (!rtype) {
 		uc_value_t *repr = uc_ctype_repr(vm, ctype_cid(ct_ret->info), NULL);
@@ -2291,7 +2300,7 @@ uc_ctype_call(uc_vm_t *vm, size_t nargs)
 
 		CType *d = ctype_raw(cts, did);
 		CTSize sz = d->size;
-		ffi_type *atype = uc_ctype_to_ffi_type(cts, did, NULL);
+		ffi_type *atype = uc_ctype_to_ffi_type(cts, did, NULL, NULL);
 
 		/* Apply default argument promotions for variadic arguments */
 		if (is_vararg && atype) {
@@ -2459,15 +2468,7 @@ uc_ctype_call(uc_vm_t *vm, size_t nargs)
 	}
 
 out:
-#ifdef __clang_analyzer__
-	/* Clang static analyzer does not understand that rtype is either a static
-	 * ffi_type or a heap-allocated value that is freed here. Pretend to free
-	 * it unconditionally to suppress the false positive memory leak warning. */
-	free(rtype);
-#else
-	if (rtype->type == FFI_TYPE_STRUCT)
-		free(rtype);
-#endif
+	free(stype);
 
 	while (argtypes.count)
 		if (argtypes.entries[--argtypes.count]->type == FFI_TYPE_STRUCT)

@@ -94,15 +94,9 @@ UC_NOAPI uc_value_t *uc_cdata_newx(uc_vm_t *vm, CTypeID id, CTSize sz,
 static inline void *
 uc_cdata_dataptr(uc_value_t *val)
 {
-	if (ucv_type(val) != UC_RESOURCE)
-		return NULL;
+	GCcdata *cd = ucv_resource_data(val, "ffi.ctype");
 
-	uc_resource_t *res = (uc_resource_t *)val;
-
-	if (!res->type || strcmp(res->type->name, "ffi.ctype") != 0)
-		return NULL;
-
-	return cdataptr((GCcdata *)res->data);
+	return cd ? cdataptr(cd) : NULL;
 }
 
 #define uc_cdataptr(res) cdataptr(((uc_resource_t *)res)->data)
