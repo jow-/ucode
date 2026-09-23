@@ -388,12 +388,6 @@ uc_vm_current_program(uc_vm_t *vm)
 	return uc_vm_frame_program(uc_vm_current_frame(vm));
 }
 
-static bool
-uc_vm_is_strict(uc_vm_t *vm)
-{
-	return uc_vm_current_frame(vm)->strict;
-}
-
 static uc_vm_insn_t
 uc_vm_decode_insn(uc_vm_t *vm, uc_callframe_t *frame, uc_chunk_t *chunk)
 {
@@ -1669,7 +1663,9 @@ uc_vm_insn_store_val(uc_vm_t *vm, uc_vm_insn_t insn)
 		if (assert_mutable_value(vm, o)) {
 			/* ucv_key_set() retains the stored value on its own and returns a
 			 * reference to it, which becomes the value of the assignment; for
-			 * resources it dispatches a __set__ metamethod when present */
+			 * resources it dispatches a __set__ metamethod when present. In
+			 * strict mode it raises a type error when a non-index property
+			 * store on an array would otherwise be silently dropped. */
 			uc_vm_stack_push(vm, ucv_key_set(vm, o, k, v));
 		}
 
