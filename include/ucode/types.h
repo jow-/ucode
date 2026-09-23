@@ -588,7 +588,10 @@ bool ucv_compare(int, uc_value_t *, uc_value_t *, int *);
  * Own keys and numeric array indices take precedence, the __get__, __set__ and
  * __delete__ metamethods of the accessed value serve as fallback; with a null
  * vm nothing is dispatched. ucv_key_set() retains the value stored and returns
- * a reference to it, or NULL if the store failed. */
+ * a reference to it, or NULL if the store failed. Setting a non-index property
+ * on an array is guaranteed to fail (arrays have no own-key storage); in
+ * strict mode it raises a type error instead of being silently dropped,
+ * unless the array has a __set__ metamethod which handles the store. */
 uc_value_t *ucv_key_get(uc_vm_t *, uc_value_t *, uc_value_t *);
 uc_value_t *ucv_key_set(uc_vm_t *, uc_value_t *, uc_value_t *, uc_value_t *);
 bool ucv_key_delete(uc_vm_t *, uc_value_t *, uc_value_t *);

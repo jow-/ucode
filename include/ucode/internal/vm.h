@@ -108,4 +108,10 @@ extern const int8_t uc_vm_insn_format[__I_MAX];
 
 int8_t uc_vm_insn_to_argtype(uc_vm_insn_t insn);
 
+static inline bool
+uc_vm_is_strict(uc_vm_t *vm)
+{
+	return (vm->callframes.count && uc_vector_last(&vm->callframes)->strict);
+}
+
 #endif /* UCODE_INTERNAL_VM_H */

@@ -440,6 +440,22 @@ array only accepts index keys, so a `__set__` on an array must route its
 values to some other storage, such as a plain object kept as a backing store
 (closures capture it, as above).
 
+A non-index property set on an array without a `__set__` metamethod is
+guaranteed to fail (arrays have no own-key storage to fall back to). In
+non-strict mode the write is silently dropped; in strict mode it raises a
+Type error, consistent with setting a property on any other non-object type:
+
+```
+"use strict";
+let a = [1, 2];
+a.foo = 3;         // Type error: attempt to set property on array value
+a[2] = 3;          // fine: valid index
+a[-5] = 4;         // fine: out-of-range negative index, reads back as null
+```
+
+Adding a `__set__` metamethod to the array's prototype silences the error
+and gives the script a chance to route the value to its own storage.
+
 This keeps integer-indexed access a fast O(1) slot read and reserves
 `__get__`/`__set__` for the "array as a named-field container" case. Sparse
 or numeric virtual properties are not supported on arrays; use an object for

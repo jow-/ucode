@@ -2808,7 +2808,8 @@ ucv_key_get(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key)
 uc_value_t *
 ucv_key_set(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
 {
-	uc_value_t *meta, *rv;
+	uc_value_t *meta = NULL, *rv;
+	int64_t idx;
 
 	/* only a null key is invalid, a null value stores null */
 	if (!scope || !key)
@@ -2816,8 +2817,27 @@ ucv_key_set(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
 
 	switch (ucv_type(scope)) {
 	case UC_ARRAY:
-		if (ucv_key_to_index(key) != INT64_MIN)
+		idx = ucv_key_to_index(key);
+
+		if (idx != INT64_MIN)
 			return ucv_array_set_key(scope, key, ucv_get(val)) ? ucv_get(val) : NULL;
+
+		/* a non-index key on an array has no own-key storage to fall back to:
+		 * without a __set__ metamethod the store is guaranteed to be dropped.
+		 * In strict mode that is a type error, consistent with setting a
+		 * property on any other non-object type; in non-strict mode it
+		 * remains a silent no-op. */
+		if (vm != NULL && uc_vm_is_strict(vm)) {
+			meta = ucv_metamethod_lookup(scope, "__set__");
+
+			if (!meta) {
+				uc_vm_raise_exception(vm, EXCEPTION_TYPE,
+				                      "attempt to set property on %s value",
+				                      ucv_typename(scope));
+
+				return NULL;
+			}
+		}
 
 		break;
 
@@ -2834,19 +2854,17 @@ ucv_key_set(uc_vm_t *vm, uc_value_t *scope, uc_value_t *key, uc_value_t *val)
 		return NULL;
 	}
 
-	if (vm != NULL) {
-		meta = ucv_metamethod_lookup(scope, "__set__");
+	/* meta may already be set from the strict array check above */
+	if (vm != NULL &&
+	    (meta || (meta = ucv_metamethod_lookup(scope, "__set__")) != NULL)) {
+		if (!ucv_meta_call(vm, scope, meta, key, val, &rv))
+			return NULL;
 
-		if (meta != NULL) {
-			if (!ucv_meta_call(vm, scope, meta, key, val, &rv))
-				return NULL;
+		/* an assignment evaluates to the assigned value, not to whatever
+		 * the metamethod returned */
+		ucv_put(rv);
 
-			/* an assignment evaluates to the assigned value, not to whatever
-			 * the metamethod returned */
-			ucv_put(rv);
-
-			return ucv_get(val);
-		}
+		return ucv_get(val);
 	}
 
 	/* without a __set__ in effect, the value ends up as own key */
