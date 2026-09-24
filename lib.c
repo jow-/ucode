@@ -411,22 +411,61 @@ uc_index(uc_vm_t *vm, size_t nargs, bool right)
 {
 	uc_value_t *stack = uc_fn_arg(0);
 	uc_value_t *needle = uc_fn_arg(1);
+	uc_value_t *offset = nargs > 2 ? uc_fn_arg(2) : NULL;
 	const char *sstr, *nstr, *p;
-	size_t arridx, slen, nlen;
-	ssize_t ret = -1;
+	size_t arridx, slen, nlen, high;
+	ssize_t ret = -1, start = 0;
+	bool bounded = false;
+
+	/* An optional third argument constrains where the search begins (or, for
+	 * rindex(), the highest index a match may have). Negative offsets are
+	 * relative to the end, mirroring substr(); out-of-range offsets are
+	 * clamped rather than rejected. */
+	if (offset != NULL && ucv_type(offset) != UC_NULL) {
+		switch (ucv_type(offset)) {
+		case UC_INTEGER:
+			start = (ssize_t)ucv_int64_get(offset);
+			bounded = true;
+			break;
+
+		case UC_DOUBLE:
+			start = (ssize_t)ucv_double_get(offset);
+			bounded = true;
+			break;
+
+		default:
+			return NULL;
+		}
+	}
 
 	switch (ucv_type(stack)) {
 	case UC_ARRAY:
+		slen = ucv_array_length(stack);
+
+		if (bounded) {
+			if (start < 0)
+				start += (ssize_t)slen;
+
+			if (start < 0)
+				start = 0;
+			else if (start > (ssize_t)slen)
+				start = (ssize_t)slen;
+		}
+
 		if (right) {
-			for (arridx = ucv_array_length(stack); arridx > 0; arridx--) {
-				if (uc_uniq_ucv_equal(ucv_array_get(stack, arridx - 1), needle)) {
-					ret = (ssize_t)(arridx - 1);
+			arridx = !bounded || (size_t)start + 1 > slen ? slen : (size_t)start + 1;
+
+			while (arridx > 0) {
+				arridx--;
+
+				if (uc_uniq_ucv_equal(ucv_array_get(stack, arridx), needle)) {
+					ret = (ssize_t)arridx;
 					break;
 				}
 			}
 		}
 		else {
-			for (arridx = 0, slen = ucv_array_length(stack); arridx < slen; arridx++) {
+			for (arridx = bounded ? (size_t)start : 0; arridx < slen; arridx++) {
 				if (uc_uniq_ucv_equal(ucv_array_get(stack, arridx), needle)) {
 					ret = (ssize_t)arridx;
 					break;
@@ -437,37 +476,50 @@ uc_index(uc_vm_t *vm, size_t nargs, bool right)
 		return ucv_int64_new(ret);
 
 	case UC_STRING:
-		if (ucv_type(needle) == UC_STRING) {
-			sstr = ucv_string_get(stack);
-			slen = ucv_string_length(stack);
-			nstr = ucv_string_get(needle);
-			nlen = ucv_string_length(needle);
+		if (ucv_type(needle) != UC_STRING)
+			return ucv_int64_new(ret);
 
-			if (slen == nlen) {
-				if (memcmp(sstr, nstr, nlen) == 0)
-					ret = 0;
+		sstr = ucv_string_get(stack);
+		slen = ucv_string_length(stack);
+		nstr = ucv_string_get(needle);
+		nlen = ucv_string_length(needle);
+
+		if (bounded) {
+			if (start < 0)
+				start += (ssize_t)slen;
+
+			if (start < 0)
+				start = 0;
+			else if (start > (ssize_t)slen)
+				start = (ssize_t)slen;
+		}
+
+		if (!right) {
+			if (nlen <= slen && (size_t)start <= slen - nlen) {
+				p = (const char *)memmem(sstr + start, slen - (size_t)start, nstr, nlen);
+
+				if (p)
+					ret = (ssize_t)(p - sstr);
 			}
-			else if (slen > nlen) {
-				if (right) {
-					p = sstr + slen - nlen;
+		}
+		else if (nlen <= slen) {
+			high = slen - nlen;
 
-					do {
-						if (memcmp(p, nstr, nlen) == 0) {
-							ret = (ssize_t)(p - sstr);
-							break;
-						}
-					}
-					while (p-- != sstr);
-				}
-				else if (nlen > 0) {
-					p = (const char *)memmem(sstr, slen, nstr, nlen);
+			if (bounded && (size_t)start < high)
+				high = (size_t)start;
 
-					if (p)
-						ret = (ssize_t)(p - sstr);
+			p = sstr + high;
+
+			for (;;) {
+				if (memcmp(p, nstr, nlen) == 0) {
+					ret = (ssize_t)(p - sstr);
+					break;
 				}
-				else {
-					ret = 0;
-				}
+
+				if (p == sstr)
+					break;
+
+				p--;
 			}
 		}
 
@@ -495,9 +547,17 @@ uc_index(uc_vm_t *vm, size_t nargs, bool right)
  * @param {*} needle
  * The value to find within the array or string.
  *
+ * @param {?number} [offset=0]
+ * Optional index to begin the search at, counted in bytes for strings and in
+ * elements for arrays. A negative offset is relative to the end and an
+ * out-of-range offset is clamped rather than treated as a failure.
+ *
  * @returns {?number}
  *
  * @example
+ * index("hello world", "o")               // 4
+ * index("hello world", "o", 5)            // 7
+ * index("hello world", "l", -3)           // 9
  * index("Hello hello hello", "ll")          // 2
  * index([ 1, 2, 3, 1, 2, 3, 1, 2, 3 ], 2)   // 1
  * index("foo", "bar")                       // -1
@@ -527,9 +587,16 @@ uc_lindex(uc_vm_t *vm, size_t nargs)
  * @param {*} needle
  * The value to find within the array or string.
  *
+ * @param {?number} [offset]
+ * Optional upper bound: only indices less than or equal to it are considered.
+ * A negative offset is relative to the end and an out-of-range offset is
+ * clamped rather than treated as a failure.
+ *
  * @returns {?number}
  *
  * @example
+ * rindex("hello world", "o")              // 7
+ * rindex("hello world", "o", 5)           // 4
  * rindex("Hello hello hello", "ll")          // 14
  * rindex([ 1, 2, 3, 1, 2, 3, 1, 2, 3 ], 2)   //  7
  * rindex("foo", "bar")                       // -1
