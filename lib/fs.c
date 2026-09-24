@@ -1395,7 +1395,7 @@ uc_fs_open(uc_vm_t *vm, size_t nargs)
 	fd = open(ucv_string_get(path), open_flags, open_perm);
 
 	if (fd < 0)
-		return NULL;
+		err_return(errno);
 
 	fp = fdopen(fd, m);
 
