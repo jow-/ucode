@@ -10,10 +10,10 @@ Build-Depends: debhelper-compat (= 13),
                libjson-c-dev,
                libmd-dev,
                zlib1g-dev,
-Homepage: https://github.com/jow-/ucode
-Vcs-Browser: https://github.com/jow-/ucode
-Vcs-Git: https://github.com/jow-/ucode.git
-Bugs: https://github.com/jow-/ucode/issues
+Homepage: https://github.com/ucode-lang/ucode
+Vcs-Browser: https://github.com/ucode-lang/ucode
+Vcs-Git: https://github.com/ucode-lang/ucode.git
+Bugs: https://github.com/ucode-lang/ucode/issues
 
 Package: ucode
 Architecture: any

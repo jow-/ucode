@@ -46,7 +46,7 @@ placed in the `docs/` directory.
 ## Examples
 
 Examples for embedding ucode into C applications can be found in the
-[`examples/` directory](https://github.com/jow-/ucode/tree/master/examples).
+[`examples/` directory](https://github.com/ucode-lang/ucode/tree/master/examples).
 
 Notable OpenWrt programs *embedding* ucode are the
 [OpenWrt ubus rpc daemon](https://github.com/openwrt/rpcd) and the

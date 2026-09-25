@@ -64,7 +64,7 @@ Additional Notices
 
 This module also depends on:
 
-- ucode (https://github.com/jow-/ucode)
+- ucode (https://github.com/ucode-lang/ucode)
   Copyright (C) 2020-2026 ucode contributors
   Licensed under the ISC License
 

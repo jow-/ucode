@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    if: github.repository == 'jow-/ucode'
+    if: github.repository == 'ucode-lang/ucode'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

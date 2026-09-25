@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: github.com/jow-/ucode
-Source: https://github.com/jow-/ucode
+Upstream-Name: github.com/ucode-lang/ucode
+Source: https://github.com/ucode-lang/ucode
 
 Files: *
 Copyright: 2021 Jo-Philipp Wich <jo@main.io>

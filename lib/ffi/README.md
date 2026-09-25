@@ -76,6 +76,6 @@ seamless usage experience.
 ## Resources
 
 - ucode Homepage: https://ucode.mein.io/
-- ucode Repository: https://github.com/jow-/ucode
+- ucode Repository: https://github.com/ucode-lang/ucode
 - LuaJIT: https://luajit.org/
 - libffi: https://github.com/libffi/libffi
