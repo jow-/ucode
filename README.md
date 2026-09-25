@@ -74,7 +74,7 @@ To build on MacOS, first install *cmake*, *json-c* and *libmd* via
 *cmake* followed by *make*:
 
     $ brew install cmake json-c libmd
-    $ git clone https://github.com/jow-/ucode.git
+    $ git clone https://github.com/ucode-lang/ucode.git
     $ cd ucode/
     $ cmake -DUBUS_SUPPORT=OFF -DUCI_SUPPORT=OFF -DULOOP_SUPPORT=OFF -DCMAKE_BUILD_RPATH=/usr/local/lib -DCMAKE_INSTALL_RPATH=/usr/local/lib .
     $ make
@@ -88,7 +88,7 @@ then clone the repository and invoke *dpkg-buildpackage* to produce the binary
 package files:
 
     $ sudo apt-get install build-essential devscripts debhelper libjson-c-dev cmake pkg-config
-    $ git clone https://github.com/jow-/ucode.git
+    $ git clone https://github.com/ucode-lang/ucode.git
     $ cd ucode/
     $ dpkg-buildpackage -b -us -uc
     $ sudo dpkg -i ../ucode*.deb ../libucode*.deb
@@ -99,7 +99,7 @@ To install ucode from source on other systems, ensure that the json-c library
 and associated development headers are installed, then clone and compile the
 ucode repository:
 
-    $ git clone https://github.com/jow-/ucode.git
+    $ git clone https://github.com/ucode-lang/ucode.git
     $ cd ucode/
     $ cmake -DUBUS_SUPPORT=OFF -DUCI_SUPPORT=OFF -DULOOP_SUPPORT=OFF .
     $ make
