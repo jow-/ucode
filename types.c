@@ -25,6 +25,7 @@
 #include "ucode/internal/vm.h" /* ISA: I_* opcodes */
 #include "ucode/internal/program.h"
 #include "ucode/internal/chunk.h"
+#include "ucode/internal/json-c-compat.h"
 
 static char *uc_default_search_path[] = { LIB_SEARCH_PATH };
 

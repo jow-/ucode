@@ -50,6 +50,7 @@
 #include "ucode/internal/source.h"
 #include "ucode/internal/program.h"
 #include "ucode/internal/platform.h"
+#include "ucode/internal/json-c-compat.h"
 
 static void
 format_context_line(uc_stringbuf_t *buf, const char *line, size_t off, bool compact)
