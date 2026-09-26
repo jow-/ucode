@@ -219,8 +219,6 @@ be needed:
 
 ```
 function deepMerge(target, ...sources) {
-    if (!sources.length) return target;
-
     for (source in sources) {
         if (type(source) !== "object") continue;
 
