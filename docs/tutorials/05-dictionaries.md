@@ -32,12 +32,14 @@ containing null bytes (`\0`) will be silently truncated at the first null byte:
 ```
 let dict = {"foo\0bar": 123};
 print(dict.foo);  // 123
-print(exists(dict, "foo\0bar"));  // false
+print(exists(dict, "foo\0bar"));  // true - lookups truncate the key as well
 print(exists(dict, "foo"));  // true
 ```
 
 This happens because the underlying hash table implementation treats keys as
-C-style null-terminated strings. While this behavior may change in future
+C-style null-terminated strings. Truncation applies to lookups as well, so the
+entry written under `"foo\0bar"` is stored - and found - under the truncated
+key `"foo"`; the two keys collide. While this behavior may change in future
 versions of ucode, you should currently:
 
 - Never use keys containing null bytes
@@ -152,7 +154,7 @@ user["email"] = "bob@example.com";
 user.name = "Robert";
 user["age"] += 1;
 
-print(user); // {name: "Robert", age: 26, email: "bob@example.com"}
+print(user); // { "name": "Robert", "age": 26, "email": "bob@example.com" }
 ```
 
 #### Removing Properties
@@ -163,10 +165,10 @@ Properties can be removed using the `delete` operator:
 let product = {id: "p123", name: "Laptop", price: 999, discontinued: false};
 
 delete product.discontinued;
-print(product); // {id: "p123", name: "Laptop", price: 999}
+print(product); // { "id": "p123", "name": "Laptop", "price": 999 }
 
 delete product["price"];
-print(product); // {id: "p123", name: "Laptop"}
+print(product); // { "id": "p123", "name": "Laptop" }
 ```
 
 #### Merging Dictionaries
@@ -179,7 +181,7 @@ let userSettings = {theme: "dark"};
 
 // Merge dictionaries with spread syntax
 let merged = {...defaults, ...userSettings};
-print(merged); // {theme: "dark", fontSize: 12, notifications: true}
+print(merged); // { "theme": "dark", "fontSize": 12, "notifications": true }
 ```
 
 When merging with spread syntax, properties from later objects overwrite those
@@ -211,7 +213,7 @@ function merge(target, ...sources) {
 let defaults = {theme: "light", fontSize: 12, notifications: true};
 let userSettings = {theme: "dark"};
 let merged = merge({}, defaults, userSettings);
-print(merged); // {theme: "dark", fontSize: 12, notifications: true}
+print(merged); // { "theme": "dark", "fontSize": 12, "notifications": true }
 ```
 
 Note that this performs a shallow merge. For nested objects, a deep merge would
@@ -257,17 +259,9 @@ let updates = {
 };
 
 let merged = deepMerge({}, userProfile, updates);
+print(merged);
 /* Result:
-{
-    name: "Alice",
-    preferences: {
-        theme: "dark",
-        sidebar: {
-            visible: true,
-            width: 300
-        }
-    }
-}
+{ "name": "Alice", "preferences": { "theme": "dark", "sidebar": { "visible": true, "width": 300 } } }
 */
 ```
 
@@ -506,6 +500,8 @@ function getStatusMessage(code) {
 Creating a deep copy of a dictionary with nested objects:
 
 ```
+function deepCloneArray;   // forward declaration, see below
+
 function deepClone(obj) {
     if (type(obj) != "object") {
         return obj;
@@ -539,6 +535,12 @@ function deepCloneArray(arr) {
 }
 ```
 
+Note the forward declaration of `deepCloneArray` at the top: ucode does not
+hoist function declarations, so the body of `deepClone()` cannot call a
+function that is declared later in the file. Without the forward declaration,
+cloning a dictionary with an array value would fail with "Type error:
+left-hand side is not a function".
+
 #### Dictionary Filtering
 
 Creating a new dictionary with only desired key-value pairs:
@@ -559,7 +561,7 @@ let mixed = {a: 1, b: "string", c: 3, d: true, e: 4.5};
 let numbersOnly = filterObject(mixed, (key, value) =>
     type(value) == "int" || type(value) == "double"
 );
-print(numbersOnly); // {a: 1, c: 3, e: 4.5}
+print(numbersOnly); // { "a": 1, "c": 3, "e": 4.5 }
 ```
 
 #### Object Mapping
@@ -578,7 +580,7 @@ function mapObject(obj, mapFn) {
 // Example: Double all numeric values
 let prices = {apple: 1.25, banana: 0.75, cherry: 2.50};
 let discountedPrices = mapObject(prices, (fruit, price) => price * 0.8);
-print(discountedPrices); // {apple: 1, banana: 0.6, cherry: 2}
+print(discountedPrices); // { "apple": 1.0, "banana": 0.6, "cherry": 2.0 }
 ```
 
 #### Dictionary Equality
@@ -586,6 +588,8 @@ print(discountedPrices); // {apple: 1, banana: 0.6, cherry: 2}
 Comparing dictionaries by value instead of by reference:
 
 ```
+function arrayEquals;   // forward declaration, see below
+
 function objectEquals(obj1, obj2) {
     // Check if both are objects
     if (type(obj1) != "object" || type(obj2) != "object") {
@@ -643,6 +647,12 @@ function arrayEquals(arr1, arr2) {
     return true;
 }
 ```
+
+Note the forward declaration of `arrayEquals` at the top: ucode does not hoist
+function declarations, so the body of `objectEquals()` cannot call a function
+that is declared later in the file. Without the forward declaration, comparing
+dictionaries with array values would fail with "Type error: left-hand side is
+not a function".
 
 ## Performance Considerations and Best Practices
 

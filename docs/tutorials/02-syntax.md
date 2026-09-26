@@ -501,7 +501,7 @@ special double value `NaN`.
   print(10 / 0);   // Infinity
 
   print(10 % 7);   // 3
-  print(10 % 7.0); // NaN (Modulo is undefined for non-integers)
+  print(10 % 7.0); // 3 (Modulo also works on double operands)
 %}
 ```
 
@@ -519,7 +519,7 @@ The `~` operator is unary, means that is only applies to one operand.
   print(0 ^ 0, 0 ^ 1, 1 ^ 1);  // 010
   print(10 << 2);              // 40
   print(10 >> 2);              // 2
-  print(~15);                  // -16 (0xFFFFFFFFFFFFFFF0)
+  print(~15);                  // 18446744073709551600 (0xFFFFFFFFFFFFFFF0, read as unsigned)
 %}
 ```
 
@@ -659,7 +659,7 @@ in the table below.
 | 16         | Prefix increment `++ …`            | n/a            |
 | 16         | Prefix decrement `-- …`            | n/a            |
 | 16         | Property deletion `delete …`       | n/a            |
-| 15         | Exponentiation `… ** …`            | right-to-left  |
+| 15         | Exponentiation `… ** …`            | left-to-right  |
 | 14         | Multiplication `… * …`             | left-to-right  |
 | 14         | Division `… / …`                   | left-to-right  |
 | 14         | Remainder `… % …`                  | left-to-right  |
@@ -682,22 +682,22 @@ in the table below.
 | 6          | Logical AND `… && …`               | left-to-right  |
 | 5          | Logical OR `… \|\| …`              | left-to-right  |
 | 5          | Nullish coalescing `… ?? …`        | left-to-right  |
-| 4          | Assignment `… = …`                 | right-to-left  |
-| 4          | Assignment `… += …`                | right-to-left  |
-| 4          | Assignment `… -= …`                | right-to-left  |
-| 4          | Assignment `… **= …`               | right-to-left  |
-| 4          | Assignment `… *= …`                | right-to-left  |
-| 4          | Assignment `… /= …`                | right-to-left  |
-| 4          | Assignment `… %= …`                | right-to-left  |
-| 4          | Assignment `… <<= …`               | right-to-left  |
-| 4          | Assignment `… >>= …`               | right-to-left  |
-| 4          | Assignment `… &= …`                | right-to-left  |
-| 4          | Assignment `… ^= …`                | right-to-left  |
-| 4          | Assignment `… \|= …`               | right-to-left  |
-| 4          | Assignment `… &&= …`               | right-to-left  |
-| 4          | Assignment `… \|\|= …`             | right-to-left  |
-| 4          | Assignment `… ??= …`               | right-to-left  |
-| 3          | Ternary `… ? … : …`                | right-to-left  |
+| 4          | Ternary `… ? … : …`                | right-to-left  |
+| 3          | Assignment `… = …`                 | right-to-left  |
+| 3          | Assignment `… += …`                | right-to-left  |
+| 3          | Assignment `… -= …`                | right-to-left  |
+| 3          | Assignment `… **= …`               | right-to-left  |
+| 3          | Assignment `… *= …`                | right-to-left  |
+| 3          | Assignment `… /= …`                | right-to-left  |
+| 3          | Assignment `… %= …`                | right-to-left  |
+| 3          | Assignment `… <<= …`               | right-to-left  |
+| 3          | Assignment `… >>= …`               | right-to-left  |
+| 3          | Assignment `… &= …`                | right-to-left  |
+| 3          | Assignment `… ^= …`                | right-to-left  |
+| 3          | Assignment `… \|= …`               | right-to-left  |
+| 3          | Assignment `… &&= …`               | right-to-left  |
+| 3          | Assignment `… \|\|= …`             | right-to-left  |
+| 3          | Assignment `… ??= …`               | right-to-left  |
 | 2          | Arrow `… => …`                     | right-to-left  |
 | 2          | Spread `... …`                     | n/a            |
 | 1          | Sequence `… , …`                   | left-to-right  |

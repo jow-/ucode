@@ -114,7 +114,7 @@ push(x, 4, 5, 6); // 6
 print(x); // [1, 2, 3, 4, 5, 6]
 ```
 
-Returns null if the array was empty or if a non-array argument was passed.
+Returns null if no values were pushed or if a non-array argument was passed.
 
 #### {@link module:core#pop|pop(arr)} → {*}
 
@@ -205,8 +205,8 @@ unexpected conversion results:
 - `"32"` in base 1 produces `NaN` because base 1 is invalid (a numeral system needs at least 2 distinct digits)
 - `"13"` in base 2 produces `1` because in binary only `0` and `1` are valid digits - it converts `"1"` successfully and stops at the invalid character `"3"`
 
-The actual result would be `[10, NaN, 1]`, which is certainly not what you'd
-expect when trying to convert string numbers to integers!
+The actual result would be `[ 10, "NaN", 1 ]`, which is certainly not what
+you'd expect when trying to convert string numbers to integers!
 
 To fix this, wrap the function call in an arrow function or a regular function
 that controls the number of arguments:
@@ -610,6 +610,8 @@ When working with large arrays, consider these optimization techniques:
 Since arrays are reference types, creating true copies requires special handling:
 
 ```
+function deepCopyObject;   // forward declaration, see below
+
 function deepCopy(arr) {
     if (type(arr) != "array")
         return arr;
@@ -645,3 +647,9 @@ function deepCopyObject(obj) {
 
 This approach ensures all nested arrays and objects are properly copied rather
 than referenced.
+
+Note the forward declaration of `deepCopyObject` at the top: ucode does not
+hoist function declarations, so the body of `deepCopy()` cannot call a function
+that is declared later in the file. Without the forward declaration, the first
+`deepCopyObject()` call would fail with "Type error: left-hand side is not a
+function".
