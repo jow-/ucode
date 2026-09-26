@@ -30,6 +30,8 @@
 #include "ucode/source.h"
 #include "ucode/program.h"
 
+#include "ucode/internal/json-c-compat.h"
+
 #ifdef __GLIBC__
 # define POSIXLY_CORRECT_FLAG "+"
 #else
