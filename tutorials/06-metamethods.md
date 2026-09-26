@@ -108,20 +108,26 @@ instance (not the prototype), and the operation-specific arguments follow.
 | `__get__`      | `m.__get__(key)`       | the property value, or `null` for "still missing" |
 | `__set__`      | `m.__set__(key, value)`| ignored; the assignment yields `value`      |
 | `__delete__`   | `m.__delete__(key)`    | truthy = deleted, falsy = not present       |
-| `__tostring__` | `m.__tostring__()`     | a string (non-strings fall back to default rendering) |
+| `__tostring__` | `m.__tostring__()`     | a string (a non-string result renders as an empty string) |
 
 The *key* argument of `__get__`, `__set__` and `__delete__` is the original
 key value the script used: a string for `foo.bar`, a number for `foo[0]`.
 Metamethods are looked up by exact key, without any coercion.
 
 A metamethod is only honored when it is an actual function (closure or
-native function). A non-callable value stored under a dunder name is skipped
-and the search continues with the next prototype:
+native function). The chain walk stops at the first prototype holding the
+dunder name, so a non-callable value stored there ends the search: the
+operation falls back to the default behaviour and prototypes further up the
+chain are not consulted. A slot holding `null` is treated as absent; the
+search continues past it:
 
 ```
-let o = proto({}, { __get__: "not callable" });
+let grand  = { __get__(key) { return "grand:" + key; } };
+let parent = proto({ __get__: "not callable" }, grand);
+let child  = proto({}, parent);
 
-o.x;                  // null, no metamethod in effect
+child.x;              // null - the non-callable slot ends the search,
+                      // the grandparent's __get__ is not consulted
 ```
 
 ### The Assignment Expression Always Yields the Assigned Value
@@ -245,23 +251,38 @@ o.missing;          // "virtual"
 hits;               // [ "missing" ]
 ```
 
-### Delegating to a Table
+### Delegating to an Object
 
-If a `__get__` returns an object or an array, the interpreter delegates the
-lookup to that table, exactly like Lua's `__index` tables. The delegated
-lookup is a fresh read, so it may in turn dispatch a `__get__`. This is a
-convenient way to share a common set of virtual properties without copying
+A metamethod slot may hold an object or an array instead of a function. When
+the `__get__` slot holds an object, a lookup that reaches it re-dispatches on
+that object with the same key - exactly like Lua's `__index`. This is a
+convenient way to share a common set of default properties without copying
 them:
 
 ```
-let base = { greeting: "hi", shared: "base", n: 1 };
-let o = proto({ shared: "own" }, { __get__(key) { return base; } });
+let defaults = { host: "0.0.0.0", port: 80 };
+let o = proto({}, { __get__: defaults });
 
-o.greeting;         // "hi"
-o.shared;           // "own", real properties still win
-o.n + 1;            // 2
-o.nope;             // null
+o.host;             // "0.0.0.0", delegated to the defaults object
+o.port;             // 80
+o.nope;             // null, not found there either
 ```
+
+The delegated lookup is a fresh read, so the object may hold its own keys and
+even its own metamethods. A `__get__` *function*, on the other hand, simply
+hands its return value over as the result of the read; returning an object
+does not look into it:
+
+```
+let base = { greeting: "hi" };
+let o = proto({}, { __get__(key) { return base; } });
+
+o.greeting;         // the base object itself, not "hi"
+```
+
+The same slot-holds-an-object form works for the other key metamethods: an
+object-valued `__set__` slot redirects stores into that object, and an
+object-valued `__delete__` slot re-dispatches deletes on it.
 
 ### Optional Chaining
 
@@ -400,9 +421,11 @@ The legacy `tostring` name is still honored as an alias; `__tostring__` wins
 when both are present. Both are now resolved by walking the full prototype
 chain, so a `tostring` on a grandparent prototype works as well.
 
-A broken `__tostring__` never makes `print()` fail: a non-callable method, a
-call exception, or a non-string result all fall back to the default
-rendering.
+A broken `__tostring__` never produces a broken rendering: a non-callable
+method falls back to the default rendering, and a call that raises falls back
+to the default rendering as well - but the exception itself still propagates
+to the caller, so `print()` aborts unless the caller catches it. A non-string
+result renders as an empty string.
 
 ## Metamethods on Arrays
 
@@ -581,7 +604,9 @@ try { o.a += 1; }        catch (e) { print(e); }   // get:a
 A metamethod that recurses too deeply fails with "Too much recursion", which
 unwinds the dispatch and surfaces as the operation's error rather than
 looping forever. Rendering a value while its own `__tostring__` is running
-falls back to the default rendering instead of re-dispatching.
+re-dispatches as well: a `__tostring__` that renders its own value - for
+example through concatenation - recurses until the interpreter raises "Too
+much recursion".
 
 ## Summary
 
@@ -590,7 +615,8 @@ falls back to the default rendering instead of re-dispatching.
 | `foo.bar` where `bar` is own or inherited       | normal value, `__get__` not consulted        |
 | `foo.bar` missing, `__get__` set                | `__get__("bar")` result, `this` = `foo`      |
 | `__get__` returns `null`                        | `null`, indistinguishable from not found     |
-| `__get__` returns an object or array            | the lookup is delegated to that table        |
+| `__get__` slot holds an object or array         | lookup re-dispatches on that object          |
+| `__get__` returns an object or array            | handed over as-is, not looked into           |
 | `foo.bar = x`, `bar` an own key                 | direct store, `__set__` not consulted        |
 | `foo.bar = x`, `bar` inherited or missing       | `__set__("bar", x)`, `this` = `foo`          |
 | `foo.bar = x` again after the first write       | direct store, `__set__` bypassed             |
